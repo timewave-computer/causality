@@ -186,11 +186,11 @@ let storage = FileLogStorage::new("/path/to/logs", "app-logs")
 
 ### Time Map Integration
 
-The log system integrates with Causality's time map for temporal queries:
+The log system integrates with Causality's time map for temporal queries through the `time_map` module:
 
 ```rust
 use causality::log::LogTimeMapIntegration;
-use causality::time::TimeMap;
+use causality::domain::map::map::TimeMap;
 
 fn query_logs_by_time(
     time_map: &TimeMap, 
@@ -208,6 +208,23 @@ fn query_logs_by_time(
     for entry in entries {
         // Process entries within the time range
     }
+}
+```
+
+The `LogTimeMapIntegration` implementation provides feature-gated functionality:
+
+```rust
+// When the "domain" feature is enabled, a full implementation is provided
+#[cfg(feature = "domain")]
+let integration = LogTimeMapIntegration::new(Arc::new(Mutex::new(storage)));
+
+// For all feature configurations, static methods are available
+// Attach time map information to a log entry
+LogTimeMapIntegration::attach_time_map(&mut entry, &time_map)?;
+
+// Verify a log entry's time map hash
+if !LogTimeMapIntegration::verify_time_map(&entry, &time_map)? {
+    // Handle time map inconsistency
 }
 ```
 
