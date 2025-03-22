@@ -1,0 +1,12 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index abcdefg..hijklmn 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -123,7 +123,7 @@ fn find_crate_by_name(crate_name: &str) -> Result<Manifest> {
+     /// Try to find the path to the `cargo` executable.
+     fn find_cargo() -> Result<String> {
+         // Check if cargo is in PATH
+-        env::var("CARGO").map_err(|_| Error::CargoEnvVariableNotSet)?
++        std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned())
+     }
+ } 

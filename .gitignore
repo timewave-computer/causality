@@ -1,0 +1,97 @@
+# Generated files
+/target/
+
+# Cargo lock file (uncomment if it's a library)
+# Cargo.lock
+
+# Backup files
+**/*.rs.bk
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Direnv
+.direnv/
+.envrc.local
+
+# Generated adapter code
+generated/
+output/
+adapters-output/
+
+# Build artifacts
+dist/
+build/
+
+# Nix artifacts
+result
+result-*
+.pre-commit-config.yaml.backup
+
+# Template test outputs
+.template-test/
+
+# Node modules (for TypeScript adapters)
+node_modules/ 
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Log files
+*.log
+logs/
+npm-debug.log*
+
+# Coverage reports
+coverage/
+*.lcov
+.nyc_output/
+
+# Profiling files
+chrome-profiler-events*.json
+speed-measure-plugin*.json
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Rust analyzer
+rust-project.json
+
+# Nix-specific
+.nix-gcroots/
+/shells/
+
+# WASM output
+*.wasm
+*.wat
+
+# Documentation generation
+/docs/api/
+/docs/generated/
+
+# Working files
+work/
+valence/
+.cursor/rules/
+scripts/
+migration_docs/
+docs/migrations/
+adapter-generator/
+benches/
+examples/
