@@ -20,6 +20,8 @@ Causality is an integrated toolchain for distributed program development that en
 
 Under heavy development. The core logic is coming together but I'm still refactoring substantially. Once I'm happy with the core data structures and their relationship I plan to implement an extensive test suite. Only when that's finished will I split out node types and implement the P2P system.
 
+Everything in the docs directory is very WIP. Things in the specs folder are more solid, except some of the more advanced, unimplemented concepts. These are more potential ideas I'm considering.
+
 ## System Architecture
 
 ### Time
@@ -44,7 +46,7 @@ TEL is a domain-specific language for time-aware, causal computation. It enables
 
 ### Verifiable Execution
 
-The system enables privacy-preserving verifiable computation by translating high-level effects to RISC-V instructions and providing a zero-knowledge VM optimized for ZK proof generation. Efficient witness generation, on-chain and off-chain proof verification, and automatic circuit optimization minimize proving time while maintaining security guarantees.
+The system enables verifiable computation by translating high-level effects to RISC-V instructions and providing a zero-knowledge VM optimized for ZK proof generation. Efficient witness generation, on-chain and off-chain proof verification, and automatic circuit optimization minimize proving time while maintaining security guarantees.
 
 ### Content-Addressed Code
 

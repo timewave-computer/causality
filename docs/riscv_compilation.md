@@ -21,7 +21,6 @@ Rather than maintaining a custom RISC-V compiler, we utilize production-ready ZK
 
 ### Supported ZK-VMs
 
-- **Risc0**: A RISC-V based ZK-VM with strong tooling and performance characteristics
 - **Succinct**: A high-performance ZK-VM with advanced proving technology
 - **Extensible Backend**: The architecture supports adding additional ZK-VM backends as needed
 
@@ -189,22 +188,3 @@ impl ZkVmBackend for SuccinctBackend {
     // Implementation for Succinct
 }
 ```
-
-## Migration Path from Custom RISC-V
-
-For projects using the previous custom RISC-V compiler:
-
-1. Generate equivalent Rust code that matches the behavior of the RISC-V program
-2. Execute the Rust code in the chosen ZK-VM
-3. Update on-chain verification to use the new proof format
-
-## Conclusion
-
-By leveraging established ZK-VMs like Risc0 and Succinct, we maintain the power of our domain and effect adapter architecture while benefiting from industry-standard ZK proving technology. This approach:
-
-1. Reduces the maintenance burden of a custom RISC-V compiler
-2. Improves proving performance and reliability
-3. Provides flexibility to choose the optimal ZK-VM for different workloads
-4. Maintains compatibility with our existing domain adapter architecture
-
-The key insight is that domain adapters remain the primary integration point, but now target ZK-VM environments for proof generation rather than generating custom RISC-V bytecode. 

@@ -16,7 +16,7 @@ The integration between these two systems ensures:
 
 ### LogTimeMapIntegration
 
-The `LogTimeMapIntegration` struct provides methods for attaching time map information to log entries and querying logs based on time-related criteria:
+The `LogTimeMapIntegration` struct (located in the `time_map.rs` module) provides methods for attaching time map information to log entries and querying logs based on time-related criteria:
 
 ```rust
 pub struct LogTimeMapIntegration;
@@ -42,6 +42,22 @@ impl LogTimeMapIntegration {
     // Verify that a log entry's time map hash matches a given time map
     pub fn verify_time_map(entry: &LogEntry, time_map: &TimeMap) -> Result<bool>;
 }
+```
+
+The implementation also provides feature-gated versions with different capabilities:
+
+```rust
+// When the "domain" feature is enabled, a full implementation is provided
+#[cfg(feature = "domain")]
+pub struct LogTimeMapIntegration {
+    storage: Arc<Mutex<dyn LogStorage + Send>>,
+    time_map: TimeMap,
+    indexed_up_to: u64,
+}
+
+// When the "domain" feature is not enabled, a minimal stub implementation is provided
+#[cfg(not(feature = "domain"))]
+pub struct LogTimeMapIntegration {}
 ```
 
 ### Time Map Integration in ReplayEngine
@@ -163,6 +179,14 @@ if calculated_hash != time_map_hash {
 2. **Deterministic Replay**: The system can be deterministically replayed using the unified log and time map.
 3. **Temporal Queries**: The system can efficiently query log entries based on time criteria.
 4. **Verification**: Effects can verify their consistency with the time map.
+
+## Module Organization
+
+The Time Map integration functionality is now consolidated in the `time_map.rs` module, which provides:
+
+1. **Feature-based Implementations**: Different implementations based on whether the `domain` feature is enabled
+2. **Full Integration APIs**: All the necessary methods for integrating Time Maps with the Log system
+3. **Comprehensive Test Coverage**: Tests for both feature configurations
 
 ## Usage Examples
 

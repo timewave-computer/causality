@@ -30,7 +30,7 @@ A data structure that tracks the history of a resource as it crosses between Dom
 The net change in resource quantity during an operation. The system enforces that all operations must have a total delta of zero, ensuring conservation of resources.
 
 ### Time Map
-A data structure that maps Domain states to resources, tracking where resources exist across different Domain states.
+A data structure that maps Domain states to resources, tracking where resources exist across different Domain states. It serves as a "global clock" for the system, ensuring that all actors have a consistent view of external state.
 
 ### Execution Log
 A record of all operations performed on Domains, used for debugging, auditing, and verification purposes.
@@ -82,6 +82,18 @@ A component that translates abstract effects into concrete operations on a speci
 ### Program Precondition
 A condition that must be satisfied before a program can be executed on a Domain.
 
+### LogTimeMapIntegration
+A component that provides the integration between the Time Map and Unified Log System, enabling temporal consistency verification, time-based querying, and causal ordering of log entries.
+
+### Time Map Hash
+A cryptographic hash derived from the content of a Time Map, used to ensure integrity when attaching Time Maps to log entries and verifying temporal consistency.
+
+### Time Indexed Entry
+A data structure that represents a log entry indexed by time, containing the entry's timestamp, log index, entry type, and associated domain and resource identifiers.
+
+### Time Map Entry
+A data structure that represents the state of a domain at a specific point in time, including block height, block hash, and timestamp.
+
 ## Content-Addressable Code System
 
 ### Content Hash
@@ -120,4 +132,27 @@ The component that evaluates TEL expressions, manages effects, and integrates wi
 The static type checking system that ensures TEL programs are well-formed and type-safe before execution.
 
 ### TEL Program
-A collection of function definitions in the Temporal Effect Language that can be deployed to the Causality network. 
+A collection of function definitions in the Temporal Effect Language that can be deployed to the Causality network.
+
+## Log System
+
+### Log Entry
+The fundamental unit of the Unified Log System, which can represent an Effect, Fact, or Event with associated metadata including timestamps, trace IDs, and domain information.
+
+### Fact Entry
+A log entry that documents an observed truth or assertion about system state, particularly about external domains.
+
+### Effect Entry
+A log entry that records a state change or side effect in the system, which is causally verified against the Time Map.
+
+### Event Entry
+A log entry that captures significant occurrences that may not directly change state, used primarily for monitoring and debugging.
+
+### Log Storage
+A component responsible for storing and retrieving log entries, with implementations including in-memory, file-based, and distributed storage.
+
+### Log Segment
+A portion of the log containing entries within a specific range, used to optimize storage and retrieval operations.
+
+### ReplayEngine
+A component that can deterministically replay log entries to reconstruct system state or verify temporal consistency, with support for time-based filtering using the Time Map. 

@@ -125,8 +125,12 @@ graph TD
     log --> segment_manager
     log --> replay[log::replay]
     log --> sync
-    log --> time_map_integration
+    log --> time_map
     log --> fact[log::fact]
+    
+    %% Time map integration
+    time_map[log::time_map] --> domain::map::map
+    replay[log::replay] --> time_map
     
     %% Resource system
     resource --> error
