@@ -128,6 +128,7 @@ pub use cosmwasm::{
     CosmWasmAdapter,
     CosmWasmAdapterConfig,
     CosmWasmAdapterFactory,
+    CosmWasmAdapterFactoryConfig,
     CosmWasmAddress,
     CosmWasmCode,
     CosmWasmMessage,
@@ -135,6 +136,19 @@ pub use cosmwasm::{
     CosmWasmExecutionResult,
     CosmWasmEffectValidator,
     COSMWASM_VM_TYPE,
+};
+
+// Re-export EVM types
+pub use evm::{
+    EthereumAdapter,
+    EthereumConfig,
+    EthereumAdapterFactory,
+    EthereumAdapterFactoryConfig,
+    EvmAddress,
+    EvmZkCompileEffect,
+    EvmZkWitnessEffect,
+    EvmZkProveEffect,
+    EvmZkVerifyEffect,
 };
 
 // Re-export ZK-VM types

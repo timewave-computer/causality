@@ -3,11 +3,13 @@ use std::sync::{Arc, RwLock};
 
 use crate::address::Address;
 use crate::resource::{
-    Register, RegisterId, RegisterContents, RegisterMetadata,
-    RegisterService, ResourceManager, capability::{
-        CapabilityId, Right, Restrictions, CapabilityError, CapabilityRegistry, 
-        ResourceCapability
-    }
+    ResourceId, ResourceState, RegisterId, RegisterState, RegisterContents, RegisterMetadata,
+    capability::{
+        CapabilityId, Right, Restrictions, CapabilityError, ResourceCapability
+    },
+    lifecycle_manager::ResourceRegisterLifecycleManager,
+    relationship_tracker::RelationshipTracker,
+    capability_system::{CapabilityValidator, UnifiedCapabilitySystem}
 };
 
 /// Error types for capability-based resource operations
@@ -16,8 +18,8 @@ pub enum ResourceApiError {
     #[error("Capability error: {0}")]
     Capability(#[from] CapabilityError),
     
-    #[error("Register service error: {0}")]
-    RegisterService(String),
+    #[error("Lifecycle manager error: {0}")]
+    LifecycleManager(String),
     
     #[error("Resource not found: {0}")]
     NotFound(RegisterId),
@@ -57,7 +59,7 @@ pub enum ResourceOperation {
     Write(RegisterId, RegisterContents),
     Update(RegisterId, RegisterContents),
     Delete(RegisterId),
-    Create(Register),
+    Create(ResourceState),
     UpdateMetadata(RegisterId, RegisterMetadata),
 }
 
@@ -81,34 +83,37 @@ impl ResourceOperation {
             Self::Write(id, _) => Some(id),
             Self::Update(id, _) => Some(id),
             Self::Delete(id) => Some(id),
-            Self::Create(register) => Some(register.id()),
+            Self::Create(state) => Some(&state.id),
             Self::UpdateMetadata(id, _) => Some(id),
         }
     }
 }
 
-/// A capability-based API for resource operations
+/// A capability-based API for resource operations using the unified architecture
 #[derive(Debug, Clone)]
 pub struct ResourceAPI {
-    register_service: Arc<dyn RegisterService>,
-    capability_registry: Arc<CapabilityRegistry>,
+    lifecycle_manager: Arc<ResourceRegisterLifecycleManager>,
+    relationship_tracker: Arc<RelationshipTracker>,
+    capability_system: Arc<UnifiedCapabilitySystem>,
 }
 
 impl ResourceAPI {
-    /// Creates a new resource API
+    /// Creates a new resource API using the unified architecture components
     pub fn new(
-        register_service: Arc<dyn RegisterService>,
-        capability_registry: Arc<CapabilityRegistry>,
+        lifecycle_manager: Arc<ResourceRegisterLifecycleManager>,
+        relationship_tracker: Arc<RelationshipTracker>,
+        capability_system: Arc<UnifiedCapabilitySystem>,
     ) -> Self {
         Self {
-            register_service,
-            capability_registry,
+            lifecycle_manager,
+            relationship_tracker,
+            capability_system,
         }
     }
     
-    /// Returns the capability registry
-    pub fn capability_registry(&self) -> &Arc<CapabilityRegistry> {
-        &self.capability_registry
+    /// Returns the capability system
+    pub fn capability_system(&self) -> &Arc<UnifiedCapabilitySystem> {
+        &self.capability_system
     }
     
     /// Verifies a capability for a specific operation
@@ -121,8 +126,8 @@ impl ResourceAPI {
         let right = operation.required_right();
         let register_id = operation.register_id();
         
-        self.capability_registry
-            .verify(capability_id, holder, &right, register_id, None)
+        self.capability_system
+            .validate_capability(capability_id, holder, &right, register_id)
             .map_err(ResourceApiError::Capability)
     }
     
@@ -132,7 +137,7 @@ impl ResourceAPI {
         capability_id: &CapabilityId,
         holder: &Address,
         register_id: &RegisterId,
-    ) -> ResourceApiResult<Register> {
+    ) -> ResourceApiResult<RegisterState> {
         // Verify the capability for this operation
         self.verify_capability(
             capability_id,
@@ -141,9 +146,9 @@ impl ResourceAPI {
         )?;
         
         // Perform the read operation
-        self.register_service
-            .get_register(register_id)
-            .map_err(|e| ResourceApiError::RegisterService(e.to_string()))
+        self.lifecycle_manager
+            .get_resource_state(register_id)
+            .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))
             .and_then(|opt| opt.ok_or_else(|| ResourceApiError::NotFound(register_id.clone())))
     }
     
@@ -153,7 +158,7 @@ impl ResourceAPI {
         capability_id: &CapabilityId,
         holder: &Address,
         register_ids: &[RegisterId],
-    ) -> ResourceApiResult<Vec<Register>> {
+    ) -> ResourceApiResult<Vec<RegisterState>> {
         let mut results = Vec::with_capacity(register_ids.len());
         
         for id in register_ids {
@@ -168,19 +173,19 @@ impl ResourceAPI {
         &self,
         capability_id: &CapabilityId,
         holder: &Address,
-        register: Register,
+        state: ResourceState,
     ) -> ResourceApiResult<RegisterId> {
         // Verify the capability for this operation
         self.verify_capability(
             capability_id,
             holder,
-            &ResourceOperation::Create(register.clone()),
+            &ResourceOperation::Create(state.clone()),
         )?;
         
         // Perform the create operation
-        self.register_service
-            .create_register(register)
-            .map_err(|e| ResourceApiError::RegisterService(e.to_string()))
+        self.lifecycle_manager
+            .create_resource(state)
+            .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))
     }
     
     /// Updates a register using a capability
@@ -198,11 +203,20 @@ impl ResourceAPI {
             &ResourceOperation::Update(register_id.clone(), contents.clone()),
         )?;
         
+        // Get the current state
+        let current_state = self.lifecycle_manager
+            .get_resource_state(register_id)
+            .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))?
+            .ok_or_else(|| ResourceApiError::NotFound(register_id.clone()))?;
+        
+        // Create updated state
+        let mut updated_state = current_state.clone();
+        updated_state.contents = contents;
+        
         // Perform the update operation
-        self.register_service
-            .update_register(register_id, contents)
-            .map_err(|e| ResourceApiError::RegisterService(e.to_string()))?
-            .ok_or_else(|| ResourceApiError::NotFound(register_id.clone()))
+        self.lifecycle_manager
+            .update_resource_state(register_id, updated_state)
+            .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))
     }
     
     /// Deletes a register using a capability
@@ -220,10 +234,9 @@ impl ResourceAPI {
         )?;
         
         // Perform the delete operation
-        self.register_service
-            .delete_register(register_id)
-            .map_err(|e| ResourceApiError::RegisterService(e.to_string()))?
-            .ok_or_else(|| ResourceApiError::NotFound(register_id.clone()))
+        self.lifecycle_manager
+            .delete_resource(register_id)
+            .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))
     }
     
     /// Updates register metadata using a capability
@@ -241,14 +254,23 @@ impl ResourceAPI {
             &ResourceOperation::UpdateMetadata(register_id.clone(), metadata.clone()),
         )?;
         
+        // Get the current state
+        let current_state = self.lifecycle_manager
+            .get_resource_state(register_id)
+            .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))?
+            .ok_or_else(|| ResourceApiError::NotFound(register_id.clone()))?;
+        
+        // Create updated state with new metadata
+        let mut updated_state = current_state.clone();
+        updated_state.metadata = metadata;
+        
         // Perform the metadata update operation
-        self.register_service
-            .update_metadata(register_id, metadata)
-            .map_err(|e| ResourceApiError::RegisterService(e.to_string()))?
-            .ok_or_else(|| ResourceApiError::NotFound(register_id.clone()))
+        self.lifecycle_manager
+            .update_resource_state(register_id, updated_state)
+            .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))
     }
     
-    /// Delegates a capability to another principal
+    /// Delegates a capability using the capability system
     pub fn delegate_capability(
         &self,
         parent_id: &CapabilityId,
@@ -257,12 +279,12 @@ impl ResourceAPI {
         rights: HashSet<Right>,
         restrictions: Restrictions,
     ) -> ResourceApiResult<CapabilityId> {
-        self.capability_registry
-            .delegate(parent_id, delegator, new_holder, rights, restrictions)
+        self.capability_system
+            .delegate_capability(parent_id, delegator, new_holder, rights, restrictions)
             .map_err(ResourceApiError::Capability)
     }
     
-    /// Composes multiple capabilities into a new one
+    /// Creates a new capability by composing existing capabilities
     pub fn compose_capabilities(
         &self,
         composer: &Address,
@@ -270,8 +292,8 @@ impl ResourceAPI {
         new_holder: Address,
         restrictions: Restrictions,
     ) -> ResourceApiResult<CapabilityId> {
-        self.capability_registry
-            .compose(composer, capability_ids, new_holder, restrictions)
+        self.capability_system
+            .compose_capabilities(capability_ids, composer, new_holder, restrictions)
             .map_err(ResourceApiError::Capability)
     }
     
@@ -281,44 +303,79 @@ impl ResourceAPI {
         capability_id: &CapabilityId,
         revoker: &Address,
     ) -> ResourceApiResult<()> {
-        self.capability_registry
-            .revoke(capability_id, revoker)
+        self.capability_system
+            .revoke_capability(capability_id, revoker)
             .map_err(ResourceApiError::Capability)
     }
     
-    /// Executes a batch of operations using a capability
+    /// Executes a batch of operations with a single capability check
     pub fn execute_batch(
         &self,
         capability_id: &CapabilityId,
         holder: &Address,
         operations: &[ResourceOperation],
     ) -> ResourceApiResult<()> {
-        // First verify all operations can be performed with this capability
+        // For each operation, verify the capability
         for op in operations {
             self.verify_capability(capability_id, holder, op)?;
         }
         
-        // Then execute each operation
+        // If all verifications pass, execute the operations
         for op in operations {
             match op {
-                ResourceOperation::Read(id) => {
-                    self.read(capability_id, holder, id)?;
-                }
+                ResourceOperation::Read(_) => {
+                    // Read operations don't modify state, so just verify
+                    continue;
+                },
                 ResourceOperation::Write(id, contents) => {
-                    self.update(capability_id, holder, id, contents.clone())?;
-                }
+                    let current_state = self.lifecycle_manager
+                        .get_resource_state(id)
+                        .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))?
+                        .ok_or_else(|| ResourceApiError::NotFound(id.clone()))?;
+                    
+                    let mut updated_state = current_state.clone();
+                    updated_state.contents = contents.clone();
+                    
+                    self.lifecycle_manager
+                        .update_resource_state(id, updated_state)
+                        .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))?;
+                },
                 ResourceOperation::Update(id, contents) => {
-                    self.update(capability_id, holder, id, contents.clone())?;
-                }
+                    let current_state = self.lifecycle_manager
+                        .get_resource_state(id)
+                        .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))?
+                        .ok_or_else(|| ResourceApiError::NotFound(id.clone()))?;
+                    
+                    let mut updated_state = current_state.clone();
+                    updated_state.contents = contents.clone();
+                    
+                    self.lifecycle_manager
+                        .update_resource_state(id, updated_state)
+                        .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))?;
+                },
                 ResourceOperation::Delete(id) => {
-                    self.delete(capability_id, holder, id)?;
-                }
-                ResourceOperation::Create(register) => {
-                    self.create(capability_id, holder, register.clone())?;
-                }
+                    self.lifecycle_manager
+                        .delete_resource(id)
+                        .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))?;
+                },
+                ResourceOperation::Create(state) => {
+                    self.lifecycle_manager
+                        .create_resource(state.clone())
+                        .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))?;
+                },
                 ResourceOperation::UpdateMetadata(id, metadata) => {
-                    self.update_metadata(capability_id, holder, id, metadata.clone())?;
-                }
+                    let current_state = self.lifecycle_manager
+                        .get_resource_state(id)
+                        .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))?
+                        .ok_or_else(|| ResourceApiError::NotFound(id.clone()))?;
+                    
+                    let mut updated_state = current_state.clone();
+                    updated_state.metadata = metadata.clone();
+                    
+                    self.lifecycle_manager
+                        .update_resource_state(id, updated_state)
+                        .map_err(|e| ResourceApiError::LifecycleManager(e.to_string()))?;
+                },
             }
         }
         
@@ -330,16 +387,66 @@ impl ResourceAPI {
         &self,
         intent: &I,
     ) -> ResourceApiResult<I::Output> {
-        // Validate the intent first
+        // First validate the intent
         intent.validate(self)?;
         
-        // Execute the intent
+        // Then execute it
         intent.execute(self)
+    }
+    
+    /// Finds related resources using the relationship tracker
+    pub fn find_related_resources(
+        &self,
+        resource_id: &ResourceId,
+        relationship_type: Option<&str>,
+    ) -> ResourceApiResult<Vec<ResourceId>> {
+        self.relationship_tracker
+            .find_related_resources(resource_id, relationship_type)
+            .map_err(|e| ResourceApiError::Internal(e.to_string()))
+    }
+    
+    /// Checks if two resources have a specific relationship
+    pub fn has_relationship(
+        &self,
+        source: &ResourceId,
+        target: &ResourceId,
+        relationship_type: &str,
+    ) -> ResourceApiResult<bool> {
+        self.relationship_tracker
+            .has_relationship(source, target, relationship_type)
+            .map_err(|e| ResourceApiError::Internal(e.to_string()))
+    }
+    
+    /// Creates a relationship between two resources
+    pub fn create_relationship(
+        &self,
+        capability_id: &CapabilityId,
+        holder: &Address,
+        source: &ResourceId,
+        target: &ResourceId,
+        relationship_type: &str,
+    ) -> ResourceApiResult<()> {
+        // Verify capability for both resources
+        self.verify_capability(
+            capability_id,
+            holder,
+            &ResourceOperation::Read(source.clone()),
+        )?;
+        
+        self.verify_capability(
+            capability_id,
+            holder,
+            &ResourceOperation::Read(target.clone()),
+        )?;
+        
+        // Create the relationship
+        self.relationship_tracker
+            .create_relationship(source, target, relationship_type)
+            .map_err(|e| ResourceApiError::Internal(e.to_string()))
     }
 }
 
-/// A transfer intent to move ownership of a resource
-#[derive(Debug, Clone)]
+/// A transfer intent for moving resources between addresses
 pub struct TransferIntent {
     /// The capability ID authorizing the transfer
     pub capability_id: CapabilityId,
@@ -355,62 +462,68 @@ impl ResourceIntent for TransferIntent {
     type Output = CapabilityId;
     
     fn to_operations(&self) -> Vec<ResourceOperation> {
-        vec![
-            ResourceOperation::Read(self.register_id.clone()),
-            ResourceOperation::UpdateMetadata(self.register_id.clone(), RegisterMetadata::default()),
-        ]
+        // Transfer doesn't directly map to a single operation
+        // It's a higher-level concept that involves capability operations
+        vec![ResourceOperation::Read(self.register_id.clone())]
     }
     
     fn validate(&self, api: &ResourceAPI) -> ResourceApiResult<()> {
         // Check if the register exists
-        let _register = api.read(&self.capability_id, &self.current_holder, &self.register_id)?;
+        let state = api.read(&self.capability_id, &self.current_holder, &self.register_id)?;
         
-        // Check that the holder has delegate rights
-        api.capability_registry()
-            .verify(
-                &self.capability_id,
-                &self.current_holder,
-                &Right::Delegate,
-                Some(&self.register_id),
-                None,
-            )
-            .map_err(ResourceApiError::Capability)
+        // Additional validations could be added here
+        // For example, check if the register has already been transferred
+        
+        // Validate that the capability allows transfer (read + management rights)
+        api.verify_capability(
+            &self.capability_id,
+            &self.current_holder,
+            &ResourceOperation::Read(self.register_id.clone()),
+        )?;
+        
+        Ok(())
     }
     
     fn execute(&self, api: &ResourceAPI) -> ResourceApiResult<Self::Output> {
-        // Read the register
-        let register = api.read(&self.capability_id, &self.current_holder, &self.register_id)?;
+        // Read the current register state
+        let state = api.read(&self.capability_id, &self.current_holder, &self.register_id)?;
         
-        // Create a new capability for the recipient with all rights
-        let mut rights = HashSet::new();
-        rights.insert(Right::Read);
-        rights.insert(Right::Write);
-        rights.insert(Right::Delete);
-        rights.insert(Right::UpdateMetadata);
-        rights.insert(Right::Delegate);
-        
-        let restrictions = Restrictions {
-            resource_scope: {
-                let mut scope = HashSet::new();
-                scope.insert(self.register_id.clone());
-                Some(scope)
-            },
-            ..Restrictions::default()
+        // Create a new capability for the recipient
+        let rights = {
+            let mut set = HashSet::new();
+            set.insert(Right::Read);
+            set.insert(Right::Write);
+            set.insert(Right::Delete);
+            set.insert(Right::UpdateMetadata);
+            set
         };
         
-        // Delegate to create a new capability for the recipient
-        api.delegate_capability(
+        // Create transfer restrictions
+        let restrictions = Restrictions::default();
+        
+        // Delegate a capability to the recipient
+        let new_capability_id = api.delegate_capability(
             &self.capability_id,
             &self.current_holder,
             self.recipient.clone(),
             rights,
             restrictions,
-        )
+        )?;
+        
+        // Create a relationship documenting the transfer
+        api.create_relationship(
+            &self.capability_id,
+            &self.current_holder,
+            &self.register_id,
+            &ResourceId::from(new_capability_id.clone()),
+            "transferred_to",
+        )?;
+        
+        Ok(new_capability_id)
     }
 }
 
-/// A swap intent to exchange two resources between parties
-#[derive(Debug, Clone)]
+/// A swap intent for exchanging resources between two parties
 pub struct SwapIntent {
     /// First party's capability
     pub capability_a: CapabilityId,
@@ -430,92 +543,70 @@ impl ResourceIntent for SwapIntent {
     type Output = (CapabilityId, CapabilityId);
     
     fn to_operations(&self) -> Vec<ResourceOperation> {
+        // Swap doesn't directly map to resource operations
+        // It's a higher-level concept involving transfers
         vec![
             ResourceOperation::Read(self.register_a.clone()),
             ResourceOperation::Read(self.register_b.clone()),
-            ResourceOperation::UpdateMetadata(self.register_a.clone(), RegisterMetadata::default()),
-            ResourceOperation::UpdateMetadata(self.register_b.clone(), RegisterMetadata::default()),
         ]
     }
     
     fn validate(&self, api: &ResourceAPI) -> ResourceApiResult<()> {
         // Check if both registers exist
-        let _register_a = api.read(&self.capability_a, &self.holder_a, &self.register_a)?;
-        let _register_b = api.read(&self.capability_b, &self.holder_b, &self.register_b)?;
+        let state_a = api.read(&self.capability_a, &self.holder_a, &self.register_a)?;
+        let state_b = api.read(&self.capability_b, &self.holder_b, &self.register_b)?;
         
-        // Check that both holders have delegate rights
-        api.capability_registry()
-            .verify(
-                &self.capability_a,
-                &self.holder_a,
-                &Right::Delegate,
-                Some(&self.register_a),
-                None,
-            )
-            .map_err(ResourceApiError::Capability)?;
-            
-        api.capability_registry()
-            .verify(
-                &self.capability_b,
-                &self.holder_b,
-                &Right::Delegate,
-                Some(&self.register_b),
-                None,
-            )
-            .map_err(ResourceApiError::Capability)
+        // Verify capabilities for both registers
+        api.verify_capability(
+            &self.capability_a,
+            &self.holder_a,
+            &ResourceOperation::Read(self.register_a.clone()),
+        )?;
+        
+        api.verify_capability(
+            &self.capability_b,
+            &self.holder_b,
+            &ResourceOperation::Read(self.register_b.clone()),
+        )?;
+        
+        // Additional validations could go here
+        // For example, checking compatible register types or values
+        
+        Ok(())
     }
     
     fn execute(&self, api: &ResourceAPI) -> ResourceApiResult<Self::Output> {
-        // Read both registers
-        let _register_a = api.read(&self.capability_a, &self.holder_a, &self.register_a)?;
-        let _register_b = api.read(&self.capability_b, &self.holder_b, &self.register_b)?;
+        // Implement swap as two transfers
         
-        // Create capabilities for both parties with all rights
-        let mut rights = HashSet::new();
-        rights.insert(Right::Read);
-        rights.insert(Right::Write);
-        rights.insert(Right::Delete);
-        rights.insert(Right::UpdateMetadata);
-        rights.insert(Right::Delegate);
-        
-        // Create restrictions for register A
-        let restrictions_a = Restrictions {
-            resource_scope: {
-                let mut scope = HashSet::new();
-                scope.insert(self.register_a.clone());
-                Some(scope)
-            },
-            ..Restrictions::default()
+        // First transfer: A to B
+        let transfer_a_to_b = TransferIntent {
+            capability_id: self.capability_a.clone(),
+            current_holder: self.holder_a.clone(),
+            register_id: self.register_a.clone(),
+            recipient: self.holder_b.clone(),
         };
         
-        // Create restrictions for register B
-        let restrictions_b = Restrictions {
-            resource_scope: {
-                let mut scope = HashSet::new();
-                scope.insert(self.register_b.clone());
-                Some(scope)
-            },
-            ..Restrictions::default()
+        // Second transfer: B to A
+        let transfer_b_to_a = TransferIntent {
+            capability_id: self.capability_b.clone(),
+            current_holder: self.holder_b.clone(),
+            register_id: self.register_b.clone(),
+            recipient: self.holder_a.clone(),
         };
         
-        // Delegate capability for holder B to access register A
-        let cap_a_for_b = api.delegate_capability(
+        // Execute both transfers
+        let capability_b_to_a = transfer_a_to_b.execute(api)?;
+        let capability_a_to_b = transfer_b_to_a.execute(api)?;
+        
+        // Create relationship to document the swap
+        api.create_relationship(
             &self.capability_a,
             &self.holder_a,
-            self.holder_b.clone(),
-            rights.clone(),
-            restrictions_a,
+            &self.register_a,
+            &self.register_b,
+            "swapped_with",
         )?;
         
-        // Delegate capability for holder A to access register B
-        let cap_b_for_a = api.delegate_capability(
-            &self.capability_b,
-            &self.holder_b,
-            self.holder_a.clone(),
-            rights,
-            restrictions_b,
-        )?;
-        
-        Ok((cap_b_for_a, cap_a_for_b))
+        Ok((capability_b_to_a, capability_a_to_b))
     }
 } 

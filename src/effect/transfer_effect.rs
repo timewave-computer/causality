@@ -1,16 +1,24 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-use crate::address::Address;
-use crate::resource::{ResourceId, Right, ResourceAPI, ResourceApiError, ResourceApiResult};
-use crate::program_account::{ProgramAccount, AssetProgramAccount};
+use crate::types::DomainId;
+use crate::resource::{ResourceId, Right};
+use crate::resource::api::{ResourceAPI, ResourceApiError, ResourceApiResult};
+use crate::effect::ProgramAccount;
 use crate::effect::{
-    Effect, ProgramAccountEffect, EffectResult, EffectError, EffectOutcome, ResourceChange, ResourceChangeType
+    Effect, EffectResult, EffectError, EffectOutcome, EffectId, ProgramAccountEffect
 };
 use crate::effect::boundary::{EffectContext, ExecutionBoundary};
+
+#[cfg(feature = "domain")]
+use crate::domain::{BoundaryParameters};
+
+use crate::log::fact_snapshot::{FactDependency, FactDependencyType, FactId, FactSnapshot};
+use crate::log::FactEntry;
 
 /// Parameters for the TransferEffect
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,55 +36,80 @@ pub struct TransferParams {
     pub additional_params: HashMap<String, String>,
 }
 
-/// An effect for transferring resources from one account to another
+/// The TransferEffect handles transferring resources between accounts
+#[derive(Debug, Clone)]
 pub struct TransferEffect {
+    /// Unique identifier for this effect
+    id: EffectId,
+    /// Resource API for interacting with resources
     resource_api: Arc<dyn ResourceAPI>,
+    /// Parameters for the transfer operation
+    params: TransferParams,
+    /// Data associated with this effect
+    data: HashMap<String, String>,
+    /// Fact snapshot for this effect
+    fact_snapshot: Option<FactSnapshot>,
+    /// Fact dependencies for this effect
+    fact_dependencies: Vec<FactDependency>,
 }
 
 impl TransferEffect {
     /// Create a new transfer effect
-    pub fn new(resource_api: Arc<dyn ResourceAPI>) -> Self {
-        Self {
+    pub fn new(
+        resource_api: Arc<dyn ResourceAPI>,
+        params: TransferParams,
+    ) -> Self {
+        TransferEffect {
+            id: EffectId::new_unique(),
             resource_api,
+            params,
+            data: HashMap::new(),
+            fact_snapshot: None,
+            fact_dependencies: Vec::new(),
         }
     }
-    
-    /// Execute the transfer with specific parameters
-    async fn execute_transfer(&self, context: &EffectContext, params: &TransferParams) -> EffectResult<(ResourceId, ResourceId)> {
+
+    /// Factory method to create a new transfer effect
+    pub fn create_transfer(resource_api: Arc<dyn ResourceAPI>, params: TransferParams) -> Arc<dyn Effect> {
+        Arc::new(Self::new(resource_api, params))
+    }
+
+    /// Execute the transfer operation
+    async fn execute_transfer(&self, ctx: &EffectContext) -> EffectResult<EffectOutcome> {
         // Find the source capability
-        let source_capability = context.capabilities.iter()
+        let source_capability = ctx.capabilities.iter()
             .find(|cap| {
                 let cap_obj = cap.capability();
-                let resource_matches = cap_obj.resource_id() == params.source_resource_id.to_string();
+                let resource_matches = cap_obj.resource_id() == self.params.source_resource_id.to_string();
                 let has_right = cap_obj.has_right(&Right::Transfer);
                 resource_matches && has_right
             })
             .ok_or_else(|| EffectError::CapabilityError(
-                format!("Missing transfer capability for source resource {}", params.source_resource_id)
+                format!("Missing transfer capability for source resource {}", self.params.source_resource_id)
             ))?;
         
         // Find the destination capability
-        let dest_capability = context.capabilities.iter()
+        let dest_capability = ctx.capabilities.iter()
             .find(|cap| {
                 let cap_obj = cap.capability();
-                let resource_matches = cap_obj.resource_id() == params.destination_resource_id.to_string();
+                let resource_matches = cap_obj.resource_id() == self.params.destination_resource_id.to_string();
                 let has_right = cap_obj.has_right(&Right::Write);
                 resource_matches && has_right
             })
             .ok_or_else(|| EffectError::CapabilityError(
-                format!("Missing write capability for destination resource {}", params.destination_resource_id)
+                format!("Missing write capability for destination resource {}", self.params.destination_resource_id)
             ))?;
         
         // Get the source resource
         let source_resource = self.resource_api.get_resource_mut(
             source_capability,
-            &params.source_resource_id,
+            &self.params.source_resource_id,
         ).await.map_err(|e| match e {
             ResourceApiError::NotFound(_) => EffectError::ResourceError(
-                format!("Source resource not found: {}", params.source_resource_id)
+                format!("Source resource not found: {}", self.params.source_resource_id)
             ),
             ResourceApiError::AccessDenied(_) => EffectError::AuthorizationFailed(
-                format!("Access denied to source resource: {}", params.source_resource_id)
+                format!("Access denied to source resource: {}", self.params.source_resource_id)
             ),
             _ => EffectError::ExecutionError(format!("Failed to get source resource: {}", e)),
         })?;
@@ -84,57 +117,72 @@ impl TransferEffect {
         // Get the destination resource
         let dest_resource = self.resource_api.get_resource_mut(
             dest_capability,
-            &params.destination_resource_id,
+            &self.params.destination_resource_id,
         ).await.map_err(|e| match e {
             ResourceApiError::NotFound(_) => EffectError::ResourceError(
-                format!("Destination resource not found: {}", params.destination_resource_id)
+                format!("Destination resource not found: {}", self.params.destination_resource_id)
             ),
             ResourceApiError::AccessDenied(_) => EffectError::AuthorizationFailed(
-                format!("Access denied to destination resource: {}", params.destination_resource_id)
+                format!("Access denied to destination resource: {}", self.params.destination_resource_id)
             ),
             _ => EffectError::ExecutionError(format!("Failed to get destination resource: {}", e)),
         })?;
         
-        // Read the source data
-        let source_data = source_resource.data().to_vec();
+        // Validate transfer constraints
+        if source_resource.is_locked() {
+            return Err(EffectError::ResourceError(
+                format!("Source resource is locked: {}", self.params.source_resource_id)
+            ));
+        }
+        
+        if dest_resource.is_locked() {
+            return Err(EffectError::ResourceError(
+                format!("Destination resource is locked: {}", self.params.destination_resource_id)
+            ));
+        }
+        
+        let source_data = source_resource.data(source_capability).await.map_err(|e| 
+            EffectError::ResourceError(format!("Failed to read source data: {}", e))
+        )?;
+        let dest_data = dest_resource.data(dest_capability).await.map_err(|e|
+            EffectError::ResourceError(format!("Failed to read destination data: {}", e))
+        )?;
+        
+        if source_data.is_empty() {
+            return Err(EffectError::ResourceError(
+                format!("Source resource is empty: {}", self.params.source_resource_id)
+            ));
+        }
         
         // Handle specific transfer logic depending on resource types
-        match params.amount {
+        match self.params.amount {
             Some(amount) if amount > 0 => {
                 // Fungible asset transfer
-                // Parse source data as an amount
-                let source_amount = String::from_utf8(source_data.clone())
-                    .map_err(|_| EffectError::ExecutionError("Failed to parse source amount".into()))?
-                    .parse::<u64>()
-                    .map_err(|_| EffectError::ExecutionError("Source is not a valid amount".into()))?;
+                let source_amount = source_resource.get_amount()
+                    .ok_or_else(|| EffectError::ResourceError(
+                        format!("Source resource does not have an amount: {}", self.params.source_resource_id)
+                    ))?;
                 
-                // Check if source has enough funds
                 if source_amount < amount {
-                    return Err(EffectError::ResourceError(format!(
-                        "Insufficient funds: have {}, need {}",
-                        source_amount, amount
-                    )));
+                    return Err(EffectError::ResourceError(
+                        format!("Insufficient amount in source resource: {}", self.params.source_resource_id)
+                    ));
                 }
                 
-                // Parse destination data as an amount
-                let dest_data = dest_resource.data().to_vec();
-                let dest_amount = String::from_utf8(dest_data)
-                    .map_err(|_| EffectError::ExecutionError("Failed to parse destination amount".into()))?
-                    .parse::<u64>()
-                    .map_err(|_| EffectError::ExecutionError("Destination is not a valid amount".into()))?;
+                let dest_amount = dest_resource.get_amount().unwrap_or(0);
                 
-                // Update source resource
-                let new_source_amount = source_amount - amount;
-                let new_source_data = new_source_amount.to_string().into_bytes();
+                // Create updated resource data
+                let mut new_source_data = source_data.clone();
+                let mut new_dest_data = dest_data.clone();
                 
-                // Update destination resource
-                let new_dest_amount = dest_amount + amount;
-                let new_dest_data = new_dest_amount.to_string().into_bytes();
+                // Update the amounts
+                source_resource.set_amount(source_amount - amount);
+                dest_resource.set_amount(dest_amount + amount);
                 
                 // Perform the updates
                 self.resource_api.update_resource(
                     source_capability,
-                    &params.source_resource_id,
+                    &self.params.source_resource_id,
                     Some(new_source_data),
                     None,
                 ).await.map_err(|e| EffectError::ExecutionError(
@@ -143,7 +191,7 @@ impl TransferEffect {
                 
                 self.resource_api.update_resource(
                     dest_capability,
-                    &params.destination_resource_id,
+                    &self.params.destination_resource_id,
                     Some(new_dest_data),
                     None,
                 ).await.map_err(|e| EffectError::ExecutionError(
@@ -155,7 +203,7 @@ impl TransferEffect {
                 // Update the destination resource with source data
                 self.resource_api.update_resource(
                     dest_capability,
-                    &params.destination_resource_id,
+                    &self.params.destination_resource_id,
                     Some(source_data.clone()),
                     None,
                 ).await.map_err(|e| EffectError::ExecutionError(
@@ -165,129 +213,121 @@ impl TransferEffect {
                 // Clear the source resource (transfer complete)
                 self.resource_api.update_resource(
                     source_capability,
-                    &params.source_resource_id,
+                    &self.params.source_resource_id,
                     Some(vec![]), // Empty data
                     None,
                 ).await.map_err(|e| EffectError::ExecutionError(
-                    format!("Failed to clear source resource: {}", e)
+                    format!("Failed to update source resource: {}", e)
                 ))?;
             }
         }
         
-        Ok((params.source_resource_id.clone(), params.destination_resource_id.clone()))
+        Ok(EffectOutcome {
+            id: EffectId::new_unique(),
+            success: true,
+            data: HashMap::new(),
+            error: None,
+            execution_id: Some(ctx.execution_id),
+            resource_changes: Vec::new(),
+            metadata: HashMap::new(),
+        })
     }
 }
 
 #[async_trait]
 impl Effect for TransferEffect {
+    fn id(&self) -> &EffectId {
+        &self.id
+    }
+
     fn name(&self) -> &str {
         "transfer"
     }
-    
-    fn description(&self) -> &str {
-        "Transfer resources from one account to another"
+
+    fn display_name(&self) -> String {
+        "Transfer Resources".to_string()
     }
-    
-    fn required_capabilities(&self) -> Vec<(ResourceId, Right)> {
-        // Dynamic capabilities are checked during execution
-        vec![]
+
+    fn description(&self) -> String {
+        "Transfers resources between accounts".to_string()
     }
-    
-    async fn execute(&self, context: EffectContext) -> EffectResult<EffectOutcome> {
-        // Parse parameters from the context
-        let source_id = context.parameters.get("source_resource_id")
-            .ok_or_else(|| EffectError::InvalidParameter("Missing source_resource_id".into()))?;
-        
-        let dest_id = context.parameters.get("destination_resource_id")
-            .ok_or_else(|| EffectError::InvalidParameter("Missing destination_resource_id".into()))?;
-        
-        let amount = context.parameters.get("amount")
-            .map(|s| s.parse::<u64>().ok())
-            .flatten();
-        
-        // Create transfer parameters
-        let params = TransferParams {
-            source_resource_id: ResourceId::from(source_id.clone()),
-            destination_resource_id: ResourceId::from(dest_id.clone()),
-            amount,
-            additional_params: context.parameters.clone(),
-        };
-        
-        // Execute the transfer
-        let (source_id, dest_id) = self.execute_transfer(&context, &params).await?;
-        
-        // Create the outcome
-        let source_hash = format!("hash:{}", uuid::Uuid::new_v4());
-        let dest_hash = format!("hash:{}", uuid::Uuid::new_v4());
-        
-        let resource_changes = vec![
-            ResourceChange {
-                resource_id: source_id,
-                change_type: ResourceChangeType::Transferred,
-                previous_state_hash: Some(format!("old:{}", uuid::Uuid::new_v4())),
-                new_state_hash: source_hash,
-            },
-            ResourceChange {
-                resource_id: dest_id,
-                change_type: ResourceChangeType::Updated,
-                previous_state_hash: Some(format!("old:{}", uuid::Uuid::new_v4())),
-                new_state_hash: dest_hash,
-            },
-        ];
-        
-        // Create outcome with results
-        let mut result_data = HashMap::new();
-        result_data.insert("amount".to_string(), amount.unwrap_or(1).to_string());
-        result_data.insert("source_id".to_string(), source_id.to_string());
-        result_data.insert("destination_id".to_string(), dest_id.to_string());
-        
-        let outcome = EffectOutcome {
-            execution_id: context.execution_id,
-            success: true,
-            result: Some(serde_json::to_value(result_data).unwrap_or_default()),
-            error: None,
-            resource_changes,
-            metadata: context.parameters,
-        };
-        
-        Ok(outcome)
+
+    fn execute(&self, ctx: &EffectContext) -> EffectResult<EffectOutcome> {
+        // Return a placeholder outcome in synchronous context
+        Ok(EffectOutcome {
+            id: EffectId::new_unique(),
+            success: false,
+            data: HashMap::new(),
+            error: Some("Transfer effect must be executed asynchronously".to_string()),
+            execution_id: Some(ctx.execution_id),
+            resource_changes: Vec::new(),
+            metadata: HashMap::new(),
+        })
     }
-    
+
+    async fn execute_async(&self, ctx: &EffectContext) -> EffectResult<EffectOutcome> {
+        self.execute_transfer(ctx).await
+    }
+
     fn can_execute_in(&self, boundary: ExecutionBoundary) -> bool {
-        // This effect must run inside the system since it modifies resources
-        boundary == ExecutionBoundary::InsideSystem
+        matches!(boundary, ExecutionBoundary::CrossSystem)
     }
-    
+
     fn preferred_boundary(&self) -> ExecutionBoundary {
-        ExecutionBoundary::InsideSystem
+        ExecutionBoundary::CrossSystem
+    }
+
+    fn display_parameters(&self) -> HashMap<String, String> {
+        let mut params = HashMap::new();
+        params.insert("from".to_string(), self.params.source_resource_id.to_string());
+        params.insert("to".to_string(), self.params.destination_resource_id.to_string());
+        if let Some(amount) = self.params.amount {
+            params.insert("amount".to_string(), amount.to_string());
+        }
+        // Add other parameters from additional_params
+        for (key, value) in &self.params.additional_params {
+            params.insert(key.clone(), value.clone());
+        }
+        params
+    }
+
+    fn fact_dependencies(&self) -> Vec<FactDependency> {
+        // Return the fact dependencies
+        self.fact_dependencies.clone()
+    }
+
+    fn fact_snapshot(&self) -> Option<FactSnapshot> {
+        // Return the fact snapshot if one exists
+        self.fact_snapshot.clone()
+    }
+
+    fn validate_fact_dependencies(&self) -> crate::error::Result<()> {
+        // No fact dependencies to validate in this implementation
+        Ok(())
     }
 }
 
 impl ProgramAccountEffect for TransferEffect {
     fn applicable_account_types(&self) -> Vec<&'static str> {
-        vec!["asset", "token", "nft"]
+        vec!["asset"]
     }
-    
+
     fn can_apply_to(&self, account: &dyn ProgramAccount) -> bool {
-        // Check if this is an asset program account
-        if let Some(_) = account.as_any().downcast_ref::<AssetProgramAccount>() {
-            return true;
-        }
-        
-        // Check if account type is supported
-        let account_type = account.account_type();
-        self.applicable_account_types().contains(&account_type)
+        account.account_type() == "asset"
     }
-    
-    fn display_name(&self) -> &str {
-        "Transfer"
-    }
-    
-    fn display_parameters(&self) -> HashMap<String, String> {
-        let mut params = HashMap::new();
-        params.insert("icon".to_string(), "arrow-right".to_string());
-        params.insert("description".to_string(), "Transfer assets to another account".to_string());
-        params.insert("color".to_string(), "#4CAF50".to_string());
-        params
-    }
-} 
+}
+
+/// Implementation of a transfer effect
+#[derive(Debug)]
+pub struct TransferEffectImpl {
+    // ... existing fields ...
+}
+
+/// Factory function to create a new transfer effect
+pub fn create_transfer_effect(
+    // ... existing parameters ...
+) -> Arc<dyn Effect> {
+    // ... existing implementation ...
+}
+
+// Update any other functions that return TransferEffect to specify Output type 

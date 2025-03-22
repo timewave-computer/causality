@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use futures::FutureExt;
 use log::{info, debug};
+use async_trait::async_trait;
 
 use crate::error::{Error, Result};
 use crate::domain::{
@@ -433,6 +434,393 @@ impl DomainSelector {
         }
         
         Ok(adapters)
+    }
+}
+
+// Domain Selection Strategies
+//
+// This module provides strategies for selecting domains when executing operations
+// that can span multiple domains.
+
+/// Domain selection strategy interface
+///
+/// This trait defines the interface for strategies that select domains
+/// for operations that can span multiple domains.
+#[async_trait]
+pub trait DomainSelectionStrategy: Send + Sync {
+    /// Select a domain for the given operation
+    ///
+    /// # Arguments
+    /// * `domains` - The available domains to choose from
+    /// * `required_capabilities` - Capabilities that the selected domain must support
+    /// * `preferences` - Optional preferences to consider during selection (e.g., cost, latency)
+    ///
+    /// # Returns
+    /// The selected domain ID or an error if no suitable domain is found
+    async fn select_domain(
+        &self,
+        domains: &[Arc<dyn DomainAdapter>],
+        required_capabilities: &HashSet<String>,
+        preferences: &HashMap<String, String>,
+    ) -> Result<DomainId>;
+    
+    /// Select multiple domains for an operation that spans multiple domains
+    ///
+    /// # Arguments
+    /// * `domains` - The available domains to choose from
+    /// * `required_capabilities` - Capabilities that the selected domains must support
+    /// * `preferences` - Optional preferences to consider during selection (e.g., cost, latency)
+    /// * `count` - Number of domains to select
+    ///
+    /// # Returns
+    /// The selected domain IDs or an error if no suitable domains are found
+    async fn select_domains(
+        &self,
+        domains: &[Arc<dyn DomainAdapter>],
+        required_capabilities: &HashSet<String>,
+        preferences: &HashMap<String, String>,
+        count: usize,
+    ) -> Result<Vec<DomainId>>;
+}
+
+/// Preferred domain selection strategy
+///
+/// This strategy selects domains based on a preferred list, falling back to
+/// other domains if the preferred ones are not available.
+pub struct PreferredDomainStrategy {
+    /// List of preferred domain IDs in order of preference
+    preferred_domains: Vec<DomainId>,
+}
+
+impl PreferredDomainStrategy {
+    /// Create a new preferred domain strategy
+    pub fn new(preferred_domains: Vec<DomainId>) -> Self {
+        Self {
+            preferred_domains,
+        }
+    }
+}
+
+#[async_trait]
+impl DomainSelectionStrategy for PreferredDomainStrategy {
+    async fn select_domain(
+        &self,
+        domains: &[Arc<dyn DomainAdapter>],
+        required_capabilities: &HashSet<String>,
+        _preferences: &HashMap<String, String>,
+    ) -> Result<DomainId> {
+        // First try the preferred domains
+        for preferred_id in &self.preferred_domains {
+            if let Some(domain) = domains.iter().find(|d| d.domain_id() == preferred_id) {
+                // Check if domain has required capabilities
+                // For now we don't have a capability check, so just return the domain
+                return Ok(preferred_id.clone());
+            }
+        }
+        
+        // If no preferred domain is found, use the first available one
+        if let Some(domain) = domains.first() {
+            Ok(domain.domain_id().clone())
+        } else {
+            Err(Error::DomainNotFound("No domains available".to_string()))
+        }
+    }
+    
+    async fn select_domains(
+        &self,
+        domains: &[Arc<dyn DomainAdapter>],
+        required_capabilities: &HashSet<String>,
+        preferences: &HashMap<String, String>,
+        count: usize,
+    ) -> Result<Vec<DomainId>> {
+        let mut selected = Vec::with_capacity(count);
+        
+        // First add all preferred domains that are available
+        for preferred_id in &self.preferred_domains {
+            if selected.len() >= count {
+                break;
+            }
+            
+            if let Some(domain) = domains.iter().find(|d| d.domain_id() == preferred_id) {
+                // Check if domain has required capabilities
+                // For now we don't have a capability check, so just add the domain
+                selected.push(preferred_id.clone());
+            }
+        }
+        
+        // If we need more domains, add any remaining available ones
+        for domain in domains {
+            if selected.len() >= count {
+                break;
+            }
+            
+            if !selected.contains(domain.domain_id()) {
+                selected.push(domain.domain_id().clone());
+            }
+        }
+        
+        if selected.is_empty() {
+            Err(Error::DomainNotFound("No domains available".to_string()))
+        } else if selected.len() < count {
+            Err(Error::InsufficientDomains(format!("Requested {} domains but only found {}", count, selected.len())))
+        } else {
+            Ok(selected)
+        }
+    }
+}
+
+/// Latency-based domain selection strategy
+///
+/// This strategy selects domains based on their current latency, preferring
+/// domains with lower latency.
+pub struct LatencyBasedStrategy {
+    /// Maximum acceptable latency in milliseconds
+    max_latency_ms: u64,
+}
+
+impl LatencyBasedStrategy {
+    /// Create a new latency-based strategy
+    pub fn new(max_latency_ms: u64) -> Self {
+        Self {
+            max_latency_ms,
+        }
+    }
+    
+    /// Measure latency to a domain
+    async fn measure_latency(&self, domain: &Arc<dyn DomainAdapter>) -> Result<u64> {
+        // In a real implementation, we would measure the actual latency
+        // For now, just return a placeholder value
+        Ok(100)
+    }
+}
+
+#[async_trait]
+impl DomainSelectionStrategy for LatencyBasedStrategy {
+    async fn select_domain(
+        &self,
+        domains: &[Arc<dyn DomainAdapter>],
+        required_capabilities: &HashSet<String>,
+        _preferences: &HashMap<String, String>,
+    ) -> Result<DomainId> {
+        if domains.is_empty() {
+            return Err(Error::DomainNotFound("No domains available".to_string()));
+        }
+        
+        // Measure latency to each domain
+        let mut domain_latencies = Vec::with_capacity(domains.len());
+        for domain in domains {
+            if let Ok(latency) = self.measure_latency(domain).await {
+                if latency <= self.max_latency_ms {
+                    domain_latencies.push((domain.domain_id().clone(), latency));
+                }
+            }
+        }
+        
+        // Sort by latency (lowest first)
+        domain_latencies.sort_by_key(|(_, latency)| *latency);
+        
+        // Return the domain with the lowest latency, or an error if none is found
+        if let Some((domain_id, _)) = domain_latencies.first() {
+            Ok(domain_id.clone())
+        } else {
+            Err(Error::DomainNotFound("No domain with acceptable latency found".to_string()))
+        }
+    }
+    
+    async fn select_domains(
+        &self,
+        domains: &[Arc<dyn DomainAdapter>],
+        required_capabilities: &HashSet<String>,
+        preferences: &HashMap<String, String>,
+        count: usize,
+    ) -> Result<Vec<DomainId>> {
+        if domains.is_empty() {
+            return Err(Error::DomainNotFound("No domains available".to_string()));
+        }
+        
+        // Measure latency to each domain
+        let mut domain_latencies = Vec::with_capacity(domains.len());
+        for domain in domains {
+            if let Ok(latency) = self.measure_latency(domain).await {
+                if latency <= self.max_latency_ms {
+                    domain_latencies.push((domain.domain_id().clone(), latency));
+                }
+            }
+        }
+        
+        // Sort by latency (lowest first)
+        domain_latencies.sort_by_key(|(_, latency)| *latency);
+        
+        // Take the domains with the lowest latency
+        let selected: Vec<DomainId> = domain_latencies
+            .iter()
+            .take(count)
+            .map(|(id, _)| id.clone())
+            .collect();
+        
+        if selected.is_empty() {
+            Err(Error::DomainNotFound("No domain with acceptable latency found".to_string()))
+        } else if selected.len() < count {
+            Err(Error::InsufficientDomains(format!("Requested {} domains but only found {}", count, selected.len())))
+        } else {
+            Ok(selected)
+        }
+    }
+}
+
+/// Cost-based domain selection strategy
+///
+/// This strategy selects domains based on their estimated operation cost,
+/// preferring domains with lower costs.
+pub struct CostBasedStrategy {
+    /// Maximum acceptable cost
+    max_cost: f64,
+}
+
+impl CostBasedStrategy {
+    /// Create a new cost-based strategy
+    pub fn new(max_cost: f64) -> Self {
+        Self {
+            max_cost,
+        }
+    }
+    
+    /// Estimate the cost of an operation on a domain
+    fn estimate_cost(&self, domain: &Arc<dyn DomainAdapter>, capabilities: &HashSet<String>) -> Result<f64> {
+        // In a real implementation, we would estimate the actual cost
+        // For now, just return a placeholder value
+        Ok(1.0)
+    }
+}
+
+#[async_trait]
+impl DomainSelectionStrategy for CostBasedStrategy {
+    async fn select_domain(
+        &self,
+        domains: &[Arc<dyn DomainAdapter>],
+        required_capabilities: &HashSet<String>,
+        _preferences: &HashMap<String, String>,
+    ) -> Result<DomainId> {
+        if domains.is_empty() {
+            return Err(Error::DomainNotFound("No domains available".to_string()));
+        }
+        
+        // Estimate cost for each domain
+        let mut domain_costs = Vec::with_capacity(domains.len());
+        for domain in domains {
+            if let Ok(cost) = self.estimate_cost(domain, required_capabilities) {
+                if cost <= self.max_cost {
+                    domain_costs.push((domain.domain_id().clone(), cost));
+                }
+            }
+        }
+        
+        // Sort by cost (lowest first)
+        domain_costs.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        
+        // Return the domain with the lowest cost, or an error if none is found
+        if let Some((domain_id, _)) = domain_costs.first() {
+            Ok(domain_id.clone())
+        } else {
+            Err(Error::DomainNotFound("No domain with acceptable cost found".to_string()))
+        }
+    }
+    
+    async fn select_domains(
+        &self,
+        domains: &[Arc<dyn DomainAdapter>],
+        required_capabilities: &HashSet<String>,
+        preferences: &HashMap<String, String>,
+        count: usize,
+    ) -> Result<Vec<DomainId>> {
+        if domains.is_empty() {
+            return Err(Error::DomainNotFound("No domains available".to_string()));
+        }
+        
+        // Estimate cost for each domain
+        let mut domain_costs = Vec::with_capacity(domains.len());
+        for domain in domains {
+            if let Ok(cost) = self.estimate_cost(domain, required_capabilities) {
+                if cost <= self.max_cost {
+                    domain_costs.push((domain.domain_id().clone(), cost));
+                }
+            }
+        }
+        
+        // Sort by cost (lowest first)
+        domain_costs.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        
+        // Take the domains with the lowest cost
+        let selected: Vec<DomainId> = domain_costs
+            .iter()
+            .take(count)
+            .map(|(id, _)| id.clone())
+            .collect();
+        
+        if selected.is_empty() {
+            Err(Error::DomainNotFound("No domain with acceptable cost found".to_string()))
+        } else if selected.len() < count {
+            Err(Error::InsufficientDomains(format!("Requested {} domains but only found {}", count, selected.len())))
+        } else {
+            Ok(selected)
+        }
+    }
+}
+
+/// Composite domain selection strategy
+///
+/// This strategy combines multiple strategies with weights to make a selection.
+pub struct CompositeStrategy {
+    /// Strategies to combine
+    strategies: Vec<(Box<dyn DomainSelectionStrategy>, f64)>,
+}
+
+impl CompositeStrategy {
+    /// Create a new composite strategy
+    pub fn new(strategies: Vec<(Box<dyn DomainSelectionStrategy>, f64)>) -> Self {
+        Self {
+            strategies,
+        }
+    }
+}
+
+#[async_trait]
+impl DomainSelectionStrategy for CompositeStrategy {
+    async fn select_domain(
+        &self,
+        domains: &[Arc<dyn DomainAdapter>],
+        required_capabilities: &HashSet<String>,
+        preferences: &HashMap<String, String>,
+    ) -> Result<DomainId> {
+        if self.strategies.is_empty() {
+            return Err(Error::InvalidArgument("No strategies defined".to_string()));
+        }
+        
+        // Use the strategy with the highest weight
+        let (strategy, _) = self.strategies.iter()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap();
+        
+        strategy.select_domain(domains, required_capabilities, preferences).await
+    }
+    
+    async fn select_domains(
+        &self,
+        domains: &[Arc<dyn DomainAdapter>],
+        required_capabilities: &HashSet<String>,
+        preferences: &HashMap<String, String>,
+        count: usize,
+    ) -> Result<Vec<DomainId>> {
+        if self.strategies.is_empty() {
+            return Err(Error::InvalidArgument("No strategies defined".to_string()));
+        }
+        
+        // Use the strategy with the highest weight
+        let (strategy, _) = self.strategies.iter()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap();
+        
+        strategy.select_domains(domains, required_capabilities, preferences, count).await
     }
 }
 

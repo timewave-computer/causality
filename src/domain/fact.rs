@@ -8,8 +8,6 @@ mod types;
 mod verification;
 mod verifiers;
 mod observer;
-mod bridge;   // Compatibility layer for legacy code
-mod register_observer;
 mod zkproof_observer;
 
 // Re-exports
@@ -19,7 +17,3 @@ pub use verifiers::{
     MerkleProofVerifier, SignatureVerifier, ConsensusVerifier,
     VerifierRegistry
 };
-
-// Legacy compatibility exports - marked for deprecation in future versions
-// @deprecated - Use new FactType system instead
-pub use bridge::{ObservedFact, VerifiedFact, FactProof, ProofType};

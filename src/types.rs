@@ -77,17 +77,19 @@ pub mod domain {
     pub struct DomainId(pub String);
     
     impl DomainId {
-        pub fn new(id: &str) -> Self {
-            DomainId(id.to_string())
+        /// Create a new DomainId
+        pub fn new(id: impl Into<String>) -> Self {
+            Self(id.into())
         }
         
+        /// Get the string representation
         pub fn as_str(&self) -> &str {
             &self.0
         }
     }
     
     impl fmt::Display for DomainId {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{}", self.0)
         }
     }
@@ -533,64 +535,9 @@ impl fmt::Display for Amount {
     }
 }
 
-/// A resource identifier
+/// Resource identifier
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ResourceId(pub Uuid);
-
-impl ResourceId {
-    /// Generate a new random resource ID
-    pub fn new() -> Self {
-        ResourceId(Uuid::new_v4())
-    }
-    
-    /// Create a deterministic resource ID from a namespace and name
-    /// 
-    /// This uses UUID v5 (SHA1-based) to create a deterministic ID based on
-    /// the namespace and name, which ensures that the same inputs always produce
-    /// the same ID. This is useful for creating deterministic IDs for resources
-    /// that should be consistently identified across different systems.
-    pub fn deterministic(namespace: &str, name: &str) -> Self {
-        // Create a namespace UUID from the namespace string
-        let namespace_uuid = Uuid::new_v5(&Uuid::NAMESPACE_OID, namespace.as_bytes());
-        
-        // Create a deterministic ID using the namespace UUID and name
-        let uuid = Uuid::new_v5(&namespace_uuid, name.as_bytes());
-        
-        ResourceId(uuid)
-    }
-    
-    /// Create a domain-specific resource ID
-    /// 
-    /// This creates a deterministic ID that includes the domain information
-    /// to ensure proper namespacing between different domains.
-    pub fn domain_specific(domain: &str, resource_name: &str) -> Self {
-        // Use a standard prefix for all domain-specific IDs
-        let namespace = format!("domain:{}", domain);
-        Self::deterministic(&namespace, resource_name)
-    }
-    
-    /// Create from an existing UUID
-    pub fn from_uuid(uuid: Uuid) -> Self {
-        ResourceId(uuid)
-    }
-    
-    /// Create from a string representation
-    pub fn from_str(s: &str) -> Result<Self, uuid::Error> {
-        let uuid = Uuid::parse_str(s)?;
-        Ok(ResourceId(uuid))
-    }
-    
-    /// Extract domain from a domain-specific ID if it was created with domain_specific()
-    /// 
-    /// This is a heuristic attempt and may not work for all IDs, especially if they
-    /// weren't created using the domain_specific method. Returns None if the domain
-    /// can't be deterministically extracted.
-    pub fn extract_domain(&self) -> Option<String> {
-        // This is a simplified implementation that would need to be enhanced
-        // in a real system to actually extract the domain reliably.
-        None
-    }
-}
+pub struct ResourceId(pub String);
 
 impl fmt::Display for ResourceId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -598,8 +545,100 @@ impl fmt::Display for ResourceId {
     }
 }
 
+impl From<String> for ResourceId {
+    fn from(s: String) -> Self {
+        ResourceId(s)
+    }
+}
+
+impl From<&str> for ResourceId {
+    fn from(s: &str) -> Self {
+        ResourceId(s.to_string())
+    }
+}
+
+/// State of a resource register in the system
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RegisterState {
+    /// Initial state when created
+    Initial,
+    
+    /// Active and usable
+    Active,
+    
+    /// Temporarily locked
+    Locked,
+    
+    /// Permanently frozen
+    Frozen,
+    
+    /// Consumed (used up)
+    Consumed,
+    
+    /// Pending consumption
+    Pending,
+    
+    /// Archived (in long-term storage)
+    Archived,
+}
+
+impl fmt::Display for RegisterState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RegisterState::Initial => write!(f, "Initial"),
+            RegisterState::Active => write!(f, "Active"),
+            RegisterState::Locked => write!(f, "Locked"),
+            RegisterState::Frozen => write!(f, "Frozen"),
+            RegisterState::Consumed => write!(f, "Consumed"),
+            RegisterState::Pending => write!(f, "Pending"),
+            RegisterState::Archived => write!(f, "Archived"),
+        }
+    }
+}
+
 // Re-export time types from time module
 pub use crate::time::LamportTime;
+
+/// A general purpose metadata struct for storing key-value pairs
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct Metadata {
+    /// Internal storage for metadata key-value pairs
+    pub values: HashMap<String, String>,
+}
+
+impl Metadata {
+    /// Create a new empty metadata container
+    pub fn new() -> Self {
+        Self {
+            values: HashMap::new(),
+        }
+    }
+
+    /// Insert a key-value pair
+    pub fn insert(&mut self, key: impl Into<String>, value: impl Into<String>) -> Option<String> {
+        self.values.insert(key.into(), value.into())
+    }
+
+    /// Get a value by key
+    pub fn get(&self, key: &str) -> Option<&String> {
+        self.values.get(key)
+    }
+
+    /// Check if a key exists
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.values.contains_key(key)
+    }
+
+    /// Get the number of key-value pairs
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    /// Check if the metadata is empty
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -650,5 +689,34 @@ mod tests {
             arr
         };
         assert_eq!(to_fixed_bytes(input), expected);
+    }
+
+    #[test]
+    fn test_resource_id_creation() {
+        let id1 = ResourceId("resource-1".to_string());
+        let id2: ResourceId = "resource-2".into();
+        let id3: ResourceId = String::from("resource-3").into();
+        
+        assert_eq!(id1.0, "resource-1");
+        assert_eq!(id2.0, "resource-2");
+        assert_eq!(id3.0, "resource-3");
+    }
+    
+    #[test]
+    fn test_domain_id_creation() {
+        let id1 = DomainId("domain-1".to_string());
+        let id2: DomainId = "domain-2".into();
+        let id3: DomainId = String::from("domain-3").into();
+        
+        assert_eq!(id1.0, "domain-1");
+        assert_eq!(id2.0, "domain-2");
+        assert_eq!(id3.0, "domain-3");
+    }
+    
+    #[test]
+    fn test_register_state_display() {
+        assert_eq!(format!("{}", RegisterState::Active), "Active");
+        assert_eq!(format!("{}", RegisterState::Locked), "Locked");
+        assert_eq!(format!("{}", RegisterState::Consumed), "Consumed");
     }
 } 

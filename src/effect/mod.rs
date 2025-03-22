@@ -1,26 +1,225 @@
-pub mod boundary;
-pub mod transfer_effect;
-pub mod private_effect;
-#[cfg(test)]
-mod tests;
+// Effect System Module
+//
+// The Effect System provides a way to model and execute operations that may have
+// side effects on resources, domains, or external systems.
+//
+// The core of the system is the `Effect` trait, which represents any operation that 
+// can be executed and produces an outcome. Effects can run both synchronously and 
+// asynchronously, and they may target different execution boundaries (inside or outside
+// the system).
+//
+// Instead of using generic type parameters, the Effect system uses a uniform 
+// `EffectOutcome` structure that can represent any result of an effect execution.
+// This simplifies the API and makes it easier to compose and chain effects.
+//
+// Key components:
+// - `Effect` trait: The core interface for all effects
+// - `EffectOutcome`: Uniform structure for effect results
+// - `EffectContext`: Provides context for effect execution
+// - `EffectHandler`: Processes effects and handles their execution
+// - `ExecutionBoundary`: Defines where an effect can run (inside/outside system)
+// - `EffectRegistry`: Manages registration and resolution of effects
 
+// Effect system for Causality
+//
+// This module provides the core effect system for Causality, allowing effects
+// to be described, composed, and executed.
+
+use std::any::Any;
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
+
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
+use uuid;
+use thiserror::Error;
 
-use crate::address::Address;
-use crate::resource::{ResourceAPI, ResourceId, CapabilityRef, Right};
-use crate::program_account::ProgramAccount;
-use crate::effect::boundary::{
-    EffectContext, ExecutionBoundary, BoundaryCrossing, BoundaryError, 
-    BoundaryCrossingRegistry, CrossingDirection
-};
+use crate::error::{Error, Result};
+use crate::capabilities::{CapabilityId, Right};
+use crate::types::{ResourceId, DomainId};
 
-/// Result type for effect operations
-pub type EffectResult<T> = Result<T, EffectError>;
+// Module declarations
+pub mod boundary;
+pub mod constraints;
+pub mod continuation;
+pub mod factory;
+pub mod handler;
+pub mod storage;
+pub mod templates;
+pub mod three_layer;
+pub mod transfer_effect;
+pub mod types;
 
-/// Errors that can occur during effect execution
+// Test module
+#[cfg(test)]
+pub mod tests;
+
+// Re-export common types
+pub use self::boundary::ExecutionBoundary;
+pub use self::handler::{EffectHandler, HandlerResult};
+pub use self::types::ResourceChange;
+pub use self::continuation::StatusToken;
+
+/// Unique identifier for an effect
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EffectId(String);
+
+impl EffectId {
+    /// Create a new unique ID
+    pub fn new_unique() -> Self {
+        Self(Uuid::new_v4().to_string())
+    }
+    
+    /// Create an ID from a string
+    pub fn from_string(s: String) -> Self {
+        Self(s)
+    }
+    
+    /// Get the string representation
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for EffectId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// The result of applying an effect
+#[derive(Debug, Clone)]
+pub struct EffectOutcome {
+    /// ID of the effect
+    pub id: EffectId,
+    
+    /// Whether the effect was successful
+    pub success: bool,
+    
+    /// Output data (key-value pairs)
+    pub data: HashMap<String, String>,
+    
+    /// Error message if not successful
+    pub error: Option<String>,
+    
+    /// The execution context ID
+    pub execution_id: Option<uuid::Uuid>,
+    
+    /// Resource changes resulting from the effect
+    pub resource_changes: Vec<ResourceChange>,
+    
+    /// Metadata about the execution
+    pub metadata: HashMap<String, String>,
+}
+
+impl EffectOutcome {
+    /// Create a new successful outcome
+    pub fn success(id: EffectId) -> Self {
+        Self {
+            id,
+            success: true,
+            data: HashMap::new(),
+            error: None,
+            execution_id: Some(uuid::Uuid::new_v4()),
+            resource_changes: Vec::new(),
+            metadata: HashMap::new(),
+        }
+    }
+    
+    /// Create a new failed outcome
+    pub fn failure(id: EffectId, error: impl Into<String>) -> Self {
+        Self {
+            id,
+            success: false,
+            data: HashMap::new(),
+            error: Some(error.into()),
+            execution_id: Some(uuid::Uuid::new_v4()),
+            resource_changes: Vec::new(),
+            metadata: HashMap::new(),
+        }
+    }
+    
+    /// Add a key-value pair to the output data
+    pub fn with_data(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.data.insert(key.into(), value.into());
+        self
+    }
+    
+    /// Add a resource change
+    pub fn with_resource_change(mut self, change: ResourceChange) -> Self {
+        self.resource_changes.push(change);
+        self
+    }
+    
+    /// Add metadata
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+}
+
+/// Execution status of an async effect
+#[derive(Debug)]
+pub enum EffectExecution {
+    /// The effect is complete with a result
+    Complete(EffectOutcome),
+    
+    /// The effect is still in progress
+    InProgress(StatusToken),
+    
+    /// The effect encountered an error
+    Error(Error),
+}
+
+/// Effect context for execution
+#[derive(Debug, Clone)]
+pub struct EffectContext {
+    /// When the effect was started
+    pub started_at: DateTime<Utc>,
+    
+    /// Caller address
+    pub caller: Option<String>,
+    
+    /// Context parameters
+    pub params: HashMap<String, String>,
+}
+
+impl EffectContext {
+    /// Create a new empty context
+    pub fn new() -> Self {
+        Self {
+            started_at: Utc::now(),
+            caller: None,
+            params: HashMap::new(),
+        }
+    }
+    
+    /// Create a context with a caller
+    pub fn with_caller(caller: String) -> Self {
+        let mut context = Self::new();
+        context.caller = Some(caller);
+        context
+    }
+    
+    /// Add a parameter to the context
+    pub fn with_param(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.params.insert(key.into(), value.into());
+        self
+    }
+}
+
+impl Default for EffectContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Result type for effect execution
+pub type EffectResult<T> = std::result::Result<T, EffectError>;
+
+/// Error type for effect execution
 #[derive(Debug, thiserror::Error)]
 pub enum EffectError {
     #[error("Authentication failed: {0}")]
@@ -39,101 +238,105 @@ pub enum EffectError {
     ExecutionError(String),
     
     #[error("Boundary error: {0}")]
-    BoundaryError(#[from] BoundaryError),
+    BoundaryError(#[from] self::boundary::BoundaryError),
     
     #[error("Invalid parameter: {0}")]
     InvalidParameter(String),
+    
+    #[error("Permission denied: {0}")]
+    PermissionDenied(String),
+    
+    #[error("Invalid state: {0}")]
+    InvalidState(String),
+    
+    #[error("Not found: {0}")]
+    NotFound(String),
+    
+    #[error("Timeout: {0}")]
+    Timeout(String),
+    
+    #[error("Unsupported operation: {0}")]
+    UnsupportedOperation(String),
+    
+    #[error("External error: {0}")]
+    ExternalError(String),
     
     #[error("Not implemented")]
     NotImplemented,
 }
 
-/// Trait for effects that can be executed within the system
-#[async_trait]
-pub trait Effect: Send + Sync {
+/// Core trait for effects
+pub trait Effect: Send + Sync + fmt::Debug {
+    /// Get the unique ID of this effect
+    fn id(&self) -> &EffectId;
+    
     /// Get the name of the effect
     fn name(&self) -> &str;
     
-    /// Get the description of the effect
-    fn description(&self) -> &str;
+    /// Get a display name for this effect
+    fn display_name(&self) -> String;
     
-    /// Get the required capabilities for this effect
-    fn required_capabilities(&self) -> Vec<(ResourceId, Right)>;
+    /// Get the description of the effect
+    fn description(&self) -> String;
     
     /// Execute the effect
-    async fn execute(&self, context: EffectContext) -> EffectResult<EffectOutcome>;
+    fn execute(&self, context: &EffectContext) -> Result<EffectOutcome>;
     
-    /// Check if the effect can be executed in the given boundary
+    /// Check if this effect requires authorization
+    fn requires_authorization(&self) -> bool {
+        true
+    }
+    
+    /// Get the required capabilities for this effect
+    fn required_capabilities(&self) -> Vec<(ResourceId, Right)> {
+        Vec::new()
+    }
+    
+    /// Get the dependencies of this effect
+    fn dependencies(&self) -> Vec<EffectId> {
+        Vec::new()
+    }
+    
+    /// Check if this effect can execute in the given boundary
     fn can_execute_in(&self, boundary: ExecutionBoundary) -> bool;
     
-    /// Get the boundary where this effect should be executed
+    /// Get the preferred execution boundary for this effect
     fn preferred_boundary(&self) -> ExecutionBoundary;
+    
+    /// Get display parameters that describe what this effect does
+    fn display_parameters(&self) -> HashMap<String, String>;
+    
+    /// Get the fact dependencies for this effect
+    fn fact_dependencies(&self) -> Vec<crate::log::fact_snapshot::FactDependency> {
+        Vec::new()
+    }
+    
+    /// Get the fact snapshot for this effect
+    fn fact_snapshot(&self) -> Option<crate::log::fact_snapshot::FactSnapshot> {
+        None
+    }
+    
+    /// Validate fact dependencies for this effect
+    fn validate_fact_dependencies(&self) -> crate::error::Result<()> {
+        Ok(())
+    }
+    
+    /// Convert to Any for downcasting
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
-/// Represents the outcome of an effect execution
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EffectOutcome {
-    /// The execution context ID
-    pub execution_id: uuid::Uuid,
-    
-    /// Whether the effect execution was successful
-    pub success: bool,
-    
-    /// The result data if successful
-    pub result: Option<serde_json::Value>,
-    
-    /// Error message if unsuccessful
-    pub error: Option<String>,
-    
-    /// Resource changes resulting from the effect
-    pub resource_changes: Vec<ResourceChange>,
-    
-    /// Metadata about the execution
-    pub metadata: HashMap<String, String>,
+/// Asynchronous execution trait for effects
+#[async_trait]
+pub trait AsyncEffect: Effect {
+    /// Execute the effect asynchronously
+    async fn execute_async(&self, context: &EffectContext) -> EffectResult<EffectOutcome>;
 }
 
-/// Represents a change to a resource resulting from an effect
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceChange {
-    /// The ID of the resource that changed
-    pub resource_id: ResourceId,
-    
-    /// The type of change
-    pub change_type: ResourceChangeType,
-    
-    /// Previous state hash (if available)
-    pub previous_state_hash: Option<String>,
-    
-    /// New state hash
-    pub new_state_hash: String,
-}
-
-/// Types of resource changes
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ResourceChangeType {
-    /// Resource was created
-    Created,
-    
-    /// Resource was updated
-    Updated,
-    
-    /// Resource was deleted
-    Deleted,
-    
-    /// Resource was transferred
-    Transferred,
-    
-    /// Resource was locked
-    Locked,
-    
-    /// Resource was unlocked
-    Unlocked,
-}
-
-/// Registry for managing available effects
+/// A structure to manage effect registrations and executions
+#[derive(Debug)]
 pub struct EffectRegistry {
     effects: HashMap<String, Arc<dyn Effect>>,
-    crossing_registry: BoundaryCrossingRegistry,
+    crossing_registry: boundary::BoundaryCrossingRegistry,
 }
 
 impl EffectRegistry {
@@ -141,7 +344,7 @@ impl EffectRegistry {
     pub fn new() -> Self {
         Self {
             effects: HashMap::new(),
-            crossing_registry: BoundaryCrossingRegistry::new(),
+            crossing_registry: boundary::BoundaryCrossingRegistry::new(),
         }
     }
     
@@ -160,40 +363,62 @@ impl EffectRegistry {
         self.effects.values().cloned().collect()
     }
     
-    /// Get all effects that can be executed in the given boundary
+    /// Get effects that can execute in a specific boundary
     pub fn get_for_boundary(&self, boundary: ExecutionBoundary) -> Vec<Arc<dyn Effect>> {
-        self.effects.values()
-            .filter(|effect| effect.can_execute_in(boundary))
+        self.effects
+            .values()
+            .filter(|e| e.can_execute_in(boundary))
             .cloned()
             .collect()
     }
     
-    /// Record a boundary crossing
-    pub fn record_crossing<T>(&mut self, crossing: &BoundaryCrossing<T>, direction: CrossingDirection, success: bool, error: Option<String>)
+    /// Record a boundary crossing event
+    pub fn record_crossing<T>(&mut self, crossing: &boundary::BoundaryCrossing<T>, 
+                             direction: boundary::CrossingDirection, 
+                             success: bool, 
+                             error: Option<String>)
     where
         T: std::any::Any,
     {
-        self.crossing_registry.record(crossing, direction, success, error);
+        self.crossing_registry.record_crossing(crossing, direction, success, error);
     }
     
     /// Get the boundary crossing registry
-    pub fn crossing_registry(&self) -> &BoundaryCrossingRegistry {
+    pub fn crossing_registry(&self) -> &boundary::BoundaryCrossingRegistry {
         &self.crossing_registry
     }
 }
 
-/// Manages effect execution with boundary awareness
+impl Default for EffectRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Effect Manager for executing and managing effects
+#[derive(Debug)]
 pub struct EffectManager {
     registry: EffectRegistry,
-    resource_api: Arc<dyn ResourceAPI>,
+    resource_api: Option<Arc<dyn resource_api>>,
 }
+
+// For the resource API, this is just a placeholder until we implement the actual trait
+trait resource_api: Send + Sync {}
 
 impl EffectManager {
     /// Create a new effect manager
-    pub fn new(resource_api: Arc<dyn ResourceAPI>) -> Self {
+    pub fn new() -> Self {
         Self {
             registry: EffectRegistry::new(),
-            resource_api,
+            resource_api: None,
+        }
+    }
+    
+    /// Create a new effect manager with a resource API
+    pub fn with_resource_api(resource_api: Arc<dyn resource_api>) -> Self {
+        Self {
+            registry: EffectRegistry::new(),
+            resource_api: Some(resource_api),
         }
     }
     
@@ -212,137 +437,200 @@ impl EffectManager {
         &mut self.registry
     }
     
-    /// Execute an effect with boundary crossing handling
+    /// Execute an effect by name
     pub async fn execute_effect(&self, effect_name: &str, context: EffectContext) -> EffectResult<EffectOutcome> {
         let effect = self.registry.get(effect_name)
-            .ok_or_else(|| EffectError::ExecutionError(format!("Effect not found: {}", effect_name)))?;
+            .ok_or_else(|| EffectError::NotFound(format!("Effect '{}' not found", effect_name)))?;
         
-        // Check if the effect can execute in the given boundary
-        if !effect.can_execute_in(context.boundary) {
-            // We need to cross a boundary
-            let preferred_boundary = effect.preferred_boundary();
-            
-            if preferred_boundary == ExecutionBoundary::InsideSystem && context.boundary == ExecutionBoundary::OutsideSystem {
-                // We need to cross from outside to inside
-                return self.cross_boundary_to_inside(effect, context).await;
-            } else if preferred_boundary == ExecutionBoundary::OutsideSystem && context.boundary == ExecutionBoundary::InsideSystem {
-                // We need to cross from inside to outside
-                return self.cross_boundary_to_outside(effect, context).await;
+        // Verify capabilities if needed
+        if effect.requires_authorization() {
+            self.verify_capabilities(&effect, &context).await?;
+        }
+        
+        // For synchronous execution, use the regular Effect trait
+        effect.execute(&context).map_err(|e| {
+            match e {
+                Error::BoundaryViolation => EffectError::BoundaryError(boundary::BoundaryError::ViolatedBoundary {
+                    operation: effect_name.to_string(),
+                }),
+                _ => EffectError::ExecutionError(format!("Effect execution failed: {}", e)),
             }
+        })
+    }
+    
+    /// Execute an effect asynchronously by name
+    pub async fn execute_effect_async(&self, effect_name: &str, context: EffectContext) -> EffectResult<EffectOutcome> {
+        let effect = self.registry.get(effect_name)
+            .ok_or_else(|| EffectError::NotFound(format!("Effect '{}' not found", effect_name)))?;
+        
+        // Verify capabilities if needed
+        if effect.requires_authorization() {
+            self.verify_capabilities(&effect, &context).await?;
         }
         
-        // We can execute in the current boundary
-        self.execute_effect_in_current_boundary(effect, context).await
-    }
-    
-    /// Execute an effect in the current boundary
-    async fn execute_effect_in_current_boundary(&self, effect: Arc<dyn Effect>, context: EffectContext) -> EffectResult<EffectOutcome> {
-        // Check capabilities
-        self.verify_capabilities(&effect, &context).await?;
-        
-        // Execute the effect
-        let outcome = effect.execute(context).await?;
-        
-        Ok(outcome)
-    }
-    
-    /// Cross boundary from outside to inside
-    async fn cross_boundary_to_inside(&self, effect: Arc<dyn Effect>, context: EffectContext) -> EffectResult<EffectOutcome> {
-        // Create a boundary crossing
-        let crossing = BoundaryCrossing::new_inbound(
-            context.clone(),
-            effect.name().to_string(),
-        );
-        
-        // Record the crossing
-        self.registry.record_crossing(&crossing, CrossingDirection::Inbound, true, None);
-        
-        // Create a new inside context
-        let inside_context = EffectContext {
-            boundary: ExecutionBoundary::InsideSystem,
-            ..context
-        };
-        
-        // Execute the effect in the inside boundary
-        let outcome = self.execute_effect_in_current_boundary(effect, inside_context).await;
-        
-        // Record the outcome
-        if let Err(ref e) = outcome {
-            self.registry.record_crossing(&crossing, CrossingDirection::Inbound, false, Some(e.to_string()));
+        // Try to downcast to AsyncEffect
+        if let Some(async_effect) = effect.as_any().downcast_ref::<dyn AsyncEffect>() {
+            // Execute asynchronously
+            async_effect.execute_async(&context).await
+        } else {
+            // Fall back to synchronous execution
+            effect.execute(&context).map_err(|e| {
+                match e {
+                    Error::BoundaryViolation => EffectError::BoundaryError(boundary::BoundaryError::ViolatedBoundary {
+                        operation: effect_name.to_string(),
+                    }),
+                    _ => EffectError::ExecutionError(format!("Effect execution failed: {}", e)),
+                }
+            })
         }
-        
-        outcome
     }
     
-    /// Cross boundary from inside to outside
-    async fn cross_boundary_to_outside(&self, effect: Arc<dyn Effect>, context: EffectContext) -> EffectResult<EffectOutcome> {
-        // Create a boundary crossing
-        let crossing = BoundaryCrossing::new_outbound(
-            context.clone(),
-            effect.name().to_string(),
-        );
-        
-        // Record the crossing
-        self.registry.record_crossing(&crossing, CrossingDirection::Outbound, true, None);
-        
-        // Create a new outside context
-        let outside_context = EffectContext {
-            boundary: ExecutionBoundary::OutsideSystem,
-            ..context
-        };
-        
-        // Execute the effect in the outside boundary
-        let outcome = self.execute_effect_in_current_boundary(effect, outside_context).await;
-        
-        // Record the outcome
-        if let Err(ref e) = outcome {
-            self.registry.record_crossing(&crossing, CrossingDirection::Outbound, false, Some(e.to_string()));
-        }
-        
-        outcome
-    }
-    
-    /// Verify that the context has the required capabilities for the effect
+    /// Verify that the caller has the required capabilities for this effect
     async fn verify_capabilities(&self, effect: &Arc<dyn Effect>, context: &EffectContext) -> EffectResult<()> {
-        let required_capabilities = effect.required_capabilities();
+        // Skip verification if there's no resource API configured
+        if self.resource_api.is_none() {
+            return Ok(());
+        }
         
-        for (resource_id, right) in required_capabilities {
-            let has_capability = context.capabilities.iter().any(|cap| {
-                // Check if any capability applies to this resource and has the required right
-                let cap_obj = cap.capability();
-                
-                // Check if resource ID matches or capability has wildcard
-                let resource_matches = cap_obj.resource_id() == "*" || cap_obj.resource_id() == resource_id.to_string();
-                
-                // Check if capability has the required right
-                let has_right = cap_obj.has_right(&right);
-                
-                resource_matches && has_right
-            });
-            
-            if !has_capability {
-                return Err(EffectError::CapabilityError(format!(
-                    "Missing capability for resource {} with right {:?}",
-                    resource_id, right
-                )));
-            }
+        // In a full implementation, we would check each required capability
+        // against the caller's capabilities. For now, this is a placeholder.
+        let required = effect.required_capabilities();
+        if !required.is_empty() {
+            // Just a placeholder - in a real implementation, this would verify
+            // capabilities against the caller using the resource API
+            return Err(EffectError::AuthorizationFailed(
+                "Capability verification not implemented".to_string()
+            ));
         }
         
         Ok(())
     }
 }
 
-/// A marker trait for effects that can be used with program accounts
+impl Default for EffectManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Trait for effects that can be applied to program accounts
 pub trait ProgramAccountEffect: Effect {
     /// Get the program account types this effect can be applied to
     fn applicable_account_types(&self) -> Vec<&'static str>;
     
     /// Check if this effect can be applied to a specific program account
     fn can_apply_to(&self, account: &dyn ProgramAccount) -> bool;
+}
+
+// This is a placeholder for the ProgramAccount trait
+trait ProgramAccount: Send + Sync {
+    fn account_type(&self) -> &str;
+}
+
+/// Basic no-op effect implementation
+#[derive(Debug, Clone)]
+pub struct EmptyEffect {
+    id: EffectId,
+    name: String,
+    description: String,
+    boundary: ExecutionBoundary,
+}
+
+impl EmptyEffect {
+    /// Create a new empty effect
+    pub fn new() -> Self {
+        Self {
+            id: EffectId::new_unique(),
+            name: "empty".to_string(),
+            description: "No-op effect".to_string(),
+            boundary: ExecutionBoundary::InsideSystem,
+        }
+    }
     
-    /// Get a display name for this effect that is shown to users
-    fn display_name(&self) -> &str;
+    /// Create a new empty effect with a specific name
+    pub fn with_name(name: impl Into<String>) -> Self {
+        Self {
+            id: EffectId::new_unique(),
+            name: name.into(),
+            description: "No-op effect".to_string(),
+            boundary: ExecutionBoundary::InsideSystem,
+        }
+    }
     
-    /// Get display parameters that describe what this effect does
-    fn display_parameters(&self) -> HashMap<String, String>;
+    /// Create a new empty effect with a specific description
+    pub fn with_description(description: impl Into<String>) -> Self {
+        Self {
+            id: EffectId::new_unique(),
+            name: "empty".to_string(),
+            description: description.into(),
+            boundary: ExecutionBoundary::InsideSystem,
+        }
+    }
+    
+    /// Create a new empty effect with a specific boundary
+    pub fn with_boundary(boundary: ExecutionBoundary) -> Self {
+        Self {
+            id: EffectId::new_unique(),
+            name: "empty".to_string(),
+            description: "No-op effect".to_string(),
+            boundary,
+        }
+    }
+}
+
+impl Effect for EmptyEffect {
+    fn id(&self) -> &EffectId {
+        &self.id
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    fn display_name(&self) -> String {
+        self.name.clone()
+    }
+    
+    fn description(&self) -> String {
+        self.description.clone()
+    }
+    
+    fn execute(&self, _context: &EffectContext) -> Result<EffectOutcome> {
+        Ok(EffectOutcome::success(self.id.clone()))
+    }
+    
+    fn can_execute_in(&self, boundary: ExecutionBoundary) -> bool {
+        boundary == self.boundary
+    }
+    
+    fn preferred_boundary(&self) -> ExecutionBoundary {
+        self.boundary
+    }
+    
+    fn display_parameters(&self) -> HashMap<String, String> {
+        HashMap::new()
+    }
+    
+    fn fact_dependencies(&self) -> Vec<crate::log::fact_snapshot::FactDependency> {
+        Vec::new()
+    }
+    
+    fn fact_snapshot(&self) -> Option<crate::log::fact_snapshot::FactSnapshot> {
+        None
+    }
+    
+    fn validate_fact_dependencies(&self) -> crate::error::Result<()> {
+        Ok(())
+    }
+    
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+#[async_trait]
+impl AsyncEffect for EmptyEffect {
+    async fn execute_async(&self, _context: &EffectContext) -> EffectResult<EffectOutcome> {
+        Ok(EffectOutcome::success(self.id.clone()))
+    }
 } 

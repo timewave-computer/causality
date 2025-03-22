@@ -12,7 +12,7 @@ use crate::error::{Error, Result};
 use crate::types::{ContentId, ContentHash, TraceId, Timestamp};
 use crate::actor::{
     Actor, ActorId, ActorType, ActorState, ActorInfo, 
-    ActorRole, ActorCapability, Message, MessageCategory, MessagePayload
+    ActorRole, ActorCapability, Message, MessageCategory, MessagePayload, GenericActorId
 };
 
 /// Committee decision rule
@@ -238,7 +238,7 @@ impl Committee {
     ) -> Self {
         let id_str = id.into();
         let name_str = name.into();
-        let actor_id = ActorId(id_str);
+        let actor_id = GenericActorId::from_string(id_str);
         let now = Timestamp::now();
         
         let info = ActorInfo {

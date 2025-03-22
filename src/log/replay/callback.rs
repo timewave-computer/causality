@@ -3,10 +3,13 @@
 // This module provides callback interfaces for log replay.
 
 use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 
 use crate::error::Error;
 use crate::log::entry::{LogEntry, EffectEntry, FactEntry};
 use crate::log::replay::ReplayResult;
+use crate::log::event::{EventEntry, EventSeverity};
+use crate::effect::types::EffectType;
 
 /// Callback interface for log replay
 ///
@@ -264,7 +267,7 @@ mod tests {
     
     fn create_test_effect() -> EffectEntry {
         EffectEntry {
-            effect_type: crate::effect::EffectType::Transfer,
+            effect_type: crate::effect::types::EffectType::Transfer,
             resources: Vec::new(),
             domains: Vec::new(),
             code_hash: None,

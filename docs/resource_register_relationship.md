@@ -274,8 +274,7 @@ Programs interact with resources through a capability-based Resource API that pr
 1. **Capability-Based Access**: Programs never access resources directly; they receive unforgeable capability references
 2. **Composable Delegation**: Capabilities can be delegated, attenuated, and composed
 3. **Intent-Based Operations**: API operations express user intent rather than raw state mutations
-4. **Privacy-Preserving**: Operations generate only the minimal proofs needed to validate state transitions
-5. **Consistency Guarantees**: The API ensures atomic operations and causal consistency
+4. **Consistency Guarantees**: The API ensures atomic operations and causal consistency
 
 #### Key Abstractions in the Resource API
 

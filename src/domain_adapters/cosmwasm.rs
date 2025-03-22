@@ -580,6 +580,23 @@ impl CosmWasmAdapterFactory {
     }
 }
 
+pub mod adapter;
+pub mod factory;
+pub mod types;
+pub mod effects;
+pub mod storage_strategy;
+pub mod zk;
+
+pub use adapter::{CosmWasmAdapter, CosmWasmAdapterConfig};
+pub use factory::{CosmWasmAdapterFactory, CosmWasmAdapterFactoryConfig};
+pub use types::{CosmWasmAddress, CosmWasmMessage, CosmWasmMessageType, Coin, coin};
+pub use effects::{CosmWasmExecuteEffect, CosmWasmQueryEffect};
+pub use storage_strategy::{CosmWasmStoreEffect, CosmWasmCommitmentEffect};
+pub use zk::{
+    CosmWasmZkCompileEffect, CosmWasmZkWitnessEffect, 
+    CosmWasmZkProveEffect, CosmWasmZkVerifyEffect
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;

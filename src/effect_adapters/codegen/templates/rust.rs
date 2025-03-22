@@ -21,6 +21,7 @@ use serde_json::json;
 
 use crate::error::{Error, Result};
 use crate::types::{ContentId, DomainId};
+use crate::effect::{Effect, EffectOutcome, EffectResult};
 use crate::effect_adapters::{
     EffectAdapter, DomainConfig, EffectParams, TransactionReceipt,
     FactType, FactObservationMeta, AdapterError, ProofError, ObservationError,

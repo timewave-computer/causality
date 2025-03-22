@@ -8,8 +8,7 @@ Proof verification is a crucial component of the Causality system that ensures f
 
 1. Merkle proofs for block inclusion
 2. Signatures for authenticated facts
-3. Zero-knowledge proofs for privacy-preserving verification
-4. Consensus proofs for cross-domain validation
+3. Consensus proofs for cross-domain validation
 
 ## Proof Components
 

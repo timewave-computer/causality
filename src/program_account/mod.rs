@@ -8,30 +8,9 @@ pub mod base_account;
 pub mod registry;
 pub mod asset_account;
 pub mod utility_account;
-pub mod domain_bridge_account;
 pub mod authorization;
 pub mod ui;
-pub mod ui_model;
 pub mod effect_adapter;
-
-// Re-export types from the main module
-pub use crate::program_account::{
-    ProgramAccount,
-    ProgramAccountRegistry,
-    AssetProgramAccount,
-    UtilityProgramAccount,
-    DomainBridgeProgramAccount,
-    ProgramAccountResource,
-    ProgramAccountCapability,
-    AvailableEffect,
-    EffectParameter,
-    EffectResult,
-    EffectStatus,
-    TransactionRecord,
-    TransactionStatus,
-    CrossDomainTransfer,
-    TransferStatus,
-};
 
 // Re-export types from sub-modules
 pub use base_account::BaseAccount;
@@ -42,7 +21,6 @@ pub use registry::{
 };
 pub use asset_account::{AssetAccount, AssetType, AssetCollection};
 pub use utility_account::{UtilityAccount, StoredData};
-pub use domain_bridge_account::{DomainBridgeAccount, CrossDomainTransfer, TransferStatus};
 pub use authorization::{
     AuthorizationManager,
     AuthorizationContext,
@@ -66,10 +44,9 @@ pub use ui::serialization::{
     write_to_file, read_from_file,
 };
 
-pub use self::effect_adapter::{
+pub use effect_adapter::{
     ProgramAccountEffectAdapter,
     ProgramAccountEffectAdapterImpl,
     EffectInfo,
-    EffectParameter,
     EffectParameterType,
 }; 

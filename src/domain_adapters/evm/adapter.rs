@@ -27,6 +27,10 @@ use crate::domain::{
 use crate::log::fact_types::FactType; // Import the new FactType enum
 use crate::error::{Error, Result};
 use crate::util::to_fixed_bytes;
+use crate::effect::{Effect, EffectContext, EffectResult, EffectError, EffectOutcome, EffectHandler};
+use crate::domain_adapters::evm::zk::{
+    EvmZkCompileEffect, EvmZkWitnessEffect, EvmZkProveEffect, EvmZkVerifyEffect
+};
 
 /// Ethereum adapter configuration
 #[derive(Debug, Clone)]
@@ -430,6 +434,58 @@ impl EthereumAdapter {
         
         Ok(Some(data))
     }
+
+    /// Handle a EVM ZK compilation effect
+    async fn handle_zk_compile(&self, effect: &EvmZkCompileEffect) -> EffectResult<EffectOutcome> {
+        // In a real implementation, this would compile the ZK program on an EVM contract
+        // For now, return a placeholder outcome
+        let outcome = EffectOutcome::success(effect.id().clone())
+            .with_data("program_name", effect.name.clone())
+            .with_data("target", effect.target.clone())
+            .with_data("contract_address", format!("{:?}", effect.contract_address))
+            .with_data("domain_id", effect.domain_id.to_string());
+        
+        Ok(outcome)
+    }
+    
+    /// Handle a EVM ZK witness generation effect
+    async fn handle_zk_witness(&self, effect: &EvmZkWitnessEffect) -> EffectResult<EffectOutcome> {
+        // In a real implementation, this would generate a witness on an EVM contract
+        // For now, return a placeholder outcome
+        let outcome = EffectOutcome::success(effect.id().clone())
+            .with_data("program", effect.program.name.clone())
+            .with_data("public_inputs_count", effect.public_inputs.len().to_string())
+            .with_data("private_inputs_count", effect.private_inputs.len().to_string())
+            .with_data("contract_address", format!("{:?}", effect.contract_address))
+            .with_data("domain_id", effect.domain_id.to_string());
+        
+        Ok(outcome)
+    }
+    
+    /// Handle a EVM ZK proof generation effect
+    async fn handle_zk_prove(&self, effect: &EvmZkProveEffect) -> EffectResult<EffectOutcome> {
+        // In a real implementation, this would generate a proof on an EVM contract
+        // For now, return a placeholder outcome
+        let outcome = EffectOutcome::success(effect.id().clone())
+            .with_data("witness_program", effect.witness.program_name.clone())
+            .with_data("contract_address", format!("{:?}", effect.contract_address))
+            .with_data("domain_id", effect.domain_id.to_string());
+        
+        Ok(outcome)
+    }
+    
+    /// Handle a EVM ZK proof verification effect
+    async fn handle_zk_verify(&self, effect: &EvmZkVerifyEffect) -> EffectResult<EffectOutcome> {
+        // In a real implementation, this would verify a proof on an EVM contract
+        // For now, return a placeholder outcome
+        let outcome = EffectOutcome::success(effect.id().clone())
+            .with_data("proof_program", effect.proof.program_name.clone())
+            .with_data("contract_address", format!("{:?}", effect.contract_address))
+            .with_data("domain_id", effect.domain_id.to_string())
+            .with_data("verification_result", "success");
+        
+        Ok(outcome)
+    }
 }
 
 // Helper function to generate proof data for balance facts
@@ -663,6 +719,53 @@ impl DomainAdapter for EthereumAdapter {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
+    }
+}
+
+#[async_trait]
+impl EffectHandler for EthereumAdapter {
+    async fn execute_async(&self, effect: &dyn Effect, _context: &EffectContext) -> EffectResult<EffectOutcome> {
+        match effect.name() {
+            "evm_zk_compile" => {
+                if let Some(zk_compile_effect) = effect.downcast_ref::<EvmZkCompileEffect>() {
+                    self.handle_zk_compile(zk_compile_effect).await
+                } else {
+                    Err(EffectError::InvalidEffectType("Expected EvmZkCompileEffect".into()))
+                }
+            }
+            "evm_zk_witness" => {
+                if let Some(zk_witness_effect) = effect.downcast_ref::<EvmZkWitnessEffect>() {
+                    self.handle_zk_witness(zk_witness_effect).await
+                } else {
+                    Err(EffectError::InvalidEffectType("Expected EvmZkWitnessEffect".into()))
+                }
+            }
+            "evm_zk_prove" => {
+                if let Some(zk_prove_effect) = effect.downcast_ref::<EvmZkProveEffect>() {
+                    self.handle_zk_prove(zk_prove_effect).await
+                } else {
+                    Err(EffectError::InvalidEffectType("Expected EvmZkProveEffect".into()))
+                }
+            }
+            "evm_zk_verify" => {
+                if let Some(zk_verify_effect) = effect.downcast_ref::<EvmZkVerifyEffect>() {
+                    self.handle_zk_verify(zk_verify_effect).await
+                } else {
+                    Err(EffectError::InvalidEffectType("Expected EvmZkVerifyEffect".into()))
+                }
+            }
+            _ => Err(EffectError::UnsupportedEffect(effect.name().into())),
+        }
+    }
+
+    fn can_handle(&self, effect_name: &str) -> bool {
+        matches!(
+            effect_name,
+            "evm_zk_compile" 
+            | "evm_zk_witness" 
+            | "evm_zk_prove" 
+            | "evm_zk_verify"
+        )
     }
 }
 

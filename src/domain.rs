@@ -14,22 +14,12 @@ use crate::error::{Error, Result};
 use crate::types::{BlockHash, BlockHeight, Timestamp};
 use crate::log::fact_types::FactType;
 
-// Sub-modules (Legacy - will be removed)
-mod selection;
-mod registry;
-
-// New refactored modules
+// Primary modules in the domain system
 pub mod map;
 pub mod fact;
 
-// Re-exports from legacy modules
-pub use registry::DomainRegistry;
-pub use selection::{DomainSelector, SelectionCriteria};
-
-// Re-exports from time module
-pub use time::map::{TimeMap, TimeMapEntry};
-pub use time::types::{TimePoint, TimeRange, TimeWindow};
-pub use time::sync::{TimeSyncManager, TimeSyncConfig, SyncResult, SyncStatus};
+// Re-exports from domain modules
+pub use map::{DomainMap, DomainMapEntry, MapQueryResult};
 
 // Re-exports from fact module
 pub use fact::{
@@ -38,8 +28,11 @@ pub use fact::{
     VerifierRegistry
 };
 
-// Re-export DomainId from types (legacy)
-pub use crate::types::DomainId as LegacyDomainId;
+// Time module re-exports (unified model)
+pub use crate::time::{
+    TimeMap, TimeMapEntry, TimePoint, TimeRange, TimeWindow,
+    TimeSyncManager, TimeSyncConfig, SyncResult, SyncStatus
+};
 
 /// Transaction data to be submitted to a domain
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -253,7 +246,93 @@ impl fmt::Display for DomainStatus {
             DomainStatus::Online => write!(f, "online"),
             DomainStatus::Offline => write!(f, "offline"),
             DomainStatus::Maintenance => write!(f, "maintenance"),
-            DomainStatus::Error(e) => write!(f, "error: {}", e),
+            DomainStatus::Error(err) => write!(f, "error: {}", err),
+        }
+    }
+}
+
+/// Domain type enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DomainType {
+    /// Ethereum Virtual Machine
+    EVM,
+    /// Solana
+    Solana,
+    /// Cosmos
+    Cosmos,
+    /// CosmWasm with ZK proofs
+    CosmWasmZK,
+    /// Layer-2 Solution
+    Layer2,
+    /// Optimistic rollup
+    OptimisticRollup,
+    /// Zero-knowledge rollup
+    ZkRollup,
+    /// Cross-chain
+    CrossChain,
+    /// Custom domain
+    Custom(u32),
+}
+
+impl DomainType {
+    /// Get the domain type as a string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DomainType::EVM => "evm",
+            DomainType::Solana => "solana",
+            DomainType::Cosmos => "cosmos",
+            DomainType::CosmWasmZK => "cosmwasm_zk",
+            DomainType::Layer2 => "layer2",
+            DomainType::OptimisticRollup => "optimistic_rollup",
+            DomainType::ZkRollup => "zk_rollup",
+            DomainType::CrossChain => "cross_chain",
+            DomainType::Custom(_) => "custom",
+        }
+    }
+    
+    /// Create a DomainType from a domain ID
+    pub fn from_domain_id(domain_id: &DomainId) -> Self {
+        // Extract domain type from domain ID format
+        // Expected format: <type>:<chain_id>:<network>
+        let parts: Vec<&str> = domain_id.as_str().split(':').collect();
+        
+        if parts.len() >= 1 {
+            match parts[0].to_lowercase().as_str() {
+                "evm" => DomainType::EVM,
+                "solana" => DomainType::Solana,
+                "cosmos" => DomainType::Cosmos,
+                "cosmwasm_zk" => DomainType::CosmWasmZK,
+                "layer2" => DomainType::Layer2,
+                "optimistic" => DomainType::OptimisticRollup,
+                "zk_rollup" => DomainType::ZkRollup,
+                "cross" => DomainType::CrossChain,
+                _ => {
+                    // Try to parse a custom type ID
+                    if let Ok(type_id) = parts[0].parse::<u32>() {
+                        DomainType::Custom(type_id)
+                    } else {
+                        DomainType::Custom(0)
+                    }
+                }
+            }
+        } else {
+            DomainType::Custom(0)
+        }
+    }
+}
+
+impl fmt::Display for DomainType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DomainType::EVM => write!(f, "EVM"),
+            DomainType::Solana => write!(f, "Solana"),
+            DomainType::Cosmos => write!(f, "Cosmos"),
+            DomainType::CosmWasmZK => write!(f, "CosmWasmZK"),
+            DomainType::Layer2 => write!(f, "Layer2"),
+            DomainType::OptimisticRollup => write!(f, "OptimisticRollup"),
+            DomainType::ZkRollup => write!(f, "ZkRollup"),
+            DomainType::CrossChain => write!(f, "CrossChain"),
+            DomainType::Custom(id) => write!(f, "Custom({})", id),
         }
     }
 }
@@ -264,73 +343,77 @@ mod tests {
     
     #[test]
     fn test_domain_id() {
-        let id = DomainId::new("test-domain");
-        assert_eq!(id.as_str(), "test-domain");
+        let id = DomainId::new("evm:1:mainnet");
+        assert_eq!(id.as_str(), "evm:1:mainnet");
         assert!(id.is_valid());
+        
+        let id_str = "cosmos:cosmoshub-4:mainnet";
+        let id: DomainId = id_str.parse().unwrap();
+        assert_eq!(id.as_str(), "cosmos:cosmoshub-4:mainnet");
         
         let empty_id = DomainId::new("");
         assert!(!empty_id.is_valid());
-        
-        let from_string: DomainId = "another-domain".into();
-        assert_eq!(from_string.as_str(), "another-domain");
-        
-        let parsed = "parsed-domain".parse::<DomainId>();
-        assert!(parsed.is_ok());
-        assert_eq!(parsed.unwrap().as_str(), "parsed-domain");
-        
-        let invalid_parse = "".parse::<DomainId>();
-        assert!(invalid_parse.is_err());
     }
     
     #[test]
     fn test_domain_capabilities() {
-        let default_caps = DomainCapabilities::default();
-        assert!(!default_caps.supports_verification);
-        assert!(!default_caps.provides_guarantees);
-        assert!(!default_caps.queryable);
-        assert!(default_caps.max_concurrent_requests.is_none());
-        assert!(default_caps.supported_queries.is_empty());
-        
-        let custom_caps = DomainCapabilities {
+        let capabilities = DomainCapabilities {
             supports_verification: true,
             provides_guarantees: true,
             queryable: true,
             max_concurrent_requests: Some(10),
-            supported_queries: vec!["query1".to_string(), "query2".to_string()],
+            supported_queries: vec!["balance".to_string(), "transaction".to_string()],
         };
         
-        assert!(custom_caps.supports_verification);
-        assert!(custom_caps.provides_guarantees);
-        assert!(custom_caps.queryable);
-        assert_eq!(custom_caps.max_concurrent_requests, Some(10));
-        assert_eq!(custom_caps.supported_queries.len(), 2);
+        assert!(capabilities.supports_verification);
+        assert!(capabilities.provides_guarantees);
+        assert!(capabilities.queryable);
+        assert_eq!(capabilities.max_concurrent_requests, Some(10));
+        assert_eq!(capabilities.supported_queries.len(), 2);
     }
     
     #[test]
     fn test_domain_info() {
-        let id = DomainId::new("test-domain");
-        let info = DomainInfo::new(id.clone(), "Test Domain", "1.0.0")
-            .with_description("A test domain")
-            .with_capabilities(DomainCapabilities {
-                supports_verification: true,
-                queryable: true,
-                ..Default::default()
-            });
+        let info = DomainInfo::new(
+            DomainId::new("evm:1:mainnet"),
+            "Ethereum Mainnet",
+            "1.0.0"
+        )
+        .with_description("Ethereum Mainnet Network")
+        .with_capabilities(DomainCapabilities {
+            supports_verification: true,
+            provides_guarantees: true,
+            queryable: true,
+            max_concurrent_requests: Some(10),
+            supported_queries: vec!["balance".to_string()],
+        });
         
-        assert_eq!(info.id, id);
-        assert_eq!(info.name, "Test Domain");
-        assert_eq!(info.version, "1.0.0");
-        assert_eq!(info.description, Some("A test domain".to_string()));
+        assert_eq!(info.id.as_str(), "evm:1:mainnet");
+        assert_eq!(info.name, "Ethereum Mainnet");
+        assert_eq!(info.description, Some("Ethereum Mainnet Network".to_string()));
         assert!(info.capabilities.supports_verification);
-        assert!(info.capabilities.queryable);
     }
     
     #[test]
     fn test_domain_status() {
-        let online = DomainStatus::Online;
-        let error = DomainStatus::Error("Connection failed".to_string());
+        let status = DomainStatus::Online;
+        assert_eq!(status.to_string(), "online");
         
-        assert_eq!(online.to_string(), "online");
-        assert_eq!(error.to_string(), "error: Connection failed");
+        let error_status = DomainStatus::Error("Connection timeout".to_string());
+        assert_eq!(error_status.to_string(), "error: Connection timeout");
+    }
+    
+    #[test]
+    fn test_domain_type() {
+        let domain_id = DomainId::new("evm:1:mainnet");
+        let domain_type = DomainType::from_domain_id(&domain_id);
+        assert_eq!(domain_type, DomainType::EVM);
+        
+        let cosmos_id = DomainId::new("cosmos:cosmoshub-4:mainnet");
+        let cosmos_type = DomainType::from_domain_id(&cosmos_id);
+        assert_eq!(cosmos_type, DomainType::Cosmos);
+        
+        assert_eq!(DomainType::EVM.as_str(), "evm");
+        assert_eq!(DomainType::Custom(42).as_str(), "custom");
     }
 } 

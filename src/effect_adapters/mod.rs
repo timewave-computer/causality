@@ -39,9 +39,6 @@ pub mod registry;
 // Adapter schemas
 pub mod schemas;
 
-// ZK adapter functionality
-pub mod zk;
-
 // CLI functionality
 pub mod cli;
 
@@ -54,9 +51,6 @@ pub mod definition;
 // Name registry for content-addressable code
 pub mod name_registry;
 
-// Compatibility modules
-pub mod compatibility;
-
 // Executor modules
 pub mod executor;
 
@@ -65,7 +59,6 @@ pub use hash::{Hash, HashAlgorithm, ContentHasher, Blake3ContentHasher, HasherFa
 pub use riscv_metadata::{RiscVMetadata, RiscVCompatibilityChecker, RiscVMetadataExporter};
 pub use definition::{CodeDefinition, CodeContent, CodeDefinitionBuilder};
 pub use name_registry::{NameRegistry, NameRecord};
-pub use compatibility::CompatibilityChecker;
 pub use executor::{ContentAddressableExecutor, ExecutionContext, Value, ExecutionEvent, SecuritySandbox, EffectWrapper};
 
 /// Effect adapter error types

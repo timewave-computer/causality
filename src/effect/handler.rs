@@ -1,203 +1,153 @@
-// Handler module for Causality Effect System
+// Effect Handler Module
 //
-// This module provides the effect handler functionality for handling
-// different types of effects in the system.
+// Provides the core interface for handling effects, allowing the effect system to 
+// execute effects through different execution environments.
 
+use std::fmt;
 use std::sync::Arc;
+use async_trait::async_trait;
 
-use crate::effect::EffectType;
 use crate::error::Result;
-use crate::types::{ResourceId, DomainId};
-use crate::zk::{RiscVProgram, Witness, Proof};
+use crate::effect::{Effect, EffectContext, EffectOutcome, EffectResult};
+use crate::effect::boundary::ExecutionBoundary;
 
-// Import for the effect type definitions
-#[cfg(feature = "zk-vm")]
-use crate::effect_adapters::zk::{
-    CompileZkProgramEffect, GenerateZkWitnessEffect,
-    GenerateZkProofEffect, VerifyZkProofEffect
-};
+/// The outcome of handling an effect
+pub type HandlerResult<T> = Result<T>;
 
-/// Handler trait for executing effects
-///
-/// Effect handlers are responsible for executing effects in the Causality system.
-/// Each handler implements behavior for specific effect types.
+/// Core trait for effect handlers that process and execute effects
+#[async_trait]
 pub trait EffectHandler: Send + Sync {
-    /// Check if this handler can handle the given effect type
-    fn can_handle(&self, effect_type: &EffectType) -> bool;
+    /// Get the execution boundary this handler operates in
+    fn execution_boundary(&self) -> ExecutionBoundary;
     
-    /// Handle a deposit effect
-    fn handle_deposit(&self, account: String, amount: i64, timestamp: u64) -> Result<()>;
-    
-    /// Handle a withdrawal effect
-    fn handle_withdrawal(&self, account: String, amount: i64, timestamp: u64) -> Result<()>;
-    
-    /// Handle an observation effect
-    fn handle_observation(&self, account: String, timestamp: u64) -> Result<i64>;
-    
-    /// Handle compiling a ZK program
-    #[cfg(feature = "zk-vm")]
-    fn handle_compile_zk_program(&self, effect: CompileZkProgramEffect) -> Result<RiscVProgram> {
-        Err(crate::error::Error::OperationFailed("Handler does not implement ZK program compilation".to_string()))
+    /// Handle an effect synchronously
+    fn handle(&self, effect: &dyn Effect, context: &EffectContext) -> Result<EffectOutcome> {
+        // Default implementation defers to the effect's own execution
+        effect.execute(context)
     }
     
-    /// Handle generating a ZK witness
-    #[cfg(feature = "zk-vm")]
-    fn handle_generate_zk_witness(&self, effect: GenerateZkWitnessEffect) -> Result<Witness> {
-        Err(crate::error::Error::OperationFailed("Handler does not implement ZK witness generation".to_string()))
+    /// Handle an effect asynchronously
+    async fn handle_async(&self, effect: &dyn Effect, context: &EffectContext) -> EffectResult<EffectOutcome> {
+        // Default implementation defers to the effect's own execution
+        effect.execute_async(context).await
     }
     
-    /// Handle generating a ZK proof
-    #[cfg(feature = "zk-vm")]
-    fn handle_generate_zk_proof(&self, effect: GenerateZkProofEffect) -> Result<Proof> {
-        Err(crate::error::Error::OperationFailed("Handler does not implement ZK proof generation".to_string()))
-    }
-    
-    /// Handle verifying a ZK proof
-    #[cfg(feature = "zk-vm")]
-    fn handle_verify_zk_proof(&self, effect: VerifyZkProofEffect) -> Result<bool> {
-        Err(crate::error::Error::OperationFailed("Handler does not implement ZK proof verification".to_string()))
+    /// Check if this handler can handle a specific effect
+    fn can_handle(&self, effect: &dyn Effect) -> bool {
+        effect.can_execute_in(self.execution_boundary())
     }
 }
 
-/// A composite handler that tries multiple handlers in sequence
-///
-/// This handler tries the primary handler first, and if it returns a specific
-/// error result, it falls back to the secondary handler.
-#[derive(Debug)]
-pub struct CompositeHandler<P, S> {
-    /// The primary handler to try first
-    primary: P,
-    /// The secondary handler to use as a fallback
-    secondary: S,
+/// A handler that delegates to other handlers based on criteria
+pub struct CompositeHandler {
+    /// The primary execution boundary for this handler
+    boundary: ExecutionBoundary,
+    /// The handlers that this composite delegates to
+    handlers: Vec<Arc<dyn EffectHandler>>,
 }
 
-impl<P, S> CompositeHandler<P, S> {
-    /// Create a new composite handler
-    pub fn new(primary: P, secondary: S) -> Self {
-        CompositeHandler { primary, secondary }
+impl CompositeHandler {
+    /// Create a new composite handler with the given boundary
+    pub fn new(boundary: ExecutionBoundary) -> Self {
+        Self {
+            boundary,
+            handlers: Vec::new(),
+        }
+    }
+    
+    /// Add a handler to this composite
+    pub fn add_handler(&mut self, handler: Arc<dyn EffectHandler>) {
+        self.handlers.push(handler);
+    }
+    
+    /// Find a handler that can handle the given effect
+    fn find_handler(&self, effect: &dyn Effect) -> Option<Arc<dyn EffectHandler>> {
+        self.handlers.iter()
+            .find(|h| h.can_handle(effect))
+            .cloned()
     }
 }
 
-impl<P, S> EffectHandler for CompositeHandler<P, S>
-where
-    P: EffectHandler,
-    S: EffectHandler,
-{
-    fn can_handle(&self, effect_type: &EffectType) -> bool {
-        self.primary.can_handle(effect_type) || self.secondary.can_handle(effect_type)
+#[async_trait]
+impl EffectHandler for CompositeHandler {
+    fn execution_boundary(&self) -> ExecutionBoundary {
+        self.boundary
     }
     
-    fn handle_deposit(&self, account: String, amount: i64, timestamp: u64) -> Result<()> {
-        match self.primary.handle_deposit(account.clone(), amount, timestamp) {
-            Ok(()) => Ok(()),
-            Err(_) => self.secondary.handle_deposit(account, amount, timestamp),
+    fn handle(&self, effect: &dyn Effect, context: &EffectContext) -> Result<EffectOutcome> {
+        if let Some(handler) = self.find_handler(effect) {
+            handler.handle(effect, context)
+        } else {
+            // Default to the effect's own execution if no handler is found
+            effect.execute(context)
         }
     }
     
-    fn handle_withdrawal(&self, account: String, amount: i64, timestamp: u64) -> Result<()> {
-        match self.primary.handle_withdrawal(account.clone(), amount, timestamp) {
-            Ok(()) => Ok(()),
-            Err(_) => self.secondary.handle_withdrawal(account, amount, timestamp),
-        }
-    }
-    
-    fn handle_observation(&self, account: String, timestamp: u64) -> Result<i64> {
-        match self.primary.handle_observation(account.clone(), timestamp) {
-            Ok(balance) => Ok(balance),
-            Err(_) => self.secondary.handle_observation(account, timestamp),
-        }
-    }
-    
-    #[cfg(feature = "zk-vm")]
-    fn handle_compile_zk_program(&self, effect: CompileZkProgramEffect) -> Result<RiscVProgram> {
-        match self.primary.handle_compile_zk_program(effect.clone()) {
-            Ok(program) => Ok(program),
-            Err(_) => self.secondary.handle_compile_zk_program(effect),
-        }
-    }
-    
-    #[cfg(feature = "zk-vm")]
-    fn handle_generate_zk_witness(&self, effect: GenerateZkWitnessEffect) -> Result<Witness> {
-        match self.primary.handle_generate_zk_witness(effect.clone()) {
-            Ok(witness) => Ok(witness),
-            Err(_) => self.secondary.handle_generate_zk_witness(effect),
-        }
-    }
-    
-    #[cfg(feature = "zk-vm")]
-    fn handle_generate_zk_proof(&self, effect: GenerateZkProofEffect) -> Result<Proof> {
-        match self.primary.handle_generate_zk_proof(effect.clone()) {
-            Ok(proof) => Ok(proof),
-            Err(_) => self.secondary.handle_generate_zk_proof(effect),
-        }
-    }
-    
-    #[cfg(feature = "zk-vm")]
-    fn handle_verify_zk_proof(&self, effect: VerifyZkProofEffect) -> Result<bool> {
-        match self.primary.handle_verify_zk_proof(effect.clone()) {
-            Ok(result) => Ok(result),
-            Err(_) => self.secondary.handle_verify_zk_proof(effect),
+    async fn handle_async(&self, effect: &dyn Effect, context: &EffectContext) -> EffectResult<EffectOutcome> {
+        if let Some(handler) = self.find_handler(effect) {
+            handler.handle_async(effect, context).await
+        } else {
+            // Default to the effect's own execution if no handler is found
+            effect.execute_async(context).await
         }
     }
 }
 
-/// Shared handler that can be cloned and shared between multiple contexts
-pub type SharedHandler = Arc<dyn EffectHandler>;
+/// A simple handler for inside-system effects
+pub struct InsideSystemHandler;
 
-/// Create a shared handler from any effect handler
-pub fn shared<H: EffectHandler + 'static>(handler: H) -> SharedHandler {
-    Arc::new(handler)
-}
-
-/// A no-op handler that returns failure results for all effects
-///
-/// This is useful as a placeholder or for testing.
-#[derive(Debug, Default)]
-pub struct NoopHandler;
-
-impl EffectHandler for NoopHandler {
-    fn can_handle(&self, _effect_type: &EffectType) -> bool {
-        false // NoopHandler cannot handle any effects
-    }
-    
-    fn handle_deposit(&self, _account: String, _amount: i64, _timestamp: u64) -> Result<()> {
-        Err(crate::error::Error::OperationFailed("Noop handler cannot perform deposits".to_string()))
-    }
-    
-    fn handle_withdrawal(&self, _account: String, _amount: i64, _timestamp: u64) -> Result<()> {
-        Err(crate::error::Error::OperationFailed("Noop handler cannot perform withdrawals".to_string()))
-    }
-    
-    fn handle_observation(&self, _account: String, _timestamp: u64) -> Result<i64> {
-        Err(crate::error::Error::OperationFailed("Noop handler cannot perform observations".to_string()))
-    }
-    
-    #[cfg(feature = "zk-vm")]
-    fn handle_compile_zk_program(&self, _effect: CompileZkProgramEffect) -> Result<RiscVProgram> {
-        Err(crate::error::Error::OperationFailed("Noop handler cannot compile ZK programs".to_string()))
-    }
-    
-    #[cfg(feature = "zk-vm")]
-    fn handle_generate_zk_witness(&self, _effect: GenerateZkWitnessEffect) -> Result<Witness> {
-        Err(crate::error::Error::OperationFailed("Noop handler cannot generate ZK witnesses".to_string()))
-    }
-    
-    #[cfg(feature = "zk-vm")]
-    fn handle_generate_zk_proof(&self, _effect: GenerateZkProofEffect) -> Result<Proof> {
-        Err(crate::error::Error::OperationFailed("Noop handler cannot generate ZK proofs".to_string()))
-    }
-    
-    #[cfg(feature = "zk-vm")]
-    fn handle_verify_zk_proof(&self, _effect: VerifyZkProofEffect) -> Result<bool> {
-        Err(crate::error::Error::OperationFailed("Noop handler cannot verify ZK proofs".to_string()))
+impl InsideSystemHandler {
+    /// Create a new inside-system handler
+    pub fn new() -> Self {
+        Self
     }
 }
 
-/// Helper function to compose two effect handlers
-pub fn compose<P, S>(primary: P, secondary: S) -> CompositeHandler<P, S>
-where
-    P: EffectHandler,
-    S: EffectHandler,
-{
-    CompositeHandler::new(primary, secondary)
+#[async_trait]
+impl EffectHandler for InsideSystemHandler {
+    fn execution_boundary(&self) -> ExecutionBoundary {
+        ExecutionBoundary::InsideSystem
+    }
+}
+
+/// A simple handler for outside-system effects
+pub struct OutsideSystemHandler;
+
+impl OutsideSystemHandler {
+    /// Create a new outside-system handler
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl EffectHandler for OutsideSystemHandler {
+    fn execution_boundary(&self) -> ExecutionBoundary {
+        ExecutionBoundary::OutsideSystem
+    }
+}
+
+/// Factory for creating effect handlers
+pub struct HandlerFactory;
+
+impl HandlerFactory {
+    /// Create a handler for the given execution boundary
+    pub fn create(boundary: ExecutionBoundary) -> Box<dyn EffectHandler> {
+        match boundary {
+            ExecutionBoundary::InsideSystem => Box::new(InsideSystemHandler::new()),
+            ExecutionBoundary::OutsideSystem => Box::new(OutsideSystemHandler::new()),
+        }
+    }
+    
+    /// Create a composite handler for multiple execution boundaries
+    pub fn create_composite(primary_boundary: ExecutionBoundary, 
+                           additional_handlers: Vec<Arc<dyn EffectHandler>>) -> CompositeHandler {
+        let mut handler = CompositeHandler::new(primary_boundary);
+        
+        for h in additional_handlers {
+            handler.add_handler(h);
+        }
+        
+        handler
+    }
 } 

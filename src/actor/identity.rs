@@ -12,7 +12,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::error::{Error, Result};
 use crate::types::{ContentHash, ContentId, TraceId};
-use crate::actor::{ActorId, ActorMetadata, ActorRole, ActorCapability, ActorState};
+use crate::actor::{ActorId, GenericActorId};
 
 /// Identity provider types for actor authentication
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ pub enum VerificationStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdentityCredential {
     /// The actor ID this credential belongs to
-    pub actor_id: ActorId,
+    pub actor_id: GenericActorId,
     /// The identity provider for this credential
     pub provider: IdentityProvider,
     /// The credential ID
@@ -64,7 +64,7 @@ pub struct IdentityCredential {
 impl IdentityCredential {
     /// Create a new identity credential
     pub fn new(
-        actor_id: ActorId,
+        actor_id: GenericActorId,
         provider: IdentityProvider,
         credential_id: impl Into<String>,
     ) -> Self {
@@ -211,7 +211,7 @@ pub struct IdentityService {
     /// Identity verifiers
     verifiers: RwLock<HashMap<IdentityProvider, Arc<dyn IdentityVerifier>>>,
     /// Actor credentials
-    credentials: RwLock<HashMap<ActorId, Vec<IdentityCredential>>>,
+    credentials: RwLock<HashMap<GenericActorId, Vec<IdentityCredential>>>,
 }
 
 impl IdentityService {
@@ -250,7 +250,7 @@ impl IdentityService {
     }
     
     /// Get all credentials for an actor
-    pub fn get_credentials(&self, actor_id: &ActorId) -> Result<Vec<IdentityCredential>> {
+    pub fn get_credentials(&self, actor_id: &GenericActorId) -> Result<Vec<IdentityCredential>> {
         let credentials = self.credentials.read().map_err(|_| {
             Error::LockError("Failed to acquire read lock on credentials".to_string())
         })?;
@@ -275,7 +275,7 @@ impl IdentityService {
     }
     
     /// Verify all credentials for an actor
-    pub async fn verify_all_credentials(&self, actor_id: &ActorId) -> Result<bool> {
+    pub async fn verify_all_credentials(&self, actor_id: &GenericActorId) -> Result<bool> {
         let mut all_valid = true;
         
         // Get a mutable copy of the credentials
@@ -315,7 +315,7 @@ mod tests {
     
     #[test]
     fn test_identity_credential() {
-        let actor_id = ActorId::new("test-actor");
+        let actor_id = GenericActorId::new("test-actor");
         let provider = IdentityProvider::Local;
         
         let credential = IdentityCredential::new(
@@ -342,7 +342,7 @@ mod tests {
     #[tokio::test]
     async fn test_local_identity_verifier() -> Result<()> {
         let verifier = LocalIdentityVerifier::new();
-        let actor_id = ActorId::new("test-actor");
+        let actor_id = GenericActorId::new("test-actor");
         
         // Add a trusted credential
         verifier.add_trusted_credential("test-credential", "secret")?;
@@ -382,7 +382,7 @@ mod tests {
     #[tokio::test]
     async fn test_identity_service() -> Result<()> {
         let service = IdentityService::new();
-        let actor_id = ActorId::new("test-actor");
+        let actor_id = GenericActorId::new("test-actor");
         
         // Register a local verifier
         let verifier = Arc::new(LocalIdentityVerifier::new());

@@ -18,6 +18,7 @@ use crate::log::storage::{LogStorage, MemoryLogStorage, StorageConfig, FileLogSt
 use crate::log::replay::{ReplayEngine, ReplayOptions, ReplayStatus, StatsCallback};
 use crate::log::segment_manager::{LogSegmentManager, RotationCriteria, SegmentManagerOptions};
 use crate::types::{ResourceId, DomainId};
+use crate::effect::types::EffectType;
 
 /// Generate a random string of the given length
 fn random_string(rng: &mut StdRng, len: usize) -> String {
@@ -73,7 +74,7 @@ fn generate_random_entry(rng: &mut StdRng, entry_id: usize) -> LogEntry {
         },
         EntryType::Effect => {
             EntryData::Effect(EffectEntry {
-                effect_type: crate::log::EffectType::Create,
+                effect_type: EffectType::Create,
                 resources: (0..rng.gen_range(1..5))
                     .map(|i| ResourceId::new(format!("res_{}", i)))
                     .collect(),

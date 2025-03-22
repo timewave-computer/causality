@@ -2,70 +2,48 @@
 //
 // This module provides factory functions for creating common effect types.
 
-use crate::effect::{Effect, SerializableEffect};
-use crate::effect::EffectHandler;
-use crate::effect::EffectType;
-use crate::effect::Continuation;
-use crate::error::Result;
-use crate::effect::types::EffectType;
-use crate::types::{ResourceId, DomainId, TokenAmount};
-use crate::log::fact_snapshot::{FactSnapshot, FactId, FactDependency, FactDependencyType};
-use std::sync::Arc;
 use std::fmt;
+use std::sync::Arc;
+use std::collections::HashMap;
 
-/// Represents a deposit effect
+use crate::effect::{Effect, EffectId, EffectContext, EffectOutcome, EffectResult};
+use crate::effect::boundary::ExecutionBoundary;
+use crate::error::Result;
+use crate::types::{ResourceId, DomainId};
+use crate::log::fact_snapshot::{FactSnapshot, FactId, FactDependency, FactDependencyType};
+
+/// An effect for depositing tokens
 #[derive(Debug, Clone)]
 pub struct DepositEffect {
+    /// The unique ID of this effect
+    pub id: crate::effect::EffectId,
     /// The resource to deposit
     pub resource_id: ResourceId,
     /// The domain to deposit to
     pub domain_id: DomainId,
     /// The amount to deposit
-    pub amount: TokenAmount,
+    pub amount: String, // Using string for now since TokenAmount is not available
     /// Fact dependencies
     pub dependencies: Vec<FactDependency>,
     /// Fact snapshot
     pub snapshot: Option<FactSnapshot>,
 }
 
-impl crate::effect::Effect for DepositEffect {
-    type Output = bool;
-    
-    fn get_type(&self) -> EffectType {
-        EffectType::Deposit
+impl DepositEffect {
+    /// Create a new deposit effect
+    pub fn new(resource_id: ResourceId, domain_id: DomainId, amount: String) -> Self {
+        Self {
+            id: crate::effect::EffectId::new_unique(),
+            resource_id,
+            domain_id,
+            amount,
+            dependencies: Vec::new(),
+            snapshot: None,
+        }
     }
     
-    fn as_debug(&self) -> &dyn fmt::Debug {
-        self
-    }
-    
-    fn clone_box(&self) -> Box<dyn crate::effect::Effect<Output = Self::Output>> {
-        Box::new(self.clone())
-    }
-    
-    fn resources(&self) -> Vec<ResourceId> {
-        vec![self.resource_id.clone()]
-    }
-    
-    fn domains(&self) -> Vec<DomainId> {
-        vec![self.domain_id.clone()]
-    }
-    
-    fn execute(self, handler: &dyn crate::effect::EffectHandler) -> Self::Output {
-        handler.handle_deposit(self.resource_id, self.domain_id, self.amount)
-    }
-    
-    fn fact_dependencies(&self) -> Vec<FactDependency> {
-        self.dependencies.clone()
-    }
-    
-    fn fact_snapshot(&self) -> Option<FactSnapshot> {
-        self.snapshot.clone()
-    }
-}
-
-impl crate::effect::EffectWithFactDependencies for DepositEffect {
-    fn with_fact_dependency(
+    /// Add a fact dependency to this effect
+    pub fn with_fact_dependency(
         &mut self,
         fact_id: FactId,
         domain_id: DomainId,
@@ -75,12 +53,69 @@ impl crate::effect::EffectWithFactDependencies for DepositEffect {
         self.dependencies.push(dependency);
     }
     
-    fn with_fact_dependencies(&mut self, dependencies: Vec<FactDependency>) {
+    /// Add multiple fact dependencies to this effect
+    pub fn with_fact_dependencies(&mut self, dependencies: Vec<FactDependency>) {
         self.dependencies.extend(dependencies);
     }
     
-    fn with_fact_snapshot(&mut self, snapshot: FactSnapshot) {
+    /// Add a fact snapshot to this effect
+    pub fn with_fact_snapshot(&mut self, snapshot: FactSnapshot) {
         self.snapshot = Some(snapshot);
+    }
+}
+
+impl crate::effect::Effect for DepositEffect {
+    fn id(&self) -> &crate::effect::EffectId {
+        &self.id
+    }
+    
+    fn name(&self) -> &str {
+        "deposit"
+    }
+    
+    fn display_name(&self) -> String {
+        format!("Deposit {}", self.amount)
+    }
+    
+    fn description(&self) -> String {
+        format!("Deposit {} to resource {}", self.amount, self.resource_id)
+    }
+    
+    fn execute(&self, _context: &crate::effect::EffectContext) -> crate::error::Result<crate::effect::EffectOutcome> {
+        // For now just return a successful outcome
+        Ok(crate::effect::EffectOutcome::success(self.id.clone())
+            .with_data("amount", self.amount.to_string())
+            .with_data("resource_id", self.resource_id.to_string()))
+    }
+    
+    async fn execute_async(&self, context: &crate::effect::EffectContext) -> crate::effect::EffectResult<crate::effect::EffectOutcome> {
+        self.execute(context)
+    }
+    
+    fn can_execute_in(&self, _boundary: crate::effect::boundary::ExecutionBoundary) -> bool {
+        // For simplicity, allow execution in any boundary
+        true
+    }
+    
+    fn preferred_boundary(&self) -> crate::effect::boundary::ExecutionBoundary {
+        // Prefer local execution
+        crate::effect::boundary::ExecutionBoundary::Local
+    }
+    
+    fn display_parameters(&self) -> std::collections::HashMap<String, String> {
+        let mut params = std::collections::HashMap::new();
+        params.insert("resource_id".to_string(), self.resource_id.to_string());
+        params.insert("amount".to_string(), self.amount.to_string());
+        params.insert("domain_id".to_string(), self.domain_id.to_string());
+        params
+    }
+    
+    fn fact_dependencies(&self) -> Vec<crate::log::fact_snapshot::FactDependency> {
+        self.dependencies.clone()
+    }
+    
+    fn fact_snapshot(&self) -> Option<crate::log::fact_snapshot::FactSnapshot> {
+        self.snapshot.clone()
     }
     
     fn validate_fact_dependencies(&self) -> crate::error::Result<()> {
@@ -94,90 +129,59 @@ impl crate::effect::EffectWithFactDependencies for DepositEffect {
     }
 }
 
-/// Create a deposit effect
+/// Factory function to create a new deposit effect
 pub fn deposit(
     resource_id: ResourceId,
     domain_id: DomainId,
-    amount: TokenAmount,
-) -> Box<dyn crate::effect::Effect<Output = bool>> {
-    Box::new(DepositEffect {
-        resource_id,
-        domain_id,
-        amount,
-        dependencies: Vec::new(),
-        snapshot: None,
-    })
+    amount: String,
+) -> Box<dyn crate::effect::Effect> {
+    Box::new(DepositEffect::new(resource_id, domain_id, amount))
 }
 
-/// Create a deposit effect with fact dependencies
+/// Factory function to create a new deposit effect with fact information
 pub fn deposit_with_facts(
     resource_id: ResourceId,
     domain_id: DomainId,
-    amount: TokenAmount,
+    amount: String,
     fact_snapshot: FactSnapshot,
 ) -> Box<DepositEffect> {
-    Box::new(DepositEffect {
-        resource_id,
-        domain_id,
-        amount,
-        dependencies: Vec::new(),
-        snapshot: Some(fact_snapshot),
-    })
+    let mut effect = DepositEffect::new(resource_id, domain_id, amount);
+    effect.snapshot = Some(fact_snapshot);
+    Box::new(effect)
 }
 
 /// Represents a withdrawal effect
 #[derive(Debug, Clone)]
 pub struct WithdrawalEffect {
+    /// The unique ID of this effect
+    pub id: crate::effect::EffectId,
     /// The resource to withdraw
     pub resource_id: ResourceId,
     /// The domain to withdraw from
     pub domain_id: DomainId,
     /// The amount to withdraw
-    pub amount: TokenAmount,
+    pub amount: String, // Using string for now
     /// Fact dependencies
     pub dependencies: Vec<FactDependency>,
     /// Fact snapshot
     pub snapshot: Option<FactSnapshot>,
 }
 
-impl crate::effect::Effect for WithdrawalEffect {
-    type Output = bool;
-    
-    fn get_type(&self) -> EffectType {
-        EffectType::Withdraw
+impl WithdrawalEffect {
+    /// Create a new withdrawal effect
+    pub fn new(resource_id: ResourceId, domain_id: DomainId, amount: String) -> Self {
+        Self {
+            id: crate::effect::EffectId::new_unique(),
+            resource_id,
+            domain_id,
+            amount,
+            dependencies: Vec::new(),
+            snapshot: None,
+        }
     }
     
-    fn as_debug(&self) -> &dyn fmt::Debug {
-        self
-    }
-    
-    fn clone_box(&self) -> Box<dyn crate::effect::Effect<Output = Self::Output>> {
-        Box::new(self.clone())
-    }
-    
-    fn resources(&self) -> Vec<ResourceId> {
-        vec![self.resource_id.clone()]
-    }
-    
-    fn domains(&self) -> Vec<DomainId> {
-        vec![self.domain_id.clone()]
-    }
-    
-    fn execute(self, handler: &dyn crate::effect::EffectHandler) -> Self::Output {
-        handler.handle_withdrawal(self.resource_id, self.domain_id, self.amount)
-    }
-    
-    fn fact_dependencies(&self) -> Vec<FactDependency> {
-        self.dependencies.clone()
-    }
-    
-    fn fact_snapshot(&self) -> Option<FactSnapshot> {
-        self.snapshot.clone()
-    }
-}
-
-impl crate::effect::EffectWithFactDependencies for WithdrawalEffect {
-    fn with_fact_dependency(
+    /// Add a fact dependency to this effect
+    pub fn with_fact_dependency(
         &mut self,
         fact_id: FactId,
         domain_id: DomainId,
@@ -187,12 +191,69 @@ impl crate::effect::EffectWithFactDependencies for WithdrawalEffect {
         self.dependencies.push(dependency);
     }
     
-    fn with_fact_dependencies(&mut self, dependencies: Vec<FactDependency>) {
+    /// Add multiple fact dependencies to this effect
+    pub fn with_fact_dependencies(&mut self, dependencies: Vec<FactDependency>) {
         self.dependencies.extend(dependencies);
     }
     
-    fn with_fact_snapshot(&mut self, snapshot: FactSnapshot) {
+    /// Add a fact snapshot to this effect
+    pub fn with_fact_snapshot(&mut self, snapshot: FactSnapshot) {
         self.snapshot = Some(snapshot);
+    }
+}
+
+impl crate::effect::Effect for WithdrawalEffect {
+    fn id(&self) -> &crate::effect::EffectId {
+        &self.id
+    }
+    
+    fn name(&self) -> &str {
+        "withdrawal"
+    }
+    
+    fn display_name(&self) -> String {
+        format!("Withdraw {}", self.amount)
+    }
+    
+    fn description(&self) -> String {
+        format!("Withdraw {} from resource {}", self.amount, self.resource_id)
+    }
+    
+    fn execute(&self, _context: &crate::effect::EffectContext) -> crate::error::Result<crate::effect::EffectOutcome> {
+        // For now just return a successful outcome
+        Ok(crate::effect::EffectOutcome::success(self.id.clone())
+            .with_data("amount", self.amount.to_string())
+            .with_data("resource_id", self.resource_id.to_string()))
+    }
+    
+    async fn execute_async(&self, context: &crate::effect::EffectContext) -> crate::effect::EffectResult<crate::effect::EffectOutcome> {
+        self.execute(context)
+    }
+    
+    fn can_execute_in(&self, _boundary: crate::effect::boundary::ExecutionBoundary) -> bool {
+        // For simplicity, allow execution in any boundary
+        true
+    }
+    
+    fn preferred_boundary(&self) -> crate::effect::boundary::ExecutionBoundary {
+        // Prefer local execution
+        crate::effect::boundary::ExecutionBoundary::Local
+    }
+    
+    fn display_parameters(&self) -> std::collections::HashMap<String, String> {
+        let mut params = std::collections::HashMap::new();
+        params.insert("resource_id".to_string(), self.resource_id.to_string());
+        params.insert("amount".to_string(), self.amount.to_string());
+        params.insert("domain_id".to_string(), self.domain_id.to_string());
+        params
+    }
+    
+    fn fact_dependencies(&self) -> Vec<crate::log::fact_snapshot::FactDependency> {
+        self.dependencies.clone()
+    }
+    
+    fn fact_snapshot(&self) -> Option<crate::log::fact_snapshot::FactSnapshot> {
+        self.snapshot.clone()
     }
     
     fn validate_fact_dependencies(&self) -> crate::error::Result<()> {
@@ -206,40 +267,32 @@ impl crate::effect::EffectWithFactDependencies for WithdrawalEffect {
     }
 }
 
-/// Create a withdrawal effect
+/// Factory function to create a new withdrawal effect
 pub fn withdrawal(
     resource_id: ResourceId,
     domain_id: DomainId,
-    amount: TokenAmount,
-) -> Box<dyn crate::effect::Effect<Output = bool>> {
-    Box::new(WithdrawalEffect {
-        resource_id,
-        domain_id,
-        amount,
-        dependencies: Vec::new(),
-        snapshot: None,
-    })
+    amount: String, // Change from TokenAmount to String
+) -> Box<dyn crate::effect::Effect> {
+    Box::new(WithdrawalEffect::new(resource_id, domain_id, amount))
 }
 
-/// Create a withdrawal effect with fact dependencies
+/// Factory function to create a new withdrawal effect with fact information
 pub fn withdrawal_with_facts(
     resource_id: ResourceId,
     domain_id: DomainId,
-    amount: TokenAmount,
+    amount: String, // Change from TokenAmount to String
     fact_snapshot: FactSnapshot,
 ) -> Box<WithdrawalEffect> {
-    Box::new(WithdrawalEffect {
-        resource_id,
-        domain_id,
-        amount,
-        dependencies: Vec::new(),
-        snapshot: Some(fact_snapshot),
-    })
+    let mut effect = WithdrawalEffect::new(resource_id, domain_id, amount);
+    effect.snapshot = Some(fact_snapshot);
+    Box::new(effect)
 }
 
 /// Represents an observation effect
 #[derive(Debug, Clone)]
 pub struct ObservationEffect {
+    /// The unique ID of this effect
+    pub id: crate::effect::EffectId,
     /// The resource to observe
     pub resource_id: ResourceId,
     /// The domain to observe
@@ -250,44 +303,20 @@ pub struct ObservationEffect {
     pub snapshot: Option<FactSnapshot>,
 }
 
-impl crate::effect::Effect for ObservationEffect {
-    type Output = TokenAmount;
-    
-    fn get_type(&self) -> EffectType {
-        EffectType::Observe
+impl ObservationEffect {
+    /// Create a new observation effect
+    pub fn new(resource_id: ResourceId, domain_id: DomainId) -> Self {
+        Self {
+            id: crate::effect::EffectId::new_unique(),
+            resource_id,
+            domain_id,
+            dependencies: Vec::new(),
+            snapshot: None,
+        }
     }
     
-    fn as_debug(&self) -> &dyn fmt::Debug {
-        self
-    }
-    
-    fn clone_box(&self) -> Box<dyn crate::effect::Effect<Output = Self::Output>> {
-        Box::new(self.clone())
-    }
-    
-    fn resources(&self) -> Vec<ResourceId> {
-        vec![self.resource_id.clone()]
-    }
-    
-    fn domains(&self) -> Vec<DomainId> {
-        vec![self.domain_id.clone()]
-    }
-    
-    fn execute(self, handler: &dyn crate::effect::EffectHandler) -> Self::Output {
-        handler.handle_observation(self.resource_id, self.domain_id)
-    }
-    
-    fn fact_dependencies(&self) -> Vec<FactDependency> {
-        self.dependencies.clone()
-    }
-    
-    fn fact_snapshot(&self) -> Option<FactSnapshot> {
-        self.snapshot.clone()
-    }
-}
-
-impl crate::effect::EffectWithFactDependencies for ObservationEffect {
-    fn with_fact_dependency(
+    /// Add a fact dependency to this effect
+    pub fn with_fact_dependency(
         &mut self,
         fact_id: FactId,
         domain_id: DomainId,
@@ -297,12 +326,68 @@ impl crate::effect::EffectWithFactDependencies for ObservationEffect {
         self.dependencies.push(dependency);
     }
     
-    fn with_fact_dependencies(&mut self, dependencies: Vec<FactDependency>) {
+    /// Add multiple fact dependencies to this effect
+    pub fn with_fact_dependencies(&mut self, dependencies: Vec<FactDependency>) {
         self.dependencies.extend(dependencies);
     }
     
-    fn with_fact_snapshot(&mut self, snapshot: FactSnapshot) {
+    /// Add a fact snapshot to this effect
+    pub fn with_fact_snapshot(&mut self, snapshot: FactSnapshot) {
         self.snapshot = Some(snapshot);
+    }
+}
+
+impl crate::effect::Effect for ObservationEffect {
+    fn id(&self) -> &crate::effect::EffectId {
+        &self.id
+    }
+    
+    fn name(&self) -> &str {
+        "observation"
+    }
+    
+    fn display_name(&self) -> String {
+        format!("Observe resource {}", self.resource_id)
+    }
+    
+    fn description(&self) -> String {
+        format!("Observe resource {} in domain {}", self.resource_id, self.domain_id)
+    }
+    
+    fn execute(&self, _context: &crate::effect::EffectContext) -> crate::error::Result<crate::effect::EffectOutcome> {
+        // For now just return a successful outcome
+        Ok(crate::effect::EffectOutcome::success(self.id.clone())
+            .with_data("resource_id", self.resource_id.to_string())
+            .with_data("domain_id", self.domain_id.to_string()))
+    }
+    
+    async fn execute_async(&self, context: &crate::effect::EffectContext) -> crate::effect::EffectResult<crate::effect::EffectOutcome> {
+        self.execute(context)
+    }
+    
+    fn can_execute_in(&self, _boundary: crate::effect::boundary::ExecutionBoundary) -> bool {
+        // For simplicity, allow execution in any boundary
+        true
+    }
+    
+    fn preferred_boundary(&self) -> crate::effect::boundary::ExecutionBoundary {
+        // Prefer local execution
+        crate::effect::boundary::ExecutionBoundary::Local
+    }
+    
+    fn display_parameters(&self) -> std::collections::HashMap<String, String> {
+        let mut params = std::collections::HashMap::new();
+        params.insert("resource_id".to_string(), self.resource_id.to_string());
+        params.insert("domain_id".to_string(), self.domain_id.to_string());
+        params
+    }
+    
+    fn fact_dependencies(&self) -> Vec<crate::log::fact_snapshot::FactDependency> {
+        self.dependencies.clone()
+    }
+    
+    fn fact_snapshot(&self) -> Option<crate::log::fact_snapshot::FactSnapshot> {
+        self.snapshot.clone()
     }
     
     fn validate_fact_dependencies(&self) -> crate::error::Result<()> {
@@ -311,29 +396,21 @@ impl crate::effect::EffectWithFactDependencies for ObservationEffect {
     }
 }
 
-/// Create an observation effect
+/// Factory function to create a new observation effect
 pub fn observation(
     resource_id: ResourceId,
     domain_id: DomainId,
-) -> Box<dyn crate::effect::Effect<Output = TokenAmount>> {
-    Box::new(ObservationEffect {
-        resource_id,
-        domain_id,
-        dependencies: Vec::new(),
-        snapshot: None,
-    })
+) -> Box<dyn crate::effect::Effect> {
+    Box::new(ObservationEffect::new(resource_id, domain_id))
 }
 
-/// Create an observation effect with fact dependencies
+/// Factory function to create a new observation effect with fact information
 pub fn observation_with_facts(
     resource_id: ResourceId,
     domain_id: DomainId,
     fact_snapshot: FactSnapshot,
 ) -> Box<ObservationEffect> {
-    Box::new(ObservationEffect {
-        resource_id,
-        domain_id,
-        dependencies: Vec::new(),
-        snapshot: Some(fact_snapshot),
-    })
+    let mut effect = ObservationEffect::new(resource_id, domain_id);
+    effect.snapshot = Some(fact_snapshot);
+    Box::new(effect)
 } 

@@ -16,6 +16,7 @@ use crate::error::Result;
 use crate::log::entry::{EntryType, EntryData, LogEntry, EventEntry, EventSeverity, EffectEntry, FactEntry};
 use crate::log::storage::{LogStorage, MemoryLogStorage};
 use crate::types::{ResourceId, DomainId};
+use crate::effect::types::EffectType;
 
 /// Strategies for generating test data
 
@@ -86,7 +87,7 @@ fn effect_entry_strategy() -> impl Strategy<Value = EffectEntry> {
         vec(domain_id_strategy(), 1..3)
     ).prop_map(|(resources, domains)| {
         EffectEntry {
-            effect_type: crate::log::EffectType::Create,
+            effect_type: EffectType::Create,
             resources,
             domains,
             code_hash: None,

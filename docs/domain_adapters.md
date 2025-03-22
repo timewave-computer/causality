@@ -1,126 +1,139 @@
-# Domain Adapter Architecture
+# Domain Adapters in the Three-Layer Effect Architecture
 
 ## Overview
 
-The Domain Adapter architecture in Causality provides a unified interface for interacting with different blockchain networks (domains). Each domain has its own specific implementation that conforms to the `DomainAdapter` trait, allowing the system to work with multiple chains in a consistent manner.
+Domain adapters provide a consistent interface between the Causality system and external blockchain networks. The domain adapter layer is a critical component of the three-layer effect architecture, bridging the gap between abstract effects and concrete chain-specific implementations.
 
-## Directory Structure
+## Architecture Layers
 
-```
-src/
-├── domain/           # Core domain interfaces and shared functionality
-│   ├── adapter.rs    # DomainAdapter trait and related types
-│   ├── fact.rs       # Fact observation and verification
-│   ├── mod.rs        # Domain module definition and re-exports
-│   ├── registry.rs   # Domain registry for managing adapters
-│   ├── selection.rs  # Domain selection logic
-│   ├── time_map.rs   # Time synchronization across domains
-│   └── time_sync.rs  # Time synchronization manager
-└── domain_adapters/          # Domain-specific adapter implementations
-    ├── evm/          # Ethereum Virtual Machine adapter
-    │   ├── adapter.rs # EVM-specific adapter implementation
-    │   ├── mod.rs     # EVM module definition
-    │   └── types.rs   # EVM-specific types
-    └── ... other domain adapters
-```
+The three-layer effect architecture consists of:
 
-## Architecture
+1. **Abstract Effect Layer**: Defines effect interfaces and constraints
+2. **Domain Adapter Layer**: Translates abstract effects to domain-specific implementations
+3. **Chain-Specific Layer**: Handles the actual on-chain execution
 
-### Core Components
+## Domain Adapter Components
 
-1. **DomainAdapter Trait**
-   - Defined in `src/domain/adapter.rs`
-   - Provides a consistent interface for all domain interactions
-   - Methods for getting information, observing facts, submitting transactions
-   - Currently being updated to use the new standardized fact system
+Each domain adapter includes:
 
-2. **Domain Registry**
-   - Manages all registered domain adapters
-   - Allows lookup by domain ID
-   - Provides domain metadata
+- **Core Adapter**: Main adapter implementation with connection handling
+- **Type Definitions**: Domain-specific data types
+- **Effect Implementations**: Concrete implementations of abstract effects
+- **Storage Strategies**: Domain-specific storage for the unified ResourceRegister model
 
-3. **Time Map**
-   - Synchronizes time across different domains
-   - Maps domain block heights and hashes to consistent timestamps
+## Supported Domains
 
-4. **Domain Selection**
-   - Selects appropriate domains based on criteria like reliability, cost, latency
+The system currently supports the following domains:
 
-5. **Fact System Integration**
-   - Domain adapters are being migrated to use the standardized `FactType` enum
-   - Provides type-safe fact observation and verification
-   - Enables strong typing for domain-specific facts
+- **EVM** (Ethereum Virtual Machine): For Ethereum and compatible chains
+- **CosmWasm**: For Cosmos ecosystem chains
+- **Other**: Generic adapter for testing and custom implementations
 
-### Domain-Specific Adapters
+## Implementation Pattern
 
-Domain-specific adapters implement the `DomainAdapter` trait and handle the specifics of interacting with a particular blockchain or system. Each adapter is isolated in its own module under `src/domain_adapters/`.
-
-#### Example: EVM Adapter
-
-The EVM adapter (in `src/domain_adapters/evm/`) provides:
-
-- Connection to Ethereum-compatible chains
-- Methods to query balances, storage, logs
-- Transaction submission and receipt retrieval
-- Block information and time synchronization
-
-## Adding a New Domain Adapter
-
-To add support for a new blockchain:
-
-1. Create a new directory under `src/domain_adapters/` for your adapter
-2. Implement the required modules:
-   - `mod.rs` - Module definition and exports
-   - `adapter.rs` - Main adapter implementation
-   - `types.rs` - Domain-specific types
-
-3. Implement the `DomainAdapter` trait for your adapter
-4. Register your adapter with the `DomainRegistry`
-
-## Usage Example
+Domain adapters follow a consistent pattern:
 
 ```rust
-// Create an EVM adapter for Ethereum
-let eth_config = EthereumConfig {
-    domain_id: DomainId::from_str("0x01").unwrap(),
-    name: "Ethereum Mainnet".to_string(),
-    description: Some("Ethereum main network".to_string()),
-    rpc_url: "https://mainnet.infura.io/v3/YOUR_API_KEY".to_string(),
-    chain_id: 1,
-    explorer_url: Some("https://etherscan.io".to_string()),
-    native_currency: "ETH".to_string(),
-};
-
-let eth_adapter = EthereumAdapter::new(eth_config)?;
-
-// Register with the domain registry
-let mut registry = DomainRegistry::new();
-registry.register_domain(Arc::new(eth_adapter));
-
-// Observe facts from the domain
-// Note: The domain adapter interface is being migrated to use the new FactType system
-let query = FactQuery {
-    domain_id: eth_adapter.domain_id().clone(),
-    fact_type: "balance".to_string(),
-    parameters: {
-        let mut params = HashMap::new();
-        params.insert("address".to_string(), "0x...".to_string());
-        params
-    },
-    block_height: None,
-    block_hash: None,
-    timestamp: None,
-};
-
-// Observe the fact (in future this will directly return the standardized FactType)
-let observed_fact = eth_adapter.observe_fact(query).await?;
+// Example module structure for a domain adapter
+pub mod domain_name {
+    // Core adapter implementation
+    pub mod adapter;
+    
+    // Type definitions
+    pub mod types;
+    
+    // Storage strategy implementation
+    pub mod storage_strategy;
+    
+    // Re-export core types and create factory functions
+    pub use adapter::DomainAdapter;
+    pub use adapter::DomainConfig;
+    pub use types::DomainAddress;
+    pub use storage_strategy::DomainStorageEffectFactory;
+    
+    // Factory function for creating adapters
+    pub fn create_domain_adapter(config: DomainConfig) -> Result<DomainAdapter> {
+        DomainAdapter::new(config)
+    }
+}
 ```
 
-## Best Practices
+## Storage Strategies
 
-1. **Isolate Dependencies**: Each adapter should keep its chain-specific dependencies contained within its module
-2. **Clean API Surface**: Only export what's necessary from the domain-specific modules
-3. **Error Handling**: Convert chain-specific errors to Causality's error types
-4. **Caching**: Implement appropriate caching for expensive blockchain calls
-5. **Testing**: Create mock implementations for testing purposes
-6. **Fact Standardization**: Use the standardized `FactType` system for all new code 
+Domain adapters implement storage strategies for the unified ResourceRegister model:
+
+- **FullyOnChain**: All register data is stored on-chain
+- **CommitmentBased**: Only commitments to register data are stored on-chain
+- **Hybrid**: Critical fields stored on-chain, with commitments for remaining data
+
+Each domain implements custom storage effects:
+
+- `DomainStoreEffect`: For storing register data on-chain
+- `DomainCommitmentEffect`: For storing register commitment on-chain
+- `DomainNullifierEffect`: For storing register nullifier on-chain
+
+## Integration Example
+
+```rust
+// Creating a domain-specific store effect
+let domain_info = domain_registry.get_domain_info(&domain_id)?;
+let effect = create_domain_specific_store_effect(
+    register_id,
+    fields,
+    domain_id,
+    invoker,
+    &domain_info,
+)?;
+
+// Execute using the effect runtime
+let outcome = effect_runtime.execute_effect(effect, context).await?;
+```
+
+## EVM Adapter
+
+The EVM adapter supports Ethereum and other EVM-compatible chains with:
+
+- Ethers.rs integration for contract interactions
+- Gas estimation and transaction management
+- Support for different network types (mainnet, testnet)
+- ABIs for common register storage contracts
+
+## CosmWasm Adapter
+
+The CosmWasm adapter supports Cosmos ecosystem chains with:
+
+- CosmWasm contract interaction
+- Support for different network types and gas configurations
+- Integration with various Cosmos SDK modules
+
+## Adding New Domain Adapters
+
+To add a new domain adapter:
+
+1. Create a new module in `src/domain_adapters/{domain_name}/`
+2. Implement the core adapter with connection handling
+3. Define domain-specific types
+4. Implement storage strategies for the unified ResourceRegister model
+5. Register the domain type in the domain registry
+6. Update effect factory functions to support the new domain
+
+## Storage Effect Factory Pattern
+
+Domain adapters provide effect factories to create domain-specific effects:
+
+```rust
+// Example storage effect factory
+pub struct DomainStorageEffectFactory {
+    contract_address: String,
+    config: DomainConfig,
+    domain_id: DomainId,
+}
+
+impl DomainStorageEffectFactory {
+    // Create a store effect
+    pub fn create_store_effect(&self, register_id: ResourceId, fields: HashSet<String>, invoker: Address) -> Result<Arc<dyn Effect>>;
+    
+    // Create a commitment effect
+    pub fn create_commitment_effect(&self, register_id: ResourceId, commitment: Commitment, invoker: Address) -> Result<Arc<dyn Effect>>;
+}
+``` 

@@ -54,6 +54,18 @@ pub struct EffectContext {
 }
 
 impl EffectContext {
+    /// Create a new effect context with the given boundary
+    pub fn new(boundary: ExecutionBoundary) -> Self {
+        Self {
+            execution_id: Uuid::new_v4(),
+            boundary,
+            chain: None,
+            invoker: Address::default(),
+            capabilities: Vec::new(),
+            parameters: HashMap::new(),
+        }
+    }
+    
     /// Create a new effect context for inside-system execution
     pub fn new_inside(invoker: Address) -> Self {
         Self {

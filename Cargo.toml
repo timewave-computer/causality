@@ -78,10 +78,6 @@ name = "program_account_effect"
 path = "examples/program_account_effect.rs"
 
 [[example]]
-name = "privacy_preserving_effect"
-path = "examples/privacy_preserving_effect.rs"
-
-[[example]]
 name = "boundary_crossing"
 path = "examples/boundary_crossing.rs"
 

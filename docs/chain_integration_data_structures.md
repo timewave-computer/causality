@@ -353,10 +353,10 @@ struct FactSnapshot {
 
 ---
 
-These core data structures form the complete system for a blockchain integration. All state transitions, privacy features, and cross-chain interactions can be built using these primitives. 
+These core data structures form the complete system for a blockchain integration. All state transitions and cross-chain interactions can be built using these primitives. 
 
 The most critical design aspects are:
-1. The commitment/nullifier pattern for privacy-preserving state
+1. The commitment/nullifier pattern for eventual privacy-preserving state
 2. The capability model for secure resource access
 3. The register model for atomic state transitions
 4. The unified logging system for causal consistency and replay
@@ -461,14 +461,6 @@ Programs process operations
 They request capabilities through ResourceAPI
 Capabilities allow access to Registers
 Register operations create Commitments and Nullifiers
-
-
-### Privacy preservation flow:
-
-Witnesses create ZK Proofs (off-chain)
-ZK Proofs are verified on-chain
-Nullifiers prevent double-spending
-Commitments hide actual values
 
 
 ### Cross-chain interaction flow:

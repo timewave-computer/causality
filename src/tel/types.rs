@@ -60,8 +60,56 @@ impl std::str::FromStr for Domain {
     }
 }
 
-/// Metadata as key-value pairs
-pub type Metadata = HashMap<String, serde_json::Value>;
+/// Metadata key-value pairs for resources and relationships
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct Metadata {
+    // Internal map of string keys to string values
+    values: HashMap<String, String>,
+}
+
+impl Metadata {
+    /// Create a new empty metadata container
+    pub fn new() -> Self {
+        Self {
+            values: HashMap::new(),
+        }
+    }
+    
+    /// Add a key-value pair to the metadata
+    pub fn insert(&mut self, key: String, value: String) -> Option<String> {
+        self.values.insert(key, value)
+    }
+    
+    /// Get a value from the metadata by key
+    pub fn get(&self, key: &str) -> Option<&String> {
+        self.values.get(key)
+    }
+    
+    /// Remove a key-value pair from the metadata
+    pub fn remove(&mut self, key: &str) -> Option<String> {
+        self.values.remove(key)
+    }
+    
+    /// Check if the metadata contains a specific key
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.values.contains_key(key)
+    }
+    
+    /// Get the number of key-value pairs in the metadata
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+    
+    /// Check if the metadata is empty
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+    
+    /// Get an iterator over the key-value pairs
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
+        self.values.iter()
+    }
+}
 
 /// Identifier for an operation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -167,4 +215,63 @@ pub enum EffectResult {
     Json(serde_json::Value),
     /// Error result
     Error(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_metadata_basic_operations() {
+        let mut metadata = Metadata::new();
+        
+        // Insert some key-value pairs
+        metadata.insert("name".to_string(), "Token X".to_string());
+        metadata.insert("version".to_string(), "1.0".to_string());
+        
+        // Check that keys exist
+        assert!(metadata.contains_key("name"));
+        assert!(metadata.contains_key("version"));
+        assert!(!metadata.contains_key("missing"));
+        
+        // Check values
+        assert_eq!(metadata.get("name"), Some(&"Token X".to_string()));
+        assert_eq!(metadata.get("version"), Some(&"1.0".to_string()));
+        assert_eq!(metadata.get("missing"), None);
+        
+        // Check length
+        assert_eq!(metadata.len(), 2);
+        assert!(!metadata.is_empty());
+        
+        // Remove a key
+        let removed = metadata.remove("name");
+        assert_eq!(removed, Some("Token X".to_string()));
+        
+        // Check updated state
+        assert!(!metadata.contains_key("name"));
+        assert_eq!(metadata.len(), 1);
+    }
+    
+    #[test]
+    fn test_metadata_iteration() {
+        let mut metadata = Metadata::new();
+        
+        metadata.insert("key1".to_string(), "value1".to_string());
+        metadata.insert("key2".to_string(), "value2".to_string());
+        
+        // Collect the keys and values into vectors for testing
+        let mut keys: Vec<String> = metadata.iter()
+            .map(|(k, _)| k.clone())
+            .collect();
+        let mut values: Vec<String> = metadata.iter()
+            .map(|(_, v)| v.clone())
+            .collect();
+        
+        // Sort for deterministic comparison
+        keys.sort();
+        values.sort();
+        
+        assert_eq!(keys, vec!["key1".to_string(), "key2".to_string()]);
+        assert_eq!(values, vec!["value1".to_string(), "value2".to_string()]);
+    }
 } 

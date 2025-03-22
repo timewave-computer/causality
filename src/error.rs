@@ -70,6 +70,9 @@ pub enum Error {
     #[error("Domain not found: {0}")]
     DomainNotFound(DomainId),
 
+    #[error("Domain already registered: {0}")]
+    DomainAlreadyRegistered(String),
+
     #[error("Domain connection error: {0}")]
     DomainConnectionError(String),
 
@@ -174,6 +177,10 @@ pub enum Error {
 
     #[error("Concurrency error: {0}")]
     ConcurrencyError(String),
+
+    // System errors
+    #[error("System error: {0}")]
+    SystemError(String),
 
     // IO and serialization errors
     #[error("IO error: {0}")]

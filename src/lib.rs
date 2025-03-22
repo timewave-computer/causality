@@ -14,13 +14,12 @@ pub mod actor;
 pub mod address;
 pub mod effect_adapters;
 pub mod time;
+pub mod capabilities;
 
-// Effect system (core components always included)
-#[path = "effect.rs"]
+// Effect system
 pub mod effect;
 
-// Temporal Effect Language (TEL) system
-#[path = "tel.rs"]
+// TEL (Transaction Effect Language)
 pub mod tel;
 
 // Optional modules based on features
@@ -30,11 +29,7 @@ pub mod domain;
 #[cfg(feature = "domain")]
 pub mod domain_adapters;
 
-#[cfg(feature = "code-repo")]
-pub mod code;
-
 // Resource system
-#[path = "resource.rs"]
 pub mod resource;
 
 // Abstract Syntax Tree (AST) system
@@ -50,7 +45,6 @@ pub mod snapshot;
 pub mod zk;
 
 // Logging system
-#[path = "log.rs"]
 pub mod log;
 
 // Optional invocation system
@@ -66,48 +60,36 @@ pub mod interpreter;
 pub mod builder;
 
 // Program Account Layer
-#[path = "program_account.rs"]
 pub mod program_account;
 
 // System boundaries
 pub mod boundary;
 
 // Re-exports from effect system
-pub use effect::{Effect, EffectType, SerializableEffect};
-pub use effect::handler::{EffectHandler, SharedHandler, NoopHandler, shared, compose};
-pub use effect::continuation::{Continuation, map, and_then, constant, identity};
-pub use effect::dependency::{FactDependency as DependencyFactDependency, EffectDependency, DependencySet};
-pub use effect::snapshot::{FactSnapshot as SnapshotFactSnapshot, SystemSnapshot, SnapshotManager};
+pub use effect::Effect;
+pub use effect::EffectContext;
+pub use effect::EffectOutcome;
+pub use effect::EffectResult;
 
 // Re-exports from TEL system
 pub use tel::{
-    Effect as TelEffect,
-    DomainId,
-    AssetId,
-    Amount,
-    Address as TelAddress,
-    ResourceId,
-    Authorization as TelAuthorization,
-    AuthorizedEffect,
-    ConditionalEffect,
-    TimedEffect,
-    ResourceContents,
-    FactType,
-    Condition,
-    Predicate,
-    CircuitType,
+    TelScript, TelOperation, TelOperationType, TelParser,
+    TelHandler, TelHandlerRegistry, TelCompiler, StandardTelCompiler,
+    TransferParams, StorageParams, QueryParams,
+    parse_tel, compile_tel, execute_tel
 };
 
 // Re-exports from resource system
 pub use resource::{
-    ResourceManager, 
-    ResourceGuard,
-    ResourceAllocator, 
-    ResourceRequest, 
-    ResourceGrant, 
-    ResourceUsage, 
-    StaticAllocator
+    ResourceId, Quantity, RegisterId, ResourceRegister, ResourceLogic,
+    ResourceState, TransitionReason,
+    RelationshipTracker, ResourceRelationship, RelationshipType, RelationshipDirection,
+    ResourceRegisterLifecycleManager, RegisterOperationType,
+    StorageStrategy, StorageAdapter, CapabilityId
 };
+
+// Re-exports from capabilities system
+pub use capabilities::{Right, Capability, CapabilityType};
 
 // Re-exports from AST system
 pub use ast::{
@@ -118,27 +100,13 @@ pub use ast::{
     CorrelationTracker
 };
 
-// Re-exports from code system
-#[cfg(feature = "code-repo")]
-pub use crate::effect_adapters::repository::{CodeRepository, CodeEntry, CodeMetadata};
-
 // Re-exports from log system
 pub use log::{LogEntry, LogStorage, ReplayEngine};
-pub use log::sync::{SyncManager, SyncConfig, PeerInfo, SyncProtocol, HttpSyncProtocol};
-pub use log::visualization::{LogVisualizer, VisualizationFilter, VisualizationFormat};
 
 // Re-exports from domain system
 #[cfg(feature = "domain")]
 pub use domain::{
-    DomainAdapter, DomainRegistry, DomainId, DomainInfo, DomainType, DomainStatus,
-};
-
-// Re-exports from domain time system
-#[cfg(feature = "domain")]
-pub use domain::map::{
-    TimeMap, TimeMapEntry, TimeMapHistory, TimeMapNotifier, SharedTimeMap,
-    TimePoint, TimeRange, TimeSyncConfig, SyncStatus, SyncResult,
-    TimeSyncManager
+    DomainAdapter, DomainRegistry, DomainId, DomainInfo, DomainType
 };
 
 // Re-export from time module
@@ -146,10 +114,10 @@ pub use time::LamportTime;
 
 // Re-exports from ZK system
 pub use zk::{
+    StateTransition,
     ZkVirtualMachine,
     ZkAdapter,
     Witness,
-    StateTransition,
     MemoryAccess,
     VmState,
     Proof,
@@ -196,20 +164,15 @@ pub use snapshot::{
 // Re-exports from modules directly (avoiding integration modules)
 #[cfg(feature = "code-repo")]
 pub use effect::{EffectIntegrator, ContentAddressedEffect};
-#[cfg(feature = "code-repo")]
-pub use code::{TelIntegrator, ContentAddressedTelCompiler};
 
 // Re-exports from program account system
-pub use program_account::{
-    ProgramAccount,
-    ProgramAccountRegistry,
-    AssetProgramAccount,
-    UtilityProgramAccount,
-    DomainBridgeProgramAccount,
-    ProgramAccountResource,
-    AvailableEffect,
-    EffectResult,
+pub use program_account::base_account::BaseAccount;
+pub use program_account::registry::{StandardProgramAccountRegistry, AccountType};
+pub use program_account::asset_account::{AssetAccount, AssetType, AssetCollection};
+pub use program_account::utility_account::{UtilityAccount, StoredData};
+pub use program_account::effect_adapter::{
+    ProgramAccountEffectAdapter,
+    ProgramAccountEffectAdapterImpl,
+    EffectInfo,
+    EffectParameterType
 };
-
-// Export tel model
-pub use tel::resource::model;

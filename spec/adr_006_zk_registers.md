@@ -2,15 +2,11 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Author
 
 Sam Hart
-
-## Last updated
-
-2023-21-03
 
 ## Context
 

@@ -496,6 +496,28 @@ impl ContentAddressableExecutor {
     }
 }
 
+/// Different kinds of effects
+#[derive(Debug)]
+pub enum EffectKind {
+    /// A pure effect with no external execution
+    Pure(Vec<u8>),
+    
+    /// An effect implemented by a builtin handler
+    Builtin(BuiltinEffect),
+    
+    /// A general effect
+    Effect(Box<dyn Effect>),
+    
+    /// A JavaScript effect
+    JavaScript(JavaScriptEffect),
+    
+    /// A Rust effect
+    Rust(RustEffect),
+    
+    /// A WebAssembly effect
+    WebAssembly(WebAssemblyEffect),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
