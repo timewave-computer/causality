@@ -14,4 +14,9 @@ pub use context::{ExecutionContext, CallFrame, ExecutionEvent, ContextId};
 pub use executor::{ContentAddressableExecutor, ExecutionError};
 pub use trace::ExecutionTracer;
 pub use replay::ExecutionReplayer;
-pub use security::SecuritySandbox; 
+pub use security::SecuritySandbox;
+
+// Re-export from effect modules for backward compatibility 
+// This allows code to migrate to using the effect::content module directly
+pub use crate::effect::content::{ContentHash, CodeContent, CodeDefinition};
+pub use crate::effect::repository::{CodeRepository, CodeEntry, CodeMetadata}; 

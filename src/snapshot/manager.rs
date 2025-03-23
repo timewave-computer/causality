@@ -11,7 +11,7 @@ use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::effect_adapters::hash::Hash as ContentHash;
+use crate::effect::content::ContentHash;
 use crate::execution::context::ExecutionContext;
 use crate::execution::context::{CallFrame, ContextId};
 use crate::resource::usage::ResourceUsage;

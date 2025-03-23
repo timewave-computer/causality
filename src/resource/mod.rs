@@ -11,8 +11,8 @@ pub mod static_alloc;
 pub mod usage;
 pub mod manager;
 pub mod resource_register;
-pub mod capability;
 pub mod capability_system;
+pub mod capability; // file-based module replacing capability/mod.rs
 pub mod lifecycle_manager;
 pub mod relationship_tracker;
 pub mod storage;
@@ -20,9 +20,11 @@ pub mod storage_adapter;
 pub mod relationship;
 pub mod boundary_manager;
 pub mod authorization;
-pub mod time_map_integration;
+pub mod resource_temporal_consistency;
 pub mod tests;
-pub mod error;
+
+// Using crate's error module
+use crate::error::{self, Result as CrateResult};
 
 // Re-exports
 pub use api::ResourceState;
@@ -32,22 +34,16 @@ pub use resource_register::RegisterState;
 #[cfg(feature = "capabilities")]
 use crate::capabilities::{Right, Capability, CapabilityType};
 
-// Resource IDs
-pub type ResourceId = String;
+// Resource IDs - using the ResourceId from types.rs
+pub use crate::types::ResourceId;
 pub type RegisterId = String;
 pub type CapabilityId = String;
 
+// Resource-specific result type
+pub type ResourceResult<T> = std::result::Result<T, error::Error>;
+
 // Re-export from resource_register
 pub use resource_register::ResourceRegister;
-
-// Define a ResourceRegisterTrait to wrap the ResourceRegister struct
-// This allows using ResourceRegister as a trait object
-pub trait ResourceRegisterTrait: Send + Sync + 'static {
-    fn get_by_id(&self, id: &str) -> error::ResourceResult<ResourceRegister>;
-    fn create(&self, register: ResourceRegister) -> error::ResourceResult<()>;
-    fn update(&self, register: ResourceRegister) -> error::ResourceResult<()>;
-    fn delete(&self, id: &str) -> error::ResourceResult<()>;
-}
 
 // Re-export from lifecycle_manager
 pub use lifecycle_manager::ResourceRegisterLifecycleManager;
@@ -82,16 +78,12 @@ pub use relationship::{
     SchedulerStatus,
 };
 
-// Storage capabilities
+// Re-export storage capabilities
 pub use storage::StorageStrategy;
-
-// Types that need to be defined since they're used in lib.rs but not available in the modules
-pub struct StorageAdapter;
+pub use storage::StateVisibility;
 
 // Re-export from capability_system
 pub use capability_system::AuthorizationService;
-// Define locally since the original is not available
-pub struct CapabilityValidator;
 
 // Types that need to be defined
 pub struct ResourceLogic {
@@ -137,70 +129,8 @@ impl ResourceLogic {
     }
 }
 
-/// Storage strategy variants
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StorageStrategy {
-    /// Store the resource fully on chain
-    FullyOnChain {
-        /// Visibility of the resource state
-        visibility: StateVisibility
-    },
-    
-    /// Store only a commitment on chain
-    CommitmentBased,
-    
-    /// Store the resource using a hybrid approach
-    Hybrid,
-}
-
-/// State visibility options
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StateVisibility {
-    /// State is publicly visible
-    Public,
-    
-    /// State is private
-    Private,
-    
-    /// State is visible only to authorized parties
-    Authorized,
-}
-
-// Error types for resource operations
-pub mod error {
-    use thiserror::Error;
-    
-    /// Error type for resource operations
-    #[derive(Debug, Error)]
-    pub enum ResourceError {
-        #[error("Resource not found: {0}")]
-        NotFound(String),
-        
-        #[error("Invalid operation: {0}")]
-        InvalidOperation(String),
-        
-        #[error("Resource in invalid state: {0}")]
-        InvalidState(String),
-        
-        #[error("Resource already exists: {0}")]
-        AlreadyExists(String),
-        
-        #[error("Resource locked: {0}")]
-        Locked(String),
-        
-        #[error("Permission denied: {0}")]
-        PermissionDenied(String),
-        
-        #[error("Internal error: {0}")]
-        InternalError(String),
-    }
-    
-    /// Result type for resource operations
-    pub type ResourceResult<T> = std::result::Result<T, ResourceError>;
-}
-
 // Re-export from authorization
 pub use authorization::ResourceAuthorizationService;
 
-// Re-export the time map integration
-pub use time_map_integration::{ResourceTimeMapIntegration, ResourceTimeSnapshot}; 
+// Re-export the temporal consistency management
+pub use resource_temporal_consistency::{ResourceTemporalConsistency, ResourceTimeSnapshot}; 

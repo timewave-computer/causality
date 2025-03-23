@@ -5,8 +5,46 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use crate::address::Address;
-use crate::resource::capability::{CapabilityId, CapabilityRef, CapabilityError, Right};
-use crate::resource::ResourceId;
+use crate::resource::{CapabilityId, ResourceId};
+use crate::error::{Error, Result};
+
+/// Type alias for capability references
+pub type CapabilityRef = String;
+
+/// Capability-related errors
+#[derive(Debug, Error)]
+pub enum CapabilityError {
+    #[error("Capability not found: {0}")]
+    NotFound(String),
+    
+    #[error("Insufficient rights: {0}")]
+    InsufficientRights(String),
+    
+    #[error("Capability expired")]
+    Expired,
+    
+    #[error("Capability revoked")]
+    Revoked,
+}
+
+/// Capability rights
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Right {
+    /// Read resource data
+    Read,
+    /// Write resource data
+    Write,
+    /// Delete a resource
+    Delete,
+    /// Control resource access
+    Control,
+    /// Delegate capabilities
+    Delegate,
+    /// Administrative operations
+    Admin,
+    /// Custom right
+    Custom(String),
+}
 
 /// Errors that can occur during resource API operations
 #[derive(Debug, Error)]
@@ -42,8 +80,42 @@ pub enum ResourceApiError {
     InternalError(String),
 }
 
+impl From<ResourceApiError> for Error {
+    fn from(err: ResourceApiError) -> Self {
+        match err {
+            ResourceApiError::NotFound(s) => Error::ResourceNotFound(s.into()),
+            ResourceApiError::AccessDenied(s) => Error::PermissionDenied(s),
+            ResourceApiError::CapabilityError(e) => Error::PermissionDenied(e.to_string()),
+            ResourceApiError::InvalidOperation(s) => Error::InvalidOperation(s),
+            ResourceApiError::SerializationError(s) => Error::SerializationError(s),
+            ResourceApiError::ValidationError(s) => Error::ValidationError(s),
+            ResourceApiError::ResourceLocked(s) => Error::ResourceAlreadyLocked(s.into()),
+            ResourceApiError::ResourceConflict(s) => Error::AlreadyExists(s),
+            ResourceApiError::StorageError(s) => Error::StorageError(s),
+            ResourceApiError::InternalError(s) => Error::InternalError(s),
+        }
+    }
+}
+
+impl From<Error> for ResourceApiError {
+    fn from(err: Error) -> Self {
+        match err {
+            Error::ResourceNotFound(id) => ResourceApiError::NotFound(id.to_string()),
+            Error::PermissionDenied(s) => ResourceApiError::AccessDenied(s),
+            Error::InvalidOperation(s) => ResourceApiError::InvalidOperation(s),
+            Error::SerializationError(s) => ResourceApiError::SerializationError(s),
+            Error::ValidationError(s) => ResourceApiError::ValidationError(s),
+            Error::ResourceAlreadyLocked(id) => ResourceApiError::ResourceLocked(id.to_string()),
+            Error::AlreadyExists(s) => ResourceApiError::ResourceConflict(s),
+            Error::StorageError(s) => ResourceApiError::StorageError(s),
+            Error::InternalError(s) => ResourceApiError::InternalError(s),
+            _ => ResourceApiError::InternalError(err.to_string()),
+        }
+    }
+}
+
 /// Result type for resource API operations
-pub type ResourceApiResult<T> = Result<T, ResourceApiError>;
+pub type ResourceApiResult<T> = std::result::Result<T, ResourceApiError>;
 
 /// Resource metadata
 #[derive(Debug, Clone)]

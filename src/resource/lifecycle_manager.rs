@@ -14,10 +14,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{Error, Result};
 use crate::types::{ResourceId, DomainId, Timestamp, Metadata, RegisterState};
-use crate::resource::lifecycle::StateTransition;
-use crate::resource::lifecycle::TransitionReason;
-use crate::resource::transition::TransitionSystem;
 use crate::resource::capability_system::AuthorizationService;
+use crate::resource::relationship_tracker::RelationshipTracker;
+use crate::relationship::cross_domain_query::{ResourceStateTransitionHelper, RelationshipQueryExecutor};
+use crate::resource::CapabilityId;
 
 /// Type of operation on a register
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -69,6 +69,10 @@ pub struct ResourceRegisterLifecycleManager {
     transition_history: HashMap<ResourceId, Vec<StateTransitionRecord>>,
     /// Valid state transitions
     valid_transitions: HashMap<RegisterState, HashSet<RegisterState>>,
+    /// Relationship tracker for validating relationship constraints during transitions
+    relationship_tracker: Option<Arc<RelationshipTracker>>,
+    /// State transition helper for cross-domain relationship validation
+    state_transition_helper: Option<Arc<ResourceStateTransitionHelper>>,
 }
 
 impl ResourceRegisterLifecycleManager {
@@ -79,12 +83,39 @@ impl ResourceRegisterLifecycleManager {
             locked_resources: HashMap::new(),
             transition_history: HashMap::new(),
             valid_transitions: HashMap::new(),
+            relationship_tracker: None,
+            state_transition_helper: None,
         };
         
         // Initialize valid transitions
         manager.initialize_valid_transitions();
         
         manager
+    }
+
+    /// Create a new lifecycle manager with relationship tracking
+    pub fn with_relationship_tracker(relationship_tracker: Arc<RelationshipTracker>) -> Self {
+        let mut manager = Self::new();
+        manager.relationship_tracker = Some(relationship_tracker);
+        manager
+    }
+    
+    /// Set the state transition helper for cross-domain relationship validation
+    pub fn with_state_transition_helper(
+        mut self,
+        query_executor: Arc<RelationshipQueryExecutor>, 
+        relationship_tracker: Arc<RelationshipTracker>
+    ) -> Self {
+        // Create the state transition helper
+        let helper = ResourceStateTransitionHelper::new(query_executor, relationship_tracker.clone());
+        self.state_transition_helper = Some(Arc::new(helper));
+        
+        // Make sure we also have the relationship tracker set
+        if self.relationship_tracker.is_none() {
+            self.relationship_tracker = Some(relationship_tracker);
+        }
+        
+        self
     }
 
     /// Initialize the valid state transitions
@@ -169,30 +200,90 @@ impl ResourceRegisterLifecycleManager {
         Ok(())
     }
 
-    /// Transition a resource to a new state if valid
-    fn transition_state(
+    /// Validate a state transition considering relationships
+    async fn validate_state_transition_with_relationships(
+        &self,
+        resource_id: &ResourceId,
+        from_state: &RegisterState,
+        to_state: &RegisterState,
+    ) -> Result<bool> {
+        // First check basic transition validity
+        if !self.is_valid_transition(from_state, to_state) {
+            return Ok(false);
+        }
+        
+        // If we have a state transition helper, use it to validate relationships
+        if let Some(helper) = &self.state_transition_helper {
+            // Convert RegisterState to string for the helper
+            let from_str = format!("{:?}", from_state);
+            let to_str = format!("{:?}", to_state);
+            
+            // Validate relationships for this transition
+            match helper.validate_relationships_for_transition(
+                resource_id,
+                &from_str,
+                &to_str
+            ).await {
+                Ok(valid) => return Ok(valid),
+                Err(e) => return Err(Error::InvalidOperation(format!(
+                    "Failed to validate relationships for transition: {}", e
+                ))),
+            }
+        }
+        
+        // If no helper or no relationships to check, default to base validation
+        Ok(true)
+    }
+    
+    /// Transition state with relationship validation
+    pub async fn transition_state_async(
         &mut self,
         resource_id: &ResourceId,
         to_state: RegisterState,
         caused_by: Option<&ResourceId>,
         metadata: Option<Metadata>,
     ) -> Result<()> {
+        // Get current state
         let from_state = self.get_state(resource_id)?;
-
-        // Check if transition is valid
-        if !self.is_valid_transition(&from_state, &to_state) {
+        
+        // Validate the transition including relationships
+        let is_valid = self.validate_state_transition_with_relationships(
+            resource_id, 
+            &from_state, 
+            &to_state
+        ).await?;
+        
+        if !is_valid {
             return Err(Error::InvalidOperation(format!(
                 "Invalid state transition from {:?} to {:?} for resource {}",
                 from_state, to_state, resource_id
             )));
         }
-
+        
         // Update state
-        self.states.insert(resource_id.clone(), to_state);
-
-        // Record transition
+        self.states.insert(resource_id.clone(), to_state.clone());
+        
+        // Record the transition
         self.record_transition(resource_id, from_state, to_state, caused_by, metadata)?;
-
+        
+        // If we have a state transition helper, update relationships after transition
+        if let Some(helper) = &self.state_transition_helper {
+            // Convert RegisterState to string for the helper
+            let from_str = format!("{:?}", from_state);
+            let to_str = format!("{:?}", to_state);
+            
+            // Update relationships after this transition
+            if let Err(e) = helper.update_relationships_after_transition(
+                resource_id,
+                &from_str,
+                &to_str
+            ).await {
+                return Err(Error::InvalidOperation(format!(
+                    "Failed to update relationships after transition: {}", e
+                )));
+            }
+        }
+        
         Ok(())
     }
 

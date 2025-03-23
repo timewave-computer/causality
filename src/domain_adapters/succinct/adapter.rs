@@ -5,9 +5,20 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::fs;
+use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use thiserror::Error;
+use serde::{Serialize, Deserialize};
+use serde_json;
+use reqwest;
 
 use crate::error::{Error, Result};
 use super::types::{ProgramId, PublicInputs, ProofData, ProofOptions};
+
+#[cfg(feature = "md5")]
+use crate::crypto::Md5ChecksumFunction;
+#[cfg(not(feature = "md5"))]
+use crate::crypto::{HashFactory, HashOutput};
 
 /// Adapter for Succinct ZK-VM
 #[derive(Debug)]
@@ -73,7 +84,16 @@ impl SuccinctAdapter {
     /// Compile a program from source code
     pub fn compile_program(&mut self, source: &str, name: Option<&str>) -> Result<ProgramId> {
         // Check if we have a cached program ID for this source
-        let source_hash = format!("{:x}", md5::compute(source.as_bytes()));
+        #[cfg(feature = "md5")]
+        let source_hash = Md5ChecksumFunction::compute(source.as_bytes()).to_hex();
+        
+        #[cfg(not(feature = "md5"))]
+        let source_hash = {
+            let hash_factory = HashFactory::default();
+            let hasher = hash_factory.create_hasher().unwrap();
+            hasher.hash(source.as_bytes()).to_hex()
+        };
+        
         if let Some(program_id) = self.program_cache.get(&source_hash) {
             return Ok(program_id.clone());
         }

@@ -8,8 +8,11 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use async_trait::async_trait;
+use serde::{Serialize, Deserialize};
+
 use crate::error::{Error, Result};
-use crate::effect_adapters::hash::Hash as ContentHash;
+use crate::effect::content::ContentHash;
 use crate::execution::{ContextId, ExecutionContext, ExecutionEvent, Value};
 use crate::execution::trace::ExecutionTracer;
 

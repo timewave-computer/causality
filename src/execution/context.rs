@@ -13,7 +13,8 @@ use uuid::Uuid;
 
 use crate::error::{Error, Result};
 use crate::effect::EffectType;
-use crate::effect_adapters::repository;
+use crate::effect::content::ContentHash;
+use crate::effect::repository;
 
 /// A unique identifier for an execution context
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

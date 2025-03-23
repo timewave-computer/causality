@@ -37,23 +37,24 @@ use uuid;
 use thiserror::Error;
 
 use crate::error::{Error, Result};
-use crate::capabilities::{CapabilityId, Right};
+use crate::resource::CapabilityId;
 use crate::types::{ResourceId, DomainId};
 
 // Module declarations
 pub mod boundary;
 pub mod constraints;
-pub mod continuation;
-pub mod factory;
+pub mod content;
+pub mod executor;
 pub mod handler;
+pub mod repository;
 pub mod storage;
 pub mod templates;
 pub mod three_layer;
 pub mod transfer_effect;
 pub mod types;
-pub mod outcome;
-pub mod empty;
 pub mod random;
+pub mod effect_id;
+pub mod empty_effect;
 
 // Test module
 #[cfg(test)]
@@ -61,36 +62,13 @@ pub mod tests;
 
 // Re-export common types
 pub use self::boundary::ExecutionBoundary;
+pub use self::content::{ContentHash, CodeContent, CodeDefinition};
+pub use self::executor::{ContentAddressableExecutor, ExecutionContext, SecuritySandbox, Value, ContextId, ExecutionEvent, CallFrame};
 pub use self::handler::{EffectHandler, HandlerResult};
-pub use self::types::ResourceChange;
-pub use self::continuation::StatusToken;
-
-/// Unique identifier for an effect
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct EffectId(String);
-
-impl EffectId {
-    /// Create a new unique ID
-    pub fn new_unique() -> Self {
-        Self(Uuid::new_v4().to_string())
-    }
-    
-    /// Create an ID from a string
-    pub fn from_string(s: String) -> Self {
-        Self(s)
-    }
-    
-    /// Get the string representation
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for EffectId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+pub use self::effect_id::EffectId;
+pub use self::empty_effect::EmptyEffect;
+pub use self::repository::{CodeRepository, CodeEntry, CodeMetadata};
+pub use self::types::{ResourceChangeType, ResourceChange};
 
 /// The result of applying an effect
 #[derive(Debug, Clone)]
@@ -118,53 +96,52 @@ pub struct EffectOutcome {
 }
 
 impl EffectOutcome {
-    /// Create a new successful outcome
+    /// Create a successful outcome
     pub fn success(id: EffectId) -> Self {
         Self {
             id,
             success: true,
             data: HashMap::new(),
             error: None,
-            execution_id: Some(uuid::Uuid::new_v4()),
+            execution_id: None,
             resource_changes: Vec::new(),
             metadata: HashMap::new(),
         }
     }
     
-    /// Create a new failed outcome
+    /// Create a failure outcome
     pub fn failure(id: EffectId, error: impl Into<String>) -> Self {
         Self {
             id,
             success: false,
             data: HashMap::new(),
             error: Some(error.into()),
-            execution_id: Some(uuid::Uuid::new_v4()),
+            execution_id: None,
             resource_changes: Vec::new(),
             metadata: HashMap::new(),
         }
     }
     
-    /// Add a key-value pair to the output data
+    /// Add data to the outcome
     pub fn with_data(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.data.insert(key.into(), value.into());
         self
     }
     
-    /// Add a resource change
+    /// Add a resource change to the outcome
     pub fn with_resource_change(mut self, change: ResourceChange) -> Self {
         self.resource_changes.push(change);
         self
     }
     
-    /// Add metadata
+    /// Add metadata to the outcome
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.metadata.insert(key.into(), value.into());
         self
     }
 }
 
-/// Execution status of an async effect
-#[derive(Debug)]
+/// Status of an effect execution
 pub enum EffectExecution {
     /// The effect is complete with a result
     Complete(EffectOutcome),
@@ -268,64 +245,31 @@ pub enum EffectError {
     NotImplemented,
 }
 
-/// Core trait for effects
-pub trait Effect: Send + Sync + fmt::Debug {
-    /// Get the unique ID of this effect
-    fn id(&self) -> &EffectId;
+/// Main effect trait - defines something that can be executed and produces an outcome
+#[async_trait]
+pub trait Effect: Send + Sync + std::fmt::Debug {
+    /// Get the ID of this effect
+    fn id(&self) -> EffectId;
     
-    /// Get the name of the effect
-    fn name(&self) -> &str;
+    /// Get the boundary where this effect can be executed
+    fn boundary(&self) -> ExecutionBoundary;
     
-    /// Get a display name for this effect
-    fn display_name(&self) -> String;
+    /// Execute the effect and produce an outcome
+    async fn execute(&self, context: &EffectContext) -> EffectResult<EffectOutcome>;
     
-    /// Get the description of the effect
+    /// Get a description of what this effect does
     fn description(&self) -> String;
     
-    /// Execute the effect
-    fn execute(&self, context: &EffectContext) -> Result<EffectOutcome>;
+    /// Validate that this effect can be executed
+    async fn validate(&self, context: &EffectContext) -> EffectResult<()>;
     
-    /// Check if this effect requires authorization
-    fn requires_authorization(&self) -> bool {
-        true
-    }
-    
-    /// Get the required capabilities for this effect
-    fn required_capabilities(&self) -> Vec<(ResourceId, Right)> {
+    /// Get any capabilities required to execute this effect
+    fn required_capabilities(&self) -> Vec<(CapabilityId, Vec<Right>)> {
         Vec::new()
-    }
-    
-    /// Get the dependencies of this effect
-    fn dependencies(&self) -> Vec<EffectId> {
-        Vec::new()
-    }
-    
-    /// Check if this effect can execute in the given boundary
-    fn can_execute_in(&self, boundary: ExecutionBoundary) -> bool;
-    
-    /// Get the preferred execution boundary for this effect
-    fn preferred_boundary(&self) -> ExecutionBoundary;
-    
-    /// Get display parameters that describe what this effect does
-    fn display_parameters(&self) -> HashMap<String, String>;
-    
-    /// Get the fact dependencies for this effect
-    fn fact_dependencies(&self) -> Vec<crate::log::fact_snapshot::FactDependency> {
-        Vec::new()
-    }
-    
-    /// Get the fact snapshot for this effect
-    fn fact_snapshot(&self) -> Option<crate::log::fact_snapshot::FactSnapshot> {
-        None
-    }
-    
-    /// Validate fact dependencies for this effect
-    fn validate_fact_dependencies(&self) -> crate::error::Result<()> {
-        Ok(())
     }
     
     /// Convert to Any for downcasting
-    fn as_any(&self) -> &dyn std::any::Any;
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// Asynchronous execution trait for effects
@@ -631,197 +575,4 @@ impl Effect for EmptyEffect {
     }
 }
 
-#[async_trait]
-impl AsyncEffect for EmptyEffect {
-    async fn execute_async(&self, _context: &EffectContext) -> EffectResult<EffectOutcome> {
-        Ok(EffectOutcome::success(self.id.clone()))
-    }
-}
-
-// Re-exports
-pub use self::types::*;
-pub use self::outcome::*;
-pub use self::boundary::*;
-pub use self::empty::*;
-
-pub mod templates;
-pub mod effect_id;
-pub mod empty_effect;
-
-// Re-exports
-pub use effect_id::EffectId;
-pub use empty_effect::EmptyEffect;
-
-/// Outcome of an effect execution
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EffectOutcome {
-    /// ID of the effect
-    pub id: String,
-    
-    /// Whether the effect executed successfully
-    pub success: bool,
-    
-    /// Result data from the effect
-    pub data: HashMap<String, serde_json::Value>,
-    
-    /// Error message if the effect failed
-    pub error: Option<String>,
-    
-    /// Execution ID for tracing
-    pub execution_id: Option<String>,
-    
-    /// Changes to resources
-    pub resource_changes: Vec<ResourceChange>,
-    
-    /// Additional metadata
-    pub metadata: HashMap<String, serde_json::Value>,
-}
-
-/// Change to a resource
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceChange {
-    /// Resource ID
-    pub resource_id: String,
-    
-    /// Type of change
-    pub change_type: ResourceChangeType,
-    
-    /// New value if applicable
-    pub new_value: Option<serde_json::Value>,
-}
-
-/// Type of resource change
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ResourceChangeType {
-    Created,
-    Updated,
-    Deleted,
-    StateChanged,
-}
-
-/// Error that can occur during effect execution
-#[derive(Debug, thiserror::Error)]
-pub enum EffectError {
-    #[error("Effect not found: {0}")]
-    NotFound(String),
-    
-    #[error("Effect execution failed: {0}")]
-    ExecutionFailed(String),
-    
-    #[error("Validation failed: {0}")]
-    ValidationFailed(String),
-    
-    #[error("Required service not available: {0}")]
-    ServiceNotAvailable(String),
-    
-    #[error("Internal error: {0}")]
-    InternalError(String),
-}
-
-/// Result type for effect operations
-pub type EffectResult<T> = std::result::Result<T, EffectError>;
-
-/// Context for effect execution
-#[derive(Debug, Clone, Default)]
-pub struct EffectContext {
-    /// Execution ID for tracing
-    pub execution_id: Option<String>,
-    
-    /// Invoker of the effect
-    pub invoker: Option<crate::address::Address>,
-    
-    /// Domains in scope
-    pub domains: Vec<crate::types::DomainId>,
-    
-    /// Capabilities available
-    pub capabilities: Vec<String>,
-    
-    /// Resource manager
-    pub resource_manager: Option<Arc<crate::resource::manager::ResourceManager>>,
-    
-    /// Authorization service
-    pub authorization_service: Option<Arc<dyn std::any::Any + Send + Sync>>,
-    
-    /// Time service
-    pub time_service: Option<Arc<dyn std::any::Any + Send + Sync>>,
-    
-    /// Boundary manager
-    pub boundary_manager: Option<Arc<dyn std::any::Any + Send + Sync>>,
-}
-
-impl EffectContext {
-    /// Get the authorization service
-    pub fn get_authorization_service<T: 'static>(&self) -> EffectResult<&T> {
-        self.authorization_service
-            .as_ref()
-            .and_then(|service| service.downcast_ref::<T>())
-            .ok_or_else(|| EffectError::ServiceNotAvailable("Authorization service not available".to_string()))
-    }
-    
-    /// Get the time service
-    pub fn get_time_service<T: 'static>(&self) -> EffectResult<&T> {
-        self.time_service
-            .as_ref()
-            .and_then(|service| service.downcast_ref::<T>())
-            .ok_or_else(|| EffectError::ServiceNotAvailable("Time service not available".to_string()))
-    }
-    
-    /// Get the boundary manager
-    pub fn get_boundary_manager<T: 'static>(&self) -> EffectResult<&T> {
-        self.boundary_manager
-            .as_ref()
-            .and_then(|manager| manager.downcast_ref::<T>())
-            .ok_or_else(|| EffectError::ServiceNotAvailable("Boundary manager not available".to_string()))
-    }
-}
-
-/// Effect trait for stateful transformations
-#[async_trait]
-pub trait Effect: Send + Sync {
-    /// Get the ID of this effect
-    fn id(&self) -> &str;
-    
-    /// Get the display name of this effect
-    fn display_name(&self) -> String;
-    
-    /// Get a description of this effect
-    fn description(&self) -> String;
-    
-    /// Execute this effect
-    async fn execute(&self, context: &EffectContext) -> EffectResult<EffectOutcome>;
-}
-
-/// Create a composite effect from multiple effects
-pub fn create_composite_effect(
-    effects: Vec<Arc<dyn Effect>>,
-    description: String,
-) -> Arc<dyn Effect> {
-    // Implementation would create a composite effect
-    // that executes all the given effects in sequence
-    // For now, return a simple empty effect
-    Arc::new(EmptyEffect::with_description(description))
-}
-
-/// Execution boundary for effects
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExecutionBoundary {
-    /// Boundary ID
-    pub id: String,
-    
-    /// Boundary type
-    pub boundary_type: String,
-    
-    /// Metadata
-    pub metadata: HashMap<String, serde_json::Value>,
-}
-
-impl ExecutionBoundary {
-    /// Create a new execution boundary
-    pub fn new(id: String) -> Self {
-        Self {
-            id,
-            boundary_type: "default".to_string(),
-            metadata: HashMap::new(),
-        }
-    }
-} 
+// End of file

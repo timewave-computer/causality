@@ -10,20 +10,56 @@ pub mod address;
 pub mod time;
 pub mod effect;
 pub mod resource;
+pub mod relationship {
+    //! Relationship management system
+    
+    // Re-export core types from the resource relationship module
+    pub use crate::resource::relationship::*;
+    
+    // Import the cross-domain relationship query
+    pub mod cross_domain_query;
+}
+
+// Exposed language modules
+pub mod ast;
+pub mod capabilities;
+
+// Concurrency and execution frameworks
+pub mod concurrency;
+pub mod execution;
+
+// Domain and adapter modules
+pub mod domain;
+pub mod domain_adapters;
+pub mod committee;
+
+// Integration modules
+pub mod integration;
+
+// Workflow modules
+pub mod invocation;
+pub mod snapshot;
+pub mod zk;
 
 // Make the key types available directly
 pub use types::{ResourceId, DomainId, TraceId, Timestamp, Metadata};
 pub use error::{Error, Result};
 pub use address::Address;
 pub use time::TimeMapSnapshot;
-pub use effect::{Effect, EffectContext, EffectOutcome, EffectResult, EffectError};
+pub use effect::{
+    Effect, EffectContext, EffectOutcome, EffectResult, EffectError,
+    ContentHash, CodeContent, CodeDefinition, 
+    ContentAddressableExecutor, CodeRepository,
+    ExecutionContext, SecuritySandbox, Value,
+    CodeEntry, CodeMetadata
+};
 pub use resource::{
     ResourceRegister, 
     RegisterState, 
     ResourceRegisterLifecycleManager,
     RelationshipTracker,
     RelationshipType,
-    ResourceTimeMapIntegration,
+    ResourceTemporalConsistency,
     StorageStrategy,
 };
 
@@ -48,14 +84,6 @@ mod tests {
     }
 }
 
-// Main library file
-//
-// This file brings together all the modules and provides a unified public API
-// for the hashing, commitment, SMT, and database interfaces.
-
-// Re-export public modules and types
-pub use types::*;
-
 // Crypto primitives
 pub use crypto::hash::{
     HashFunction, HashOutput, Hasher, HashFactory, 
@@ -73,11 +101,8 @@ pub use crypto::signature::{
 pub use crypto::zk::{
     ZkProof, ZkVerifier, ZkProver, ZkError, ZkFactory
 };
-
-// SMT implementation
-pub use smt::{
-    SmtFactory, SmtConfig, SmtError, Key, 
-    SmtKeyValue, MerkleSmt
+pub use crypto::smt::{
+    SmtKeyValue, SmtFactory, MerkleSmt, SmtError
 };
 
 // Database interfaces
@@ -94,23 +119,28 @@ pub use verification::{
 
 // Public modules
 pub mod crypto;
-pub mod smt;
 pub mod db;
-
-// Legacy modules (to be removed after migration)
-pub mod hash;
-// commitment module has been removed and replaced by crypto::merkle
-
-// Domain-specific modules
-pub mod domain;
 pub mod actor;
 pub mod operation;
+pub mod log;
+pub mod boundary;
+pub mod examples;
 
-// Test utilities (only for tests)
-#[cfg(test)]
-pub mod test_utils {
-    // Export utilities for testing here
-}
+// Concurrency exports
+pub use concurrency::{
+    TaskId, ResourceGuard, ResourceManager, SharedResourceManager,
+    WaitQueue, SharedWaitQueue, TaskScheduler
+};
+
+// Execution exports
+pub use execution::{
+    ExecutionContext as ExecContext, CallFrame as ExecCallFrame, 
+    ExecutionEvent as ExecEvent, ContextId as ExecContextId,
+    ContentAddressableExecutor as ExecCodeExecutor, ExecutionError, ExecutionTracer
+};
+
+// Feature management
+pub mod features;
 
 /// Feature flags
 #[cfg(feature = "rocksdb")]
@@ -118,12 +148,6 @@ pub const HAS_ROCKSDB: bool = true;
 
 #[cfg(not(feature = "rocksdb"))]
 pub const HAS_ROCKSDB: bool = false;
-
-// Make the boundary module public 
-pub mod boundary;
-
-// Make the examples module public
-pub mod examples;
 
 // Add boundary exports
 pub use boundary::{BoundaryType, CrossingType, BoundarySafe};

@@ -1,23 +1,18 @@
-// Executor module for Causality Content-Addressed Code System
+// Executor module for Causality Content-Addressed Code system
 //
-// This module provides functionality for executing content-addressed code
-// through the ContentAddressableExecutor trait.
+// This module provides the content-addressable executor for code execution.
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-#[cfg(feature = "code-repo")]
-use crate::effect_adapters::hash::Hash as ContentHash;
-#[cfg(feature = "code-repo")]
-use crate::effect_adapters::repository::CodeRepository;
-#[cfg(feature = "code-repo")]
-use crate::effect_adapters::name_registry::NameRegistry;
+use async_trait::async_trait;
+use crate::effect::content::ContentHash;
+use crate::effect::repository::CodeRepository;
+use crate::effect::repository::{CodeEntry, CodeMetadata};
+use crate::effect::executor::{ContextId, Value, ExecutionEvent, ExecutionContext, SecuritySandbox};
 
-use crate::error::Result;
-use crate::execution::{
-    ContextId, ExecutionContext, ExecutionEvent, ExecutionError
-};
-use crate::execution::context::Value;
+use crate::error::{Error, Result};
 use crate::resource::{ResourceAllocator, ResourceRequest, ResourceGrant, GrantId, ResourceUsage};
 
 /// Main interface for the content-addressable executor
@@ -57,8 +52,6 @@ pub trait ContentAddressableExecutor: Send + Sync {
 pub struct InterpreterExecutor {
     /// The code repository
     repository: Arc<dyn CodeRepository>,
-    /// The name registry
-    name_registry: Arc<NameRegistry>,
     /// The resource allocator
     resource_allocator: Arc<dyn ResourceAllocator>,
     /// The security sandbox
@@ -76,7 +69,6 @@ impl InterpreterExecutor {
     /// Create a new interpreter executor
     pub fn new(
         repository: Arc<dyn CodeRepository>,
-        name_registry: Arc<NameRegistry>,
         resource_allocator: Arc<dyn ResourceAllocator>,
         security_sandbox: SecuritySandbox,
     ) -> Self {
@@ -89,7 +81,6 @@ impl InterpreterExecutor {
             
         InterpreterExecutor {
             repository,
-            name_registry,
             resource_allocator,
             security_sandbox,
             tracer: None,
@@ -185,7 +176,7 @@ impl ContentAddressableExecutor for InterpreterExecutor {
         context: &mut ExecutionContext,
     ) -> Result<Value> {
         // Lookup hash by name
-        let hash = self.name_registry.get_latest_hash(name)?;
+        let hash = self.repository.get_latest_hash(name)?;
         self.execute_by_hash(&hash, arguments, context)
     }
     

@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Serialize, Deserialize};
 
-use crate::effect_adapters::hash::Hash as ContentHash;
+use crate::effect::content::ContentHash;
 use crate::error::{Error, Result};
 use crate::execution::{ContextId, ExecutionEvent};
 use crate::execution::context::Value;

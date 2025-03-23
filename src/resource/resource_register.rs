@@ -421,13 +421,6 @@ impl From<ResourceRegister> for ResourceState {
 
 // Default implementations for various types
 
-impl Default for TimeMapSnapshot {
-    fn default() -> Self {
-        // In a real implementation, this would use the actual time system
-        Self {}
-    }
-}
-
 impl FungibilityDomain {
     pub fn new(domain: impl Into<String>) -> Self {
         Self(domain.into())

@@ -236,6 +236,173 @@ impl HashFunction for PoseidonHashFunction {
     }
 }
 
+/// Checksum output type for non-cryptographic hash functions
+#[derive(Clone, PartialEq, Eq)]
+pub struct ChecksumOutput {
+    /// The raw bytes of the checksum
+    data: Vec<u8>,
+}
+
+impl ChecksumOutput {
+    /// Create a new checksum output from raw bytes
+    pub fn new(data: Vec<u8>) -> Self {
+        Self { data }
+    }
+    
+    /// Get the raw bytes of the checksum
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.data
+    }
+    
+    /// Convert the checksum output to a hex string
+    pub fn to_hex(&self) -> String {
+        hex::encode(&self.data)
+    }
+    
+    /// Create a checksum output from a hex string
+    pub fn from_hex(hex_str: &str) -> Result<Self, HashError> {
+        let bytes = hex::decode(hex_str)
+            .map_err(|_| HashError::InvalidFormat)?;
+        
+        Ok(Self::new(bytes))
+    }
+}
+
+impl fmt::Debug for ChecksumOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ChecksumOutput({})", self.to_hex())
+    }
+}
+
+impl fmt::Display for ChecksumOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_hex())
+    }
+}
+
+/// Checksum algorithm options
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChecksumAlgorithm {
+    /// MD5 checksum algorithm
+    Md5,
+}
+
+impl Default for ChecksumAlgorithm {
+    fn default() -> Self {
+        Self::Md5
+    }
+}
+
+impl fmt::Display for ChecksumAlgorithm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Md5 => write!(f, "MD5"),
+        }
+    }
+}
+
+/// Interface for checksum functions
+pub trait ChecksumFunction: Send + Sync {
+    /// Compute the checksum of the provided data
+    fn checksum(&self, data: &[u8]) -> ChecksumOutput;
+    
+    /// Get the algorithm used by this checksum function
+    fn algorithm(&self) -> ChecksumAlgorithm;
+}
+
+/// A concrete checksum implementation
+pub struct Checksum {
+    function: Arc<dyn ChecksumFunction>,
+}
+
+impl Checksum {
+    /// Create a new checksum with the given function
+    pub fn new(function: Arc<dyn ChecksumFunction>) -> Self {
+        Self { function }
+    }
+    
+    /// Compute the checksum of the provided data
+    pub fn checksum(&self, data: &[u8]) -> ChecksumOutput {
+        self.function.checksum(data)
+    }
+    
+    /// Get the algorithm used by this checksum
+    pub fn algorithm(&self) -> ChecksumAlgorithm {
+        self.function.algorithm()
+    }
+}
+
+/// Factory for creating checksum functions
+#[derive(Clone)]
+pub struct ChecksumFactory {
+    default_algorithm: ChecksumAlgorithm,
+}
+
+impl ChecksumFactory {
+    /// Create a new checksum factory with the specified default algorithm
+    pub fn new(default_algorithm: ChecksumAlgorithm) -> Self {
+        Self { default_algorithm }
+    }
+    
+    /// Create a new checksum factory with the default algorithm
+    pub fn default() -> Self {
+        Self::new(ChecksumAlgorithm::default())
+    }
+    
+    /// Create a checksum using the default algorithm
+    pub fn create_checksum(&self) -> Result<Checksum, HashError> {
+        self.create_checksum_with_algorithm(self.default_algorithm)
+    }
+    
+    /// Create a checksum with the specified algorithm
+    pub fn create_checksum_with_algorithm(&self, algorithm: ChecksumAlgorithm) -> Result<Checksum, HashError> {
+        match algorithm {
+            ChecksumAlgorithm::Md5 => {
+                #[cfg(feature = "md5")]
+                {
+                    let function = Arc::new(Md5ChecksumFunction::new());
+                    Ok(Checksum::new(function))
+                }
+                #[cfg(not(feature = "md5"))]
+                {
+                    Err(HashError::UnsupportedAlgorithm("MD5 not enabled".to_string()))
+                }
+            },
+        }
+    }
+}
+
+/// MD5 checksum function implementation
+#[cfg(feature = "md5")]
+pub struct Md5ChecksumFunction;
+
+#[cfg(feature = "md5")]
+impl Md5ChecksumFunction {
+    /// Create a new MD5 checksum function
+    pub fn new() -> Self {
+        Self
+    }
+    
+    /// Compute the MD5 hash directly without creating an instance
+    pub fn compute(data: &[u8]) -> ChecksumOutput {
+        let digest = md5::compute(data);
+        let mut output = Vec::with_capacity(16);
+        output.extend_from_slice(digest.as_ref());
+        ChecksumOutput::new(output)
+    }
+}
+
+#[cfg(feature = "md5")]
+impl ChecksumFunction for Md5ChecksumFunction {
+    fn checksum(&self, data: &[u8]) -> ChecksumOutput {
+        Self::compute(data)
+    }
+    
+    fn algorithm(&self) -> ChecksumAlgorithm {
+        ChecksumAlgorithm::Md5
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,5 +478,77 @@ mod tests {
         
         // Should be the same as the original
         assert_eq!(hash, recreated);
+    }
+
+    #[test]
+    #[cfg(feature = "md5")]
+    fn test_md5_checksum() {
+        let checksum_fn = Md5ChecksumFunction::new();
+        let data = b"test data for checksum";
+        let checksum = checksum_fn.checksum(data);
+        
+        // MD5 should be 16 bytes
+        assert_eq!(checksum.as_bytes().len(), 16);
+        
+        // Checksumming the same data twice should produce the same result
+        let checksum2 = checksum_fn.checksum(data);
+        assert_eq!(checksum, checksum2);
+        
+        // Checksumming different data should produce different checksums
+        let different_data = b"different data";
+        let different_checksum = checksum_fn.checksum(different_data);
+        assert_ne!(checksum, different_checksum);
+    }
+
+    #[test]
+    fn test_checksum_factory() {
+        let factory = ChecksumFactory::default();
+        
+        // Default algorithm should be MD5
+        assert_eq!(factory.default_algorithm, ChecksumAlgorithm::Md5);
+        
+        #[cfg(feature = "md5")]
+        {
+            // Create an MD5 checksum
+            let md5_checksum = factory.create_checksum_with_algorithm(ChecksumAlgorithm::Md5).unwrap();
+            assert_eq!(md5_checksum.algorithm(), ChecksumAlgorithm::Md5);
+            
+            // Create a default checksum (should be MD5)
+            let default_checksum = factory.create_checksum().unwrap();
+            assert_eq!(default_checksum.algorithm(), ChecksumAlgorithm::Md5);
+        }
+    }
+
+    #[test]
+    fn test_checksum_output_hex() {
+        let data = vec![1u8; 16];
+        let checksum = ChecksumOutput::new(data);
+        
+        // Convert to hex
+        let hex = checksum.to_hex();
+        
+        // Check hex length (MD5 is 16 bytes = 32 hex chars)
+        assert_eq!(hex.len(), 32);
+        
+        // Recreate from hex
+        let recreated = ChecksumOutput::from_hex(&hex).unwrap();
+        
+        // Should be the same as the original
+        assert_eq!(checksum, recreated);
+    }
+
+    #[test]
+    #[cfg(feature = "md5")]
+    fn test_md5_direct_compute() {
+        let data = b"test data";
+        
+        // Using the function instance
+        let checksum1 = Md5ChecksumFunction::new().checksum(data);
+        
+        // Using the static compute method
+        let checksum2 = Md5ChecksumFunction::compute(data);
+        
+        // Both should be identical
+        assert_eq!(checksum1, checksum2);
     }
 } 

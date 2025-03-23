@@ -10,10 +10,9 @@ use thiserror::Error;
 
 pub use sparse_merkle_tree::{H256, MerkleProof};
 use sparse_merkle_tree::default_store::DefaultStore;
-use sparse_merkle_tree::traits::{StoreReadOps, StoreWriteOps};
 
-use crate::smt::{SmtFactory, MerkleSmt, SmtError, SmtKeyValue};
-use crate::crypto::hash::HashFactory;
+use crate::crypto::smt::{SmtFactory, MerkleSmt, SmtError, SmtKeyValue, StoreReadOps, StoreWriteOps};
+use crate::crypto::hash::{HashFactory, HashOutput, HashAlgorithm};
 
 /// Types of commitment schemes available
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -132,23 +131,45 @@ pub struct MerkleTreeCommitmentScheme {
 impl MerkleTreeCommitmentScheme {
     /// Create a new MerkleTreeCommitmentScheme
     pub fn new() -> Result<Self, CommitmentError> {
-        let smt_factory = SmtFactory::default();
+        let smt_factory = SmtFactoryImpl::default();
         Ok(Self {
-            smt: smt_factory.create_memory_smt().map_err(|e| CommitmentError::Other(e.to_string()))?,
+            smt: smt_factory.create_default_smt(),
             object_map: RwLock::new(HashMap::new()),
         })
     }
     
     /// Create a key for the SMT from an object ID
     fn create_key(&self, object_id: &str) -> Result<H256, CommitmentError> {
-        MerkleSmt::<DefaultStore<H256>>::create_key(object_id.as_bytes())
-            .map_err(|e| CommitmentError::Other(format!("Failed to create key: {}", e)))
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let hash_output = hasher.hash(object_id.as_bytes());
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(hash_output.as_bytes());
+        Ok(H256::from(bytes))
     }
     
     /// Create a value for the SMT from object data
     fn create_value(&self, data: &[u8]) -> Result<SmtKeyValue, CommitmentError> {
-        MerkleSmt::<DefaultStore<H256>>::create_value(data)
-            .map_err(|e| CommitmentError::Other(format!("Failed to create value: {}", e)))
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let hash_output = hasher.hash(data);
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(hash_output.as_bytes());
+        Ok(SmtKeyValue(H256::from(bytes)))
+    }
+}
+
+/// Basic SMT factory implementation
+#[derive(Default)]
+struct SmtFactoryImpl;
+
+impl SmtFactory for SmtFactoryImpl {
+    fn create_smt<S: StoreReadOps<SmtKeyValue> + StoreWriteOps<SmtKeyValue>>(&self, store: S) -> Arc<MerkleSmt<S>> {
+        Arc::new(MerkleSmt::new(store))
+    }
+    
+    fn create_default_smt(&self) -> Arc<MerkleSmt<DefaultStore<H256>>> {
+        Arc::new(MerkleSmt::new(DefaultStore::default()))
     }
 }
 
@@ -163,18 +184,14 @@ impl CommitmentScheme for MerkleTreeCommitmentScheme {
         let value = self.create_value(data)?;
         
         // Insert into the SMT
-        self.smt.insert(key, value)
-            .map_err(|e| CommitmentError::Other(format!("SMT insert error: {}", e)))?;
+        let new_root = self.smt.insert(key, value)?;
         
         // Add to object map
         let mut object_map = self.object_map.write().unwrap();
         object_map.insert(object_id.to_string(), key);
         
         // Return the root hash as the commitment
-        let root = self.smt.root()
-            .map_err(|e| CommitmentError::Other(format!("Failed to get root: {}", e)))?;
-        
-        Ok(Commitment::new(root.as_slice().to_vec()))
+        Ok(Commitment::new(new_root.as_slice().to_vec()))
     }
     
     fn commit_batch(&self, objects: &HashMap<String, Vec<u8>>) -> Result<Commitment, CommitmentError> {
@@ -184,8 +201,7 @@ impl CommitmentScheme for MerkleTreeCommitmentScheme {
             let value = self.create_value(data)?;
             
             // Insert into the SMT
-            self.smt.insert(key, value)
-                .map_err(|e| CommitmentError::Other(format!("SMT insert error: {}", e)))?;
+            self.smt.insert(key, value)?;
             
             // Add to object map
             let mut object_map = self.object_map.write().unwrap();
@@ -193,8 +209,7 @@ impl CommitmentScheme for MerkleTreeCommitmentScheme {
         }
         
         // Return the root hash as the commitment
-        let root = self.smt.root()
-            .map_err(|e| CommitmentError::Other(format!("Failed to get root: {}", e)))?;
+        let root = self.smt.root();
         
         Ok(Commitment::new(root.as_slice().to_vec()))
     }
@@ -213,32 +228,27 @@ impl CommitmentScheme for MerkleTreeCommitmentScheme {
         // Create the expected value
         let expected_value = self.create_value(data)?;
         
-        // Generate a proof
-        let proof = self.smt.merkle_proof(&key)
-            .map_err(|e| CommitmentError::Other(format!("Failed to generate proof: {}", e)))?;
-        
-        // Get the root hash from the commitment
-        let root_bytes = commitment.data();
-        let mut root = [0u8; 32];
-        if root_bytes.len() != 32 {
-            return Err(CommitmentError::InvalidCommitment);
+        // Get the actual value from the SMT
+        match self.smt.get(&key) {
+            Ok(actual_value) => {
+                // Compare the values
+                Ok(actual_value == expected_value)
+            },
+            Err(_) => {
+                // Key not found in the tree
+                Ok(false)
+            }
         }
-        root.copy_from_slice(root_bytes);
-        let root = H256::from(root);
-        
-        // Verify the proof
-        self.smt.verify_proof(&root, &key, &expected_value, &proof)
-            .map_err(|e| CommitmentError::Other(format!("Failed to verify proof: {}", e)))
     }
     
     fn reset(&self) -> Result<(), CommitmentError> {
-        // Reset the SMT
-        self.smt.reset()
-            .map_err(|e| CommitmentError::Other(format!("Failed to reset SMT: {}", e)))?;
-        
         // Clear the object map
         let mut object_map = self.object_map.write().unwrap();
         object_map.clear();
+        
+        // For the SMT, we need to recreate it
+        // This is a limitation since we can't easily clear an SMT directly
+        self.smt.clear()?;
         
         Ok(())
     }

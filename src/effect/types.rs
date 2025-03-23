@@ -5,6 +5,7 @@
 
 use std::fmt;
 use serde::{Serialize, Deserialize};
+use crate::types::ResourceId;
 
 /// The type of effect being performed
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -73,4 +74,32 @@ impl fmt::Display for EffectType {
             EffectType::Custom(name) => write!(f, "Custom({})", name),
         }
     }
+}
+
+/// Type of resource change
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResourceChangeType {
+    /// Resource was created
+    Created,
+    /// Resource was updated
+    Updated,
+    /// Resource was deleted
+    Deleted,
+    /// Resource was marked as consumed
+    Consumed,
+    /// Resource ownership was transferred
+    Transferred,
+}
+
+/// Represents a change to a resource
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceChange {
+    /// ID of the resource that was changed
+    pub resource_id: ResourceId,
+    /// Type of change that occurred
+    pub change_type: ResourceChangeType,
+    /// Hash of the previous state (if any)
+    pub previous_state_hash: Option<String>,
+    /// Hash of the new state
+    pub new_state_hash: String,
 } 

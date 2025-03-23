@@ -109,9 +109,10 @@ mod domain_implementation {
     use crate::log::{EntryType, LogEntry, LogStorage};
     // Import TimeMap directly from domain if it's at the top level
     use crate::domain::map::map::{TimeMap, TimeMapEntry};
-    use crate::types::{DomainId, BlockHeight, Timestamp, Hash as BlockHash};
+    use crate::types::{DomainId, BlockHeight, Timestamp, Hash as BlockHash, TraceId};
     use crate::effect::EffectType;
     use crate::error::{Error, Result};
+    use crate::crypto::{HashFactory, HashAlgorithm, HashFunction};
 
     /// Represents a log entry in a time-indexed structure
     #[derive(Debug, Clone)]
@@ -251,7 +252,10 @@ mod domain_implementation {
             }
             
             // Calculate the hash
-            let hash = format!("{:x}", blake3::hash(hash_input.as_bytes()));
+            let hash_factory = HashFactory::default();
+            let hasher = hash_factory.create_hasher().unwrap();
+            let hash_output = hasher.hash(hash_input.as_bytes());
+            let hash = hash_output.to_hex();
             Ok(hash)
         }
         

@@ -28,8 +28,10 @@ use crate::domain_adapters::cosmwasm::storage_strategy::CosmWasmStorageEffectFac
 use crate::domain_adapters::cosmwasm::CosmWasmAdapterConfig;
 use std::str::FromStr;
 
+use super::types::{ResourceChangeType, ResourceChange};
+
 /// Result of a storage operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum StoreResult {
     /// Storage succeeded with a transaction ID
     Success { transaction_id: String },
@@ -40,7 +42,7 @@ pub enum StoreResult {
 }
 
 /// Result of a read operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum ReadResult {
     /// Full register data was read
     FullRegister(ResourceRegister),

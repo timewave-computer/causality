@@ -7,8 +7,9 @@
 use std::fmt;
 use std::str::FromStr;
 use serde::{Serialize, Deserialize};
-use blake3::Hasher;
-use std::hash::{Hash, Hasher};
+use std::collections::HashMap;
+use thiserror::Error;
+use crate::crypto::{HashFactory, HashAlgorithm, HashFunction};
 
 /// Error types for content addressing operations
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,13 +54,13 @@ impl ContentHash {
 
     /// Create a Blake3 hash from content
     pub fn blake3(content: &[u8]) -> Self {
-        let mut hasher = Hasher::new();
-        hasher.update(content);
-        let hash = hasher.finalize();
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let hash_output = hasher.hash(content);
         
         Self {
             algorithm: "blake3".to_string(),
-            bytes: hash.as_bytes().to_vec(),
+            bytes: hash_output.as_bytes().to_vec(),
         }
     }
 

@@ -537,7 +537,7 @@ impl fmt::Display for Amount {
 }
 
 /// Resource identifier
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ResourceId(pub String);
 
 impl fmt::Display for ResourceId {
@@ -555,6 +555,24 @@ impl From<String> for ResourceId {
 impl From<&str> for ResourceId {
     fn from(s: &str) -> Self {
         ResourceId(s.to_string())
+    }
+}
+
+impl Serialize for ResourceId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ResourceId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        String::deserialize(deserializer).map(ResourceId)
     }
 }
 
@@ -601,10 +619,36 @@ impl fmt::Display for RegisterState {
 pub use crate::time::LamportTime;
 
 /// A general purpose metadata struct for storing key-value pairs
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Metadata {
     /// Internal storage for metadata key-value pairs
     pub values: HashMap<String, String>,
+}
+
+impl Default for Metadata {
+    fn default() -> Self {
+        Self {
+            values: HashMap::new(),
+        }
+    }
+}
+
+impl Serialize for Metadata {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.values.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Metadata {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        HashMap::<String, String>::deserialize(deserializer).map(|values| Metadata { values })
+    }
 }
 
 impl Metadata {

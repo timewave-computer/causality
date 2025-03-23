@@ -38,7 +38,7 @@ sparse-merkle-tree = "0.6.1"
 proc-macro = false
 
 [features]
-default = ["std", "base64"]
+default = ["std", "base64", "md5"]
 std = []
 examples = []
 cosmwasm_zk = ["zk-proving", "cosmwasm-std", "md5", "base64"]

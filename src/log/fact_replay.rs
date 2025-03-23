@@ -11,7 +11,11 @@ use crate::log::{FactLogger, FactMetadata, FactEntry, LogStorage};
 use crate::log::fact_types::{FactType, RegisterFact, ZKProofFact};
 use crate::log::fact_snapshot::{FactId, FactSnapshot, RegisterObservation};
 use crate::resource::register::RegisterId;
-use md5;
+
+#[cfg(feature = "md5")]
+use crate::crypto::Md5ChecksumFunction;
+#[cfg(not(feature = "md5"))]
+use crate::crypto::{HashFactory, HashOutput};
 
 /// Callback type for fact replay events
 pub type FactReplayCallback = Box<dyn Fn(&FactEntry) -> Result<()> + Send>;
@@ -435,7 +439,15 @@ impl FactReplayEngine {
             let domain_id = DomainId::new("fact-replay");
             
             // Create a data hash from the state
-            let data_hash = format!("{:x}", md5::compute(state));
+            #[cfg(feature = "md5")]
+            let data_hash = Md5ChecksumFunction::compute(state).to_hex();
+            
+            #[cfg(not(feature = "md5"))]
+            let data_hash = {
+                let hash_factory = HashFactory::default();
+                let hasher = hash_factory.create_hasher().unwrap();
+                hasher.hash(state).to_hex()
+            };
             
             snapshot.add_register_observation(
                 register_id.clone(),

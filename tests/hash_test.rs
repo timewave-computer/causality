@@ -1,5 +1,5 @@
-use timewave::effect_adapters::hash::{
-    Hash, 
+use timewave::effect::content::{
+    ContentHash, 
     HashAlgorithm, 
     ContentHasher, 
     ObjectHasher,
