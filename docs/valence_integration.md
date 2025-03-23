@@ -47,8 +47,6 @@ This maps to our "operation" concept from earlier - atomic state transitions tha
 
 ## How It All Fits Together
 
-The system flow appears to be:
-
 1. Users interact with their `AccountResource`, which functions as the program account boundary we discussed
 2. When they want to perform an operation, they:
    - Generate a proof client-side (using the registered circuits)
@@ -77,18 +75,15 @@ Valence makes heavy use of Solidity's create2 for deterministic contract deploym
 
 ---
 
-
-Looking at Valence and your Time Bandits architecture, I'm seeing what amounts to a natural fit with some thoughtful integration work needed. Let me walk through how I'd approach implementing the system we've discussed.
-
 ## The Integration Approach
 
-Valence has already implemented key primitives that we need - nullifiers, commitments, capabilities, and ZK verification. I'd leverage this as the on-chain anchor while building out the full system we've discussed.
+Valence has already implemented key primitives that we need - nullifiers, commitments, capabilities, and ZK verification. Leverage this as the on-chain anchor while building out the full system.
 
 Here's my suggested approach:
 
 ### 1. Start with the Boundary Components
 
-First, I'd map our ProgramAccount concept to Valence's AccountResource. Both serve as the boundary between users and the system, but we need to enhance Valence's implementation:
+First, map the ProgramAccount concept to Valence's AccountResource. Both serve as the boundary between users and the system, but we need to enhance Valence's implementation:
 
 ```solidity
 // Enhanced AccountResource that supports client-side view construction
@@ -155,7 +150,7 @@ contract ResourceAPI {
 
 ### 3. Extend the Register Model
 
-Third, I'd extend Valence's resource types to fully implement our register concept:
+Third, extend Valence's resource types to fully implement our register concept:
 
 ```solidity
 // Base interface for all registers
