@@ -15,7 +15,7 @@ Causality is an integrated toolchain for distributed program development that en
 - **Program Account UI Models**: Serializable views for frontend integration
 - **Capability-Based Resource API**: Secure, unforgeable access control with delegation and composition
 - **Effect Adapter System**: Bridging abstract effects to domain-specific implementations with automatic code generation
-- **Cross-Domain Relationships**: Type-safe relationships between resources across different domains with automated synchronization
+- **Cross-Domain Relationships**: Type-safe relationships between resources across different domains with efficient querying and automated synchronization
 
 ## Status
 
@@ -29,7 +29,7 @@ The time system ensures causal consistency across disparate execution environmen
 
 ### Effects
 
-The effect system takes an algebraic approach to distributed computation. Effects are compositional, allowing complex operations to be built from simple, reusable components. Context-specific effect handlers interpret abstract operations based on their execution environment. The system employs continuation-passing style to manage control flow across asynchronous boundaries, automatically infers required capabilities, and isolates side-effects for deterministic execution.
+The effect system takes an algebraic approach to distributed computation. Effects are compositional, allowing complex operations to be built from simple, reusable components. Context-specific effect handlers interpret abstract operations based on their execution environment. Causality's effect model provides consistent, structured outcomes that preserve execution context, enabling interoperability across the system.
 
 ### Effect Adapters and Code Generation
 
@@ -37,11 +37,11 @@ The effect adapter system connects abstract effects to concrete implementations.
 
 ### Resources
 
-The resource model provides deterministic concurrency control through explicit resource-scoped locks for acquisition and release of named resources. Deterministic wait queues ensure predictable execution ordering for reproducibility, while structured resource hierarchies prevent deadlocks. The system implements a permission system through resource capabilities and provides high-level abstractions for state management through register management.
+The resource model provides deterministic concurrency control through explicit resource-scoped locks for acquisition and release of named resources. The unified resource system features a consistent lifecycle manager with well-defined state transitions, a capability-based authorization system, and integrated time map verification for temporal consistency.
 
 ### Cross-Domain Relationships
 
-The cross-domain relationship system enables type-safe relationships between resources residing in different domains. It supports various relationship types such as Mirror (identical resources across domains), Reference (resource references), Ownership (hierarchical ownership), Derived (derived data), Bridge (domain-spanning connections), and Custom relationships.
+The cross-domain relationship system enables type-safe relationships between resources residing in different domains. It supports various relationship types such as Mirror (identical resources across domains), Reference (resource references), Ownership (hierarchical ownership), Derived (derived data), Bridge (domain-spanning connections), and Custom relationships. The system includes an efficient query engine with path-finding capabilities, relationship caching, and a domain-aware indexing system.
 
 ### Temporal Effect Language
 
@@ -49,7 +49,7 @@ TEL is a domain-specific language for time-aware, causal computation. It enables
 
 ### Verifiable Execution
 
-The system enables verifiable computation by translating high-level effects to RISC-V instructions and providing a zero-knowledge VM optimized for ZK proof generation. Efficient witness generation, on-chain and off-chain proof verification, and automatic circuit optimization minimize proving time while maintaining security guarantees.
+The system enables verifiable computation by translating high-level effects to RISC-V instructions and providing a zero-knowledge VM optimized for ZK proof generation. The unified verification framework integrates different verification mechanisms (ZK execution, time map verification, controller label verification, and effect validation) into a unified verification pipeline.
 
 ### Content-Addressed Code
 

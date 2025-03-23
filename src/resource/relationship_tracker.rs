@@ -61,6 +61,8 @@ impl fmt::Display for RelationshipType {
         match self {
             RelationshipType::ParentChild => write!(f, "ParentChild"),
             RelationshipType::Dependency => write!(f, "Dependency"),
+            RelationshipType::Consumption => write!(f, "Consumption"),
+            RelationshipType::Reference => write!(f, "Reference"),
             RelationshipType::Custom(name) => write!(f, "Custom({})", name),
         }
     }
@@ -529,12 +531,42 @@ impl RelationshipTracker {
     pub fn get_original_resource(&self, derived_id: &ResourceId) -> Result<HashSet<ResourceId>> {
         self.get_related_resources(
             derived_id,
-            &RelationshipType::Derivation,
-            Some(RelationshipDirection::ParentToChild),
+            &RelationshipType::Custom("derivation".to_string()),
+            Some(RelationshipDirection::ChildToParent),
         )
     }
 
-    /// Helper to get all relationship IDs for a resource (as source or target)
+    /// Get direct relationships between two specific resources
+    pub fn get_direct_relationships(
+        &self,
+        source_id: &ResourceId,
+        target_id: &ResourceId,
+    ) -> Result<Vec<ResourceRelationship>> {
+        let mut relationships = Vec::new();
+        
+        // Check relationships where source is the source ID
+        let source_rels = self.get_resource_relationships(source_id)?;
+        for rel in source_rels {
+            if rel.target_id == *target_id {
+                relationships.push(rel);
+            }
+        }
+        
+        // Check relationships where target is the source ID (for bidirectional relationships)
+        let target_rels = self.get_resource_relationships(target_id)?;
+        for rel in target_rels {
+            if rel.source_id == *source_id && rel.direction == RelationshipDirection::Bidirectional {
+                // Avoid duplicates if already added
+                if !relationships.iter().any(|r| r.id == rel.id) {
+                    relationships.push(rel);
+                }
+            }
+        }
+        
+        Ok(relationships)
+    }
+
+    /// Helper method to get all relationship IDs for a resource
     fn get_all_relationship_ids_for_resource(&self, resource_id: &ResourceId) -> Result<HashSet<String>> {
         let mut result = HashSet::new();
         

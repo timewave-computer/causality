@@ -3,10 +3,14 @@
 // This module defines relationships between resources, including cross-domain relationships
 // that span different domains in the system.
 
+use std::collections::HashMap;
+use uuid::Uuid;
+
 pub mod cross_domain;
 pub mod validation;
 pub mod sync;
 pub mod scheduler;
+pub mod query;
 
 // Re-export main types
 pub use cross_domain::{
@@ -36,6 +40,12 @@ pub use scheduler::{
     RetryBackoff,
     SchedulerStatus,
     CrossDomainSyncScheduler,
+};
+
+pub use query::{
+    RelationshipPath,
+    RelationshipQuery,
+    RelationshipQueryExecutor,
 };
 
 use crate::error::{Error, Result};

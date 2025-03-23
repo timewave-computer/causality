@@ -1,0 +1,19 @@
+[book]
+authors      = ["Sam Hart"]
+language     = "en"
+multilingual = false
+src          = "src"
+title        = "Causality Documentation"
+
+[output.html]
+git-repository-url    = "https://github.com/timewave-computer/causality"
+default-theme         = "light"
+preferred-light-theme = "light"
+preferred-dark-theme  = "ayu"
+additional-js         = ["mermaid.min.js", "mermaid-init.js"]
+mathjax-support       = true
+
+[output.linkcheck]
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
