@@ -17,7 +17,7 @@ use crate::types::{ResourceId, DomainId, Timestamp, Metadata};
 use crate::time::TimeMapSnapshot;
 
 /// Direction of a relationship
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RelationshipDirection {
     /// From resource A to resource B
     ParentToChild,
@@ -38,12 +38,20 @@ impl fmt::Display for RelationshipDirection {
 }
 
 /// Type of relationship between resources
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RelationshipType {
     /// Parent-child relationship
     ParentChild,
+    
     /// Dependency relationship
     Dependency,
+    
+    /// Consumption relationship
+    Consumption,
+    
+    /// Reference relationship
+    Reference,
+    
     /// Custom relationship type
     Custom(String),
 }

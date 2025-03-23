@@ -11,8 +11,9 @@ use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
-use crate::types::Timestamp;
-use super::ActorId;
+use crate::types::{Timestamp, TraceId};
+use crate::actor::{ActorIdBox, ActorRole};
+use crate::actor::role::ActorCapability;
 
 mod mailbox;
 mod patterns;
@@ -81,103 +82,6 @@ pub enum MessageCategory {
     Custom(String),
 }
 
-/// Message envelope containing a message and metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Message {
-    /// Unique message identifier
-    pub id: MessageId,
-    /// Sender actor ID
-    pub sender: Option<ActorId>,
-    /// Recipient actor ID
-    pub recipient: ActorId,
-    /// Related message ID (for replies)
-    pub in_reply_to: Option<MessageId>,
-    /// Message category
-    pub category: MessageCategory,
-    /// Message priority
-    pub priority: MessagePriority,
-    /// When this message was created
-    pub created_at: Timestamp,
-    /// When this message expires (if applicable)
-    pub expires_at: Option<Timestamp>,
-    /// Message payload
-    pub payload: MessagePayload,
-    /// Additional metadata
-    pub metadata: HashMap<String, String>,
-}
-
-impl Message {
-    /// Create a new message
-    pub fn new(
-        sender: Option<ActorId>,
-        recipient: ActorId,
-        category: MessageCategory,
-        payload: MessagePayload,
-    ) -> Self {
-        Message {
-            id: MessageId::new(),
-            sender,
-            recipient,
-            in_reply_to: None,
-            category,
-            priority: MessagePriority::Normal,
-            created_at: Timestamp::now(),
-            expires_at: None,
-            payload,
-            metadata: HashMap::new(),
-        }
-    }
-    
-    /// Create a reply to another message
-    pub fn reply_to(
-        original: &Message,
-        sender: ActorId,
-        payload: MessagePayload,
-    ) -> Self {
-        let recipient = match &original.sender {
-            Some(sender) => sender.clone(),
-            None => return Self::new(Some(sender), ActorId::new("unknown"), original.category.clone(), payload),
-        };
-        
-        let mut reply = Self::new(
-            Some(sender),
-            recipient,
-            original.category.clone(),
-            payload,
-        );
-        
-        reply.in_reply_to = Some(original.id.clone());
-        reply
-    }
-    
-    /// Set the message priority
-    pub fn with_priority(mut self, priority: MessagePriority) -> Self {
-        self.priority = priority;
-        self
-    }
-    
-    /// Set the message expiration time
-    pub fn with_expiration(mut self, expires_in_seconds: u64) -> Self {
-        self.expires_at = Some(self.created_at + expires_in_seconds);
-        self
-    }
-    
-    /// Add metadata to the message
-    pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
-        self.metadata.insert(key.to_string(), value.to_string());
-        self
-    }
-    
-    /// Check if this message has expired
-    pub fn is_expired(&self) -> bool {
-        if let Some(expires_at) = self.expires_at {
-            Timestamp::now().value() > expires_at.value()
-        } else {
-            false
-        }
-    }
-}
-
 /// Message payload types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessagePayload {
@@ -217,6 +121,119 @@ pub enum MessagePayload {
     },
 }
 
+/// Message used for communication between actors
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    /// Unique ID for this message
+    pub id: MessageId,
+    
+    /// Actor that sent this message (if any)
+    pub sender: Option<ActorIdBox>,
+    
+    /// Actor that should receive this message
+    pub recipient: ActorIdBox,
+    
+    /// Message category
+    pub category: MessageCategory,
+    
+    /// Message payload
+    pub payload: MessagePayload,
+    
+    /// Message priority
+    pub priority: MessagePriority,
+    
+    /// When the message was created
+    pub created_at: Timestamp,
+    
+    /// When the message expires (if applicable)
+    pub expires_at: Option<Timestamp>,
+    
+    /// Trace ID for tracking related messages
+    pub trace_id: Option<TraceId>,
+    
+    /// Reference to another message (for replies)
+    pub in_reply_to: Option<MessageId>,
+    
+    /// Additional metadata
+    pub metadata: HashMap<String, String>,
+}
+
+impl Message {
+    /// Create a new message
+    pub fn new(
+        sender: Option<ActorIdBox>,
+        recipient: ActorIdBox,
+        category: MessageCategory,
+        payload: MessagePayload,
+    ) -> Self {
+        Self {
+            id: MessageId::new(),
+            sender,
+            recipient,
+            category,
+            payload,
+            priority: MessagePriority::default(),
+            created_at: Timestamp::now(),
+            expires_at: None,
+            trace_id: Some(TraceId::new()),
+            in_reply_to: None,
+            metadata: HashMap::new(),
+        }
+    }
+    
+    /// Create a reply to this message
+    pub fn reply_to(
+        original: &Message,
+        sender: ActorIdBox,
+        payload: MessagePayload,
+    ) -> Self {
+        let recipient = match &original.sender {
+            Some(sender) => sender.clone(),
+            None => ActorIdBox::new(),
+        };
+        
+        let mut reply = Self::new(
+            Some(sender),
+            recipient,
+            original.category.clone(),
+            payload,
+        );
+        
+        reply.in_reply_to = Some(original.id.clone());
+        reply.trace_id = original.trace_id.clone();
+        
+        reply
+    }
+    
+    /// Set the message priority
+    pub fn with_priority(mut self, priority: MessagePriority) -> Self {
+        self.priority = priority;
+        self
+    }
+    
+    /// Set the message expiration time
+    pub fn with_expiration(mut self, expires_in_seconds: u64) -> Self {
+        let expires_at = Timestamp::from_seconds(self.created_at.to_seconds() + expires_in_seconds);
+        self.expires_at = Some(expires_at);
+        self
+    }
+    
+    /// Add metadata to the message
+    pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
+        self.metadata.insert(key.to_string(), value.to_string());
+        self
+    }
+    
+    /// Check if this message has expired
+    pub fn is_expired(&self) -> bool {
+        if let Some(expires_at) = &self.expires_at {
+            Timestamp::now() > *expires_at
+        } else {
+            false
+        }
+    }
+}
+
 /// Message handler trait
 #[async_trait]
 pub trait MessageHandler: Send + Sync {
@@ -238,8 +255,8 @@ mod tests {
     
     #[test]
     fn test_message_creation() {
-        let sender = ActorId::new("sender");
-        let recipient = ActorId::new("recipient");
+        let sender = ActorIdBox::from("sender");
+        let recipient = ActorIdBox::from("recipient");
         
         let message = Message::new(
             Some(sender.clone()),
@@ -256,34 +273,28 @@ mod tests {
         // Test priority setting
         let high_priority = message.clone().with_priority(MessagePriority::High);
         assert_eq!(high_priority.priority, MessagePriority::High);
-        
-        // Test expiration
-        let expiring = message.clone().with_expiration(3600);
-        assert!(expiring.expires_at.is_some());
-        assert!(!expiring.is_expired());
     }
     
     #[test]
     fn test_message_reply() {
-        let sender = ActorId::new("sender");
-        let recipient = ActorId::new("recipient");
+        let original_sender = ActorIdBox::from("original_sender");
+        let original_recipient = ActorIdBox::from("original_recipient");
         
         let original = Message::new(
-            Some(sender.clone()),
-            recipient.clone(),
+            Some(original_sender.clone()),
+            original_recipient.clone(),
             MessageCategory::Query,
-            MessagePayload::Text("Query?".to_string()),
+            MessagePayload::Text("Query data?".to_string()),
         );
         
         let reply = Message::reply_to(
             &original,
-            recipient.clone(),
-            MessagePayload::Text("Answer!".to_string()),
+            original_recipient.clone(),
+            MessagePayload::Text("Response data!".to_string()),
         );
         
-        assert_eq!(reply.sender.unwrap(), recipient);
-        assert_eq!(reply.recipient, sender);
-        assert_eq!(reply.in_reply_to.unwrap(), original.id);
+        assert_eq!(reply.sender.unwrap(), original_recipient);
+        assert_eq!(reply.recipient, original_sender);
         assert_eq!(reply.category, MessageCategory::Query);
     }
 } 

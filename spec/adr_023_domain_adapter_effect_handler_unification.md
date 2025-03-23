@@ -1,4 +1,4 @@
-# ADR-021: Three-Layer Effect Architecture with TEL Integration
+# ADR-023: Three-Layer Effect Architecture with TEL Integration
 
 ## Status
 

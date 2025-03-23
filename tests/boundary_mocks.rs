@@ -10,6 +10,8 @@ use causality::boundary::{
     BoundarySystem,
 };
 
+use causality::effect::{EffectContext, random::{RandomEffectFactory, RandomType}};
+
 /// Mock data structure that can safely cross boundaries
 #[derive(Debug, Clone)]
 pub struct MockData {
@@ -87,8 +89,15 @@ impl OffChainComponent for MockStorageService {
             std::thread::sleep(std::time::Duration::from_millis(self.latency_ms));
         }
         
-        // Simulate random errors
-        if rand::random::<f64>() < self.error_rate {
+        // Simulate random errors using RandomEffect
+        let context = EffectContext::default();
+        let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+        
+        // Use block_on in tests to get randomness synchronously
+        let random_value = std::future::block_on(random_effect.gen_f64(&context))
+            .unwrap_or(0.0);
+            
+        if random_value < self.error_rate {
             return Err("Service error (simulated)".to_string());
         }
         
@@ -234,8 +243,12 @@ impl ContractInterface for MockContract {
                 let key = String::from_utf8(params[0].clone()).map_err(|e| e.to_string())?;
                 let value = params[1].clone();
                 
-                // Store in state based on success rate
-                let success = rand::random::<f64>() < self.success_rate;
+                // Determine success based on success rate using RandomEffect
+                let context = EffectContext::default();
+                let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+                let random_value = std::future::block_on(random_effect.gen_f64(&context))
+                    .unwrap_or(0.5);
+                let success = random_value < self.success_rate;
                 
                 let mut tx_history = self.tx_history.lock().unwrap();
                 if success {
@@ -248,7 +261,12 @@ impl ContractInterface for MockContract {
             },
             "transfer" => {
                 // Just record the transaction for now
-                let success = rand::random::<f64>() < self.success_rate;
+                let context = EffectContext::default();
+                let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+                let random_value = std::future::block_on(random_effect.gen_f64(&context))
+                    .unwrap_or(0.5);
+                let success = random_value < self.success_rate;
+                
                 let mut tx_history = self.tx_history.lock().unwrap();
                 
                 if success {
@@ -273,9 +291,13 @@ impl ContractInterface for MockContract {
             Some(status) => {
                 match status {
                     TransactionStatus::Pending => {
-                        // Simulate confirmation after the specified time
-                        // In a real implementation, this would check if enough time has passed
-                        if rand::random::<bool>() {
+                        // Simulate confirmation using RandomEffect
+                        let context = EffectContext::default();
+                        let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+                        let is_confirmed = std::future::block_on(random_effect.gen_bool(&context))
+                            .unwrap_or(false);
+                            
+                        if is_confirmed {
                             Ok(TransactionStatus::Confirmed(TransactionReceipt {
                                 block_number: 12345,
                                 gas_used: 21000,
@@ -385,8 +407,13 @@ impl MockComponentFactory {
     }
     
     pub fn create_mock_contract(name: &str, confirmation_time: u64, success_rate: f64) -> MockContract {
-        // Generate pseudo-random contract address
-        let address = format!("0x{:040x}", rand::random::<u64>());
+        // Generate pseudo-random contract address using RandomEffect
+        let context = EffectContext::default();
+        let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+        let random_u64 = std::future::block_on(random_effect.gen_u64(&context))
+            .unwrap_or(0);
+            
+        let address = format!("0x{:040x}", random_u64);
         MockContract::new(name.to_string(), address, confirmation_time, success_rate)
     }
     
@@ -407,6 +434,72 @@ impl MockComponentFactory {
             value,
             metadata: None,
         }
+    }
+
+    fn execute_contract(&self, address: &ContractAddress, method: &str, args: Vec<u8>) -> Result<ContractResponse, String> {
+        // Simulate latency
+        if self.latency_ms > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(self.latency_ms));
+        }
+        
+        // Generate random success/failure based on success rate
+        let context = EffectContext::default();
+        let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+        let success_value = std::future::block_on(random_effect.gen_f64(&context))
+            .unwrap_or(0.5);
+        let success = success_value < self.success_rate;
+        
+        if !success {
+            return Err(format!("Contract execution failed (simulated): {}", method));
+        }
+        
+        // ... existing code ...
+    }
+    
+    fn query_contract(&self, address: &ContractAddress, query: &str, args: Vec<u8>) -> Result<Vec<u8>, String> {
+        // Simulate latency
+        if self.latency_ms > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(self.latency_ms));
+        }
+        
+        // Generate random success/failure based on success rate
+        let context = EffectContext::default();
+        let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+        let success_value = std::future::block_on(random_effect.gen_f64(&context))
+            .unwrap_or(0.5);
+        let success = success_value < self.success_rate;
+        
+        if !success {
+            return Err(format!("Contract query failed (simulated): {}", query));
+        }
+        
+        // ... existing code ...
+    }
+    
+    pub fn create_mock_contract(&self) -> MockContract {
+        // Simulate contract creation
+        let context = EffectContext::default();
+        let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+        
+        // Decide if we're using version 1 or 2 randomly
+        let random_bool = std::future::block_on(random_effect.gen_bool(&context))
+            .unwrap_or(false);
+        
+        if random_bool {
+            // ... existing code ...
+        } else {
+            // ... existing code ...
+        }
+    }
+    
+    fn generate_random_address(&self) -> ContractAddress {
+        let context = EffectContext::default();
+        let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+        let random_u64 = std::future::block_on(random_effect.gen_u64(&context))
+            .unwrap_or(0);
+        
+        let address = format!("0x{:040x}", random_u64);
+        ContractAddress::from(address)
     }
 }
 

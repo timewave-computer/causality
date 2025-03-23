@@ -10,6 +10,7 @@ pub mod off_chain;
 
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
+use std::fmt;
 
 pub use annotation::{
     BoundaryType, 
@@ -258,4 +259,155 @@ pub fn boundary_system() -> Arc<BoundarySystem> {
     static BOUNDARY_SYSTEM: OnceLock<Arc<BoundarySystem>> = OnceLock::new();
     
     BOUNDARY_SYSTEM.get_or_init(init_boundary_system).clone()
+}
+
+/// Boundary Module
+///
+/// This module defines boundary types and crossing operations in the system.
+/// Boundaries represent different execution/storage contexts such as inside the system,
+/// outside the system, on-chain, or off-chain.
+
+/// Types of boundaries in the system
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BoundaryType {
+    /// Inside the running system
+    InsideSystem,
+    
+    /// Outside the running system
+    OutsideSystem,
+    
+    /// On-chain storage/execution
+    OnChain,
+    
+    /// Off-chain storage/execution
+    OffChain,
+    
+    /// EVM-based chains
+    EVM,
+    
+    /// CosmWasm-based chains
+    CosmWasm,
+    
+    /// Custom boundary type
+    Custom(u32),
+}
+
+/// Directions for crossing boundaries
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CrossingType {
+    /// From inside to outside the system
+    InsideToOutside,
+    
+    /// From outside to inside the system
+    OutsideToInside,
+    
+    /// From off-chain to on-chain
+    OffChainToOnChain,
+    
+    /// From on-chain to off-chain
+    OnChainToOffChain,
+    
+    /// Custom crossing with a description
+    Custom(String),
+}
+
+/// Trait for types that can safely cross boundaries
+pub trait BoundarySafe {
+    /// Check if the entity can cross from one boundary to another
+    fn can_cross(&self, from: BoundaryType, to: BoundaryType) -> bool;
+    
+    /// Prepare the entity for crossing a boundary
+    fn prepare_for_crossing(&self, from: BoundaryType, to: BoundaryType) -> Option<Vec<u8>>;
+    
+    /// Process the entity after crossing a boundary
+    fn process_after_crossing(&mut self, data: Vec<u8>, from: BoundaryType, to: BoundaryType) -> bool;
+}
+
+/// Handles operations related to boundary crossings
+pub struct BoundaryManager;
+
+impl BoundaryManager {
+    /// Create a new boundary manager
+    pub fn new() -> Self {
+        Self
+    }
+    
+    /// Check if a crossing between two boundaries is allowed by system policy
+    pub fn is_crossing_allowed(&self, from: BoundaryType, to: BoundaryType) -> bool {
+        match (from, to) {
+            // Prevent crossing from external to internal if not explicitly allowed
+            (BoundaryType::OutsideSystem, BoundaryType::InsideSystem) => false,
+            
+            // By default allow all other crossings
+            _ => true,
+        }
+    }
+    
+    /// Get the crossing type for a boundary crossing
+    pub fn get_crossing_type(&self, from: BoundaryType, to: BoundaryType) -> CrossingType {
+        match (from, to) {
+            (BoundaryType::InsideSystem, BoundaryType::OutsideSystem) => CrossingType::InsideToOutside,
+            (BoundaryType::OutsideSystem, BoundaryType::InsideSystem) => CrossingType::OutsideToInside,
+            (BoundaryType::OffChain, BoundaryType::OnChain) => CrossingType::OffChainToOnChain,
+            (BoundaryType::OnChain, BoundaryType::OffChain) => CrossingType::OnChainToOffChain,
+            _ => CrossingType::Custom(format!("{:?}_to_{:?}", from, to)),
+        }
+    }
+}
+
+impl fmt::Display for BoundaryType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BoundaryType::InsideSystem => write!(f, "Inside System"),
+            BoundaryType::OutsideSystem => write!(f, "Outside System"),
+            BoundaryType::OnChain => write!(f, "On-Chain"),
+            BoundaryType::OffChain => write!(f, "Off-Chain"),
+            BoundaryType::EVM => write!(f, "EVM"),
+            BoundaryType::CosmWasm => write!(f, "CosmWasm"),
+            BoundaryType::Custom(id) => write!(f, "Custom({})", id),
+        }
+    }
+}
+
+impl fmt::Display for CrossingType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CrossingType::InsideToOutside => write!(f, "Inside to Outside"),
+            CrossingType::OutsideToInside => write!(f, "Outside to Inside"),
+            CrossingType::OffChainToOnChain => write!(f, "Off-Chain to On-Chain"),
+            CrossingType::OnChainToOffChain => write!(f, "On-Chain to Off-Chain"),
+            CrossingType::Custom(desc) => write!(f, "{}", desc),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_boundary_crossing_types() {
+        let manager = BoundaryManager::new();
+        
+        assert_eq!(
+            manager.get_crossing_type(BoundaryType::InsideSystem, BoundaryType::OnChain),
+            CrossingType::Custom("InsideSystem_to_OnChain".to_string())
+        );
+        
+        assert_eq!(
+            manager.get_crossing_type(BoundaryType::InsideSystem, BoundaryType::OutsideSystem),
+            CrossingType::InsideToOutside
+        );
+    }
+    
+    #[test]
+    fn test_crossing_permissions() {
+        let manager = BoundaryManager::new();
+        
+        // By default, outside to inside should not be allowed
+        assert!(!manager.is_crossing_allowed(BoundaryType::OutsideSystem, BoundaryType::InsideSystem));
+        
+        // But inside to outside should be allowed
+        assert!(manager.is_crossing_allowed(BoundaryType::InsideSystem, BoundaryType::OutsideSystem));
+    }
 } 

@@ -15,12 +15,11 @@ Causality is an integrated toolchain for distributed program development that en
 - **Program Account UI Models**: Serializable views for frontend integration
 - **Capability-Based Resource API**: Secure, unforgeable access control with delegation and composition
 - **Effect Adapter System**: Bridging abstract effects to domain-specific implementations with automatic code generation
+- **Cross-Domain Relationships**: Type-safe relationships between resources across different domains with automated synchronization
 
 ## Status
 
 Under heavy development. The core logic is coming together but I'm still refactoring substantially. Once I'm happy with the core data structures and their relationship I plan to implement an extensive test suite. Only when that's finished will I split out node types and implement the P2P system.
-
-Everything in the docs directory is very WIP. Things in the specs folder are more solid, except some of the more advanced, unimplemented concepts. These are more potential ideas I'm considering.
 
 ## System Architecture
 
@@ -30,7 +29,7 @@ The time system ensures causal consistency across disparate execution environmen
 
 ### Effects
 
-The effect system provides a powerful algebraic approach to distributed computation. Effects are compositional, allowing complex operations to be built from simple, reusable components. Context-specific effect handlers interpret abstract operations based on their execution environment. The system employs continuation-passing style to manage control flow across asynchronous boundaries, automatically infers required capabilities, and isolates side-effects for deterministic execution.
+The effect system takes an algebraic approach to distributed computation. Effects are compositional, allowing complex operations to be built from simple, reusable components. Context-specific effect handlers interpret abstract operations based on their execution environment. The system employs continuation-passing style to manage control flow across asynchronous boundaries, automatically infers required capabilities, and isolates side-effects for deterministic execution.
 
 ### Effect Adapters and Code Generation
 
@@ -39,6 +38,10 @@ The effect adapter system connects abstract effects to concrete implementations.
 ### Resources
 
 The resource model provides deterministic concurrency control through explicit resource-scoped locks for acquisition and release of named resources. Deterministic wait queues ensure predictable execution ordering for reproducibility, while structured resource hierarchies prevent deadlocks. The system implements a permission system through resource capabilities and provides high-level abstractions for state management through register management.
+
+### Cross-Domain Relationships
+
+The cross-domain relationship system enables type-safe relationships between resources residing in different domains. It supports various relationship types such as Mirror (identical resources across domains), Reference (resource references), Ownership (hierarchical ownership), Derived (derived data), Bridge (domain-spanning connections), and Custom relationships.
 
 ### Temporal Effect Language
 
@@ -56,135 +59,6 @@ Content-addressed code ensures immutable, verifiable program representation thro
 
 The fact system provides a standardized representation of blockchain state using unified fact types that present common interfaces for different blockchain data. Domain-specific methods enable fact observation from various sources, while cryptographic verification ensures fact integrity. The system explicitly tracks data dependencies to maintain causal consistency.
 
-## Usage Examples
-
-### Working with Effects
-
-```rust
-// Define a composable effect
-let effect = deposit(account, amount, timestamp)
-    .and_then(|_| update_balance(account, amount))
-    .map(|result| {
-        match result {
-            Ok(_) => "Transaction successful",
-            Err(_) => "Transaction failed",
-        }
-    });
-
-// Execute the effect with a handler
-let result = effect.execute(&handler).await?;
-
-// Compile to RISC-V for zero-knowledge execution
-let riscv_code = compiler.compile(effect);
-let proof = prover.generate_proof(riscv_code, inputs);
-```
-
-### Using Effect Adapters
-
-```rust
-// Define an adapter schema for Ethereum
-let schema = AdapterSchema::new()
-    .with_domain("ethereum")
-    .with_effect("transfer", transfer_schema)
-    .with_fact("balance", balance_schema);
-
-// Save the schema to a file for code generation
-let schema_path = std::path::Path::new("schemas/ethereum.toml");
-std::fs::write(schema_path, schema.to_toml()?)?;
-
-// Generate code from schema
-effect_adapters::compile_schema(schema_path, "src/adapters", "rust")?;
-
-// Create and use the adapter
-let adapter = EthereumAdapter::new(config);
-let receipt = adapter.apply_effect(transfer_effect).await?;
-```
-
-### Using TEL (Temporal Effect Language)
-
-```rust
-// Define a TEL program with temporal constraints
-let program = tel! {
-    // Operation must occur within specified time window
-    within(time_window) {
-        // Operations must happen in causal sequence
-        sequence {
-            // Verify previous balance fact
-            observe(balance(account)).
-            // Perform deposit with temporal constraint
-            then(deposit(account, amount)).
-            // Update state only after deposit confirmation
-            then(update_balance(account, amount))
-        }
-    }
-};
-
-// Compile and execute the TEL program
-let executor = TelExecutor::new();
-let result = executor.execute(program).await?;
-```
-
-### Working with Time
-
-```rust
-// Create a time window for cross-chain operations
-let time_window = TimeWindow::new()
-    .with_start(Timestamp::now())
-    .with_duration(Duration::from_secs(600))
-    .with_domains(&[ethereum_domain, solana_domain]);
-
-// Synchronize time across domains
-let time_map = time_synchronizer.synchronize(&domains).await?;
-
-// Perform time-bounded operation
-let operation = WithinTime::new(transfer_effect, time_window);
-let result = executor.execute(operation).await?;
-```
-
-### Content-Addressed Code
-
-```rust
-// Generate content address for code
-let code_hash = content_hasher.hash(program_code);
-
-// Deploy using content address
-let deployment = Deployment::new(code_hash)
-    .with_runtime("risc-v")
-    .with_permissions(["read_balance", "update_register"]);
-
-// Execute code by content address
-let execution = runtime.execute_by_hash(code_hash, inputs).await?;
-```
-
-### Resource Management
-
-```rust
-// Acquire multiple resources with deterministic ordering
-let resources = resource_manager
-    .acquire(["account:alice", "register:token1", "time:window1"])
-    .with_timeout(Duration::from_secs(5))
-    .await?;
-
-// Resources automatically released when guard goes out of scope
-let result = perform_atomic_operation(resources);
-```
-
-### Program Account UI Models
-
-```rust
-// Transform a program account to a UI view
-let transformer = ProgramAccountViewTransformer::new();
-let view = transformer.to_view(account);
-
-// Serialize to JSON for frontend use
-let json = to_json(&view)?;
-
-// Create API response
-HttpResponse::Ok()
-    .content_type("application/json")
-    .body(json)
-```
-
 ## Development
 
 ### Building with Nix
@@ -201,6 +75,7 @@ cargo build --release
 # Run examples
 cargo run --example program_account_serialization
 cargo run --example program_account_api
+cargo run --example cross_domain_relationships
 ```
 
 ### Testing
@@ -209,12 +84,8 @@ cargo run --example program_account_api
 # Run all tests
 cargo test
 
-# Run specific test categories
-cargo test --test tel_tests
-cargo test --test zk_vm_tests
-cargo test --test time_tests
-cargo test --test effect_tests
-cargo test program_account::tests::ui_tests
+# Run specific test groups
+./scripts/test_cross_domain.sh
 ```
 
 ## Documentation

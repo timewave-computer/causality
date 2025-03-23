@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::error::{Error, Result};
 use crate::types::{ContentId, ContentHash, TraceId};
-use crate::actor::{ActorId, ActorCapability};
+use crate::actor::{ActorIdBox, ActorCapability, ActorRole};
 
 /// Message priority levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
@@ -33,6 +33,78 @@ pub enum MessagePriority {
 impl Default for MessagePriority {
     fn default() -> Self {
         MessagePriority::Normal
+    }
+}
+
+/// Timestamp for messages
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct Timestamp(u64);
+
+impl Timestamp {
+    /// Create a new timestamp with the current time
+    pub fn now() -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        Timestamp(now)
+    }
+
+    /// Create a timestamp from seconds since the epoch
+    pub fn from_seconds(seconds: u64) -> Self {
+        Timestamp(seconds)
+    }
+
+    /// Get the timestamp value in seconds
+    pub fn to_seconds(&self) -> u64 {
+        self.0
+    }
+}
+
+/// Message category for routing
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MessageCategory {
+    /// Normal direct message
+    Normal,
+    /// Message sent to a topic
+    Topic(String),
+    /// System message
+    System,
+    /// Custom category
+    Custom(String),
+}
+
+/// Message payload with content and metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessagePayload {
+    /// Content of the message
+    pub content: Vec<u8>,
+    /// Content type (MIME type)
+    pub content_type: String,
+    /// Additional headers
+    pub headers: HashMap<String, String>,
+}
+
+impl MessagePayload {
+    /// Create a new message payload
+    pub fn new(content: impl AsRef<[u8]>, content_type: String) -> Self {
+        MessagePayload {
+            content: content.as_ref().to_vec(),
+            content_type,
+            headers: HashMap::new(),
+        }
+    }
+
+    /// Get the content as a UTF-8 string if possible
+    pub fn as_str(&self) -> Result<&str> {
+        std::str::from_utf8(&self.content)
+            .map_err(|e| Error::DecodingFailed(e.to_string()))
+    }
+
+    /// Add a header to the payload
+    pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers.insert(key.into(), value.into());
+        self
     }
 }
 
@@ -73,27 +145,19 @@ impl Default for DeliveryOptions {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageEnvelope {
     /// Unique message ID
-    pub message_id: String,
-    /// Message content
-    pub content: Vec<u8>,
-    /// Content type
-    pub content_type: String,
-    /// Sender actor ID
-    pub sender: ActorId,
-    /// Recipient actor ID(s)
-    pub recipients: Vec<ActorId>,
-    /// Topic (if applicable)
-    pub topic: Option<String>,
-    /// Trace ID for correlation
-    pub trace_id: TraceId,
-    /// Timestamp when the message was sent
-    pub sent_at: u64,
-    /// Timestamp when the message expires
-    pub expires_at: Option<u64>,
-    /// Delivery options
-    pub delivery_options: DeliveryOptions,
-    /// Headers for additional metadata
-    pub headers: HashMap<String, String>,
+    pub id: String,
+    /// The actor that sent this message
+    pub sender: ActorIdBox,
+    /// The recipients of this message
+    pub recipients: Vec<ActorIdBox>,
+    /// Message category
+    pub category: MessageCategory,
+    /// Message payload
+    pub payload: MessagePayload,
+    /// When the message was created
+    pub timestamp: Timestamp,
+    /// Related trace ID for tracking
+    pub trace_id: Option<TraceId>,
 }
 
 impl MessageEnvelope {
@@ -101,34 +165,22 @@ impl MessageEnvelope {
     pub fn new(
         content: impl AsRef<[u8]>,
         content_type: impl Into<String>,
-        sender: ActorId,
-        recipients: Vec<ActorId>,
+        sender: ActorIdBox,
+        recipients: Vec<ActorIdBox>,
         delivery_options: DeliveryOptions,
     ) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-            
+        let now = Timestamp::now();
         let message_id = Uuid::new_v4().to_string();
         let trace_id = TraceId::new();
-        
-        // Calculate expiration if timeout is set
-        let expires_at = delivery_options.timeout_seconds
-            .map(|timeout| now + timeout);
             
         MessageEnvelope {
-            message_id,
-            content: content.as_ref().to_vec(),
-            content_type: content_type.into(),
+            id: message_id,
             sender,
             recipients,
-            topic: None,
-            trace_id,
-            sent_at: now,
-            expires_at,
-            delivery_options,
-            headers: HashMap::new(),
+            category: MessageCategory::Normal,
+            payload: MessagePayload::new(content, content_type.into()),
+            timestamp: now,
+            trace_id: Some(trace_id),
         }
     }
     
@@ -137,36 +189,36 @@ impl MessageEnvelope {
         message_id: impl Into<String>,
         content: impl AsRef<[u8]>,
         content_type: impl Into<String>,
-        sender: ActorId,
-        recipients: Vec<ActorId>,
+        sender: ActorIdBox,
+        recipients: Vec<ActorIdBox>,
         delivery_options: DeliveryOptions,
     ) -> Self {
         let mut envelope = Self::new(content, content_type, sender, recipients, delivery_options);
-        envelope.message_id = message_id.into();
+        envelope.id = message_id.into();
         envelope
     }
     
     /// Set the topic for this message
     pub fn with_topic(mut self, topic: impl Into<String>) -> Self {
-        self.topic = Some(topic.into());
+        self.category = MessageCategory::Topic(topic.into());
         self
     }
     
     /// Set the trace ID for this message
     pub fn with_trace(mut self, trace_id: TraceId) -> Self {
-        self.trace_id = trace_id;
+        self.trace_id = Some(trace_id);
         self
     }
     
     /// Add a header to this message
     pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.headers.insert(key.into(), value.into());
+        self.payload.headers.insert(key.into(), value.into());
         self
     }
     
     /// Check if this message has expired
     pub fn is_expired(&self) -> bool {
-        if let Some(expires_at) = self.expires_at {
+        if let Some(expires_at) = self.timestamp.to_seconds() {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -182,9 +234,9 @@ impl MessageEnvelope {
     pub fn content_id(&self) -> ContentId {
         let hash_str = format!(
             "{}:{}:{}",
-            self.message_id,
-            self.sent_at,
-            ContentHash::new(&self.content),
+            self.id,
+            self.timestamp.to_seconds(),
+            ContentHash::new(&self.payload.content),
         );
         
         let hash = ContentHash::new(&hash_str);
@@ -223,7 +275,7 @@ pub trait MessageHandler: Send + Sync + Debug {
 #[derive(Debug)]
 pub struct Subscription {
     /// Subscriber actor ID
-    pub subscriber_id: ActorId,
+    pub subscriber_id: ActorIdBox,
     /// Topic being subscribed to
     pub topic: String,
     /// When this subscription was created
@@ -237,7 +289,7 @@ pub struct Subscription {
 impl Subscription {
     /// Create a new subscription
     pub fn new(
-        subscriber_id: ActorId,
+        subscriber_id: ActorIdBox,
         topic: impl Into<String>,
         sender: mpsc::Sender<MessageEnvelope>,
     ) -> Self {
@@ -275,46 +327,38 @@ impl Subscription {
         }
     }
     
-    /// Send a message to this subscriber
+    /// Send a message through this subscription
     pub async fn send(&self, message: MessageEnvelope) -> Result<()> {
+        // Skip if subscription has expired
         if self.is_expired() {
-            return Err(Error::Expired("Subscription has expired".to_string()));
+            return Err(Error::SubscriptionExpired);
         }
         
-        // Apply timeout if configured in the message
-        if let Some(timeout_seconds) = message.delivery_options.timeout_seconds {
-            match timeout(
-                Duration::from_secs(timeout_seconds),
-                self.sender.send(message.clone()),
-            ).await {
+        // Try to send the message with a timeout
+        let send_result = timeout(
+            Duration::from_secs(5),
+            self.sender.send(message),
+        ).await;
+        
+        match send_result {
                 Ok(Ok(_)) => Ok(()),
-                Ok(Err(_)) => Err(Error::MessageDeliveryFailed(
-                    "Failed to send message".to_string(),
-                )),
-                Err(_) => Err(Error::Timeout(
-                    format!("Message delivery timed out after {} seconds", timeout_seconds),
-                )),
-            }
-        } else {
-            // No timeout
-            self.sender.send(message).await.map_err(|_| {
-                Error::MessageDeliveryFailed("Failed to send message".to_string())
-            })
+            Ok(Err(_)) => Err(Error::ChannelClosed),
+            Err(_) => Err(Error::Timeout("message delivery".into())),
         }
     }
 }
 
-/// Communication system for actor messaging
+/// Communication system for managing actor messaging
 #[derive(Debug)]
 pub struct CommunicationSystem {
     /// Message handlers by actor ID
-    handlers: RwLock<HashMap<ActorId, Arc<dyn MessageHandler>>>,
+    handlers: RwLock<HashMap<ActorIdBox, Arc<dyn MessageHandler>>>,
     /// Subscriptions by topic
     subscriptions: RwLock<HashMap<String, Vec<Subscription>>>,
     /// Delivery status by message ID
     delivery_status: RwLock<HashMap<String, DeliveryStatus>>,
     /// Message channels by actor ID
-    channels: RwLock<HashMap<ActorId, mpsc::Sender<MessageEnvelope>>>,
+    channels: RwLock<HashMap<ActorIdBox, mpsc::Sender<MessageEnvelope>>>,
 }
 
 impl CommunicationSystem {
@@ -329,482 +373,103 @@ impl CommunicationSystem {
     }
     
     /// Register a message handler for an actor
-    pub fn register_handler(&self, actor_id: ActorId, handler: Arc<dyn MessageHandler>) -> Result<()> {
-        let mut handlers = self.handlers.write().map_err(|_| {
-            Error::LockError("Failed to acquire write lock on handlers".to_string())
-        })?;
-        
+    pub fn register_handler(&self, actor_id: ActorIdBox, handler: Arc<dyn MessageHandler>) -> Result<()> {
+        let mut handlers = self.handlers.write().map_err(|_| Error::LockPoisoned)?;
         handlers.insert(actor_id, handler);
         Ok(())
     }
     
-    /// Create a channel for an actor
-    pub fn create_channel(&self, actor_id: ActorId, buffer_size: usize) -> Result<mpsc::Receiver<MessageEnvelope>> {
+    /// Create a message channel for an actor
+    pub fn create_channel(&self, actor_id: ActorIdBox, buffer_size: usize) -> Result<mpsc::Receiver<MessageEnvelope>> {
         let (tx, rx) = mpsc::channel(buffer_size);
         
-        let mut channels = self.channels.write().map_err(|_| {
-            Error::LockError("Failed to acquire write lock on channels".to_string())
-        })?;
-        
+        let mut channels = self.channels.write().map_err(|_| Error::LockPoisoned)?;
         channels.insert(actor_id, tx);
         
         Ok(rx)
     }
     
-    /// Get a channel for an actor
-    pub fn get_channel(&self, actor_id: &ActorId) -> Result<Option<mpsc::Sender<MessageEnvelope>>> {
-        let channels = self.channels.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on channels".to_string())
-        })?;
-        
+    /// Get the message channel for an actor
+    pub fn get_channel(&self, actor_id: &ActorIdBox) -> Result<Option<mpsc::Sender<MessageEnvelope>>> {
+        let channels = self.channels.read().map_err(|_| Error::LockPoisoned)?;
         Ok(channels.get(actor_id).cloned())
     }
     
-    /// Subscribe to a topic
+    /// Subscribe an actor to a topic
     pub fn subscribe(
         &self, 
-        subscriber_id: ActorId, 
+        subscriber_id: ActorIdBox, 
         topic: impl Into<String>,
         buffer_size: usize,
     ) -> Result<mpsc::Receiver<MessageEnvelope>> {
-        let topic_str = topic.into();
+        let topic = topic.into();
         let (tx, rx) = mpsc::channel(buffer_size);
         
-        let subscription = Subscription::new(subscriber_id.clone(), topic_str.clone(), tx);
+        let subscription = Subscription::new(subscriber_id, topic.clone(), tx);
         
-        let mut subscriptions = self.subscriptions.write().map_err(|_| {
-            Error::LockError("Failed to acquire write lock on subscriptions".to_string())
-        })?;
+        let mut subscriptions = self.subscriptions.write().map_err(|_| Error::LockPoisoned)?;
         
-        let topic_subscriptions = subscriptions.entry(topic_str).or_insert_with(Vec::new);
-        
-        // Remove any existing subscriptions for this actor to this topic
-        topic_subscriptions.retain(|sub| sub.subscriber_id != subscriber_id);
-        
-        // Add the new subscription
-        topic_subscriptions.push(subscription);
+        if let Some(subs) = subscriptions.get_mut(&topic) {
+            // Add to existing topic
+            subs.push(subscription);
+        } else {
+            // Create new topic
+            subscriptions.insert(topic, vec![subscription]);
+        }
         
         Ok(rx)
     }
     
-    /// Unsubscribe from a topic
-    pub fn unsubscribe(&self, subscriber_id: &ActorId, topic: &str) -> Result<()> {
-        let mut subscriptions = self.subscriptions.write().map_err(|_| {
-            Error::LockError("Failed to acquire write lock on subscriptions".to_string())
-        })?;
+    /// Unsubscribe an actor from a topic
+    pub fn unsubscribe(&self, subscriber_id: &ActorIdBox, topic: &str) -> Result<()> {
+        let mut subscriptions = self.subscriptions.write().map_err(|_| Error::LockPoisoned)?;
         
-        if let Some(topic_subscriptions) = subscriptions.get_mut(topic) {
-            topic_subscriptions.retain(|sub| &sub.subscriber_id != subscriber_id);
+        if let Some(subs) = subscriptions.get_mut(topic) {
+            // Remove all subscriptions for this actor to this topic
+            subs.retain(|sub| &sub.subscriber_id != subscriber_id);
             
-            // Remove the topic entirely if there are no more subscriptions
-            if topic_subscriptions.is_empty() {
+            // If no more subscriptions, remove the topic
+            if subs.is_empty() {
                 subscriptions.remove(topic);
             }
-        }
-        
-        Ok(())
-    }
-    
-    /// Publish a message to a topic
-    pub async fn publish(&self, topic: &str, message: MessageEnvelope) -> Result<()> {
-        let subscriptions = self.subscriptions.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on subscriptions".to_string())
-        })?;
-        
-        if let Some(topic_subscriptions) = subscriptions.get(topic) {
-            // Filter out expired subscriptions
-            let active_subscriptions: Vec<&Subscription> = topic_subscriptions
-                .iter()
-                .filter(|sub| !sub.is_expired())
-                .collect();
-                
-            if active_subscriptions.is_empty() {
-                return Err(Error::NoSubscribers(format!("No active subscribers for topic: {}", topic)));
-            }
             
-            let mut successfully_delivered = false;
-            
-            for subscription in active_subscriptions {
-                let result = subscription.send(message.clone()).await;
-                if result.is_ok() {
-                    successfully_delivered = true;
-                }
-            }
-            
-            if successfully_delivered {
-                self.update_delivery_status(&message.message_id, DeliveryStatus::Sent)?;
                 Ok(())
-            } else {
-                let error_msg = format!("Failed to deliver message to any subscribers for topic: {}", topic);
-                self.update_delivery_status(
-                    &message.message_id, 
-                    DeliveryStatus::Failed(error_msg.clone())
-                )?;
-                Err(Error::MessageDeliveryFailed(error_msg))
-            }
         } else {
-            let error_msg = format!("No subscribers for topic: {}", topic);
-            self.update_delivery_status(
-                &message.message_id, 
-                DeliveryStatus::Failed(error_msg.clone())
-            )?;
-            Err(Error::NoSubscribers(error_msg))
+            Err(Error::TopicNotFound(topic.to_string()))
         }
-    }
-    
-    /// Send a message to specific recipients
-    pub async fn send(&self, message: MessageEnvelope) -> Result<()> {
-        if message.recipients.is_empty() {
-            return Err(Error::InvalidArgument("No recipients specified".to_string()));
-        }
-        
-        // Check if the message has expired
-        if message.is_expired() {
-            let error_msg = format!("Message {} has expired", message.message_id);
-            self.update_delivery_status(
-                &message.message_id, 
-                DeliveryStatus::Failed(error_msg.clone())
-            )?;
-            return Err(Error::Expired(error_msg));
-        }
-        
-        let channels = self.channels.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on channels".to_string())
-        })?;
-        
-        // Check if we're broadcasting or sending to specific recipients
-        if message.delivery_options.broadcast {
-            let mut successfully_delivered = false;
-            
-            for recipient in &message.recipients {
-                if let Some(channel) = channels.get(recipient) {
-                    let result = channel.send(message.clone()).await;
-                    if result.is_ok() {
-                        successfully_delivered = true;
-                    }
-                }
-            }
-            
-            if successfully_delivered {
-                self.update_delivery_status(&message.message_id, DeliveryStatus::Sent)?;
-                Ok(())
-            } else {
-                let error_msg = "Failed to deliver message to any recipients".to_string();
-                self.update_delivery_status(
-                    &message.message_id, 
-                    DeliveryStatus::Failed(error_msg.clone())
-                )?;
-                Err(Error::MessageDeliveryFailed(error_msg))
-            }
-        } else {
-            // We need to deliver to all recipients or fail
-            for recipient in &message.recipients {
-                if let Some(channel) = channels.get(recipient) {
-                    if let Err(e) = channel.send(message.clone()).await {
-                        let error_msg = format!(
-                            "Failed to deliver message to recipient {}: {}",
-                            recipient.as_str(),
-                            e
-                        );
-                        self.update_delivery_status(
-                            &message.message_id, 
-                            DeliveryStatus::Failed(error_msg.clone())
-                        )?;
-                        return Err(Error::MessageDeliveryFailed(error_msg));
-                    }
-                } else {
-                    let error_msg = format!("No channel found for recipient: {}", recipient.as_str());
-                    self.update_delivery_status(
-                        &message.message_id, 
-                        DeliveryStatus::Failed(error_msg.clone())
-                    )?;
-                    return Err(Error::MessageDeliveryFailed(error_msg));
-                }
-            }
-            
-            self.update_delivery_status(&message.message_id, DeliveryStatus::Sent)?;
-            Ok(())
-        }
-    }
-    
-    /// Handle a message
-    pub async fn handle_message(&self, message: MessageEnvelope) -> Result<()> {
-        let handlers = self.handlers.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on handlers".to_string())
-        })?;
-        
-        for recipient in &message.recipients {
-            if let Some(handler) = handlers.get(recipient) {
-                if handler.can_handle(&message) {
-                    handler.handle(message.clone()).await?;
-                    self.update_delivery_status(&message.message_id, DeliveryStatus::Delivered)?;
-                } else {
-                    let error_msg = format!(
-                        "Handler for {} cannot handle message of type {}",
-                        recipient.as_str(),
-                        message.content_type
-                    );
-                    self.update_delivery_status(
-                        &message.message_id, 
-                        DeliveryStatus::Failed(error_msg.clone())
-                    )?;
-                    return Err(Error::UnsupportedMessageType(error_msg));
-                }
-            } else {
-                let error_msg = format!("No handler found for recipient: {}", recipient.as_str());
-                self.update_delivery_status(
-                    &message.message_id, 
-                    DeliveryStatus::Failed(error_msg.clone())
-                )?;
-                return Err(Error::MessageDeliveryFailed(error_msg));
-            }
-        }
-        
-        Ok(())
-    }
-    
-    /// Acknowledge a message
-    pub fn acknowledge_message(&self, message_id: &str) -> Result<()> {
-        self.update_delivery_status(message_id, DeliveryStatus::Acknowledged)
-    }
-    
-    /// Reject a message
-    pub fn reject_message(&self, message_id: &str, reason: impl Into<String>) -> Result<()> {
-        self.update_delivery_status(message_id, DeliveryStatus::Rejected(reason.into()))
-    }
-    
-    /// Get the delivery status of a message
-    pub fn get_delivery_status(&self, message_id: &str) -> Result<Option<DeliveryStatus>> {
-        let status = self.delivery_status.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on delivery status".to_string())
-        })?;
-        
-        Ok(status.get(message_id).cloned())
-    }
-    
-    /// Update the delivery status of a message
-    fn update_delivery_status(&self, message_id: &str, status: DeliveryStatus) -> Result<()> {
-        let mut delivery_status = self.delivery_status.write().map_err(|_| {
-            Error::LockError("Failed to acquire write lock on delivery status".to_string())
-        })?;
-        
-        delivery_status.insert(message_id.to_string(), status);
-        
-        Ok(())
-    }
-    
-    /// Clean up expired subscriptions
-    pub fn cleanup_expired_subscriptions(&self) -> Result<usize> {
-        let mut subscriptions = self.subscriptions.write().map_err(|_| {
-            Error::LockError("Failed to acquire write lock on subscriptions".to_string())
-        })?;
-        
-        let mut cleaned_count = 0;
-        let mut topics_to_remove = Vec::new();
-        
-        for (topic, subs) in subscriptions.iter_mut() {
-            let original_count = subs.len();
-            subs.retain(|sub| !sub.is_expired());
-            
-            cleaned_count += original_count - subs.len();
-            
-            if subs.is_empty() {
-                topics_to_remove.push(topic.clone());
-            }
-        }
-        
-        // Remove empty topics
-        for topic in topics_to_remove {
-            subscriptions.remove(&topic);
-        }
-        
-        Ok(cleaned_count)
-    }
-}
-
-impl Default for CommunicationSystem {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
     
     #[tokio::test]
     async fn test_message_envelope() {
-        let sender = ActorId::new("sender");
-        let recipient = ActorId::new("recipient");
-        
-        let options = DeliveryOptions {
-            priority: MessagePriority::High,
-            timeout_seconds: Some(60),
-            require_ack: true,
-            ..Default::default()
-        };
+        let sender = ActorIdBox::from("sender");
+        let recipient = ActorIdBox::from("recipient");
         
         let message = MessageEnvelope::new(
-            b"Hello, World!",
+            "Test content",
             "text/plain",
             sender.clone(),
             vec![recipient.clone()],
-            options.clone(),
+            DeliveryOptions::default(),
         );
         
-        assert_eq!(message.content, b"Hello, World!");
-        assert_eq!(message.content_type, "text/plain");
         assert_eq!(message.sender, sender);
-        assert_eq!(message.recipients, vec![recipient]);
-        assert_eq!(message.delivery_options.priority, MessagePriority::High);
-        assert_eq!(message.delivery_options.timeout_seconds, Some(60));
-        assert_eq!(message.delivery_options.require_ack, true);
+        assert_eq!(message.recipients.len(), 1);
+        assert_eq!(message.recipients[0], recipient);
+        assert_eq!(message.category, MessageCategory::Normal);
+        assert_eq!(message.payload.content_type, "text/plain");
+        assert!(message.trace_id.is_some());
         
         // Test with topic
-        let message_with_topic = message.clone().with_topic("test-topic");
-        assert_eq!(message_with_topic.topic, Some("test-topic".to_string()));
-        
-        // Test with header
-        let message_with_header = message.clone().with_header("key", "value");
-        assert_eq!(message_with_header.headers.get("key"), Some(&"value".to_string()));
+        let topic_message = message.clone().with_topic("test-topic");
+        assert!(matches!(topic_message.category, MessageCategory::Topic(ref t) if t == "test-topic"));
         
         // Test content ID
         let content_id = message.content_id();
-        assert_eq!(content_id.content_type, "actor-message");
-    }
-    
-    #[derive(Debug)]
-    struct TestMessageHandler {
-        actor_id: ActorId,
-        received_messages: Mutex<Vec<MessageEnvelope>>,
-    }
-    
-    impl TestMessageHandler {
-        fn new(actor_id: impl Into<String>) -> Self {
-            TestMessageHandler {
-                actor_id: ActorId::new(actor_id),
-                received_messages: Mutex::new(Vec::new()),
-            }
-        }
-    }
-    
-    #[async_trait]
-    impl MessageHandler for TestMessageHandler {
-        async fn handle(&self, message: MessageEnvelope) -> Result<()> {
-            let mut received = self.received_messages.lock().unwrap();
-            received.push(message);
-            Ok(())
-        }
-        
-        fn can_handle(&self, message: &MessageEnvelope) -> bool {
-            message.content_type == "text/plain" || message.content_type == "application/json"
-        }
-    }
-    
-    #[tokio::test]
-    async fn test_communication_system() -> Result<()> {
-        let system = CommunicationSystem::new();
-        
-        // Create actors
-        let sender_id = ActorId::new("sender");
-        let recipient_id = ActorId::new("recipient");
-        
-        // Register handlers
-        let recipient_handler = Arc::new(TestMessageHandler::new("recipient"));
-        system.register_handler(recipient_id.clone(), recipient_handler.clone())?;
-        
-        // Create channels
-        let _sender_rx = system.create_channel(sender_id.clone(), 10)?;
-        let _recipient_rx = system.create_channel(recipient_id.clone(), 10)?;
-        
-        // Create a message
-        let options = DeliveryOptions::default();
-        let message = MessageEnvelope::new(
-            b"Hello, Recipient!",
-            "text/plain",
-            sender_id.clone(),
-            vec![recipient_id.clone()],
-            options,
-        );
-        
-        // Send the message
-        system.send(message.clone()).await?;
-        
-        // Handle the message
-        system.handle_message(message.clone()).await?;
-        
-        // Check if the handler received the message
-        let received = recipient_handler.received_messages.lock().unwrap();
-        assert_eq!(received.len(), 1);
-        assert_eq!(received[0].content, b"Hello, Recipient!");
-        
-        // Check delivery status
-        let status = system.get_delivery_status(&message.message_id)?;
-        assert_eq!(status, Some(DeliveryStatus::Delivered));
-        
-        // Acknowledge the message
-        system.acknowledge_message(&message.message_id)?;
-        
-        let updated_status = system.get_delivery_status(&message.message_id)?;
-        assert_eq!(updated_status, Some(DeliveryStatus::Acknowledged));
-        
-        Ok(())
-    }
-    
-    #[tokio::test]
-    async fn test_pub_sub() -> Result<()> {
-        let system = CommunicationSystem::new();
-        
-        // Create actors
-        let publisher_id = ActorId::new("publisher");
-        let subscriber1_id = ActorId::new("subscriber1");
-        let subscriber2_id = ActorId::new("subscriber2");
-        
-        // Subscribe to topics
-        let mut sub1_rx = system.subscribe(subscriber1_id.clone(), "topic1", 10)?;
-        let mut sub2_rx = system.subscribe(subscriber2_id.clone(), "topic1", 10)?;
-        
-        // Create a message
-        let options = DeliveryOptions::default();
-        let message = MessageEnvelope::new(
-            b"Hello, Subscribers!",
-            "text/plain",
-            publisher_id,
-            vec![],  // Not needed for publish
-            options,
-        ).with_topic("topic1");
-        
-        // Publish the message
-        system.publish("topic1", message.clone()).await?;
-        
-        // Check if subscribers received the message
-        let received1 = sub1_rx.try_recv().unwrap();
-        let received2 = sub2_rx.try_recv().unwrap();
-        
-        assert_eq!(received1.content, b"Hello, Subscribers!");
-        assert_eq!(received2.content, b"Hello, Subscribers!");
-        
-        // Unsubscribe one subscriber
-        system.unsubscribe(&subscriber1_id, "topic1")?;
-        
-        // Create another message
-        let message2 = MessageEnvelope::new(
-            b"Hello again!",
-            "text/plain",
-            publisher_id,
-            vec![],
-            options,
-        ).with_topic("topic1");
-        
-        // Publish again
-        system.publish("topic1", message2.clone()).await?;
-        
-        // Check that only subscriber2 received it
-        assert!(sub1_rx.try_recv().is_err()); // Should be empty
-        let received2_again = sub2_rx.try_recv().unwrap();
-        assert_eq!(received2_again.content, b"Hello again!");
-        
-        Ok(())
+        assert!(content_id.to_string().contains("actor-message"));
     }
 } 

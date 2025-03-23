@@ -14,6 +14,9 @@ use crate::types::{ResourceId, DomainId};
 use crate::tel::types::Metadata;
 use crate::error::{Error, Result};
 use crate::time::TimeMapSnapshot;
+use crate::crypto::merkle::Commitment;
+use crate::resource::{StorageStrategy, StateVisibility};
+use crate::resource::lifecycle_manager::ResourceRegisterLifecycleManager;
 
 /// The unified ResourceRegister abstraction
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,6 +42,19 @@ pub struct ResourceRegister {
     
     // Storage strategy
     pub storage_strategy: StorageStrategy,
+    
+    // Contents of the resource
+    pub contents: Vec<u8>,
+    
+    // Version of the resource
+    pub version: String,
+    
+    // Current controller of the resource
+    pub controller: Option<String>,
+    
+    // Lifecycle manager for the resource
+    #[serde(skip)]
+    pub lifecycle_manager: ResourceRegisterLifecycleManager,
 }
 
 /// Resource logic determines how a resource behaves and transforms
@@ -100,7 +116,7 @@ pub enum StorageStrategy {
     },
 }
 
-/// Visibility of state in on-chain storage
+/// Visibility of state on the domain
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum StateVisibility {
     Public,
@@ -108,15 +124,11 @@ pub enum StateVisibility {
     Permissioned(HashSet<PermissionedEntity>),
 }
 
-/// Crypto commitment of register state
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Commitment(pub [u8; 32]);
-
-/// Nullifier ID for preventing double-spending
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+/// Nullifier identifier
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NullifierId(pub [u8; 32]);
 
-/// Entity that has permission to view state
+/// Permissioned entity identifier
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct PermissionedEntity(pub String);
 
@@ -141,6 +153,10 @@ impl ResourceRegister {
             controller_label: None,
             observed_at: TimeMapSnapshot::default(),
             storage_strategy,
+            contents: Vec::new(),
+            version: "0".to_string(),
+            controller: None,
+            lifecycle_manager: ResourceRegisterLifecycleManager::new(),
         }
     }
     
@@ -164,6 +180,10 @@ impl ResourceRegister {
             controller_label: None,
             observed_at: TimeMapSnapshot::default(),
             storage_strategy,
+            contents: Vec::new(),
+            version: "0".to_string(),
+            controller: None,
+            lifecycle_manager: ResourceRegisterLifecycleManager::new(),
         }
     }
     
@@ -236,7 +256,7 @@ impl ResourceRegister {
         }
         
         self.state = RegisterState::Active;
-        Ok(())
+        self.lifecycle_manager.activate(&self.id)
     }
     
     /// Lock this resource
@@ -246,7 +266,7 @@ impl ResourceRegister {
         }
         
         self.state = RegisterState::Locked;
-        Ok(())
+        self.lifecycle_manager.lock(&self.id)
     }
     
     /// Unlock this resource
@@ -256,7 +276,7 @@ impl ResourceRegister {
         }
         
         self.state = RegisterState::Active;
-        Ok(())
+        self.lifecycle_manager.unlock(&self.id)
     }
     
     /// Freeze this resource
@@ -266,7 +286,7 @@ impl ResourceRegister {
         }
         
         self.state = RegisterState::Frozen;
-        Ok(())
+        self.lifecycle_manager.freeze(&self.id)
     }
     
     /// Unfreeze this resource
@@ -276,7 +296,7 @@ impl ResourceRegister {
         }
         
         self.state = RegisterState::Active;
-        Ok(())
+        self.lifecycle_manager.unfreeze(&self.id)
     }
     
     /// Mark as pending
@@ -296,7 +316,7 @@ impl ResourceRegister {
         }
         
         self.state = RegisterState::Consumed;
-        Ok(())
+        self.lifecycle_manager.consume(&self.id)
     }
     
     /// Archive this resource
@@ -306,7 +326,7 @@ impl ResourceRegister {
         }
         
         self.state = RegisterState::Archived;
-        Ok(())
+        self.lifecycle_manager.archive(&self.id)
     }
     
     /// Unarchive this resource
@@ -352,6 +372,23 @@ impl ResourceRegister {
     /// Update the timeframe
     pub fn update_timeframe(&mut self, snapshot: TimeMapSnapshot) {
         self.observed_at = snapshot;
+    }
+    
+    /// Update the contents of the resource
+    pub fn update_contents(&mut self, contents: Vec<u8>) {
+        self.contents = contents;
+        self.increment_version();
+    }
+    
+    /// Increment the version of the resource
+    fn increment_version(&mut self) {
+        let version = self.version.parse::<u64>().unwrap_or(0);
+        self.version = (version + 1).to_string();
+    }
+    
+    /// Set the controller of the resource
+    pub fn set_controller(&mut self, controller: String) {
+        self.controller = Some(controller);
     }
 }
 

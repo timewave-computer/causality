@@ -13,7 +13,8 @@ use crate::resource::{ResourceId, Quantity};
 use crate::domain::{DomainId, DomainRegistry, DomainType};
 use crate::effect::{
     Effect, EffectContext, EffectOutcome, EffectResult,
-    TransferEffect, QueryEffect, StorageEffect
+    TransferEffect, QueryEffect, StorageEffect,
+    random::{RandomEffectFactory, RandomType}
 };
 use crate::tel::handlers::{
     TelHandler, ConstraintTelHandler, TransferTelHandler,
@@ -91,8 +92,13 @@ impl Effect for CosmWasmTransferEffect {
         // In a real implementation, this would connect to a CosmWasm chain and send a transaction
         // For now, we'll just create a simulated outcome
         
-        // Create a simulated transaction hash
-        let tx_hash = format!("cosmos{:016x}", rand::random::<u64>());
+        // Create a simulated transaction hash using the RandomEffect
+        let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+        let random_u64 = random_effect.gen_u64(&context)
+            .await
+            .unwrap_or(0);
+        
+        let tx_hash = format!("cosmos{:016x}", random_u64);
         
         // Create a successful outcome
         let outcome = EffectOutcome {

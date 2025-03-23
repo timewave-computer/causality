@@ -17,19 +17,33 @@ use crate::types::{ResourceId, DomainId, Timestamp, Metadata, RegisterState};
 use crate::resource::lifecycle::StateTransition;
 use crate::resource::lifecycle::TransitionReason;
 use crate::resource::transition::TransitionSystem;
+use crate::resource::capability_system::AuthorizationService;
 
-/// Type representing different operations that can be performed on a register
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Type of operation on a register
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RegisterOperationType {
+    /// Create a new register
     Create,
-    Read,
+    
+    /// Update an existing register
     Update,
-    Delete,
+    
+    /// Lock a register
     Lock,
+    
+    /// Unlock a register
     Unlock,
+    
+    /// Freeze a register
     Freeze,
+    
+    /// Unfreeze a register
     Unfreeze,
+    
+    /// Consume a register
     Consume,
+    
+    /// Archive a register
     Archive,
 }
 
@@ -53,16 +67,52 @@ pub struct ResourceRegisterLifecycleManager {
     locked_resources: HashMap<ResourceId, HashSet<ResourceId>>,
     /// History of state transitions for each resource
     transition_history: HashMap<ResourceId, Vec<StateTransitionRecord>>,
+    /// Valid state transitions
+    valid_transitions: HashMap<RegisterState, HashSet<RegisterState>>,
 }
 
 impl ResourceRegisterLifecycleManager {
     /// Create a new lifecycle manager
     pub fn new() -> Self {
-        Self {
+        let mut manager = Self {
             states: HashMap::new(),
             locked_resources: HashMap::new(),
             transition_history: HashMap::new(),
-        }
+            valid_transitions: HashMap::new(),
+        };
+        
+        // Initialize valid transitions
+        manager.initialize_valid_transitions();
+        
+        manager
+    }
+
+    /// Initialize the valid state transitions
+    fn initialize_valid_transitions(&mut self) {
+        // Initial state transitions
+        let mut initial_transitions = HashSet::new();
+        initial_transitions.insert(RegisterState::Active);
+        self.valid_transitions.insert(RegisterState::Initial, initial_transitions);
+        
+        // Active state transitions
+        let mut active_transitions = HashSet::new();
+        active_transitions.insert(RegisterState::Locked);
+        active_transitions.insert(RegisterState::Frozen);
+        active_transitions.insert(RegisterState::Consumed);
+        active_transitions.insert(RegisterState::Archived);
+        self.valid_transitions.insert(RegisterState::Active, active_transitions);
+        
+        // Locked state transitions
+        let mut locked_transitions = HashSet::new();
+        locked_transitions.insert(RegisterState::Active);
+        self.valid_transitions.insert(RegisterState::Locked, locked_transitions);
+        
+        // Frozen state transitions
+        let mut frozen_transitions = HashSet::new();
+        frozen_transitions.insert(RegisterState::Active);
+        self.valid_transitions.insert(RegisterState::Frozen, frozen_transitions);
+        
+        // Consumed and Archived have no valid transitions (terminal states)
     }
 
     /// Register a new resource in the initial state
@@ -148,38 +198,9 @@ impl ResourceRegisterLifecycleManager {
 
     /// Check if a state transition is valid
     fn is_valid_transition(&self, from_state: &RegisterState, to_state: &RegisterState) -> bool {
-        match (from_state, to_state) {
-            // Valid transitions from Initial
-            (RegisterState::Initial, RegisterState::Active) => true,
-            
-            // Valid transitions from Active
-            (RegisterState::Active, RegisterState::Locked) => true,
-            (RegisterState::Active, RegisterState::Frozen) => true,
-            (RegisterState::Active, RegisterState::Consumed) => true,
-            (RegisterState::Active, RegisterState::Archived) => true,
-            (RegisterState::Active, RegisterState::Pending) => true,
-            
-            // Valid transitions from Locked
-            (RegisterState::Locked, RegisterState::Active) => true,
-            (RegisterState::Locked, RegisterState::Consumed) => true,
-            
-            // Valid transitions from Frozen
-            (RegisterState::Frozen, RegisterState::Active) => true,
-            (RegisterState::Frozen, RegisterState::Consumed) => true,
-            
-            // No valid transitions from Consumed (terminal state)
-            (RegisterState::Consumed, _) => false,
-            
-            // Valid transitions from Pending
-            (RegisterState::Pending, RegisterState::Active) => true,
-            (RegisterState::Pending, RegisterState::Consumed) => true,
-            
-            // Valid transitions from Archived
-            (RegisterState::Archived, RegisterState::Active) => true,
-            
-            // Any other transition is invalid
-            _ => false,
-        }
+        self.valid_transitions
+            .get(from_state)
+            .map_or(false, |transitions| transitions.contains(to_state))
     }
 
     /// Check if an operation is valid for a given resource state
@@ -195,15 +216,15 @@ impl ResourceRegisterLifecycleManager {
             (_, RegisterOperationType::Read) => true,
             
             // Initial state
-            (RegisterState::Initial, RegisterOperationType::Create) => true,
+            (RegisterState::Initial, RegisterOperationType::Register) => true,
             
             // Active state
             (RegisterState::Active, RegisterOperationType::Update) => true,
-            (RegisterState::Active, RegisterOperationType::Delete) => true,
+            (RegisterState::Active, RegisterOperationType::Cancel) => true,
             (RegisterState::Active, RegisterOperationType::Lock) => true,
             (RegisterState::Active, RegisterOperationType::Freeze) => true,
             (RegisterState::Active, RegisterOperationType::Consume) => true,
-            (RegisterState::Active, RegisterOperationType::Archive) => true,
+            (RegisterState::Active, RegisterOperationType::Deactivate) => true,
             
             // Locked state
             (RegisterState::Locked, RegisterOperationType::Unlock) => true,
@@ -223,6 +244,126 @@ impl ResourceRegisterLifecycleManager {
             // Any other operation is invalid for the given state
             _ => false,
         })
+    }
+
+    /// Validate an operation against provided capabilities
+    pub fn validate_operation(
+        &self,
+        resource_id: &ResourceId,
+        operation_type: RegisterOperationType,
+        capability_ids: &[CapabilityId],
+    ) -> Result<bool> {
+        // Create a temporary authorization service
+        // In a real implementation, this would be provided via dependency injection
+        let auth_service = AuthorizationService::new(Arc::new(self.clone()));
+        
+        // Check if the operation is allowed
+        auth_service.check_operation_allowed(resource_id, operation_type, capability_ids)
+    }
+    
+    /// Execute an operation only if it's allowed by the provided capabilities
+    pub fn execute_with_capabilities(
+        &self,
+        resource_id: &ResourceId,
+        operation_type: RegisterOperationType,
+        capability_ids: &[CapabilityId],
+        // Using a function pointer for the operation to execute
+        operation: fn(&Self, &ResourceId) -> Result<()>,
+    ) -> Result<()> {
+        // Validate the operation first
+        if !self.validate_operation(resource_id, operation_type, capability_ids)? {
+            return Err(Error::PermissionDenied(format!(
+                "Operation {:?} not allowed on resource {} with the provided capabilities",
+                operation_type, resource_id
+            )));
+        }
+        
+        // Execute the operation
+        operation(self, resource_id)
+    }
+    
+    /// Activate a resource if allowed by capabilities
+    pub fn activate_with_capabilities(
+        &self, 
+        resource_id: &ResourceId,
+        capability_ids: &[CapabilityId],
+    ) -> Result<()> {
+        self.execute_with_capabilities(
+            resource_id,
+            RegisterOperationType::Activate,
+            capability_ids,
+            Self::activate,
+        )
+    }
+    
+    /// Lock a resource if allowed by capabilities
+    pub fn lock_with_capabilities(
+        &self,
+        resource_id: &ResourceId,
+        capability_ids: &[CapabilityId],
+    ) -> Result<()> {
+        self.execute_with_capabilities(
+            resource_id,
+            RegisterOperationType::Lock,
+            capability_ids,
+            Self::lock,
+        )
+    }
+    
+    /// Unlock a resource if allowed by capabilities
+    pub fn unlock_with_capabilities(
+        &self,
+        resource_id: &ResourceId,
+        capability_ids: &[CapabilityId],
+    ) -> Result<()> {
+        self.execute_with_capabilities(
+            resource_id,
+            RegisterOperationType::Unlock,
+            capability_ids,
+            Self::unlock,
+        )
+    }
+    
+    /// Freeze a resource if allowed by capabilities
+    pub fn freeze_with_capabilities(
+        &self,
+        resource_id: &ResourceId,
+        capability_ids: &[CapabilityId],
+    ) -> Result<()> {
+        self.execute_with_capabilities(
+            resource_id,
+            RegisterOperationType::Freeze,
+            capability_ids,
+            Self::freeze,
+        )
+    }
+    
+    /// Unfreeze a resource if allowed by capabilities
+    pub fn unfreeze_with_capabilities(
+        &self,
+        resource_id: &ResourceId,
+        capability_ids: &[CapabilityId],
+    ) -> Result<()> {
+        self.execute_with_capabilities(
+            resource_id,
+            RegisterOperationType::Unfreeze,
+            capability_ids,
+            Self::unfreeze,
+        )
+    }
+    
+    /// Consume a resource if allowed by capabilities
+    pub fn consume_with_capabilities(
+        &self,
+        resource_id: &ResourceId,
+        capability_ids: &[CapabilityId],
+    ) -> Result<()> {
+        self.execute_with_capabilities(
+            resource_id,
+            RegisterOperationType::Consume,
+            capability_ids,
+            Self::consume,
+        )
     }
 
     /// Activate a resource (transition from Initial to Active)

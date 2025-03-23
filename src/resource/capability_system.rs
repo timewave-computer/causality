@@ -645,4 +645,214 @@ impl AuthorizationService {
         
         Ok(false)
     }
+}
+
+/// Service that validates capabilities against resource lifecycle states
+pub struct AuthorizationService {
+    /// Reference to the lifecycle manager
+    lifecycle_manager: Arc<ResourceRegisterLifecycleManager>,
+}
+
+impl AuthorizationService {
+    /// Create a new authorization service
+    pub fn new(lifecycle_manager: Arc<ResourceRegisterLifecycleManager>) -> Self {
+        Self {
+            lifecycle_manager,
+        }
+    }
+    
+    /// Check if an operation is allowed based on the resource state and provided capabilities
+    pub fn check_operation_allowed(
+        &self,
+        resource_id: &ResourceId,
+        operation_type: RegisterOperationType,
+        capability_ids: &[CapabilityId],
+    ) -> Result<bool> {
+        // Get the resource state
+        let state = self.lifecycle_manager.get_state(resource_id)?;
+        
+        // Check if the resource state allows the operation
+        if !Self::is_operation_allowed_for_state(state, operation_type) {
+            return Ok(false);
+        }
+        
+        // Check if the capabilities allow the operation
+        // For now, we just check that at least one capability exists
+        // In a more complete implementation, we would validate the specific rights
+        // of each capability against the required rights for the operation
+        if capability_ids.is_empty() {
+            return Ok(false);
+        }
+        
+        // In a real implementation, this would check each capability to ensure
+        // it grants the right to perform the operation
+        // For now, we just return true if the state allows it and capabilities exist
+        Ok(true)
+    }
+    
+    /// Determine if an operation is allowed for a given resource state
+    fn is_operation_allowed_for_state(state: RegisterState, operation: RegisterOperationType) -> bool {
+        match (state, operation) {
+            // Initial state: allows registration and activation
+            (RegisterState::Initial, RegisterOperationType::Register) => true,
+            (RegisterState::Initial, RegisterOperationType::Activate) => true,
+            (RegisterState::Initial, _) => false,
+            
+            // Active state: allows most operations except registration (already registered)
+            (RegisterState::Active, RegisterOperationType::Register) => false,
+            (RegisterState::Active, RegisterOperationType::Activate) => false, // Already active
+            (RegisterState::Active, _) => true,
+            
+            // Locked state: only allows unlocking and reading
+            (RegisterState::Locked, RegisterOperationType::Unlock) => true,
+            (RegisterState::Locked, RegisterOperationType::Read) => true,
+            (RegisterState::Locked, _) => false,
+            
+            // Frozen state: only allows unfreezing and reading
+            (RegisterState::Frozen, RegisterOperationType::Unfreeze) => true,
+            (RegisterState::Frozen, RegisterOperationType::Read) => true,
+            (RegisterState::Frozen, _) => false,
+            
+            // Consumed state: allows no operations (resource is consumed)
+            (RegisterState::Consumed, _) => false,
+            
+            // Pending state: allows activation, cancellation and reading
+            (RegisterState::Pending, RegisterOperationType::Activate) => true,
+            (RegisterState::Pending, RegisterOperationType::Cancel) => true,
+            (RegisterState::Pending, RegisterOperationType::Read) => true,
+            (RegisterState::Pending, _) => false,
+        }
+    }
+    
+    /// Check if a capability grants a specific right for a resource
+    pub fn does_capability_grant_right(
+        &self,
+        capability: &Capability,
+        resource_id: &ResourceId,
+        right: Right,
+    ) -> bool {
+        // Check if the capability is for this resource
+        if capability.resource_id != *resource_id {
+            return false;
+        }
+        
+        // Check the capability type
+        match capability.capability_type {
+            CapabilityType::Read => matches!(right, Right::Read),
+            CapabilityType::Write => matches!(right, Right::Write | Right::Update),
+            CapabilityType::Execute => matches!(right, Right::Execute),
+            CapabilityType::Delegate => matches!(right, Right::Delegate),
+            CapabilityType::Admin => true, // Admin can do anything
+            CapabilityType::Custom(ref rights) => rights.contains(&right),
+        }
+    }
+    
+    /// Validate if a set of capabilities allows a specific operation
+    pub fn validate_capabilities_for_operation(
+        &self,
+        capabilities: &[Capability],
+        resource_id: &ResourceId,
+        operation_type: RegisterOperationType,
+    ) -> Result<bool> {
+        // Get the resource state
+        let state = self.lifecycle_manager.get_state(resource_id)?;
+        
+        // Check if the operation is allowed for this state
+        if !Self::is_operation_allowed_for_state(state, operation_type) {
+            return Ok(false);
+        }
+        
+        // Determine what rights are needed for this operation
+        let required_rights = Self::rights_for_operation(operation_type);
+        
+        // Check if any capability grants the required rights
+        for capability in capabilities {
+            let mut has_all_rights = true;
+            for right in &required_rights {
+                if !self.does_capability_grant_right(capability, resource_id, *right) {
+                    has_all_rights = false;
+                    break;
+                }
+            }
+            
+            if has_all_rights {
+                return Ok(true);
+            }
+        }
+        
+        Ok(false)
+    }
+    
+    /// Determine what rights are required for an operation
+    fn rights_for_operation(operation: RegisterOperationType) -> Vec<Right> {
+        match operation {
+            RegisterOperationType::Register => vec![Right::Create],
+            RegisterOperationType::Activate => vec![Right::Update],
+            RegisterOperationType::Deactivate => vec![Right::Update],
+            RegisterOperationType::Lock => vec![Right::Update],
+            RegisterOperationType::Unlock => vec![Right::Update],
+            RegisterOperationType::Freeze => vec![Right::Update],
+            RegisterOperationType::Unfreeze => vec![Right::Update],
+            RegisterOperationType::Consume => vec![Right::Delete],
+            RegisterOperationType::Update => vec![Right::Update],
+            RegisterOperationType::Read => vec![Right::Read],
+            RegisterOperationType::Cancel => vec![Right::Update],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_operation_allowed_for_state() {
+        // Test initial state
+        assert!(AuthorizationService::is_operation_allowed_for_state(
+            RegisterState::Initial, 
+            RegisterOperationType::Register
+        ));
+        
+        assert!(AuthorizationService::is_operation_allowed_for_state(
+            RegisterState::Initial, 
+            RegisterOperationType::Activate
+        ));
+        
+        assert!(!AuthorizationService::is_operation_allowed_for_state(
+            RegisterState::Initial, 
+            RegisterOperationType::Update
+        ));
+        
+        // Test active state
+        assert!(AuthorizationService::is_operation_allowed_for_state(
+            RegisterState::Active, 
+            RegisterOperationType::Update
+        ));
+        
+        assert!(AuthorizationService::is_operation_allowed_for_state(
+            RegisterState::Active, 
+            RegisterOperationType::Lock
+        ));
+        
+        assert!(!AuthorizationService::is_operation_allowed_for_state(
+            RegisterState::Active, 
+            RegisterOperationType::Register
+        ));
+        
+        // Test locked state
+        assert!(AuthorizationService::is_operation_allowed_for_state(
+            RegisterState::Locked, 
+            RegisterOperationType::Unlock
+        ));
+        
+        assert!(AuthorizationService::is_operation_allowed_for_state(
+            RegisterState::Locked, 
+            RegisterOperationType::Read
+        ));
+        
+        assert!(!AuthorizationService::is_operation_allowed_for_state(
+            RegisterState::Locked, 
+            RegisterOperationType::Update
+        ));
+    }
 } 

@@ -15,13 +15,5 @@ pub mod messaging;
 pub mod types;
 
 // Re-exports of core types
-pub use types::{GenericActorId, UuidActorId};
-pub use role::ActorRole;
-
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
-
-/// Type for actor IDs
-///
-/// This is a base trait for all actor ID types in the system.
-pub trait ActorId: Debug + Display + Clone + PartialEq + Eq + Hash + Send + Sync {} 
+pub use types::{GenericActorId, UuidActorId, ActorIdBox};
+pub use role::ActorRole; 

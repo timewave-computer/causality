@@ -15,9 +15,9 @@ use crate::resource::{ResourceId, ResourceRegister};
 use crate::resource::resource_register::{
     StorageStrategy, 
     StateVisibility, 
-    Commitment, 
     NullifierId
 };
+use crate::crypto::merkle::Commitment;
 use crate::effect::{
     Effect, 
     EffectId,

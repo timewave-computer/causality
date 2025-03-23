@@ -1,4 +1,4 @@
-# ADR-022: Unified Verification Framework
+# ADR-027: Unified Verification Framework
 
 ## Status
 

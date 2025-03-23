@@ -4,8 +4,10 @@
 // allowing tracking and management of resources across concurrent operations.
 
 use std::fmt;
-use rand::random;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+// Import the effect system for randomness
+use crate::effect::{EffectContext, random::{RandomEffectFactory, RandomType}};
 
 /// A unique identifier for tasks in the concurrency system
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -21,7 +23,18 @@ impl TaskId {
             .unwrap_or_default()
             .as_nanos();
         
-        let random_part = random::<u64>();
+        // Use the standard RandomEffect to generate a random number
+        let context = EffectContext::default();
+        let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+        
+        // Get a random u64 synchronously (for backward compatibility)
+        // In a full async environment, we would use await here
+        let random_part = std::future::block_on(random_effect.gen_u64(&context))
+            .unwrap_or_else(|_| std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64);
+        
         let id = format!("task-{}-{}", timestamp, random_part);
         
         TaskId { id }

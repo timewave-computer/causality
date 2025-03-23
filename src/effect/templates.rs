@@ -33,6 +33,7 @@ use crate::resource::{
     RelationshipType,
 };
 use crate::types::{DomainId, Metadata};
+use crate::time::TimeMapSnapshot;
 
 /// Template for creating a new resource
 pub fn create_resource_effect(
@@ -405,6 +406,580 @@ pub fn archive_resource_effect(
     resource.lifecycle_manager.archive(&resource.id)?;
     
     Ok(Arc::new(EmptyEffect::new()))
+}
+
+/// Template for creating a resource with boundary awareness
+pub fn create_resource_with_boundary_effect(
+    resource: &ResourceRegister,
+    boundary: ExecutionBoundary,
+    domain_id: DomainId,
+    invoker: Address,
+) -> Result<Arc<dyn Effect>> {
+    // Create a basic resource effect
+    let base_effect = create_resource_effect(resource, domain_id, invoker)?;
+    
+    // Wrap the effect with boundary information
+    let boundary_effect = BoundaryAwareEffect::new(
+        base_effect,
+        boundary,
+        format!("Create resource {} with boundary awareness", resource.id),
+    );
+    
+    Ok(Arc::new(boundary_effect))
+}
+
+/// Template for cross-domain resource operations
+pub fn cross_domain_resource_effect(
+    resource: &ResourceRegister,
+    source_domain: DomainId,
+    target_domain: DomainId,
+    invoker: Address,
+    operation_type: RegisterOperationType,
+) -> Result<Arc<dyn Effect>> {
+    // Create appropriate base effect based on operation type
+    let base_effect = match operation_type {
+        RegisterOperationType::Create => {
+            create_resource_effect(resource, target_domain.clone(), invoker.clone())?
+        },
+        RegisterOperationType::Update => {
+            update_resource_effect(
+                &mut resource.clone(), 
+                resource.all_fields(), 
+                target_domain.clone(), 
+                invoker.clone()
+            )?
+        },
+        RegisterOperationType::Lock => {
+            lock_resource_effect(&mut resource.clone(), target_domain.clone(), invoker.clone())?
+        },
+        RegisterOperationType::Unlock => {
+            unlock_resource_effect(&mut resource.clone(), target_domain.clone(), invoker.clone())?
+        },
+        RegisterOperationType::Consume => {
+            // For consumption, we need a relationship tracker
+            let mut tracker = RelationshipTracker::new();
+            consume_resource_effect(
+                &mut resource.clone(), 
+                target_domain.clone(), 
+                invoker.clone(),
+                &mut tracker
+            )?
+        },
+        _ => {
+            return Err(Error::InvalidOperation(
+                format!("Unsupported operation type {:?} for cross-domain effect", operation_type)
+            ));
+        }
+    };
+    
+    // Create a domain transition effect that wraps the base effect
+    let domain_transition_effect = DomainTransitionEffect::new(
+        base_effect,
+        source_domain,
+        target_domain,
+        format!("{:?} resource {} across domains", operation_type, resource.id),
+    );
+    
+    Ok(Arc::new(domain_transition_effect))
+}
+
+/// Template for resource operation with capability validation
+pub fn resource_operation_with_capability_effect(
+    resource: &mut ResourceRegister,
+    domain_id: DomainId,
+    invoker: Address,
+    operation_type: RegisterOperationType,
+    capability_ids: Vec<String>,
+) -> Result<Arc<dyn Effect>> {
+    // Validate the capability first
+    let capability_validator = CapabilityValidationEffect::new(
+        resource.id.clone(),
+        operation_type,
+        capability_ids,
+        domain_id.clone(),
+        invoker.clone(),
+    );
+    
+    // Create the appropriate operation effect based on type
+    let operation_effect = match operation_type {
+        RegisterOperationType::Create => {
+            create_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Update => {
+            update_resource_effect(resource, resource.all_fields(), domain_id, invoker)?
+        },
+        RegisterOperationType::Lock => {
+            lock_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Unlock => {
+            unlock_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Freeze => {
+            freeze_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Unfreeze => {
+            unfreeze_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Consume => {
+            let mut tracker = RelationshipTracker::new();
+            consume_resource_effect(resource, domain_id, invoker, &mut tracker)?
+        },
+        RegisterOperationType::Archive => {
+            archive_resource_effect(resource, domain_id, invoker)?
+        },
+        _ => {
+            return Err(Error::InvalidOperation(
+                format!("Unsupported operation type {:?} for capability effect", operation_type)
+            ));
+        }
+    };
+    
+    // Chain the capability validator with the operation effect
+    let combined_effect = create_composite_effect(
+        vec![Arc::new(capability_validator), operation_effect],
+        format!("Capability-validated {:?} operation", operation_type),
+    );
+    
+    Ok(combined_effect)
+}
+
+/// Template for resource operation with time map validation
+pub fn resource_operation_with_timemap_effect(
+    resource: &mut ResourceRegister,
+    domain_id: DomainId,
+    invoker: Address,
+    operation_type: RegisterOperationType,
+    time_map_snapshot: TimeMapSnapshot,
+) -> Result<Arc<dyn Effect>> {
+    // Create the time map validation effect
+    let time_validation_effect = TimeMapValidationEffect::new(
+        resource.id.clone(),
+        time_map_snapshot.clone(),
+        domain_id.clone(),
+        invoker.clone(),
+    );
+    
+    // Create the appropriate operation effect based on type
+    let operation_effect = match operation_type {
+        RegisterOperationType::Create => {
+            create_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Update => {
+            update_resource_effect(resource, resource.all_fields(), domain_id, invoker)?
+        },
+        RegisterOperationType::Lock => {
+            lock_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Unlock => {
+            unlock_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Freeze => {
+            freeze_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Unfreeze => {
+            unfreeze_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Consume => {
+            let mut tracker = RelationshipTracker::new();
+            consume_resource_effect(resource, domain_id, invoker, &mut tracker)?
+        },
+        RegisterOperationType::Archive => {
+            archive_resource_effect(resource, domain_id, invoker)?
+        },
+        _ => {
+            return Err(Error::InvalidOperation(
+                format!("Unsupported operation type {:?} for time map effect", operation_type)
+            ));
+        }
+    };
+    
+    // Update the resource's time map snapshot
+    resource.update_timeframe(time_map_snapshot);
+    
+    // Chain the time validation with the operation effect
+    let combined_effect = create_composite_effect(
+        vec![Arc::new(time_validation_effect), operation_effect],
+        format!("Time-map validated {:?} operation", operation_type),
+    );
+    
+    Ok(combined_effect)
+}
+
+/// Template for resource operation with on-chain commitment
+pub fn resource_operation_with_commitment_effect(
+    resource: &mut ResourceRegister,
+    domain_id: DomainId,
+    invoker: Address,
+    operation_type: RegisterOperationType,
+) -> Result<Arc<dyn Effect>> {
+    // Generate commitment for the resource state
+    let commitment = resource.generate_commitment()?;
+    
+    // Create commitment storage effect
+    let commitment_effect = create_store_commitment_effect(
+        resource.id.clone(),
+        commitment,
+        domain_id.clone(),
+        invoker.clone(),
+    );
+    
+    // Create the appropriate operation effect based on type
+    let operation_effect = match operation_type {
+        RegisterOperationType::Create => {
+            create_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Update => {
+            update_resource_effect(resource, resource.all_fields(), domain_id, invoker)?
+        },
+        RegisterOperationType::Lock => {
+            lock_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Unlock => {
+            unlock_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Freeze => {
+            freeze_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Unfreeze => {
+            unfreeze_resource_effect(resource, domain_id, invoker)?
+        },
+        RegisterOperationType::Consume => {
+            let mut tracker = RelationshipTracker::new();
+            consume_resource_effect(resource, domain_id, invoker, &mut tracker)?
+        },
+        RegisterOperationType::Archive => {
+            archive_resource_effect(resource, domain_id, invoker)?
+        },
+        _ => {
+            return Err(Error::InvalidOperation(
+                format!("Unsupported operation type {:?} for commitment effect", operation_type)
+            ));
+        }
+    };
+    
+    // Chain the commitment storage with the operation effect
+    let combined_effect = create_composite_effect(
+        vec![commitment_effect, operation_effect],
+        format!("Commitment-backed {:?} operation", operation_type),
+    );
+    
+    Ok(combined_effect)
+}
+
+/// Effect implementation for capability validation
+struct CapabilityValidationEffect {
+    id: EffectId,
+    resource_id: ResourceId,
+    operation_type: RegisterOperationType,
+    capability_ids: Vec<String>,
+    domain_id: DomainId,
+    invoker: Address,
+}
+
+impl CapabilityValidationEffect {
+    pub fn new(
+        resource_id: ResourceId,
+        operation_type: RegisterOperationType,
+        capability_ids: Vec<String>,
+        domain_id: DomainId,
+        invoker: Address,
+    ) -> Self {
+        Self {
+            id: EffectId::new_unique(),
+            resource_id,
+            operation_type,
+            capability_ids,
+            domain_id,
+            invoker,
+        }
+    }
+}
+
+#[async_trait]
+impl Effect for CapabilityValidationEffect {
+    fn id(&self) -> &EffectId {
+        &self.id
+    }
+    
+    fn display_name(&self) -> String {
+        format!("Capability Validation for {:?}", self.operation_type)
+    }
+    
+    fn description(&self) -> String {
+        format!(
+            "Validates that capabilities permit {:?} operation on resource {}",
+            self.operation_type,
+            self.resource_id
+        )
+    }
+    
+    async fn execute_async(&self, context: &EffectContext) -> EffectResult<EffectOutcome> {
+        // Create authorization service
+        let auth_service = context.get_authorization_service()?;
+        
+        // Convert capability IDs to the right format
+        let capability_ids = self.capability_ids.iter()
+            .map(|id| CapabilityId::from(id.clone()))
+            .collect::<Vec<_>>();
+        
+        // Check if operation is allowed
+        let is_allowed = auth_service.check_operation_allowed(
+            &self.resource_id,
+            self.operation_type,
+            &capability_ids,
+        )?;
+        
+        if !is_allowed {
+            return Err(EffectError::ValidationFailed(format!(
+                "Operation {:?} not allowed on resource {} with the provided capabilities",
+                self.operation_type,
+                self.resource_id
+            )));
+        }
+        
+        // If allowed, return success
+        Ok(EffectOutcome {
+            id: self.id.clone(),
+            success: true,
+            data: HashMap::new(),
+            error: None,
+            execution_id: context.execution_id,
+            resource_changes: Vec::new(),
+            metadata: HashMap::new(),
+        })
+    }
+}
+
+/// Effect implementation for time map validation
+struct TimeMapValidationEffect {
+    id: EffectId,
+    resource_id: ResourceId,
+    time_map_snapshot: TimeMapSnapshot,
+    domain_id: DomainId,
+    invoker: Address,
+}
+
+impl TimeMapValidationEffect {
+    pub fn new(
+        resource_id: ResourceId,
+        time_map_snapshot: TimeMapSnapshot,
+        domain_id: DomainId,
+        invoker: Address,
+    ) -> Self {
+        Self {
+            id: EffectId::new_unique(),
+            resource_id,
+            time_map_snapshot,
+            domain_id,
+            invoker,
+        }
+    }
+}
+
+#[async_trait]
+impl Effect for TimeMapValidationEffect {
+    fn id(&self) -> &EffectId {
+        &self.id
+    }
+    
+    fn display_name(&self) -> String {
+        format!("Time Map Validation")
+    }
+    
+    fn description(&self) -> String {
+        format!(
+            "Validates that resource {} operation is temporally consistent",
+            self.resource_id
+        )
+    }
+    
+    async fn execute_async(&self, context: &EffectContext) -> EffectResult<EffectOutcome> {
+        // Get time map service from context
+        let time_service = context.get_time_service()?;
+        
+        // Validate the time map snapshot
+        let is_valid = time_service.validate_snapshot(&self.time_map_snapshot)?;
+        
+        if !is_valid {
+            return Err(EffectError::ValidationFailed(format!(
+                "Time map snapshot validation failed for resource {}",
+                self.resource_id
+            )));
+        }
+        
+        // If valid, return success
+        Ok(EffectOutcome {
+            id: self.id.clone(),
+            success: true,
+            data: HashMap::new(),
+            error: None,
+            execution_id: context.execution_id,
+            resource_changes: Vec::new(),
+            metadata: HashMap::new(),
+        })
+    }
+}
+
+/// Effect implementation for domain transitions
+struct DomainTransitionEffect {
+    id: EffectId,
+    inner_effect: Arc<dyn Effect>,
+    source_domain: DomainId,
+    target_domain: DomainId,
+    description: String,
+}
+
+impl DomainTransitionEffect {
+    pub fn new(
+        inner_effect: Arc<dyn Effect>,
+        source_domain: DomainId,
+        target_domain: DomainId,
+        description: String,
+    ) -> Self {
+        Self {
+            id: EffectId::new_unique(),
+            inner_effect,
+            source_domain,
+            target_domain,
+            description,
+        }
+    }
+}
+
+#[async_trait]
+impl Effect for DomainTransitionEffect {
+    fn id(&self) -> &EffectId {
+        &self.id
+    }
+    
+    fn display_name(&self) -> String {
+        format!("Domain Transition Effect")
+    }
+    
+    fn description(&self) -> String {
+        self.description.clone()
+    }
+    
+    async fn execute_async(&self, context: &EffectContext) -> EffectResult<EffectOutcome> {
+        // Get domain service from context
+        let domain_service = context.get_domain_service()?;
+        
+        // Check if domains are compatible for this operation
+        let can_transition = domain_service.can_transition_between(
+            &self.source_domain,
+            &self.target_domain,
+        )?;
+        
+        if !can_transition {
+            return Err(EffectError::ValidationFailed(format!(
+                "Cannot transition between domains {} and {}",
+                self.source_domain,
+                self.target_domain
+            )));
+        }
+        
+        // If domains are compatible, execute the inner effect
+        let outcome = self.inner_effect.execute_async(context).await?;
+        
+        // Add domain transition metadata
+        let mut updated_metadata = outcome.metadata.clone();
+        updated_metadata.insert(
+            "source_domain".to_string(), 
+            serde_json::to_value(&self.source_domain).unwrap()
+        );
+        updated_metadata.insert(
+            "target_domain".to_string(), 
+            serde_json::to_value(&self.target_domain).unwrap()
+        );
+        
+        // Return success with updated metadata
+        Ok(EffectOutcome {
+            id: self.id.clone(),
+            success: outcome.success,
+            data: outcome.data,
+            error: outcome.error,
+            execution_id: context.execution_id,
+            resource_changes: outcome.resource_changes,
+            metadata: updated_metadata,
+        })
+    }
+}
+
+/// Effect implementation for boundary awareness
+struct BoundaryAwareEffect {
+    id: EffectId,
+    inner_effect: Arc<dyn Effect>,
+    boundary: ExecutionBoundary,
+    description: String,
+}
+
+impl BoundaryAwareEffect {
+    pub fn new(
+        inner_effect: Arc<dyn Effect>,
+        boundary: ExecutionBoundary,
+        description: String,
+    ) -> Self {
+        Self {
+            id: EffectId::new_unique(),
+            inner_effect,
+            boundary,
+            description,
+        }
+    }
+}
+
+#[async_trait]
+impl Effect for BoundaryAwareEffect {
+    fn id(&self) -> &EffectId {
+        &self.id
+    }
+    
+    fn display_name(&self) -> String {
+        format!("Boundary Aware Effect")
+    }
+    
+    fn description(&self) -> String {
+        self.description.clone()
+    }
+    
+    async fn execute_async(&self, context: &EffectContext) -> EffectResult<EffectOutcome> {
+        // Get boundary manager from context
+        let boundary_manager = context.get_boundary_manager()?;
+        
+        // Check if operation is allowed across the boundary
+        let can_cross = boundary_manager.can_cross_boundary(
+            &self.boundary,
+            context.invoker.as_ref(),
+        )?;
+        
+        if !can_cross {
+            return Err(EffectError::ValidationFailed(format!(
+                "Cannot cross boundary {:?}",
+                self.boundary
+            )));
+        }
+        
+        // If boundary crossing is allowed, execute the inner effect
+        let outcome = self.inner_effect.execute_async(context).await?;
+        
+        // Add boundary metadata
+        let mut updated_metadata = outcome.metadata.clone();
+        updated_metadata.insert(
+            "boundary".to_string(), 
+            serde_json::to_value(&self.boundary).unwrap()
+        );
+        
+        // Return success with updated metadata
+        Ok(EffectOutcome {
+            id: self.id.clone(),
+            success: outcome.success,
+            data: outcome.data,
+            error: outcome.error,
+            execution_id: context.execution_id,
+            resource_changes: outcome.resource_changes,
+            metadata: updated_metadata,
+        })
+    }
 }
 
 #[cfg(test)]

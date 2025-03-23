@@ -11,6 +11,7 @@ use futures::future::FutureExt;
 use tokio::time::sleep;
 
 use crate::error::{Error, Result};
+use crate::effect::{EffectContext, random::{RandomEffectFactory, RandomType}};
 
 /// Run a future with a timeout
 ///
@@ -129,8 +130,8 @@ where
     for retry in 0..=max_retries {
         // Add some jitter to the retry delay to avoid thundering herd
         let jittered_delay = if retry > 0 {
-            let jitter = (rand::random::<f64>() * 0.2 - 0.1) * retry_delay.as_secs_f64();
-            Duration::from_secs_f64((retry_delay.as_secs_f64() + jitter).max(0.0))
+            // calculate_retry_delay uses RandomEffect
+            calculate_retry_delay(retry as u32, retry_delay).await
         } else {
             Duration::from_secs(0)
         };
@@ -152,6 +153,28 @@ where
     
     // If we get here, all retries failed
     Err(last_error.unwrap_or_else(|| Error::OperationFailed("All retries failed".to_string())))
+}
+
+/// Calculate the delay for a retry, with exponential backoff and jitter
+pub async fn calculate_retry_delay(retry_attempt: u32, base_delay: Duration) -> Duration {
+    // Calculate exponential backoff
+    let exp_backoff = base_delay.mul_f64(2.0f64.powi(retry_attempt as i32));
+    
+    // Apply jitter (-10% to +10%)
+    let context = EffectContext::default();
+    let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+    
+    // Get a random float
+    let random_float = random_effect.gen_f64(&context)
+        .await
+        .unwrap_or(0.5);
+    
+    let jitter = (random_float * 0.2 - 0.1) * exp_backoff.as_secs_f64();
+    let with_jitter = exp_backoff.as_secs_f64() + jitter;
+    
+    // Cap at 30 seconds
+    let capped = with_jitter.min(30.0);
+    Duration::from_secs_f64(capped)
 }
 
 #[cfg(test)]

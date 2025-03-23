@@ -8,21 +8,20 @@ use std::fmt;
 use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
-use ethers::types::Address;
+use ethers::types::Address as EthAddress;
 
 use crate::effect::{
-    Effect, EffectContext, EffectOutcome, EffectResult, EffectError, ResourceChange,
-    ResourceChangeType, ExecutionBoundary
+    Effect, EffectContext, EffectOutcome, EffectResult, EffectError,
+    ExecutionBoundary
 };
 use crate::resource::ResourceId;
 use crate::resource::api::Right;
 use crate::resource::resource_register::{
     ResourceRegister,
-    Commitment,
     NullifierId
 };
-use crate::address::Address;
-use crate::types::DomainId;
+use crate::crypto::merkle::Commitment;
+use crate::types::{DomainId, Address};
 use crate::domain::{DomainInfo, DomainType, DomainStatus};
 use crate::domain_adapters::evm::storage_strategy::EthereumStorageEffectFactory;
 use crate::domain_adapters::cosmwasm::storage_strategy::CosmWasmStorageEffectFactory;

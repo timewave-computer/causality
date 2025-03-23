@@ -4,30 +4,37 @@
 // and causal ordering across distributed components using Lamport logical clocks.
 
 use std::fmt;
+use std::sync::atomic::{AtomicU64, Ordering};
 use serde::{Serialize, Deserialize};
 
-/// Lamport logical clock time
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct LamportTime(pub u64);
+/// A Lamport logical clock implementation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct LamportTime(u64);
 
 impl LamportTime {
-    /// Create a new logical clock with initial value 0
-    pub fn new() -> Self {
-        LamportTime(0)
+    /// Create a new Lamport clock with the specified starting value
+    pub fn new(initial: u64) -> Self {
+        Self(initial)
     }
     
-    /// Get the current value
+    /// Create a new Lamport clock starting from 0
+    pub fn zero() -> Self {
+        Self(0)
+    }
+    
+    /// Get the current clock value
     pub fn value(&self) -> u64 {
         self.0
     }
     
-    /// Increment the logical clock
-    pub fn increment(&mut self) {
+    /// Increment the clock and return the new value
+    pub fn increment(&mut self) -> u64 {
         self.0 += 1;
+        self.0
     }
     
-    /// Update the clock based on a received message timestamp.
-    /// Sets the clock to max(local, received) + 1
+    /// Update the clock based on a received timestamp
+    /// This updates the clock to max(local + 1, received + 1)
     pub fn update(&mut self, received: LamportTime) {
         self.0 = std::cmp::max(self.0, received.0) + 1;
     }
@@ -45,13 +52,13 @@ impl LamportTime {
 
 impl Default for LamportTime {
     fn default() -> Self {
-        Self::new()
+        Self::zero()
     }
 }
 
 impl fmt::Display for LamportTime {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "t{}", self.0)
+        write!(f, "T{}", self.0)
     }
 }
 
@@ -98,24 +105,78 @@ impl fmt::Display for TimeMapSnapshot {
     }
 }
 
+/// Thread-safe shared Lamport clock
+pub struct SharedLamportClock {
+    time: AtomicU64,
+}
+
+impl SharedLamportClock {
+    /// Create a new shared clock with the specified initial value
+    pub fn new(initial: u64) -> Self {
+        Self {
+            time: AtomicU64::new(initial),
+        }
+    }
+    
+    /// Get the current clock value
+    pub fn get(&self) -> LamportTime {
+        LamportTime(self.time.load(Ordering::SeqCst))
+    }
+    
+    /// Increment the clock and return the new value
+    pub fn increment(&self) -> LamportTime {
+        let new_value = self.time.fetch_add(1, Ordering::SeqCst) + 1;
+        LamportTime(new_value)
+    }
+    
+    /// Update the clock based on a received timestamp
+    pub fn update(&self, received: LamportTime) {
+        let mut current = self.time.load(Ordering::SeqCst);
+        loop {
+            let new_value = std::cmp::max(current, received.value()) + 1;
+            match self.time.compare_exchange(current, new_value, Ordering::SeqCst, Ordering::SeqCst) {
+                Ok(_) => break,
+                Err(actual) => current = actual,
+            }
+        }
+    }
+}
+
+impl Default for SharedLamportClock {
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     
     #[test]
-    fn test_lamport_clock() {
-        let mut t1 = LamportTime::new();
-        assert_eq!(t1.value(), 0);
+    fn test_lamport_time_basic() {
+        let mut time = LamportTime::zero();
+        assert_eq!(time.value(), 0);
         
-        t1.increment();
+        time.increment();
+        assert_eq!(time.value(), 1);
+        
+        time.update(LamportTime::new(5));
+        assert_eq!(time.value(), 6);
+        
+        time.update(LamportTime::new(3));
+        assert_eq!(time.value(), 7);
+    }
+    
+    #[test]
+    fn test_shared_lamport_clock() {
+        let clock = SharedLamportClock::default();
+        assert_eq!(clock.get().value(), 0);
+        
+        let t1 = clock.increment();
         assert_eq!(t1.value(), 1);
         
-        let t2 = LamportTime(3);
-        t1.update(t2);
-        assert_eq!(t1.value(), 4);
-        
-        assert!(t1.happened_after(&t2));
-        assert!(t2.happened_before(&t1));
+        clock.update(LamportTime::new(5));
+        assert_eq!(clock.get().value(), 6);
     }
     
     #[test]

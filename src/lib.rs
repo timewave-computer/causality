@@ -1,178 +1,129 @@
-// Causality System
+// Causality - A Unified Resource Management System
 //
-// A Rust implementation of the Causality system for cross-Domain 
-// programming with algebraic effects, RISC-V compilation for 
-// zero-knowledge virtual machine execution, and content-addressed code.
+// This library provides a unified resource management system with lifecycle management,
+// relationship tracking, capability-based authorization, and effect templates.
 
-// Feature flags
-pub mod features;
-
-// Core modules (always included)
-pub mod error;
+// Core modules
 pub mod types;
-pub mod actor;
+pub mod error;
 pub mod address;
-pub mod effect_adapters;
 pub mod time;
-pub mod capabilities;
-
-// Effect system
 pub mod effect;
-
-// TEL (Transaction Effect Language)
-pub mod tel;
-
-// Optional modules based on features
-#[cfg(feature = "domain")]
-pub mod domain;
-
-#[cfg(feature = "domain")]
-pub mod domain_adapters;
-
-// Resource system
 pub mod resource;
 
-// Abstract Syntax Tree (AST) system
-pub mod ast;
+// Make the key types available directly
+pub use types::{ResourceId, DomainId, TraceId, Timestamp, Metadata};
+pub use error::{Error, Result};
+pub use address::Address;
+pub use time::TimeMapSnapshot;
+pub use effect::{Effect, EffectContext, EffectOutcome, EffectResult, EffectError};
+pub use resource::{
+    ResourceRegister, 
+    RegisterState, 
+    ResourceRegisterLifecycleManager,
+    RelationshipTracker,
+    RelationshipType,
+    ResourceTimeMapIntegration,
+    StorageStrategy,
+};
 
-// Execution system
-pub mod execution;
+/// Version of the library
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// Snapshot system (includes time-travel debugging functionality)
-pub mod snapshot;
+/// Log a message to the console
+#[macro_export]
+macro_rules! log {
+    ($($arg:tt)*) => {
+        println!($($arg)*);
+    };
+}
 
-// Zero-knowledge proof system
-pub mod zk;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_version() {
+        assert!(!VERSION.is_empty());
+    }
+}
 
-// Logging system
-pub mod log;
+// Main library file
+//
+// This file brings together all the modules and provides a unified public API
+// for the hashing, commitment, SMT, and database interfaces.
 
-// Optional invocation system
-pub mod invocation;
+// Re-export public modules and types
+pub use types::*;
 
-// Concurrency primitives
-pub mod concurrency;
+// Crypto primitives
+pub use crypto::hash::{
+    HashFunction, HashOutput, Hasher, HashFactory, 
+    HashAlgorithm, HashError
+};
+pub use crypto::merkle::{
+    Commitment, CommitmentScheme, CommitmentFactory, 
+    CommitmentType, CommitmentError, MerkleTreeCommitmentScheme,
+    MerkleProof, H256
+};
+pub use crypto::signature::{
+    Signature, SignatureScheme, SignatureError, 
+    SignatureVerificationResult, SignatureFactory
+};
+pub use crypto::zk::{
+    ZkProof, ZkVerifier, ZkProver, ZkError, ZkFactory
+};
 
-// Interpreter for executing code
-pub mod interpreter;
+// SMT implementation
+pub use smt::{
+    SmtFactory, SmtConfig, SmtError, Key, 
+    SmtKeyValue, MerkleSmt
+};
 
-// Builder patterns
-pub mod builder;
+// Database interfaces
+pub use db::{Database, DbConfig, DbError, DbFactory};
 
-// Program Account Layer
-pub mod program_account;
+// Verification services
+pub mod verification;
+pub use verification::{
+    VerificationContext, VerificationResult, VerificationError,
+    VerificationProvider, VerificationProviderRegistry, 
+    VerificationType, VerificationStatus, VerificationOptions,
+    Verifiable, UnifiedProof,
+};
 
-// System boundaries
+// Public modules
+pub mod crypto;
+pub mod smt;
+pub mod db;
+
+// Legacy modules (to be removed after migration)
+pub mod hash;
+// commitment module has been removed and replaced by crypto::merkle
+
+// Domain-specific modules
+pub mod domain;
+pub mod actor;
+pub mod operation;
+
+// Test utilities (only for tests)
+#[cfg(test)]
+pub mod test_utils {
+    // Export utilities for testing here
+}
+
+/// Feature flags
+#[cfg(feature = "rocksdb")]
+pub const HAS_ROCKSDB: bool = true;
+
+#[cfg(not(feature = "rocksdb"))]
+pub const HAS_ROCKSDB: bool = false;
+
+// Make the boundary module public 
 pub mod boundary;
 
-// Re-exports from effect system
-pub use effect::Effect;
-pub use effect::EffectContext;
-pub use effect::EffectOutcome;
-pub use effect::EffectResult;
+// Make the examples module public
+pub mod examples;
 
-// Re-exports from TEL system
-pub use tel::{
-    TelScript, TelOperation, TelOperationType, TelParser,
-    TelHandler, TelHandlerRegistry, TelCompiler, StandardTelCompiler,
-    TransferParams, StorageParams, QueryParams,
-    parse_tel, compile_tel, execute_tel
-};
-
-// Re-exports from resource system
-pub use resource::{
-    ResourceId, Quantity, RegisterId, ResourceRegister, ResourceLogic,
-    ResourceState, TransitionReason,
-    RelationshipTracker, ResourceRelationship, RelationshipType, RelationshipDirection,
-    ResourceRegisterLifecycleManager, RegisterOperationType,
-    StorageStrategy, StorageAdapter, CapabilityId
-};
-
-// Re-exports from capabilities system
-pub use capabilities::{Right, Capability, CapabilityType};
-
-// Re-exports from AST system
-pub use ast::{
-    AstNodeId,
-    AstNodeType,
-    AstContext,
-    GraphCorrelation,
-    CorrelationTracker
-};
-
-// Re-exports from log system
-pub use log::{LogEntry, LogStorage, ReplayEngine};
-
-// Re-exports from domain system
-#[cfg(feature = "domain")]
-pub use domain::{
-    DomainAdapter, DomainRegistry, DomainId, DomainInfo, DomainType
-};
-
-// Re-export from time module
-pub use time::LamportTime;
-
-// Re-exports from ZK system
-pub use zk::{
-    StateTransition,
-    ZkVirtualMachine,
-    ZkAdapter,
-    Witness,
-    MemoryAccess,
-    VmState,
-    Proof,
-    RiscVProgram,
-    RiscVSection,
-    RiscVSectionType
-};
-
-// Re-exports from invocation system
-pub use invocation::{
-    InvocationSystem,
-    context::InvocationContext,
-    registry::{EffectRegistry, HandlerRegistration, HandlerInput, HandlerOutput},
-    patterns::{
-        InvocationPattern,
-        DirectInvocation,
-        CallbackInvocation,
-        ContinuationInvocation,
-        PromiseInvocation,
-        StreamingInvocation,
-        BatchInvocation,
-    }
-}; 
-
-// Re-exports from snapshot system
-pub use snapshot::{
-    ExecutionSnapshot, 
-    SnapshotId, 
-    SnapshotError, 
-    FileSystemSnapshotManager,
-    IncrementalSnapshotManager,
-    SnapshotDiff,
-    CheckpointManager,
-    CheckpointConfig,
-    // Time-travel functionality
-    navigator::TimeTravel,
-    navigator::TimeTravelNavigator,
-    inspector::StateInspector,
-    inspector::ContextStateInspector,
-    diff::StateDiffer,
-    diff::StateComparer
-};
-
-// Re-exports from modules directly (avoiding integration modules)
-#[cfg(feature = "code-repo")]
-pub use effect::{EffectIntegrator, ContentAddressedEffect};
-
-// Re-exports from program account system
-pub use program_account::base_account::BaseAccount;
-pub use program_account::registry::{StandardProgramAccountRegistry, AccountType};
-pub use program_account::asset_account::{AssetAccount, AssetType, AssetCollection};
-pub use program_account::utility_account::{UtilityAccount, StoredData};
-pub use program_account::effect_adapter::{
-    ProgramAccountEffectAdapter,
-    ProgramAccountEffectAdapterImpl,
-    EffectInfo,
-    EffectParameterType
-};
+// Add boundary exports
+pub use boundary::{BoundaryType, CrossingType, BoundarySafe};

@@ -12,7 +12,7 @@ use crate::error::{Error, Result};
 use crate::types::{ContentId, ContentHash, TraceId, Timestamp};
 use crate::actor::{
     Actor, ActorId, ActorType, ActorState, ActorInfo, 
-    ActorRole, ActorCapability, Message, MessageCategory, MessagePayload, GenericActorId
+    ActorRole, ActorCapability, Message, MessageCategory, MessagePayload, GenericActorId, ActorIdBox
 };
 
 /// Committee decision rule
@@ -34,7 +34,7 @@ pub enum DecisionRule {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Vote {
     /// The member that cast the vote
-    pub member_id: ActorId,
+    pub member_id: ActorIdBox,
     /// The vote (true = yes, false = no)
     pub vote: bool,
     /// Vote weight (if using weighted voting)
@@ -207,7 +207,7 @@ impl Decision {
 #[derive(Debug)]
 pub struct Committee {
     /// Actor ID
-    id: ActorId,
+    id: ActorIdBox,
     /// Actor type
     actor_type: ActorType,
     /// Actor state
@@ -219,7 +219,7 @@ pub struct Committee {
     /// Committee description
     description: Option<String>,
     /// Committee members
-    members: RwLock<HashSet<ActorId>>,
+    members: RwLock<HashSet<ActorIdBox>>,
     /// Decision rule
     decision_rule: RwLock<DecisionRule>,
     /// Active decisions
@@ -266,7 +266,7 @@ impl Committee {
     }
     
     /// Add a member to the committee
-    pub fn add_member(&self, member_id: ActorId) -> Result<()> {
+    pub fn add_member(&self, member_id: ActorIdBox) -> Result<()> {
         let mut members = self.members.write().map_err(|_| {
             Error::LockError("Failed to acquire write lock on members".to_string())
         })?;
@@ -277,7 +277,7 @@ impl Committee {
     }
     
     /// Remove a member from the committee
-    pub fn remove_member(&self, member_id: &ActorId) -> Result<()> {
+    pub fn remove_member(&self, member_id: &ActorIdBox) -> Result<()> {
         let mut members = self.members.write().map_err(|_| {
             Error::LockError("Failed to acquire write lock on members".to_string())
         })?;
@@ -288,7 +288,7 @@ impl Committee {
     }
     
     /// Check if an actor is a member of this committee
-    pub fn is_member(&self, member_id: &ActorId) -> Result<bool> {
+    pub fn is_member(&self, member_id: &ActorIdBox) -> Result<bool> {
         let members = self.members.read().map_err(|_| {
             Error::LockError("Failed to acquire read lock on members".to_string())
         })?;
@@ -297,7 +297,7 @@ impl Committee {
     }
     
     /// Get all committee members
-    pub fn get_members(&self) -> Result<Vec<ActorId>> {
+    pub fn get_members(&self) -> Result<Vec<ActorIdBox>> {
         let members = self.members.read().map_err(|_| {
             Error::LockError("Failed to acquire read lock on members".to_string())
         })?;
@@ -338,7 +338,7 @@ impl Committee {
     pub fn add_vote(
         &self,
         decision_id: &str,
-        member_id: ActorId,
+        member_id: ActorIdBox,
         vote: bool,
         weight: Option<u64>,
         comments: Option<String>,
@@ -445,7 +445,7 @@ impl Committee {
 
 #[async_trait]
 impl Actor for Committee {
-    fn id(&self) -> &ActorId {
+    fn id(&self) -> &ActorIdBox {
         &self.id
     }
     
@@ -604,9 +604,9 @@ mod tests {
         assert_eq!(committee.info().name, "Test Committee");
         
         // Add members
-        let member1 = ActorId("member1".to_string());
-        let member2 = ActorId("member2".to_string());
-        let member3 = ActorId("member3".to_string());
+        let member1 = ActorIdBox::from("member1");
+        let member2 = ActorIdBox::from("member2");
+        let member3 = ActorIdBox::from("member3");
         
         committee.add_member(member1.clone())?;
         committee.add_member(member2.clone())?;
@@ -694,11 +694,11 @@ mod tests {
         // Test handling add member message
         let add_member_msg = Message {
             id: "msg1".to_string(),
-            sender: ActorId("system".to_string()),
+            sender: ActorIdBox::from("system"),
             recipients: vec![committee.id().clone()],
             category: MessageCategory::MembershipManagement,
             payload: MessagePayload::AddMember { 
-                member_id: ActorId("member1".to_string()) 
+                member_id: ActorIdBox::from("member1") 
             },
             timestamp: Timestamp::now(),
             trace_id: None,
@@ -707,12 +707,12 @@ mod tests {
         committee.handle_message(add_member_msg).await?;
         
         // Check if the member was added
-        assert!(committee.is_member(&ActorId("member1".to_string()))?);
+        assert!(committee.is_member(&ActorIdBox::from("member1"))?);
         
         // Test handling create decision message
         let create_decision_msg = Message {
             id: "msg2".to_string(),
-            sender: ActorId("system".to_string()),
+            sender: ActorIdBox::from("system"),
             recipients: vec![committee.id().clone()],
             category: MessageCategory::GovernanceManagement,
             payload: MessagePayload::CreateDecision { 
@@ -734,7 +734,7 @@ mod tests {
         // Test handling cast vote message
         let cast_vote_msg = Message {
             id: "msg3".to_string(),
-            sender: ActorId("member1".to_string()),
+            sender: ActorIdBox::from("member1"),
             recipients: vec![committee.id().clone()],
             category: MessageCategory::GovernanceManagement,
             payload: MessagePayload::CastVote { 
@@ -752,7 +752,7 @@ mod tests {
         // Check if the vote was recorded
         let decision = committee.get_decision("decision1")?.unwrap();
         assert_eq!(decision.votes.len(), 1);
-        assert_eq!(decision.votes[0].member_id, ActorId("member1".to_string()));
+        assert_eq!(decision.votes[0].member_id, ActorIdBox::from("member1"));
         assert!(decision.votes[0].vote);
         
         Ok(())

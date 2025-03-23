@@ -1,4 +1,4 @@
-# ADR-020: Rigorous Resource and Capability Model
+# ADR-022: Rigorous Resource and Capability Model
 
 ## Status
 

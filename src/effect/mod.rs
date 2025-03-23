@@ -51,6 +51,9 @@ pub mod templates;
 pub mod three_layer;
 pub mod transfer_effect;
 pub mod types;
+pub mod outcome;
+pub mod empty;
+pub mod random;
 
 // Test module
 #[cfg(test)]
@@ -632,5 +635,193 @@ impl Effect for EmptyEffect {
 impl AsyncEffect for EmptyEffect {
     async fn execute_async(&self, _context: &EffectContext) -> EffectResult<EffectOutcome> {
         Ok(EffectOutcome::success(self.id.clone()))
+    }
+}
+
+// Re-exports
+pub use self::types::*;
+pub use self::outcome::*;
+pub use self::boundary::*;
+pub use self::empty::*;
+
+pub mod templates;
+pub mod effect_id;
+pub mod empty_effect;
+
+// Re-exports
+pub use effect_id::EffectId;
+pub use empty_effect::EmptyEffect;
+
+/// Outcome of an effect execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EffectOutcome {
+    /// ID of the effect
+    pub id: String,
+    
+    /// Whether the effect executed successfully
+    pub success: bool,
+    
+    /// Result data from the effect
+    pub data: HashMap<String, serde_json::Value>,
+    
+    /// Error message if the effect failed
+    pub error: Option<String>,
+    
+    /// Execution ID for tracing
+    pub execution_id: Option<String>,
+    
+    /// Changes to resources
+    pub resource_changes: Vec<ResourceChange>,
+    
+    /// Additional metadata
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Change to a resource
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceChange {
+    /// Resource ID
+    pub resource_id: String,
+    
+    /// Type of change
+    pub change_type: ResourceChangeType,
+    
+    /// New value if applicable
+    pub new_value: Option<serde_json::Value>,
+}
+
+/// Type of resource change
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ResourceChangeType {
+    Created,
+    Updated,
+    Deleted,
+    StateChanged,
+}
+
+/// Error that can occur during effect execution
+#[derive(Debug, thiserror::Error)]
+pub enum EffectError {
+    #[error("Effect not found: {0}")]
+    NotFound(String),
+    
+    #[error("Effect execution failed: {0}")]
+    ExecutionFailed(String),
+    
+    #[error("Validation failed: {0}")]
+    ValidationFailed(String),
+    
+    #[error("Required service not available: {0}")]
+    ServiceNotAvailable(String),
+    
+    #[error("Internal error: {0}")]
+    InternalError(String),
+}
+
+/// Result type for effect operations
+pub type EffectResult<T> = std::result::Result<T, EffectError>;
+
+/// Context for effect execution
+#[derive(Debug, Clone, Default)]
+pub struct EffectContext {
+    /// Execution ID for tracing
+    pub execution_id: Option<String>,
+    
+    /// Invoker of the effect
+    pub invoker: Option<crate::address::Address>,
+    
+    /// Domains in scope
+    pub domains: Vec<crate::types::DomainId>,
+    
+    /// Capabilities available
+    pub capabilities: Vec<String>,
+    
+    /// Resource manager
+    pub resource_manager: Option<Arc<crate::resource::manager::ResourceManager>>,
+    
+    /// Authorization service
+    pub authorization_service: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    
+    /// Time service
+    pub time_service: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    
+    /// Boundary manager
+    pub boundary_manager: Option<Arc<dyn std::any::Any + Send + Sync>>,
+}
+
+impl EffectContext {
+    /// Get the authorization service
+    pub fn get_authorization_service<T: 'static>(&self) -> EffectResult<&T> {
+        self.authorization_service
+            .as_ref()
+            .and_then(|service| service.downcast_ref::<T>())
+            .ok_or_else(|| EffectError::ServiceNotAvailable("Authorization service not available".to_string()))
+    }
+    
+    /// Get the time service
+    pub fn get_time_service<T: 'static>(&self) -> EffectResult<&T> {
+        self.time_service
+            .as_ref()
+            .and_then(|service| service.downcast_ref::<T>())
+            .ok_or_else(|| EffectError::ServiceNotAvailable("Time service not available".to_string()))
+    }
+    
+    /// Get the boundary manager
+    pub fn get_boundary_manager<T: 'static>(&self) -> EffectResult<&T> {
+        self.boundary_manager
+            .as_ref()
+            .and_then(|manager| manager.downcast_ref::<T>())
+            .ok_or_else(|| EffectError::ServiceNotAvailable("Boundary manager not available".to_string()))
+    }
+}
+
+/// Effect trait for stateful transformations
+#[async_trait]
+pub trait Effect: Send + Sync {
+    /// Get the ID of this effect
+    fn id(&self) -> &str;
+    
+    /// Get the display name of this effect
+    fn display_name(&self) -> String;
+    
+    /// Get a description of this effect
+    fn description(&self) -> String;
+    
+    /// Execute this effect
+    async fn execute(&self, context: &EffectContext) -> EffectResult<EffectOutcome>;
+}
+
+/// Create a composite effect from multiple effects
+pub fn create_composite_effect(
+    effects: Vec<Arc<dyn Effect>>,
+    description: String,
+) -> Arc<dyn Effect> {
+    // Implementation would create a composite effect
+    // that executes all the given effects in sequence
+    // For now, return a simple empty effect
+    Arc::new(EmptyEffect::with_description(description))
+}
+
+/// Execution boundary for effects
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionBoundary {
+    /// Boundary ID
+    pub id: String,
+    
+    /// Boundary type
+    pub boundary_type: String,
+    
+    /// Metadata
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl ExecutionBoundary {
+    /// Create a new execution boundary
+    pub fn new(id: String) -> Self {
+        Self {
+            id,
+            boundary_type: "default".to_string(),
+            metadata: HashMap::new(),
+        }
     }
 } 

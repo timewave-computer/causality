@@ -8,6 +8,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
+use serde_json;
 
 // Export all types for use throughout the codebase
 pub use self::domain::DomainId;
@@ -422,7 +423,7 @@ pub mod content {
     }
     
     /// Content ID type representing a domain-specific content identifier
-    #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub struct ContentId {
         /// The content hash
         pub hash: ContentHash,
@@ -637,6 +638,94 @@ impl Metadata {
     /// Check if the metadata is empty
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
+    }
+}
+
+/// Represents an ID for a resource
+pub type ResourceId = String;
+
+/// Represents an ID for a domain
+pub type DomainId = String;
+
+/// Represents a trace ID for tracking operations
+pub type TraceId = String;
+
+/// Represents a point in time (Unix timestamp)
+pub type Timestamp = u64;
+
+/// Metadata is a collection of key-value pairs
+pub type Metadata = HashMap<String, serde_json::Value>;
+
+/// Represents a version string, typically a hash or incrementing number
+pub type Version = String;
+
+/// Represents the type of a domain
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DomainType {
+    /// A user domain
+    User,
+    
+    /// A system domain
+    System,
+    
+    /// A shared domain
+    Shared,
+    
+    /// A temporary domain
+    Temporary,
+}
+
+/// Represents a visibility level
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Visibility {
+    /// Visible to everyone
+    Public,
+    
+    /// Visible only to the owner
+    Private,
+    
+    /// Visible to specific entities
+    Restricted(Vec<String>),
+}
+
+/// Extension methods for types
+pub trait TypeExtensions {
+    /// Get a string representation of the type
+    fn to_string_representation(&self) -> String;
+    
+    /// Get a stable hash of the type
+    fn stable_hash(&self) -> u64;
+}
+
+/// Implementation of TypeExtensions for ResourceId
+impl TypeExtensions for ResourceId {
+    fn to_string_representation(&self) -> String {
+        format!("resource:{}", self)
+    }
+    
+    fn stable_hash(&self) -> u64 {
+        // Simple hash function for example purposes
+        let mut hash = 0;
+        for byte in self.as_bytes() {
+            hash = hash.wrapping_mul(31).wrapping_add(*byte as u64);
+        }
+        hash
+    }
+}
+
+/// Implementation of TypeExtensions for DomainId
+impl TypeExtensions for DomainId {
+    fn to_string_representation(&self) -> String {
+        format!("domain:{}", self)
+    }
+    
+    fn stable_hash(&self) -> u64 {
+        // Simple hash function for example purposes
+        let mut hash = 0;
+        for byte in self.as_bytes() {
+            hash = hash.wrapping_mul(31).wrapping_add(*byte as u64);
+        }
+        hash
     }
 }
 

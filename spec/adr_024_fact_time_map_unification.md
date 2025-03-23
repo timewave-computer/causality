@@ -1,6 +1,4 @@
-I'll create an Architecture Decision Record (ADR) that addresses the unification of facts and time maps in the Causality system. Based on your request and the system documentation I've analyzed, this is a key architectural opportunity to streamline temporal validation.
-
-# ADR-019: Unification of Facts and Time Maps
+# ADR-024: Unification of Facts and Time Maps
 
 ## Status
 

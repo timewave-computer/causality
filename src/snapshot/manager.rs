@@ -16,6 +16,7 @@ use crate::execution::context::ExecutionContext;
 use crate::execution::context::{CallFrame, ContextId};
 use crate::resource::usage::ResourceUsage;
 use crate::resource::request::GrantId;
+use crate::effect::{EffectContext, random::{RandomEffectFactory, RandomType}};
 
 /// A unique identifier for a snapshot
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -32,7 +33,14 @@ impl SnapshotId {
             .unwrap_or_default()
             .as_nanos();
         
-        let random_component = rand::random::<u64>();
+        // Use RandomEffect for generating the random component
+        let context = EffectContext::default();
+        let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
+        
+        // Generate random u64 - in synchronous context so we block_on
+        let random_component = std::future::block_on(random_effect.gen_u64(&context))
+            .unwrap_or_else(|_| timestamp as u64);
+            
         let id = format!("snapshot-{}-{}", timestamp, random_component);
         
         SnapshotId(id)

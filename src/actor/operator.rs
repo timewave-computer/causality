@@ -3,18 +3,20 @@
 // This module implements the Operator actor type for Causality.
 // Operators are nodes that participate in the system, executing programs and verifying results.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, Mutex};
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::error::{Error, Result};
 use crate::types::{ContentId, ContentHash, TraceId, Timestamp};
 use crate::actor::{
-    Actor, ActorId, ActorType, ActorState, ActorInfo, 
+    Actor, ActorType, ActorState, ActorInfo, 
     ActorRole, ActorCapability, Message, MessageCategory, MessagePayload,
     GenericActorId,
+    ActorIdBox,
 };
 
 /// Operator capability level
@@ -94,26 +96,85 @@ impl Default for PerformanceMetrics {
     }
 }
 
-/// Peer information
+/// Peer status
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PeerStatus {
+    /// Peer is connected and operational
+    Connected,
+    /// Peer is known but currently disconnected
+    Disconnected,
+    /// Peer is pending connection establishment
+    Pending,
+    /// Peer is available but in degraded mode
+    Degraded,
+    /// Peer is temporarily unavailable
+    Unavailable,
+}
+
+/// Peer performance metrics
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PeerMetrics {
+    /// Average response time in milliseconds
+    pub avg_response_time_ms: f64,
+    /// Number of successful operations
+    pub successful_operations: u64,
+    /// Number of failed operations
+    pub failed_operations: u64,
+    /// Last time metrics were updated
+    pub last_updated: SystemTime,
+}
+
+/// Operator metrics
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OperatorMetrics {
+    /// Total operations processed
+    pub total_operations: u64,
+    /// Number of successful operations
+    pub successful_operations: u64,
+    /// Number of failed operations
+    pub failed_operations: u64,
+    /// Average operation execution time in milliseconds
+    pub avg_execution_time_ms: f64,
+    /// Resource utilization percentage
+    pub resource_utilization: f64,
+    /// Last time metrics were updated
+    pub last_updated: SystemTime,
+}
+
+/// Resource pool
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourcePool {
+    /// Resource name
+    pub name: String,
+    /// Total capacity
+    pub total_capacity: u64,
+    /// Available capacity
+    pub available_capacity: u64,
+    /// Resource utilization percentage
+    pub utilization: f64,
+}
+
+/// Peer information
+#[derive(Debug, Clone)]
 pub struct PeerInfo {
-    /// Peer ID
-    pub id: ActorId,
-    /// Network address
-    pub address: String,
-    /// Last seen timestamp
-    pub last_seen: Timestamp,
-    /// Connection status
-    pub connected: bool,
-    /// Peer capabilities
-    pub capabilities: OperatorCapabilityLevel,
+    /// The ID of the peer
+    pub id: ActorIdBox,
+    
+    /// Status information
+    pub status: PeerStatus,
+    
+    /// Last time communication was received
+    pub last_seen: SystemTime,
+    
+    /// Performance metrics
+    pub metrics: PeerMetrics,
 }
 
 /// Operator actor implementation
 #[derive(Debug)]
 pub struct Operator {
     /// Actor ID
-    id: ActorId,
+    id: ActorIdBox,
     /// Actor type
     actor_type: ActorType,
     /// Actor state
@@ -125,11 +186,11 @@ pub struct Operator {
     /// Network status
     network_status: RwLock<NetworkStatus>,
     /// Resource allocation
-    resources: RwLock<ResourceAllocation>,
+    resources: RwLock<HashMap<String, ResourcePool>>,
     /// Performance metrics
-    metrics: RwLock<PerformanceMetrics>,
+    metrics: RwLock<OperatorMetrics>,
     /// Known peers
-    peers: RwLock<HashMap<ActorId, PeerInfo>>,
+    peers: RwLock<HashMap<ActorIdBox, PeerInfo>>,
     /// Operator capabilities
     capabilities: RwLock<OperatorCapabilityLevel>,
     /// Supported program types
@@ -168,8 +229,8 @@ impl Operator {
             info: RwLock::new(info),
             address: RwLock::new(address.into()),
             network_status: RwLock::new(NetworkStatus::Offline),
-            resources: RwLock::new(ResourceAllocation::default()),
-            metrics: RwLock::new(PerformanceMetrics::default()),
+            resources: RwLock::new(HashMap::new()),
+            metrics: RwLock::new(OperatorMetrics::default()),
             peers: RwLock::new(HashMap::new()),
             capabilities: RwLock::new(capabilities),
             supported_programs: RwLock::new(Vec::new()),
@@ -218,7 +279,7 @@ impl Operator {
     }
     
     /// Get the operator's resource allocation
-    pub fn resources(&self) -> Result<ResourceAllocation> {
+    pub fn resources(&self) -> Result<HashMap<String, ResourcePool>> {
         let resources = self.resources.read().map_err(|_| {
             Error::LockError("Failed to acquire read lock on resources".to_string())
         })?;
@@ -227,7 +288,7 @@ impl Operator {
     }
     
     /// Update the operator's resource allocation
-    pub fn update_resources(&self, resources: ResourceAllocation) -> Result<()> {
+    pub fn update_resources(&self, resources: HashMap<String, ResourcePool>) -> Result<()> {
         let mut res = self.resources.write().map_err(|_| {
             Error::LockError("Failed to acquire write lock on resources".to_string())
         })?;
@@ -238,7 +299,7 @@ impl Operator {
     }
     
     /// Get the operator's performance metrics
-    pub fn metrics(&self) -> Result<PerformanceMetrics> {
+    pub fn metrics(&self) -> Result<OperatorMetrics> {
         let metrics = self.metrics.read().map_err(|_| {
             Error::LockError("Failed to acquire read lock on metrics".to_string())
         })?;
@@ -247,7 +308,7 @@ impl Operator {
     }
     
     /// Update the operator's performance metrics
-    pub fn update_metrics(&self, metrics: PerformanceMetrics) -> Result<()> {
+    pub fn update_metrics(&self, metrics: OperatorMetrics) -> Result<()> {
         let mut m = self.metrics.write().map_err(|_| {
             Error::LockError("Failed to acquire write lock on metrics".to_string())
         })?;
@@ -269,7 +330,7 @@ impl Operator {
     }
     
     /// Remove a peer from the operator's known peers
-    pub fn remove_peer(&self, peer_id: &ActorId) -> Result<()> {
+    pub fn remove_peer(&self, peer_id: &ActorIdBox) -> Result<()> {
         let mut peers = self.peers.write().map_err(|_| {
             Error::LockError("Failed to acquire write lock on peers".to_string())
         })?;
@@ -280,7 +341,7 @@ impl Operator {
     }
     
     /// Get a peer by ID
-    pub fn get_peer(&self, peer_id: &ActorId) -> Result<Option<PeerInfo>> {
+    pub fn get_peer(&self, peer_id: &ActorIdBox) -> Result<Option<PeerInfo>> {
         let peers = self.peers.read().map_err(|_| {
             Error::LockError("Failed to acquire read lock on peers".to_string())
         })?;
@@ -304,24 +365,24 @@ impl Operator {
         })?;
         
         Ok(peers.values()
-            .filter(|p| p.connected)
+            .filter(|p| p.status == PeerStatus::Connected)
             .cloned()
             .collect()
         )
     }
     
     /// Update peer connection status
-    pub fn update_peer_status(&self, peer_id: &ActorId, connected: bool) -> Result<()> {
+    pub fn update_peer_status(&self, peer_id: &ActorIdBox, status: PeerStatus) -> Result<()> {
         let mut peers = self.peers.write().map_err(|_| {
             Error::LockError("Failed to acquire write lock on peers".to_string())
         })?;
         
         if let Some(peer) = peers.get_mut(peer_id) {
-            peer.connected = connected;
-            peer.last_seen = Timestamp::now();
+            peer.status = status;
+            peer.last_seen = SystemTime::now();
             Ok(())
         } else {
-            Err(Error::NotFound(format!("Peer not found: {}", peer_id)))
+            Err(Error::NotFound(format!("Peer not found: {:?}", peer_id)))
         }
     }
     
@@ -422,7 +483,7 @@ impl Operator {
 
 #[async_trait]
 impl Actor for Operator {
-    fn id(&self) -> &ActorId {
+    fn id(&self) -> &ActorIdBox {
         &self.id
     }
     
@@ -694,19 +755,17 @@ mod tests {
         
         // Add peers
         let peer1 = PeerInfo {
-            id: ActorId("peer1".to_string()),
-            address: "127.0.0.1:8001".to_string(),
-            last_seen: Timestamp::now(),
-            connected: true,
-            capabilities: OperatorCapabilityLevel::Basic,
+            id: ActorIdBox::from("peer1"),
+            status: PeerStatus::Connected,
+            last_seen: SystemTime::now(),
+            metrics: PeerMetrics::default(),
         };
         
         let peer2 = PeerInfo {
-            id: ActorId("peer2".to_string()),
-            address: "127.0.0.1:8002".to_string(),
-            last_seen: Timestamp::now(),
-            connected: false,
-            capabilities: OperatorCapabilityLevel::Advanced,
+            id: ActorIdBox::from("peer2"),
+            status: PeerStatus::Disconnected,
+            last_seen: SystemTime::now(),
+            metrics: PeerMetrics::default(),
         };
         
         operator.add_peer(peer1.clone())?;
@@ -715,12 +774,12 @@ mod tests {
         assert_eq!(operator.get_all_peers()?.len(), 2);
         assert_eq!(operator.get_connected_peers()?.len(), 1);
         
-        let retrieved_peer = operator.get_peer(&ActorId("peer1".to_string()))?;
+        let retrieved_peer = operator.get_peer(&ActorIdBox::from("peer1"))?;
         assert!(retrieved_peer.is_some());
-        assert_eq!(retrieved_peer.unwrap().address, "127.0.0.1:8001");
+        assert_eq!(retrieved_peer.unwrap().id, ActorIdBox::from("peer1"));
         
         // Update peer status
-        operator.update_peer_status(&ActorId("peer2".to_string()), true)?;
+        operator.update_peer_status(&ActorIdBox::from("peer2"), PeerStatus::Connected)?;
         assert_eq!(operator.get_connected_peers()?.len(), 2);
         
         // Check permissions
@@ -764,7 +823,7 @@ mod tests {
         // Test handling heartbeat message
         let heartbeat_msg = Message {
             id: "msg1".to_string(),
-            sender: ActorId("system".to_string()),
+            sender: ActorIdBox::from("system"),
             recipients: vec![operator.id().clone()],
             category: MessageCategory::NetworkManagement,
             payload: MessagePayload::Heartbeat,
@@ -777,7 +836,7 @@ mod tests {
         
         let resp = response.unwrap();
         assert_eq!(resp.sender, operator.id().clone());
-        assert_eq!(resp.recipients[0], ActorId("system".to_string()));
+        assert_eq!(resp.recipients[0], ActorIdBox::from("system"));
         
         match resp.payload {
             MessagePayload::HeartbeatResponse { status, .. } => {
@@ -789,7 +848,7 @@ mod tests {
         // Test handling update network status message
         let status_msg = Message {
             id: "msg2".to_string(),
-            sender: ActorId("system".to_string()),
+            sender: ActorIdBox::from("system"),
             recipients: vec![operator.id().clone()],
             category: MessageCategory::NetworkManagement,
             payload: MessagePayload::UpdateNetworkStatus { 
@@ -810,7 +869,7 @@ mod tests {
         // Test handling add supported program message
         let program_msg = Message {
             id: "msg3".to_string(),
-            sender: ActorId("system".to_string()),
+            sender: ActorIdBox::from("system"),
             recipients: vec![operator.id().clone()],
             category: MessageCategory::ProgramManagement,
             payload: MessagePayload::AddSupportedProgram { 

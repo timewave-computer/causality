@@ -44,6 +44,7 @@
         commonInputs = with pkgs; [
           openssl
           pkg-config
+          rocksdb
         ] ++ lib.optionals stdenv.isDarwin [
           darwin.apple_sdk.frameworks.Security
           darwin.apple_sdk.frameworks.SystemConfiguration

@@ -9,20 +9,17 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use crate::types::Metadata;
-use crate::resource::{ResourceId, ResourceRegister, ResourceLogic, Quantity};
-use crate::resource::resource_register::{
-    FungibilityDomain, NullifierKey, ControllerLabel, 
-    StateVisibility, Commitment, NullifierId
-};
+use crate::resource::{ResourceId, ResourceRegister};
+use crate::resource::resource_register::{NullifierId};
 use crate::resource::lifecycle_manager::ResourceRegisterLifecycleManager;
 use crate::resource::relationship_tracker::RelationshipTracker;
-use crate::resource::storage::StorageStrategy;
-use crate::effect::storage::{StorageEffect, StorageOperation};
-use crate::effect::{EffectContext, EffectRuntime, EffectResult, EffectOutcome};
-use crate::domain::{DomainId, DomainType, DomainInfo, DomainRegistry};
+use crate::resource::storage::{StorageStrategy, StorageEffect};
+use crate::effect::EffectContext;
+use crate::effect::three_layer::EffectRuntime;
+use crate::domain::{DomainId, DomainType, DomainRegistry};
 use crate::address::Address;
 use crate::error::{Error, Result};
+use crate::crypto::merkle::Commitment;
 
 /// Unified Storage Adapter
 ///
@@ -33,7 +30,7 @@ pub struct StorageAdapter {
     lifecycle_manager: Arc<ResourceRegisterLifecycleManager>,
     relationship_tracker: Arc<RelationshipTracker>,
     domain_registry: Arc<DomainRegistry>,
-    effect_runtime: Arc<dyn EffectRuntime>,
+    effect_runtime: Arc<EffectRuntime>,
     invoker: Address,
 }
 
@@ -43,7 +40,7 @@ impl StorageAdapter {
         lifecycle_manager: Arc<ResourceRegisterLifecycleManager>,
         relationship_tracker: Arc<RelationshipTracker>,
         domain_registry: Arc<DomainRegistry>,
-        effect_runtime: Arc<dyn EffectRuntime>,
+        effect_runtime: Arc<EffectRuntime>,
         invoker: Address,
     ) -> Self {
         Self {

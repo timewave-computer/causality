@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::error::{Error, Result};
 use crate::types::{ContentId, ContentHash, TraceId};
-use crate::actor::{Actor, ActorId, ActorRole, ActorState, ActorMetadata, ActorCapability};
+use crate::actor::{Actor, ActorId, ActorIdBox, ActorRole, ActorState, ActorMetadata, ActorCapability};
 
 /// Registration status for actors
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -28,7 +28,7 @@ pub enum RegistrationStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActorRegistration {
     /// The actor ID
-    pub actor_id: ActorId,
+    pub actor_id: ActorIdBox,
     /// Roles assigned to this actor
     pub roles: Vec<ActorRole>,
     /// Registration status
@@ -44,7 +44,7 @@ pub struct ActorRegistration {
 impl ActorRegistration {
     /// Create a new actor registration
     pub fn new(
-        actor_id: ActorId, 
+        actor_id: ActorIdBox, 
         roles: Vec<ActorRole>, 
         metadata: ActorMetadata
     ) -> Self {
@@ -108,13 +108,12 @@ impl ActorRegistration {
     }
 }
 
-/// The actor registry for managing actor registrations
-#[derive(Debug)]
+/// Registry for actor registration and discovery
 pub struct ActorRegistry {
     /// Actor registrations by ID
-    registrations: RwLock<HashMap<ActorId, ActorRegistration>>,
+    registrations: RwLock<HashMap<ActorIdBox, ActorRegistration>>,
     /// Actor instances by ID
-    actors: RwLock<HashMap<ActorId, Arc<dyn Actor>>>,
+    actors: RwLock<HashMap<ActorIdBox, Arc<dyn Actor>>>,
 }
 
 impl ActorRegistry {
@@ -166,8 +165,8 @@ impl ActorRegistry {
         Ok(())
     }
     
-    /// Get a registration by actor ID
-    pub fn get_registration(&self, actor_id: &ActorId) -> Result<Option<ActorRegistration>> {
+    /// Get registration by actor ID
+    pub fn get_registration(&self, actor_id: &ActorIdBox) -> Result<Option<ActorRegistration>> {
         let registrations = self.registrations.read().map_err(|_| {
             Error::LockError("Failed to acquire read lock on registrations".to_string())
         })?;
@@ -175,8 +174,8 @@ impl ActorRegistry {
         Ok(registrations.get(actor_id).cloned())
     }
     
-    /// Get an actor by ID
-    pub fn get_actor(&self, actor_id: &ActorId) -> Result<Option<Arc<dyn Actor>>> {
+    /// Get actor by ID
+    pub fn get_actor(&self, actor_id: &ActorIdBox) -> Result<Option<Arc<dyn Actor>>> {
         let actors = self.actors.read().map_err(|_| {
             Error::LockError("Failed to acquire read lock on actors".to_string())
         })?;
@@ -203,7 +202,7 @@ impl ActorRegistry {
             Error::LockError("Failed to acquire read lock on actors".to_string())
         })?;
         
-        let actor_ids: Vec<ActorId> = registrations.values()
+        let actor_ids: Vec<ActorIdBox> = registrations.values()
             .filter(|reg| reg.roles.contains(role) && reg.is_active())
             .map(|reg| reg.actor_id.clone())
             .collect();
@@ -234,10 +233,10 @@ impl ActorRegistry {
         Ok(result)
     }
     
-    /// Update a registration status
+    /// Update registration status
     pub fn update_registration_status(
         &self, 
-        actor_id: &ActorId, 
+        actor_id: &ActorIdBox, 
         status: RegistrationStatus
     ) -> Result<()> {
         let mut registrations = self.registrations.write().map_err(|_| {
@@ -256,8 +255,8 @@ impl ActorRegistry {
         }
     }
     
-    /// Revoke an actor registration
-    pub fn revoke_registration(&self, actor_id: &ActorId, reason: impl Into<String>) -> Result<()> {
+    /// Revoke registration
+    pub fn revoke_registration(&self, actor_id: &ActorIdBox, reason: impl Into<String>) -> Result<()> {
         self.update_registration_status(
             actor_id, 
             RegistrationStatus::Revoked(reason.into())
@@ -265,7 +264,7 @@ impl ActorRegistry {
     }
     
     /// Remove an actor from the registry
-    pub fn remove_actor(&self, actor_id: &ActorId) -> Result<()> {
+    pub fn remove_actor(&self, actor_id: &ActorIdBox) -> Result<()> {
         let mut actors = self.actors.write().map_err(|_| {
             Error::LockError("Failed to acquire write lock on actors".to_string())
         })?;
@@ -289,7 +288,7 @@ mod tests {
     
     #[derive(Debug)]
     struct TestActor {
-        id: ActorId,
+        id: ActorIdBox,
         roles: Vec<ActorRole>,
         state: ActorState,
         metadata: ActorMetadata,
@@ -311,7 +310,7 @@ mod tests {
             };
             
             TestActor {
-                id: ActorId::new(id),
+                id: ActorIdBox::new(id),
                 roles,
                 state: ActorState::Created,
                 metadata,
@@ -321,7 +320,7 @@ mod tests {
     
     #[async_trait]
     impl Actor for TestActor {
-        fn id(&self) -> &ActorId {
+        fn id(&self) -> &ActorIdBox {
             &self.id
         }
         
@@ -365,7 +364,7 @@ mod tests {
     
     #[test]
     fn test_actor_registration() {
-        let actor_id = ActorId::new("test-actor");
+        let actor_id = ActorIdBox::new("test-actor");
         let roles = vec![ActorRole::User];
         
         let now = std::time::SystemTime::now()
@@ -416,7 +415,7 @@ mod tests {
         let registry = ActorRegistry::new();
         
         // Create an actor and registration
-        let actor_id = ActorId::new("test-actor");
+        let actor_id = ActorIdBox::new("test-actor");
         let roles = vec![ActorRole::User];
         
         let now = std::time::SystemTime::now()
