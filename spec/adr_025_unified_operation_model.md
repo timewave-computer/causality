@@ -2,7 +2,20 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Implementation Status
+
+This ADR has been fully implemented. The unified operation model is now the standard approach for operations in Causality. Key implementation components include:
+
+- Consistent representation of operations across all abstraction levels
+- Execution context framework for different environments and phases
+- Integration with the capability-based authorization system
+- Support for transformation between abstract and physical operations
+- Single validation pipeline for all operation types
+- ZK-proof integration for verifiable operations
+
+The implementation provides a coherent operation model that spans the full range from abstract operations to blockchain-specific transactions. Documentation is available in [docs/src/unified_operation_model.md](/docs/src/unified_operation_model.md) and [docs/src/operation_validation.md](/docs/src/operation_validation.md).
 
 ## Context
 

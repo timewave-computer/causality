@@ -2,7 +2,30 @@
 
 ## Status
 
-Proposed
+Accepted, Partially Implemented
+
+## Implementation Status
+
+The Program Deployment and Activation System described in this ADR has been partially implemented with the following components:
+
+### Implemented Components
+- **Actor Capabilities**: The `ActorCapability` system in `src/actor/role.rs` implements deployment capabilities with `DeployProgram` and `UpgradeProgram` capabilities
+- **Domain Capabilities**: The domain adapter system in `src/domain/capability.rs` supports the `DeployContract` capability for various domain types
+- **Basic Deployment Infrastructure**: Core components of the deployment infrastructure exist, including capability validation and management
+- **Resource Deployment Model**: The implementation in `docs/src/resource_deployment.md` shows a partial implementation of the deployment process, including packaging, validation, execution, and activation phases
+
+### Partially Implemented Features
+- **Resource Packaging**: Basic packaging for resources exists but doesn't fully implement the account-program-based gateway
+- **Deployment Validation**: Capability validation exists but not the full validation pipeline
+- **Effect Handler Integration**: Integration with the effect system for deployment is partially implemented
+
+### Missing Components
+- **Account Program Gateway**: The account program effect mechanism for deployments is not fully implemented
+- **Activation Strategies**: The variety of activation strategies described in the ADR is not yet implemented
+- **Deployment CLI Interface**: The CLI interface for deployments is not yet implemented
+- **Transient Deployment Domains**: The pattern for temporary deployment domains is not implemented
+- **Full Custom Effect Registration**: The mechanism for deploying and registering custom effects is not fully implemented
+- **Deployment Simulation Integration**: Integration with the simulation system is not implemented
 
 ## Context
 
@@ -17,7 +40,7 @@ We need a deployment system that preserves these principles while providing a co
 
 ## Decision
 
-We will implement a comprehensive deployment system that routes all deployment actions through account programs, supports flexible activation strategies, and enables safe extension through custom effects and Domain adapters.
+Accepted, not yet implemented. Requires update in light of recent ADRs.
 
 ### Account Programs as Deployment Gateways
 

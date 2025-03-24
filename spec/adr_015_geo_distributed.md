@@ -2,7 +2,24 @@
 
 ## Status
 
-Proposed
+Accepted, not yet implemented
+
+## Implementation Status
+
+Not implemented. The Geo-distributed Node Implementation using QUIC as described in this ADR has not been implemented yet. The current codebase has a basic P2P log synchronization framework in `/src/log/sync.rs` which includes:
+
+1. A synchronization manager that can coordinate with peers
+2. A basic HTTP-based protocol implementation (with placeholder methods)
+3. Interfaces for peer management and discovery
+
+However, this implementation does not use QUIC for transport as specified in the ADR. The current implementation:
+
+- Uses HTTP rather than QUIC for transport
+- Contains many placeholder/unimplemented methods
+- Lacks the certificate management, secure TLS 1.3 communication, and other security features described in the ADR
+- Does not implement the message types, network modes, or peer discovery mechanisms specified in the ADR
+
+The implementation appears to be a foundation for P2P synchronization but would need significant development to meet the requirements laid out in this ADR for a full Geo-distributed Node Implementation.
 
 ## Context
 

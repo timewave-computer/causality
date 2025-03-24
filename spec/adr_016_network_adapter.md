@@ -2,7 +2,24 @@
 
 ## Status
 
-Proposed
+Accepted, updates required in light of recent ADRs
+
+## Implementation Status
+
+Not implemented. The NetworkAdapter as described in this ADR has not been implemented in the codebase. While there are some networking concepts in the codebase, such as:
+
+1. `PeerInfo` and sync-related structures in `/src/log/sync.rs` - Related to log synchronization between peers
+2. Network status enums in `/src/actor/operator.rs` - Basic status indicators for operators
+
+These implementations are very limited and don't match the comprehensive NetworkAdapter design described in this ADR. Specifically, the codebase lacks:
+
+1. The core `NetworkAdapter` structure and its API
+2. The standardized message format with types and priorities
+3. Peer management with different peer types
+4. The security features (authentication, encryption)
+5. The network state management system
+
+It appears that some basic peer-to-peer synchronization code exists (for log synchronization), but it's focused on a specific use case rather than providing the general network communication layer described in this ADR.
 
 ## Context
 

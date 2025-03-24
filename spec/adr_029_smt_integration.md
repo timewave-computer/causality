@@ -2,7 +2,20 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Implementation Status
+
+This ADR has been fully implemented. The Sparse Merkle Tree (SMT) integration is now a standard component in the Causality storage architecture. Key implementation components include:
+
+- ContentAddressedStorage implementation backed by SMT
+- Integration with the unified ResourceRegister model
+- Support for efficient state proofs and verification
+- Implementation of domain-specific storage strategies
+- Cross-domain state verification with SMT proofs
+- Optimization for ZK-circuit compatibility
+
+The implementation provides efficient, verifiable storage that maintains content-addressing benefits while supporting diverse blockchain environments. Documentation is available in [docs/src/storage_models.md](/docs/src/storage_models.md) and [docs/src/storage_architecture.md](/docs/src/storage_architecture.md).
 
 ## Context
 

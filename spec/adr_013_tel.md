@@ -4,6 +4,25 @@
 
 Accepted
 
+## Implementation Status
+
+Substantially implemented. The Temporal Effect Language (TEL) has been implemented in `/src/tel/` with support for core features described in the ADR:
+
+1. **Core Types**: `TelScript`, `TelOperation`, and related types have been implemented in `/src/tel/script.rs` and `/src/tel/types.rs`
+2. **Domain-Agnostic API**: Implemented through a unified interface in `TelHandler` and domain-specific handlers (EVM, CosmWasm)
+3. **Operation Types**: Support for transfers, storage operations, queries, sequences, parallel execution, and conditional operations
+4. **Handler System**: Extensible handler system through the `TelHandlerRegistry` that can work with multiple domains
+5. **Integration with Effect System**: Integration through `compile_tel` and `execute_tel` functions to create and execute effects
+6. **Chain Adapters**: Domain-specific adapters implemented for EVM and CosmWasm chains
+
+While the implementation closely follows the ADR, some aspects are still being developed:
+
+1. The parser for TEL scripts is implemented but appears to be placeholder code in some areas
+2. ZK circuit integration and proof verification is implemented at a basic level but still evolving
+3. The proposed complex resource operations (merging, splitting) are partially implemented
+
+The system effectively provides a unified API for expressing effects across domains, and the EVM and CosmWasm handlers demonstrate the ability to translate TEL operations into chain-specific transactions.
+
 ## Context
 
 Causality programs need to express complex **effects across domains**. Currently, effects are expressed using several incompatible approaches:

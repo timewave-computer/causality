@@ -5,6 +5,42 @@
 
 Accepted
 
+## Implementation Status
+
+This ADR has been partially implemented with a shift in approach from the original schema-driven generation model to a more traditional factory-based approach. Key components implemented include:
+
+1. **Domain Adapters for Multiple Chains**:
+   - Implemented EVM adapter for Ethereum and EVM-compatible chains
+   - Implemented CosmWasm adapter for Cosmos ecosystem
+   - Added support for Succinct adapter for ZK proofs
+   - Created interfaces for cross-domain operations
+
+2. **Factory Pattern**:
+   - Implemented the `DomainAdapterFactory` trait for creating adapters
+   - Implemented concrete factories like `EthereumAdapterFactory`
+   - Added configuration-based adapter creation
+
+3. **Effect Handler Integration**:
+   - Integrated adapters with the effect system through interfaces
+   - Created boundary crossing mechanisms for secure domain interactions
+   - Added support for effect execution across domains
+
+4. **Proof Management**:
+   - Implemented proof validation for transactions
+   - Added fact observation and verification
+   - Created time map integration for temporal consistency
+
+5. **Storage Strategies**:
+   - Implemented storage effect factories for each domain
+   - Created commitment-based and fully on-chain storage options
+   - Added ZK integration for storage proofs
+
+While the core principles of domain adapter isolation and standardized interfaces have been implemented, the implementation diverged from the original schema-driven code generation approach. The adapter-generator directory exists but is in an early state, with the system currently using manually coded adapters with factory patterns instead of generated adapters.
+
+Recent development indicates a move toward further simplification and refactoring of this system, as indicated by the latest commit message: "code cleanup from refactor, move hashing into traits, depreciate effect_adapters".
+
+The implementation has evolved to align with ADR-023's three-layer effect architecture, which provides a more comprehensive model for effect handling that includes domain adapters as part of a unified approach.
+
 
 ## Context
 

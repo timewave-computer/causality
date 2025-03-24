@@ -2,7 +2,36 @@
 
 Status:
 
-Accepted
+Partially Implemented
+
+## Implementation Status
+
+The Autonomous Schema Evolution and Hostage Prevention systems described in this ADR have been partially implemented. The codebase shows evidence of the core concepts, but with some components still in development.
+
+1. **Schema Definition System**:
+   - Basic schema definition structures exist in `/src/schema/definition.rs` including `Schema`, `SchemaField`, and `SchemaType`
+   - Type compatibility checking is implemented to ensure schema changes preserve backward compatibility
+   - Serialization/deserialization support in JSON and TOML formats
+
+2. **Evolution Rules Engine**:
+   - Implementation of the core evolution rules system in `/src/schema/evolution.rs`
+   - Support for the change types described in the ADR: AddOptionalField, AddDefaultField, RemoveUnusedField, etc.
+   - Rule-based validation of schema changes to ensure they follow allowed evolution patterns
+
+3. **Safe State Management**:
+   - Safe state system implemented in `/src/schema/safe_state.rs` with multiple strategies:
+     - NoPendingReturns (as recommended in the ADR)
+     - NoInFlightOperations
+     - NoActiveOperators
+   - Transaction model for schema updates that ensures safety and provides rollback capability
+   - Timeout handling for long-running operations
+
+4. **Resource Versioning Alternative**:
+   - An alternative approach using resource versioning is implemented in `/src/resource/versioning.rs`
+   - This provides similar functionality but focused specifically on resources rather than generic schemas
+   - Includes migration paths and compatibility checking
+
+The implementation represents a significant portion of the ADR's recommended design, though some components (particularly the migration system) appear to be in early stages of development. The project may be using the resource versioning system as a more targeted alternative to the general schema evolution system.
 
 ## Autonomous Schema Evolution
 

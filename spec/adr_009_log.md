@@ -2,7 +2,42 @@
 
 ## Status
 
-Accepted
+Implemented
+
+## Implementation Status
+
+The unified log system has been fully implemented as described in this ADR. The implementation provides a content-addressed, append-only log system that stores facts, effects, and events in a consistent format. Key aspects of the implementation include:
+
+1. **Core Data Structures**:
+   - The `LogEntry` structure in `/src/log/entry.rs` implements the unified entry format with content addressing via the `entry_hash` field
+   - Specialized entry types (`EffectEntry`, `FactEntry`, `EventEntry`) are implemented in their respective modules
+   - Log entries are fully content-addressed with verification capabilities through `verify_hash()`
+
+2. **Storage System**:
+   - Log segmentation is implemented in `/src/log/segment.rs` and managed through the `LogSegmentManager`
+   - File-based storage in `/src/log/storage/file_storage.rs` provides persistence with segment rotation
+   - Memory-based storage is available for testing and in-memory operations
+   - Configurable storage formats (JSON, Binary, CBOR) are supported
+
+3. **Replay Engine**:
+   - Full replay functionality implemented in `/src/log/replay/engine.rs`
+   - Filtering by time, entry type, resources, and domains
+   - Support for callbacks during replay for custom processing
+   - State tracking during replay for reconstructing program state
+
+4. **Time Map Integration**:
+   - Integration with the distributed time map for temporal consistency in `/src/log/time_map.rs`
+   - Verification of fact observations against the time map
+   - Support for time-ranged queries using the time map
+
+The implementation successfully addresses all the key requirements outlined in the ADR, including:
+- Unified storage for facts, effects, and events
+- Content addressing for verification
+- Segmentation for performance
+- Replay capabilities for state reconstruction
+- Time map integration for temporal consistency
+
+This unified log implementation serves as the foundation for the system's memory, capturing all observations and effects in a verifiable, replayable format.
 
 ## Context
 

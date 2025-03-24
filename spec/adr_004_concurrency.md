@@ -4,6 +4,56 @@
 
 Accepted
 
+## Implementation Status
+
+This ADR has been fully implemented with a comprehensive resource-scoped concurrency model. The key components implemented include:
+
+1. **ResourceGuard and RAII Pattern**:
+   - Implemented a robust `ResourceGuard<T>` in `src/concurrency/primitives/resource_guard.rs`
+   - Uses RAII pattern for automatic resource release when guards go out of scope
+   - Provides `Deref`/`DerefMut` traits for convenient access to resources
+   - Includes additional features like `map()` for resource transformation
+
+2. **ResourceManager**:
+   - Implemented `ResourceManager` for handling registration, acquisition, and release of resources
+   - Uses a wait queue mechanism to manage resource contention
+   - Supports deadlock detection and prevention
+   - Provides thread-safe access with `SharedResourceManager`
+
+3. **Concurrency Primitives**:
+   - Implements all proposed primitives: `barrier`, `race`, `fork`, and `timeout`
+   - `Barrier` pattern with resource availability and condition support
+   - `Race` pattern with variants like `race_ok`, `race_result`, and `race_until`
+   - `Fork` pattern with `fork_join`, `fork_try_join`, and `fork_each` for parallel execution
+
+4. **Wait Queue and Scheduler**:
+   - Implements a deterministic `WaitQueue` for resource requests
+   - `TaskScheduler` manages concurrent tasks with resource requirements
+   - Prioritizes tasks based on priority and age
+   - Provides a mechanism for deadlock detection
+
+5. **Task Management**:
+   - `TaskId` system for uniquely identifying concurrent operations
+   - `ResourceContext` for tracking resource allocations
+   - Support for acquiring multiple resources atomically
+   - Proper cleanup on task completion
+
+6. **Integration with Resource System**:
+   - Resource-based concurrency integrates with the ResourceRegister model
+   - Fine-grained locking at the resource level for maximum parallelism
+   - Support for read vs. write locks for concurrent operations
+   - Safe concurrent access to content-addressed resources
+
+7. **VM Integration**:
+   - `ResourceVmIntegration` for VM memory management
+   - Resource allocation within the VM environment
+   - Safe loading/storing of resources between VM memory and the resource system
+   - VM memory segments with controlled access
+
+The implementation provides a solid foundation for safe, deterministic concurrent execution in a resource-scoped model. It includes several enhancements beyond the original proposal, particularly in the areas of type-safe resource access, sophisticated concurrency patterns, and deadlock prevention.
+
+For more details, see [docs/src/concurrency.md](/docs/src/concurrency.md).
+
 
 ## Context
 

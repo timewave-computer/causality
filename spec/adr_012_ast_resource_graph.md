@@ -4,6 +4,20 @@
 
 Accepted
 
+## Implementation Status
+
+Implemented. The AST-resource graph correspondence system has been fully implemented in `/src/ast/resource_graph.rs` with integration in the resource allocation system through `/src/resource/static_alloc.rs`. The implementation includes all core components described in the decision:
+
+1. **AST Node Tagging**: Implemented in `AstNodeId` and `AstNodeType` structures
+2. **Resource Attribution**: Implemented via `AttributedResourceGrant` with source node references
+3. **Correlation Tracking**: Fully implemented in `CorrelationTracker` and `GraphCorrelation` classes
+4. **Divergence Analysis**: Implemented with `DivergencePoint` and `DivergenceType` structures
+5. **Resource Delta Tracking**: Implemented via the `Delta` structure with support for conservation validation
+6. **Controller Transition Tracking**: Implemented with `ControllerTransition` structure
+7. **Visual Debugging**: Initial support via DOT graph generation in `graph_to_dot` function
+
+The implementation closely follows the specifications in the ADR and includes a comprehensive test suite that verifies the core functionality. The resource allocation system has been extended to optionally accept an `AstContext` with allocations, enabling bidirectional tracking between AST nodes and resource grants.
+
 ## Context
 
 In our content-addressable execution system implemented in Rust, we're implementing two conceptually different but related graphs:

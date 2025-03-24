@@ -2,7 +2,27 @@
 
 ## Status
 
-Accepted
+Implemented
+
+## Implementation Status
+
+The ZK Register System has been fully implemented with the following key components:
+
+1. **Content-Addressed Registers**: Implemented in `src/resource/content_addressed_register.rs` providing deterministic register identity through content hashing and one-time use semantics.
+
+2. **Register Lifecycle Management**: Implemented in `src/resource/garbage_collection.rs` with support for epoch-based garbage collection, register archiving, and configurable retention policies.
+
+3. **ZK Integration**: Implemented through multiple components:
+   - `src/resource/zk_integration.rs`: Core integration between registers and ZK proofs
+   - `src/domain_adapters/evm/zk.rs`: EVM-specific ZK operations
+   - `src/domain_adapters/cosmwasm/zk.rs`: CosmWasm-specific ZK operations
+   - `src/verification/`: Unified verification framework including ZK proof verification
+
+4. **Register Operations**: Full support for register operations (create, update, transfer, consume) with ZK proofs and nullifiers to prevent double-spending.
+
+5. **Resource Conservation**: Implemented with validation that resources are neither created nor destroyed inappropriately.
+
+6. **Unification with Resource Model**: The resource and register models have been unified as outlined in ADR-021, providing a coherent abstraction for both concepts.
 
 ## Author
 

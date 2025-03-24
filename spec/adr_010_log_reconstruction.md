@@ -2,7 +2,36 @@
 
 ## Status
 
-Accepted
+Implemented
+
+## Implementation Status
+
+The Committee as External Indexer Proxy and Unified Log Reconstruction system has been fully implemented. This implementation successfully transforms the Committee role from simulated chain nodes to external indexer proxies that observe real chain data, extract facts, and support log reconstruction. Key aspects of the implementation include:
+
+1. **Chain Indexing Infrastructure**:
+   - The foundation is implemented in `/src/committee/indexer.rs` providing a flexible `ChainIndexer` trait with concrete implementations for different blockchain types
+   - `IndexerConfig` and `IndexingOptions` allow customization of indexing behavior
+   - `IndexerFactory` and `IndexerRegistry` provide registration and management of chain indexers
+
+2. **Fact Extraction**:
+   - Rule-based fact extraction is implemented in `/src/committee/extraction.rs`
+   - Supports complex extraction conditions through `ExtractionCondition` enum (equals, matches, contains, etc.)
+   - Flexible field mapping with transformations for data normalization
+   - TOML-based rule configuration as specified in the ADR
+
+3. **Log Reconstruction**:
+   - Complete log reconstruction pipeline in `/src/committee/reconstruction.rs`
+   - `LogReconstructor` rebuilds logs from extracted facts
+   - Includes deduplication, validation, and batched processing
+   - `ReconstructorFactory` and `ReconstructorRegistry` manage multiple reconstructors
+
+4. **Unified Integration**:
+   - Committees now act as indexer proxies rather than simulated nodes
+   - Facts are extracted from real chain data using configurable rules
+   - Log reconstruction is an on-demand process
+   - Facts are treated as independent of their storage, enabling third-party reconstruction
+
+The implementation successfully shifts the Committee's role to be an external indexer proxy while maintaining fact observation capabilities. It enables Operators and external users to reconstruct FactLogs from chain data using the same extraction rules, supporting the key architectural goal of making facts derivable products rather than required to be stored by Committees.
 
 # Context
 

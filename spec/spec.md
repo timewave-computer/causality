@@ -178,18 +178,102 @@ pub struct DomainId(pub String);
 
 ## Effect
 
-```haskell
-data Effect
-    = Deposit { Domain :: DomainID, asset :: Asset, amount :: Amount }
-    | Withdraw { Domain :: DomainID, asset :: Asset, amount :: Amount }
-    | Transfer { fromProgram :: ProgramID, toProgram :: ProgramID, asset :: Asset, amount :: Amount }
-    | ObserveFact { factID :: FactID }
-    | Invoke { targetProgram :: ProgramID, invocation :: Invocation }
-    | EvolveSchema { oldSchema :: Schema, newSchema :: Schema, evolutionResult :: EvolutionResult }
-    | RegisterOp { registerID :: RegisterID, operation :: RegisterOperation, authMethod :: AuthorizationMethod }
-    | RegisterCreate { owner :: Address, contents :: RegisterContents }
-    | RegisterTransfer { sourceRegID :: RegisterID, targetDomain :: DomainID, controllerLabel :: ControllerLabel }
-    | CustomEffect Text Value
+```rust
+/// Effect types in the Causality system
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Effect {
+    /// Deposit assets into a domain
+    Deposit {
+        /// Target domain for the deposit
+        domain: DomainId,
+        /// Asset type being deposited
+        asset: Asset,
+        /// Amount being deposited
+        amount: Amount,
+    },
+    
+    /// Withdraw assets from a domain
+    Withdraw {
+        /// Source domain for the withdrawal
+        domain: DomainId,
+        /// Asset type being withdrawn
+        asset: Asset,
+        /// Amount being withdrawn
+        amount: Amount,
+    },
+    
+    /// Transfer assets between programs
+    Transfer {
+        /// Source program ID
+        from_program: ProgramId,
+        /// Target program ID
+        to_program: ProgramId,
+        /// Asset type being transferred
+        asset: Asset,
+        /// Amount being transferred
+        amount: Amount,
+    },
+    
+    /// Observe a fact from a domain
+    ObserveFact {
+        /// ID of the fact being observed
+        fact_id: FactId,
+    },
+    
+    /// Invoke another program
+    Invoke {
+        /// Target program ID to invoke
+        target_program: ProgramId,
+        /// Invocation data
+        invocation: Invocation,
+    },
+    
+    /// Evolve a program's schema
+    EvolveSchema {
+        /// Old schema being upgraded from
+        old_schema: Schema,
+        /// New schema being upgraded to
+        new_schema: Schema,
+        /// Result of the evolution process
+        evolution_result: EvolutionResult,
+    },
+    
+    /// Perform an operation on a register
+    RegisterOp {
+        /// ID of the register to operate on
+        register_id: RegisterId,
+        /// Operation to perform
+        operation: RegisterOperation,
+        /// Authorization method
+        auth_method: AuthorizationMethod,
+    },
+    
+    /// Create a new register
+    RegisterCreate {
+        /// Owner of the new register
+        owner: Address,
+        /// Contents of the new register
+        contents: RegisterContents,
+    },
+    
+    /// Transfer a register to another domain
+    RegisterTransfer {
+        /// Source register ID
+        source_reg_id: RegisterId,
+        /// Target domain
+        target_domain: DomainId,
+        /// Controller label for the transfer
+        controller_label: ControllerLabel,
+    },
+    
+    /// Custom effect with arbitrary data
+    CustomEffect {
+        /// Effect type name
+        name: String,
+        /// Effect data
+        data: serde_json::Value,
+    },
+}
 ```
 
 ## Effect Adapter 
@@ -288,27 +372,104 @@ pub struct AdapterSchema {
 
 ## Register
 
-```haskell
-data Register = Register
-    { registerId :: RegisterID
-    , owner :: Address
-    , contents :: RegisterContents
-    , lastUpdated :: BlockHeight
-    , metadata :: Map Text Value
-    , controllerLabel :: Maybe ControllerLabel
-    }
+```rust
+/// Register structure for resource management
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Register {
+    /// Unique identifier for this register
+    pub register_id: RegisterId,
+    
+    /// Owner address of this register
+    pub owner: Address,
+    
+    /// Contents stored in this register
+    pub contents: RegisterContents,
+    
+    /// Last update block height
+    pub last_updated: BlockHeight,
+    
+    /// Metadata for this register
+    pub metadata: HashMap<String, serde_json::Value>,
+    
+    /// Optional controller label
+    pub controller_label: Option<ControllerLabel>,
+}
 
-data RegisterContents 
-    = Resource Resource
-    | TokenBalance TokenType Address Amount
-    | NFTContent CollectionAddress TokenId
-    | StateCommitment CommitmentType ByteString
-    | TimeMapCommitment BlockHeight ByteString
-    | DataObject DataFormat ByteString
-    | EffectDAG EffectID ByteString
-    | ResourceNullifier NullifierKey ByteString
-    | ResourceCommitment CommitmentKey ByteString
-    | CompositeContents [RegisterContents]
+/// Contents that can be stored in a register
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RegisterContents {
+    /// Resource data
+    Resource(Resource),
+    
+    /// Token balance
+    TokenBalance {
+        /// Token type
+        token_type: TokenType,
+        /// Owner address
+        address: Address,
+        /// Balance amount
+        amount: Amount,
+    },
+    
+    /// Non-fungible token content
+    NFTContent {
+        /// Collection address
+        collection_address: CollectionAddress,
+        /// Token ID
+        token_id: TokenId,
+    },
+    
+    /// State commitment
+    StateCommitment {
+        /// Type of commitment
+        commitment_type: CommitmentType,
+        /// Commitment data
+        data: Vec<u8>,
+    },
+    
+    /// Time map commitment
+    TimeMapCommitment {
+        /// Block height
+        block_height: BlockHeight,
+        /// Commitment data
+        data: Vec<u8>,
+    },
+    
+    /// Generic data object
+    DataObject {
+        /// Format of the data
+        data_format: DataFormat,
+        /// Object data
+        data: Vec<u8>,
+    },
+    
+    /// Effect DAG
+    EffectDAG {
+        /// Effect ID
+        effect_id: EffectId,
+        /// DAG data
+        data: Vec<u8>,
+    },
+    
+    /// Resource nullifier
+    ResourceNullifier {
+        /// Nullifier key
+        nullifier_key: NullifierKey,
+        /// Nullifier data
+        data: Vec<u8>,
+    },
+    
+    /// Resource commitment
+    ResourceCommitment {
+        /// Commitment key
+        commitment_key: CommitmentKey,
+        /// Commitment data
+        data: Vec<u8>,
+    },
+    
+    /// Composite contents
+    CompositeContents(Vec<RegisterContents>),
+}
 ```
 
 ## Content-Addressed Code
@@ -367,129 +528,191 @@ pub struct ContentAddressedEffect {
 
 ## Authorization Method
 
-```haskell
-data AuthorizationMethod
-    = ZKProofAuthorization VerificationKey Proof
-    | TokenOwnershipAuthorization TokenAddress Amount
-    | NFTOwnershipAuthorization CollectionAddress TokenId
-    | MultiSigAuthorization [Address] Int [Signature]
-    | DAOAuthorization DAOAddress ProposalId
-    | TimelockAuthorization Address Timestamp
-    | CompositeAuthorization [AuthorizationMethod] AuthCombinator
+```rust
+/// Methods for authorizing operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AuthorizationMethod {
+    /// Zero-knowledge proof authorization
+    ZKProofAuthorization {
+        /// Verification key
+        verification_key: VerificationKey,
+        /// Proof data
+        proof: Proof,
+    },
+    
+    /// Token ownership authorization
+    TokenOwnershipAuthorization {
+        /// Token address
+        token_address: TokenAddress,
+        /// Amount owned
+        amount: Amount,
+    },
+    
+    /// NFT ownership authorization
+    NFTOwnershipAuthorization {
+        /// Collection address
+        collection_address: CollectionAddress,
+        /// Token ID
+        token_id: TokenId,
+    },
+    
+    /// Multi-signature authorization
+    MultiSigAuthorization {
+        /// Signer addresses
+        addresses: Vec<Address>,
+        /// Threshold of required signatures
+        threshold: u32,
+        /// Signatures
+        signatures: Vec<Signature>,
+    },
+    
+    /// DAO-based authorization
+    DAOAuthorization {
+        /// DAO address
+        dao_address: DAOAddress,
+        /// Proposal ID
+        proposal_id: ProposalId,
+    },
+    
+    /// Timelock authorization
+    TimelockAuthorization {
+        /// Authorized address
+        address: Address,
+        /// Unlock timestamp
+        timestamp: Timestamp,
+    },
+    
+    /// Composite authorization
+    CompositeAuthorization {
+        /// Authorization methods
+        methods: Vec<AuthorizationMethod>,
+        /// How to combine the methods
+        combinator: AuthCombinator,
+    },
+}
 ```
 
 ## Register Operation
 
-```haskell
-data RegisterOperation = RegisterOperation
-    { opType :: OperationType
-    , registers :: [RegisterID]
-    , newContents :: Maybe RegisterContents
-    , authorization :: Authorization
-    , proof :: Proof
-    , resourceDelta :: Delta
-    }
-```
-
-## FactSnapshot (causal dependency record)
-
 ```rust
-/// A unique identifier for a fact
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct FactId(pub String);
-
-/// A struct representing a point-in-time snapshot of facts
-/// that an effect depends on.
+/// Operation on a register
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FactSnapshot {
-    /// Facts observed before the effect
-    pub observed_facts: Vec<FactId>,
+pub struct RegisterOperation {
+    /// Type of operation
+    pub op_type: OperationType,
     
-    /// The observer (committee) that observed the facts
-    pub observer: String,
+    /// Registers involved in the operation
+    pub registers: Vec<RegisterId>,
     
-    /// The timestamp when the snapshot was created
-    pub created_at: Timestamp,
+    /// New contents (if applicable)
+    pub new_contents: Option<RegisterContents>,
     
-    /// Register observations included in this snapshot
-    pub register_observations: HashMap<RegisterId, RegisterObservation>,
+    /// Authorization for this operation
+    pub authorization: Authorization,
     
-    /// Domains that contributed facts to this snapshot
-    pub domains: HashSet<DomainId>,
+    /// Proof for this operation
+    pub proof: Proof,
     
-    /// Additional metadata for the snapshot
-    pub metadata: HashMap<String, String>,
+    /// Resource delta from this operation
+    pub resource_delta: Delta,
 }
-
-/// Represents an observation of a register's state
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegisterObservation {
-    /// The observed register ID
-    pub register_id: RegisterId,
-    
-    /// The fact ID of the register observation
-    pub fact_id: FactId,
-    
-    /// The domain the register was observed in
-    pub domain_id: DomainId,
-    
-    /// The timestamp of the observation
-    pub observed_at: Timestamp,
-    
-    /// The hash of the register data
-    pub data_hash: String,
-}
-
-/// Domain identifier
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct DomainId(pub String);
 ```
 
 ## Program State
 
-```haskell
-data ProgramState = ProgramState
-    { schema :: Schema
-    , safeStatePolicy :: SafeStatePolicy
-    , effectDAG :: EffectDAG
-    , factSnapshots :: Map EffectID FactSnapshot
-    , managedRegisters :: Map RegisterID RegisterCapabilities
-    }
+```rust
+/// State of a program in the Causality system
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProgramState {
+    /// Program schema
+    pub schema: Schema,
+    
+    /// Safe state policy
+    pub safe_state_policy: SafeStatePolicy,
+    
+    /// Effect DAG for this program
+    pub effect_dag: EffectDAG,
+    
+    /// Fact snapshots keyed by effect ID
+    pub fact_snapshots: HashMap<EffectId, FactSnapshot>,
+    
+    /// Managed registers with their capabilities
+    pub managed_registers: HashMap<RegisterId, RegisterCapabilities>,
+}
 ```
 
 ## Account Program State
 
-```haskell
-data AccountProgramState = AccountProgramState
-    { balances :: Map (DomainID, Asset) Amount
-    , effectDAG :: EffectDAG
-    , managedRegisters :: Map RegisterID RegisterCapabilities
-    , zkCapabilities :: Map CircuitType VerificationKey
-    , timeMapCommitment :: TimeMapCommitment
-    , executionSequences :: Map SequenceID ExecutionStatus
-    }
+```rust
+/// State of an account program
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountProgramState {
+    /// Token balances by domain and asset
+    pub balances: HashMap<(DomainId, Asset), Amount>,
+    
+    /// Effect DAG for this account
+    pub effect_dag: EffectDAG,
+    
+    /// Managed registers with their capabilities
+    pub managed_registers: HashMap<RegisterId, RegisterCapabilities>,
+    
+    /// ZK capabilities by circuit type
+    pub zk_capabilities: HashMap<CircuitType, VerificationKey>,
+    
+    /// Time map commitment
+    pub time_map_commitment: TimeMapCommitment,
+    
+    /// Execution sequences by sequence ID
+    pub execution_sequences: HashMap<SequenceId, ExecutionStatus>,
+}
 ```
 
 ## Execution Sequence
 
-```haskell
-data ExecutionSequence = ExecutionSequence
-    { sequenceId :: SequenceID
-    , nodes :: Map NodeID ExecutionNode
-    , edges :: [Edge]
-    , entryPoints :: [NodeID]
-    , exitPoints :: [NodeID]
-    , commitment :: ByteString
-    }
+```rust
+/// A sequence of execution steps
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionSequence {
+    /// Unique identifier for this sequence
+    pub sequence_id: SequenceId,
+    
+    /// Execution nodes by node ID
+    pub nodes: HashMap<NodeId, ExecutionNode>,
+    
+    /// Edges between nodes
+    pub edges: Vec<Edge>,
+    
+    /// Entry point nodes
+    pub entry_points: Vec<NodeId>,
+    
+    /// Exit point nodes
+    pub exit_points: Vec<NodeId>,
+    
+    /// Commitment for this sequence
+    pub commitment: Vec<u8>,
+}
 
-data ExecutionNode = ExecutionNode
-    { nodeId :: NodeID
-    , nodeType :: NodeType
-    , operation :: Operation
-    , registerDependencies :: [RegisterID]
-    , completionProof :: Maybe Proof
-    , metadata :: Map Text Value
-    }
+/// Node in an execution sequence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionNode {
+    /// Unique identifier for this node
+    pub node_id: NodeId,
+    
+    /// Type of node
+    pub node_type: NodeType,
+    
+    /// Operation to execute
+    pub operation: Operation,
+    
+    /// Register dependencies
+    pub register_dependencies: Vec<RegisterId>,
+    
+    /// Completion proof (if available)
+    pub completion_proof: Option<Proof>,
+    
+    /// Additional metadata
+    pub metadata: HashMap<String, serde_json::Value>,
+}
 ```
 
 ---
@@ -583,7 +806,7 @@ The time system ensures causal consistency across multiple domains:
 
 - **Effect System**: Algebraic effects framework for composable operations
 - **Time Module**: Unified representation of time across domains
-- **Register System**: Secure resource management with ZK verification
+- **ResourceRegister System**: Unified resource and register management with zero-knowledge verification
 - **Fact System**: Standardized blockchain state representation
 - **Log System**: Append-only, content-addressed event logs
 
@@ -591,15 +814,15 @@ The time system ensures causal consistency across multiple domains:
 
 - **Effect Adapters**: Bridge between abstract effects and domain-specific implementations
 - **Fact Observers**: Extract standardized facts from external domains
-- **Time Maps**: Maintain temporal relationship between different domain timelines
+- **Cross-Domain Resource Manager**: Manages resource lifecycle and transfers across domains
 - **Domain Connectors**: Network interfaces to external blockchain and API endpoints
 
 ## Verification System
 
-- **RISC-V Compilation**: Translate high-level effects to RISC-V instructions
-- **ZK-VM**: Virtual machine optimized for zero-knowledge proof generation
-- **Proof Verification**: On-chain and off-chain verification of computational proofs
-- **Circuit Optimization**: Automatic optimization for minimal proving time
+- **ZK Verifier**: Verification of zero-knowledge proofs for operations
+- **Proof Generator**: Generation of proofs for resource operations
+- **Register Lifecycle Management**: Secure lifecycle management with proof verification
+- **Content-Addressed Operations**: Content-addressed operation model for verifiable execution
 
 ---
 
@@ -610,28 +833,28 @@ The Causality system is structured into the following architectural layers:
 ## Interface Layer
 
 - **Temporal Effect Language (TEL)**: DSL for time-bound effects and causal dependencies
-- **Program Account UI**: Serializable views for frontend integration
+- **ResourceRegister API**: Unified API for resource and register operations
 - **CLI Tools**: Command-line tools for system interaction
 - **API Endpoints**: RESTful and GraphQL interfaces
 
 ## Execution Layer
 
 - **Effect Executor**: Applies effects across domains
-- **Resource Manager**: Controls access to named resources
-- **Register Controller**: Manages register state and operations
+- **ResourceRegister Manager**: Controls access to unified resource registers
+- **Operation Pipeline**: Processes operations through abstract, register, and physical contexts
 - **Content-Addressable Executor**: Runs code by hash or name
 
 ## Storage Layer
 
 - **Unified Log**: Append-only log of all system events
 - **Content-Addressed Storage**: Immutable storage for code and data
-- **Register State**: Current state of all system registers
-- **Time Map Storage**: Persistent storage of time mappings
+- **ResourceRegister State**: Current state of all system resource registers
+- **Snapshot System**: Provides point-in-time snapshots of register state
 
 ## Integration Layer
 
 - **Domain Adapters**: Connect to external blockchains and systems
-- **Fact Observers**: Extract standardized facts from domains
+- **Cross-Domain Operations**: Execute operations spanning multiple domains
 - **P2P Network**: Disseminate facts and effects across the network
 - **Committee Coordinator**: Coordinate committee activities
 

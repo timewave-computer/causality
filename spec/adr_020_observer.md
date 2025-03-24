@@ -2,7 +2,31 @@
 
 ## Status
 
-Proposed
+Accepted, Partially Implemented
+
+## Implementation Status
+
+The Program Observability System described in this ADR has been partially implemented with the following components:
+
+### Implemented Components
+- **Fact Observer System**: Core fact observation infrastructure (`src/domain/fact/observer.rs`) provides a mechanism for observing and caching facts from various domains
+- **Specialized Observers**: Several specialized observers are implemented, including the `ZKProofFactObserver` (`src/domain/fact/zkproof_observer.rs`) which provides specialized observation for ZK proofs
+- **Fact Logging**: The `FactLogger` system supports logging observed facts for later retrieval
+- **Resource Fact Observer**: A resource-specific observer (`src/resource/fact_observer.rs`) for tracking resource-related facts
+- **Fact Replay and Simulation**: The `FactReplay` and `FactSimulator` systems support replaying and simulating observed facts
+
+### Partially Implemented Features
+- **Event Storage**: Basic event storage exists but lacks comprehensive materialized views
+- **Basic Fact Snapshots**: The `FactSnapshot` system provides basic snapshots but not full visualization support
+- **Domain-Specific Observation**: Domain-specific fact observation is partially implemented
+
+### Missing Components
+- **Comprehensive Visualization Layer**: The visualization components described in the ADR are not implemented
+- **Query Engine**: The SQL-like query capabilities are not implemented
+- **Event Materializers**: The advanced materializers for different view types are not implemented
+- **Compiler Integration**: Integration with compilation events is not implemented
+- **CLI Interface**: The `tb-observe` interface described in the ADR is not implemented
+- **Cross-Phase Integration**: The complete cross-phase integration is not implemented
 
 ## Context
 

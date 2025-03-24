@@ -4,6 +4,62 @@
 
 Accepted
 
+## Implementation Status
+
+This ADR has been fully implemented and evolved through ADR-021 (Resource Register Unification) into a more streamlined architecture. The core components implemented include:
+
+1. **Unified ResourceRegister Model**:
+   - Combines Resource and Register concepts into a single content-addressed entity
+   - Implements lifecycle state machine with well-defined transitions
+   - Provides content-addressed register storage with cryptographic commitments
+   - Supports different storage strategies: FullyOnChain, CommitmentBased, Hybrid
+
+2. **Resource Management System**:
+   - ResourceManager for controlling register access and operations
+   - ResourceGuard pattern for safe, RAII-style resource access
+   - Thread-safe register state management
+   - Integration with boundary crossing for cross-domain operations
+   - Support for nullifier tracking to prevent double-spending
+
+3. **Capability-Based Authorization**:
+   - ResourceAuthorizationService for permission management
+   - Capability types with delegation chains
+   - Fine-grained rights control over register operations
+   - Validation of operation permissions
+   - ZK-compatible proof of capability ownership
+
+4. **Zero-Knowledge Integration**:
+   - ZkRegisterOperations trait for ZK-verified operations
+   - RegisterZkProofManager for generating and verifying proofs
+   - Nullifier calculation and verification
+   - Integration with ZK-VM adapters
+   - Conservation validation for resource operations
+
+5. **Register Lifecycle Management**:
+   - Comprehensive state transitions: Initial, Active, Consumed, Pending, Locked, Frozen, Archived
+   - ResourceLifecycleManager for state transition control
+   - Validation rules for state changes
+   - Prevention of invalid transitions
+   - Support for batch operations
+
+6. **Cross-Domain Relationship Management**:
+   - CrossDomainRelationshipManager for tracking relationships
+   - Support for relationship types: Mirror, Reference, Ownership, Derived, Bridge, Custom
+   - Content-addressed relationship storage
+   - Bidirectional relationship tracking
+   - SyncStrategy for cross-domain synchronization
+
+7. **Garbage Collection**:
+   - GarbageCollectionManager with configurable policies
+   - Support for epoch-based and age-based retention
+   - Thread-safe shared collection manager
+   - Custom predicates for fine-grained collection control
+   - Integration with archival system
+
+The implementation has evolved beyond the initial design to create a more cohesive and powerful resource system while maintaining the core principles of ownership, conservation, and cross-domain integrity. The architecture now supports a fully unified resource register model with capabilities for zero-knowledge operations and secure cross-domain interactions.
+
+For more details, see [docs/src/resource_register_unified_model.md](/docs/src/resource_register_unified_model.md) and [docs/src/resource_system_unification.md](/docs/src/resource_system_unification.md).
+
 ## Context
 
 Causality programs need to interact with resources on external chains and across domains, including:

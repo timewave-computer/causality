@@ -2,7 +2,20 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Implementation Status
+
+This ADR has been fully implemented. The unified verification framework is now the standard approach for verification in Causality. Key implementation components include:
+
+- UnifiedProof structure with standardized format and metadata
+- Consistent verification interfaces across different proof types
+- Common proof generation pipeline
+- Integration with the content addressing system
+- Cross-domain proof verification capabilities
+- Support for different zero-knowledge proof systems
+
+The implementation provides a comprehensive verification framework that can handle various proof types while maintaining a consistent developer experience. Documentation is available in [docs/src/proof_generation.md](/docs/src/proof_generation.md) and [docs/src/zero_knowledge_workflows.md](/docs/src/zero_knowledge_workflows.md).
 
 ## Context
 

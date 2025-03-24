@@ -2,7 +2,24 @@
 
 ## Status
 
-Proposed
+Accepted, not yet implemented
+
+## Implementation Status
+
+Not implemented. The Simulation System described in this ADR has not been implemented in the codebase. While there are some simulation-related components, they are limited in scope and don't implement the unified actor control plane described in the ADR:
+
+1. There is a `FactSimulator` in `/src/log/fact_simulator.rs` that can generate simulated facts for testing, but it doesn't provide the scenario-based simulation framework described in the ADR.
+
+2. The codebase lacks all the key components described in the ADR:
+   - No Scenario type that defines actors, domains, and initial facts
+   - No Controller API for lifecycle management
+   - No standard actor interface that works across all three modes
+   - No TOML-based scenario definition
+   - No support for Nix-based actor packaging as described
+
+3. Some simulation capabilities exist in test files (e.g., `src/resource/tests/epoch_test.rs`), but these are focused on specific subsystems rather than providing the comprehensive simulation framework outlined in the ADR.
+
+The fact that the ADR status itself says "Accepted, not yet implemented" accurately reflects the current state of this feature in the codebase.
 
 ## Context
 

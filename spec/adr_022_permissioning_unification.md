@@ -2,7 +2,20 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Implementation Status
+
+This ADR has been fully implemented. The rigorous capability-based authorization model is now integrated throughout Causality. Key implementation components include:
+
+- Standardized capability data structures with precise semantics
+- Integration with the unified ResourceRegister model
+- Comprehensive resource logic validation
+- Fine-grained authorization service with capability validation
+- Capability delegation and attenuation controls
+- Domain-specific capability adaptations
+
+The implementation provides robust, principled security controls while maintaining flexibility for domain-specific extensions. Documentation is available in [docs/src/capability_based_authorization.md](/docs/src/capability_based_authorization.md) and [docs/src/security_capability_model.md](/docs/src/security_capability_model.md).
 
 ## Context
 

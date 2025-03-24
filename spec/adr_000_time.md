@@ -4,6 +4,20 @@
 
 Accepted
 
+## Implementation Status
+
+This ADR has been fully implemented. The time model is a core component of the Causality system, providing a unified framework for tracking time across domains. Key implementation components include:
+
+- TimeMap structure for tracking domain positions
+- LamportClock implementation for logical time
+- Register-based time commitments for cross-domain verification
+- Time map integration with the content addressing system
+- Cross-domain temporal validation system
+- Time integration with the fact observation system
+- ZK proof generation for time map verification
+
+The time system forms the foundation for temporal validation, fact observation, and cross-domain operations. Documentation is available in [docs/src/temporal_model.md](/docs/src/temporal_model.md) and [docs/src/temporal_validation.md](/docs/src/temporal_validation.md).
+
 ## Context
 
 Causality programs operate across multiple independent Domains — each corresponding to a chain, rollup, or distributed ledger. Each Domain advances independently and asynchronously, with its own:

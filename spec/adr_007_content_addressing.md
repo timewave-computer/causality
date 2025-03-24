@@ -2,7 +2,37 @@
 
 ## Status
 
-Accepted
+Implemented
+
+## Implementation Status
+
+The content addressing system described in this ADR has been fully implemented across several modules:
+
+1. **Core Content Addressing**: 
+   - Implemented in `src/crypto/hash.rs` with support for both Blake3 (default) and Poseidon (ZK-friendly) hash functions
+   - `ContentId` and `ContentAddressed` trait provide the foundation for all content-addressed types
+
+2. **Content-Addressable Storage**:
+   - `src/crypto/content_addressed_storage.rs` implements the repository pattern for storing and retrieving content-addressed objects
+   - Ensures immutability through content verification on storage and retrieval
+
+3. **Execution Context**:
+   - `src/execution/context.rs` implements the `ExecutionContext` with variable bindings, call stack, and execution trace
+   - Supports parent-child relationships between contexts
+   - Records comprehensive execution events with timestamps
+
+4. **Content-Addressable Executor**:
+   - `src/execution/executor.rs` implements the `ContentAddressableExecutor` trait
+   - Provides both hash-based and name-based execution capabilities
+   - Implements resource management and security sandboxing
+   - Supports execution tracing for replay and debugging
+
+5. **Domain-Specific Implementations**:
+   - `src/resource/content_addressed_register.rs` for resource management
+   - `src/component/content_addressed_component.rs` for system components
+   - `src/provider/content_addressed_provider.rs` for service providers
+
+The implementation closely follows the design in the ADR, with full support for immutable, deterministic execution backed by cryptographic verification.
 
 ## Context
 

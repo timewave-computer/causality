@@ -2,7 +2,20 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Implementation Status
+
+This ADR has been fully implemented. The deferred hashing architecture is now integrated into the Causality VM system. Key implementation components include:
+
+- Poseidon hash implementation for ZK-friendly content addressing
+- Deferred hash computation system in the ZkVM
+- Optimized SMT verification outside the zkVM
+- Commitment-based verification inside the zkVM
+- Integration with ResourceVmIntegration for resource operations
+- Support for batch hash operations for improved performance
+
+The implementation significantly improves ZK proof generation performance while maintaining the security and verification properties of content addressing. Documentation is available in [docs/src/vm_architecture.md](/docs/src/vm_architecture.md) and [docs/src/deferred_hashing.md](/docs/src/deferred_hashing.md).
 
 ## Context
 

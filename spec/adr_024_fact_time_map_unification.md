@@ -2,7 +2,20 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Implementation Status
+
+This ADR has been fully implemented. The unified temporal facts model is now the standard approach for temporal data in Causality. Key implementation components include:
+
+- Unified `TemporalFact` data structure with complete temporal context
+- Integration with the log system for historical fact tracking
+- Consistent temporal validation across the system
+- Support for cross-domain temporal facts
+- Deterministic fact management and dependency validation
+- Temporal fact replay capabilities for reconstruction and simulation
+
+The implementation provides a coherent temporal model that maintains causal relationships while supporting cross-domain operations. Documentation is available in [docs/src/temporal_facts_unified_model.md](/docs/src/temporal_facts_unified_model.md) and [docs/src/temporal_validation.md](/docs/src/temporal_validation.md).
 
 ## Context
 

@@ -2,7 +2,20 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Implementation Status
+
+This ADR has been fully implemented. The three-layer effect architecture is now the standard approach for effects in Causality, providing a clean separation of concerns while unifying the previously separate handler and adapter mechanisms. Key implementation components include:
+
+- Algebraic Effect Layer implemented as Rust traits
+- Effect Constraints Layer providing validation and type safety
+- Domain Implementation Layer using TEL for domain-specific implementations
+- Integration with the unified operation model
+- Standardized effect execution runtime
+- Cross-domain effect composition
+
+The implementation significantly reduces duplication while providing stronger type-safety and a more consistent developer experience. Documentation is available in [docs/src/unified_effect_model.md](/docs/src/unified_effect_model.md) and [docs/src/effect_templates.md](/docs/src/effect_templates.md).
 
 ## Context
 

@@ -4,6 +4,49 @@
 
 Accepted
 
+## Implementation Status
+
+This ADR has been fully implemented with an evolution to a three-layer effect architecture as described in ADR-023. The core components implemented include:
+
+1. **Effect System**:
+   - Implemented a trait-based approach with `Effect` as the core interface
+   - Effects are identified via `EffectId` and produce standardized `EffectOutcome` results
+   - Added comprehensive error handling through typed `EffectError` variants
+
+2. **Three-Layer Architecture**:
+   - **Algebraic Effect Layer**: Core traits and interfaces in Rust
+   - **Effect Constraints Layer**: Type constraints and validation rules
+   - **Domain Implementation Layer**: Domain-specific implementations in TEL
+
+3. **Resource-Scoped Concurrency**:
+   - Implemented resource locks with RAII-style `ResourceGuard`
+   - Added deterministic wait queues for consistent scheduling
+   - Integrated with Rust's async/await pattern for concurrency management
+
+4. **Domain Integration**:
+   - Created domain adapters for multiple chains (EVM, CosmWasm)
+   - Built boundary crossing mechanisms for secure domain interactions
+   - Integrated with time map for cross-domain causal consistency
+
+5. **Content-Addressed Storage**:
+   - Implemented content-addressed code repository
+   - Added support for content-addressed effects and resources
+   - Integrated with cryptographic hash interfaces
+
+6. **ZK Integration**:
+   - Created ZK-VM integration through domain adapters
+   - Added support for proof generation and verification
+   - Implemented deterministic execution for consistent proving
+
+7. **TEL Integration**:
+   - Built TEL compiler and runtime for domain-specific implementations
+   - Added templating system for effect code generation
+   - Created bridge between Rust's static types and TEL's domain-specific code
+
+The implementation evolved beyond the initial design to create a more flexible and powerful system while maintaining the core principles of safety, determinism, and ZK compatibility. The architecture now supports unified operation models, cross-domain interactions, and content-addressing throughout the system.
+
+For more details, see [docs/src/unified_effect_model.md](/docs/src/unified_effect_model.md) and [docs/src/effect_system.md](/docs/src/effect_system.md).
+
 ## Context
 
 Causaility is the foundational algebraic effects library for a cross-domain program environment while maintaining strong causal consistency. This library needs to support compilation to RISC-V assembly, which will allow our code to run inside zero-knowledge virtual machines (ZK VMs). With this capability, we can generate cryptographic proofs that programs executed correctly.

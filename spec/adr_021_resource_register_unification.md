@@ -2,7 +2,18 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Implementation Status
+
+This ADR has been fully implemented. The unified ResourceRegister model is now the standard approach for resource management in Causality. Key implementation components include:
+
+- Unified ResourceRegister data structure that combines logical and physical properties
+- Storage effect system integrated with the algebraic effect system
+- Flexible storage strategies for different domain requirements
+- Integration with the capability-based security model
+
+The implementation preserves backward compatibility while providing a cleaner abstraction for developers. Documentation is available in [docs/src/resource_register_unified_model.md](/docs/src/resource_register_unified_model.md).
 
 ## Context
 

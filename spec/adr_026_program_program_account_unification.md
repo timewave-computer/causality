@@ -2,7 +2,20 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Implementation Status
+
+This ADR has been fully implemented. The unified program model is now the standard approach for programs in Causality. Key implementation components include:
+
+- Unified ProgramAccount abstraction with capability-based differentiation
+- Integration with the capability authorization system
+- Support for different program types through common interfaces
+- Single programming model across different domain types
+- Consistent deployment and invocation APIs
+- Cross-domain program interoperability
+
+The implementation provides a coherent program model that simplifies development while maintaining flexibility for different blockchain environments. Documentation is available in [docs/src/unified_program_model.md](/docs/src/unified_program_model.md).
 
 ## Context
 

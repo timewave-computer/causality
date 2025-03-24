@@ -4,6 +4,60 @@
 
 Accepted
 
+## Implementation Status
+
+This ADR has been implemented with an enhanced and more flexible approach than originally specified. The key components implemented include:
+
+1. **Invocation Context System**:
+   - `InvocationContext` in `src/invocation/context.rs` tracks execution state
+   - Includes resource acquisitions, fact observations, and time map snapshots
+   - Implements parent-child relationship tracking for nested invocations
+   - Supports state transitions: Created, Running, Completed, Failed, Waiting
+   - Integrates with the content addressing system for auditability
+
+2. **Invocation Patterns**:
+   - Implemented a versatile set of patterns in `src/invocation/patterns.rs`:
+     - `DirectInvocation`: Synchronous request-response
+     - `CallbackInvocation`: Asynchronous callbacks
+     - `ContinuationInvocation`: Chained processing with transformations
+     - `PromiseInvocation`: Future-based workflows
+     - `StreamingInvocation`: Streaming results as they become available
+     - `BatchInvocation`: Parallel or sequential batch processing
+
+3. **Content-Addressed Invocations**:
+   - All invocations are content-addressed for idempotency and auditability
+   - Uses cryptographic hashing to generate unique identifiers
+   - Enables deterministic replay and verification
+   - Supports tracing of invocation chains and dependencies
+
+4. **Context Propagation**:
+   - `ContextPropagator` in `src/invocation/context/propagation.rs` manages context
+   - Ensures causal consistency is maintained across invocation boundaries
+   - Supports thread-local and shared context storage
+   - Manages invocation lifecycle: start, complete, fail, wait, and resume
+
+5. **Effect Registry**:
+   - `EffectRegistry` in `src/invocation/registry.rs` manages effect handlers
+   - Implements registration, lookup, and validation of handlers
+   - Supports resource requirements and access level control
+   - Integrates with the security model for authorization
+
+6. **Account Program Integration**:
+   - `BaseAccount` in `src/program_account/base_account.rs` implements aspects of the gateway model
+   - Includes balances, capabilities, and transaction history
+   - Provides authorization for account-based operations
+   - Partially implements the proposed inbox/outbox model
+
+7. **Time Map Integration**:
+   - Invocations capture time map snapshots at creation time
+   - `TimeMap` tracks observed state of domains
+   - Provides causal consistency through fact observations
+   - Supports verification of external facts
+
+The implementation extends the original ADR design with a more sophisticated and flexible approach to invocations. While maintaining the core concepts of account programs as gateways and causal consistency through time maps, it adds richer patterns, stronger typing, better resource tracking, and more comprehensive context management.
+
+For more details, see [docs/src/invocation/context.md](/docs/src/invocation/context.md).
+
 
 ## Context
 

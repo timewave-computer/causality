@@ -2,7 +2,20 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Implementation Status
+
+This ADR has been fully implemented. Universal content addressing is now the standard approach for all state in Causality. Key implementation components include:
+
+- ContentAddressed trait implementation across all state objects
+- ContentReference type for safe cross-domain references
+- ContentAddressedStorage interfaces for different storage backends
+- Integration with the cryptographic subsystem
+- Support for deferred hashing for performance optimization
+- Comprehensive verification mechanisms for content integrity
+
+The implementation provides a consistent, tamper-evident foundation for all system state, enabling efficient verification and cross-domain references. Documentation is available in [docs/src/content_addressing.md](/docs/src/content_addressing.md) and [docs/src/content_addressing_guide.md](/docs/src/content_addressing_guide.md).
 
 ## Context
 

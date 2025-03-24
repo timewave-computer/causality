@@ -4,6 +4,27 @@
 
 Proposed
 
+## Implementation Status
+
+Partially implemented. The Temporal Effect Language (TEL) compiler architecture described in this ADR has been partially implemented with several key components in place:
+
+1. **Handler System**: The handler interface (`TelHandler`, `ConstraintTelHandler`, etc.) has been implemented in `/src/tel/handlers.rs`
+2. **Domain-Specific Adapters**: Domain-specific handlers (e.g., `EvmTransferHandler`) have been implemented
+3. **TEL Compiler Interface**: A basic compiler interface (`TelCompiler`) and a standard implementation (`StandardTelCompiler`) exist
+4. **Builder Pattern**: The builder pattern for TEL components is implemented in `/src/tel/builder.rs`
+5. **Effect Types**: The core effect types and operations are implemented
+
+However, several components described in the ADR are not yet fully implemented:
+
+1. **Formal Type System**: The detailed type system with resource linearity constraints is not yet implemented
+2. **AST Representation**: The full AST structure with effect tracking is partially implemented
+3. **Validation System**: The effect validation and resource conservation validation is in early stages
+4. **IR Generation**: The intermediate representation is not fully developed
+5. **Optimization**: The optimization passes are not implemented
+6. **Content-Addressable Integration**: Integration with the content-addressable storage is partial
+
+The implementation appears to be following the direction set out in the ADR, but is still in development, with basic interfaces in place but more complex features like type checking, validation, and optimization still to be completed.
+
 ## Context
 
 As Causality matures, we need a formal compiler architecture for the Temporal Effect Language (TEL) implemented in Rust. We need a clearly defined compiler pipeline that integrates with our content-addressable code system while preserving core properties required for cross-domain programming:
