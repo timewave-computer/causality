@@ -15,7 +15,7 @@ This ADR has been fully implemented. The deferred hashing architecture is now in
 - Integration with ResourceVmIntegration for resource operations
 - Support for batch hash operations for improved performance
 
-The implementation significantly improves ZK proof generation performance while maintaining the security and verification properties of content addressing. Documentation is available in [docs/src/vm_architecture.md](/docs/src/vm_architecture.md) and [docs/src/deferred_hashing.md](/docs/src/deferred_hashing.md).
+The implementation significantly improves ZK proof generation performance while maintaining the security and verification properties of content addressing. Documentation is available in [docs/src/vm_architecture.md](/docs/src/vm_architecture.md).
 
 ## Context
 
