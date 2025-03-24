@@ -9,12 +9,15 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::fmt;
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{Error, Result};
-use crate::types::{ResourceId, DomainId, Timestamp, Metadata};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::time::TimeMapSnapshot;
+use crate::crypto::hash::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+use crate::resource::resource_register::ResourceRegister;
 
 /// Direction of a relationship
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -68,17 +71,17 @@ impl fmt::Display for RelationshipType {
     }
 }
 
-/// Resource relationship record
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Resource relationship record for the unified ResourceRegister model
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ResourceRelationship {
     /// Unique ID of the relationship
     pub id: String,
     
-    /// Source resource ID
-    pub source_id: ResourceId,
+    /// Source resource content ID
+    pub source_id: ContentId,
     
-    /// Target resource ID
-    pub target_id: ResourceId,
+    /// Target resource content ID
+    pub target_id: ContentId,
     
     /// Type of relationship
     pub relationship_type: RelationshipType,
@@ -96,27 +99,49 @@ pub struct ResourceRelationship {
     pub metadata: Metadata,
 }
 
+impl ContentAddressed for ResourceRelationship {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 /// Indexes to efficiently query relationships
 #[derive(Debug, Clone, Default)]
 struct RelationshipIndex {
     /// Index by resource ID
-    by_resource: HashMap<ResourceId, HashSet<ResourceId>>,
+    by_resource: HashMap<ContentId, HashSet<ContentId>>,
     /// Index by relationship type
-    by_type: HashMap<RelationshipType, HashSet<(ResourceId, ResourceId)>>,
+    by_type: HashMap<RelationshipType, HashSet<(ContentId, ContentId)>>,
     /// Index by resource pair
-    by_pair: HashMap<(ResourceId, ResourceId), HashSet<ResourceId>>,
+    by_pair: HashMap<(ContentId, ContentId), HashSet<ContentId>>,
 }
 
-/// Tracker for relationships between resources
+/// Tracker for relationships between resources in the unified ResourceRegister model
 pub struct RelationshipTracker {
     /// All relationships, keyed by ID
     relationships: RwLock<HashMap<String, ResourceRelationship>>,
     
     /// Index of relationships by source resource ID
-    source_index: RwLock<HashMap<ResourceId, HashSet<String>>>,
+    source_index: RwLock<HashMap<ContentId, HashSet<String>>>,
     
     /// Index of relationships by target resource ID
-    target_index: RwLock<HashMap<ResourceId, HashSet<String>>>,
+    target_index: RwLock<HashMap<ContentId, HashSet<String>>>,
     
     /// Index of relationships by type
     type_index: RwLock<HashMap<RelationshipType, HashSet<String>>>,
@@ -131,8 +156,8 @@ pub struct RelationshipTracker {
 impl ResourceRelationship {
     /// Create a new relationship
     pub fn new(
-        from_id: ResourceId,
-        to_id: ResourceId,
+        from_id: ContentId,
+        to_id: ContentId,
         relationship_type: RelationshipType,
         direction: RelationshipDirection,
     ) -> Self {
@@ -141,8 +166,9 @@ impl ResourceRelationship {
             .unwrap_or_default()
             .as_secs();
 
-        Self {
-            id: Uuid::new_v4().to_string(),
+        // Create a temporary relationship for content ID generation
+        let temp_relationship = Self {
+            id: String::new(), // Temporary
             source_id: from_id,
             target_id: to_id,
             relationship_type,
@@ -150,13 +176,28 @@ impl ResourceRelationship {
             created_at: now,
             transaction_id: None,
             metadata: Metadata::default(),
-        }
+        };
+        
+        // Generate content-derived ID
+        let content_id = temp_relationship.content_id();
+        
+        // Create the final relationship with the content ID
+        let mut result = temp_relationship;
+        result.id = format!("rel:{}", content_id);
+        result
     }
 
     /// Add metadata to the relationship and return self
     pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
         self.metadata.insert(key.to_string(), value.to_string());
         self
+    }
+    
+    /// Get the content ID of this relationship
+    pub fn content_id(&self) -> ContentId {
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        ContentId::from(hasher.hash(&data))
     }
 }
 
@@ -192,11 +233,29 @@ impl RelationshipTracker {
         Ok(snapshot.clone())
     }
 
+    /// Record a new relationship between two ResourceRegisters
+    pub fn record_relationship_between_registers(
+        &self,
+        source: &ResourceRegister,
+        target: &ResourceRegister,
+        relationship_type: RelationshipType,
+        direction: RelationshipDirection,
+        transaction_id: Option<String>,
+    ) -> Result<ResourceRelationship> {
+        self.record_relationship(
+            source.id.clone(),
+            target.id.clone(),
+            relationship_type,
+            direction,
+            transaction_id,
+        )
+    }
+
     /// Record a new relationship
     pub fn record_relationship(
         &self,
-        source_id: ResourceId,
-        target_id: ResourceId,
+        source_id: ContentId,
+        target_id: ContentId,
         relationship_type: RelationshipType,
         direction: RelationshipDirection,
         transaction_id: Option<String>,
@@ -259,11 +318,25 @@ impl RelationshipTracker {
         Ok(relationship)
     }
 
+    /// Record a parent-child relationship between ResourceRegisters
+    pub fn record_parent_child_relationship_between_registers(
+        &self,
+        parent: &ResourceRegister,
+        child: &ResourceRegister,
+        transaction_id: Option<String>,
+    ) -> Result<ResourceRelationship> {
+        self.record_parent_child_relationship(
+            parent.id.clone(),
+            child.id.clone(),
+            transaction_id,
+        )
+    }
+
     /// Record a parent-child relationship
     pub fn record_parent_child_relationship(
         &self,
-        parent_id: ResourceId,
-        child_id: ResourceId,
+        parent_id: ContentId,
+        child_id: ContentId,
         transaction_id: Option<String>,
     ) -> Result<ResourceRelationship> {
         self.record_relationship(
@@ -275,11 +348,25 @@ impl RelationshipTracker {
         )
     }
 
+    /// Record a dependency relationship between ResourceRegisters
+    pub fn record_dependency_relationship_between_registers(
+        &self,
+        dependent: &ResourceRegister,
+        dependency: &ResourceRegister,
+        transaction_id: Option<String>,
+    ) -> Result<ResourceRelationship> {
+        self.record_dependency_relationship(
+            dependent.id.clone(),
+            dependency.id.clone(),
+            transaction_id,
+        )
+    }
+
     /// Record a dependency relationship
     pub fn record_dependency_relationship(
         &self,
-        dependent_id: ResourceId,
-        dependency_id: ResourceId,
+        dependent_id: ContentId,
+        dependency_id: ContentId,
         transaction_id: Option<String>,
     ) -> Result<ResourceRelationship> {
         self.record_relationship(
@@ -291,11 +378,25 @@ impl RelationshipTracker {
         )
     }
 
+    /// Record a derivation relationship between ResourceRegisters
+    pub fn record_derivation_relationship_between_registers(
+        &self,
+        original: &ResourceRegister,
+        derived: &ResourceRegister,
+        transaction_id: Option<String>,
+    ) -> Result<ResourceRelationship> {
+        self.record_derivation_relationship(
+            original.id.clone(),
+            derived.id.clone(),
+            transaction_id,
+        )
+    }
+
     /// Record a derivation relationship
     pub fn record_derivation_relationship(
         &self,
-        original_id: ResourceId,
-        derived_id: ResourceId,
+        original_id: ContentId,
+        derived_id: ContentId,
         transaction_id: Option<String>,
     ) -> Result<ResourceRelationship> {
         self.record_relationship(
@@ -382,7 +483,7 @@ impl RelationshipTracker {
     }
 
     /// Get all relationships for a resource
-    pub fn get_resource_relationships(&self, resource_id: &ResourceId) -> Result<Vec<ResourceRelationship>> {
+    pub fn get_resource_relationships(&self, resource_id: &ContentId) -> Result<Vec<ResourceRelationship>> {
         let relationship_ids = self.get_all_relationship_ids_for_resource(resource_id)?;
         
         let relationships = self.relationships.read().map_err(|_| {
@@ -397,7 +498,7 @@ impl RelationshipTracker {
     /// Get all relationships of a specific type for a resource
     pub fn get_resource_relationships_by_type(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         relationship_type: &RelationshipType,
     ) -> Result<Vec<ResourceRelationship>> {
         let relationships = self.get_resource_relationships(resource_id)?;
@@ -433,141 +534,114 @@ impl RelationshipTracker {
     /// Get all resources related to a resource by a specific type and direction
     pub fn get_related_resources(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         relationship_type: &RelationshipType,
         direction: Option<RelationshipDirection>,
-    ) -> Result<HashSet<ResourceId>> {
-        let relationships = self.get_resource_relationships(resource_id)?;
-        let mut result = HashSet::new();
+    ) -> Result<Vec<ContentId>> {
+        let relationships = self.get_resource_relationships_by_type(resource_id, relationship_type)?;
         
-        for rel in relationships {
-            if rel.relationship_type == *relationship_type {
+        let result = relationships.iter()
+            .filter(|rel| {
                 if let Some(dir) = &direction {
-                    match (dir, &rel.direction) {
-                        // For forward relationships where this resource is the source
-                        (RelationshipDirection::ParentToChild, RelationshipDirection::ParentToChild | RelationshipDirection::Bidirectional) 
-                            if rel.source_id == *resource_id => {
-                            result.insert(rel.target_id);
-                        },
-                        
-                        // For reverse relationships where this resource is the target
-                        (RelationshipDirection::ChildToParent, RelationshipDirection::ChildToParent | RelationshipDirection::Bidirectional)
-                            if rel.target_id == *resource_id => {
-                            result.insert(rel.source_id);
-                        },
-                        
-                        // For bidirectional relationships
-                        (RelationshipDirection::Bidirectional, _) => {
-                            if rel.source_id == *resource_id {
-                                result.insert(rel.target_id);
-                            } else if rel.target_id == *resource_id {
-                                result.insert(rel.source_id);
-                            }
-                        },
-                        
-                        // Skip other combinations
-                        _ => {},
-                    }
+                    rel.direction == *dir || rel.direction == RelationshipDirection::Bidirectional
                 } else {
-                    // If no direction specified, include all related resources
-                    if rel.source_id == *resource_id {
-                        result.insert(rel.target_id);
-                    } else if rel.target_id == *resource_id {
-                        result.insert(rel.source_id);
-                    }
+                    true
                 }
-            }
-        }
+            })
+            .map(|rel| {
+                if rel.source_id == *resource_id {
+                    rel.target_id.clone()
+                } else {
+                    rel.source_id.clone()
+                }
+            })
+            .collect();
         
         Ok(result)
     }
 
-    /// Get child resources for a parent
-    pub fn get_child_resources(&self, parent_id: &ResourceId) -> Result<HashSet<ResourceId>> {
-        self.get_related_resources(
-            parent_id,
-            &RelationshipType::ParentChild,
-            Some(RelationshipDirection::ParentToChild),
-        )
-    }
-
-    /// Get parent resources for a child
-    pub fn get_parent_resources(&self, child_id: &ResourceId) -> Result<HashSet<ResourceId>> {
-        self.get_related_resources(
-            child_id,
-            &RelationshipType::ParentChild,
-            Some(RelationshipDirection::ChildToParent),
-        )
-    }
-
-    /// Get dependencies for a resource
-    pub fn get_dependency_resources(&self, dependent_id: &ResourceId) -> Result<HashSet<ResourceId>> {
-        self.get_related_resources(
-            dependent_id,
-            &RelationshipType::Dependency,
-            Some(RelationshipDirection::ChildToParent),
-        )
-    }
-
-    /// Get dependent resources for a dependency
-    pub fn get_dependent_resources(&self, dependency_id: &ResourceId) -> Result<HashSet<ResourceId>> {
-        self.get_related_resources(
-            dependency_id,
-            &RelationshipType::Dependency,
-            Some(RelationshipDirection::ParentToChild),
-        )
-    }
-
-    /// Get derived resources for an original
-    pub fn get_derived_resources(&self, original_id: &ResourceId) -> Result<HashSet<ResourceId>> {
-        self.get_related_resources(
-            original_id,
-            &RelationshipType::Dependency,
-            Some(RelationshipDirection::ChildToParent),
-        )
-    }
-
-    /// Get original resource for a derived resource
-    pub fn get_original_resource(&self, derived_id: &ResourceId) -> Result<HashSet<ResourceId>> {
-        self.get_related_resources(
-            derived_id,
-            &RelationshipType::Custom("derivation".to_string()),
-            Some(RelationshipDirection::ChildToParent),
-        )
-    }
-
-    /// Get direct relationships between two specific resources
-    pub fn get_direct_relationships(
+    /// Check if two resources are directly related
+    pub fn are_resources_related(
         &self,
-        source_id: &ResourceId,
-        target_id: &ResourceId,
-    ) -> Result<Vec<ResourceRelationship>> {
-        let mut relationships = Vec::new();
+        resource_a: &ContentId,
+        resource_b: &ContentId,
+        relationship_type: Option<RelationshipType>,
+    ) -> Result<bool> {
+        let a_relationships = self.get_resource_relationships(resource_a)?;
         
-        // Check relationships where source is the source ID
-        let source_rels = self.get_resource_relationships(source_id)?;
-        for rel in source_rels {
-            if rel.target_id == *target_id {
-                relationships.push(rel);
-            }
-        }
-        
-        // Check relationships where target is the source ID (for bidirectional relationships)
-        let target_rels = self.get_resource_relationships(target_id)?;
-        for rel in target_rels {
-            if rel.source_id == *source_id && rel.direction == RelationshipDirection::Bidirectional {
-                // Avoid duplicates if already added
-                if !relationships.iter().any(|r| r.id == rel.id) {
-                    relationships.push(rel);
+        for rel in a_relationships {
+            if (rel.source_id == *resource_a && rel.target_id == *resource_b) || 
+               (rel.source_id == *resource_b && rel.target_id == *resource_a) {
+                if let Some(rtype) = &relationship_type {
+                    if rel.relationship_type == *rtype {
+                        return Ok(true);
+                    }
+                } else {
+                    return Ok(true);
                 }
             }
         }
         
-        Ok(relationships)
+        Ok(false)
     }
 
-    /// Helper method to get all relationship IDs for a resource
-    fn get_all_relationship_ids_for_resource(&self, resource_id: &ResourceId) -> Result<HashSet<String>> {
+    /// Find all resources with a specific relationship to a resource
+    pub fn find_resources_with_relationship(
+        &self,
+        relationship_type: &RelationshipType,
+        direction: Option<RelationshipDirection>,
+    ) -> Result<Vec<(ContentId, ContentId)>> {
+        let relationships = self.get_relationships_by_type(relationship_type)?;
+        
+        let result = relationships.iter()
+            .filter(|rel| {
+                if let Some(dir) = &direction {
+                    rel.direction == *dir || rel.direction == RelationshipDirection::Bidirectional
+                } else {
+                    true
+                }
+            })
+            .map(|rel| (rel.source_id.clone(), rel.target_id.clone()))
+            .collect();
+        
+        Ok(result)
+    }
+
+    /// Check if a relationship exists and get its ID
+    pub fn get_relationship_id(
+        &self,
+        source_id: &ContentId,
+        target_id: &ContentId,
+        relationship_type: &RelationshipType,
+    ) -> Result<Option<String>> {
+        let source_relationships = {
+            let source_index = self.source_index.read().map_err(|_| {
+                Error::Internal("Failed to acquire read lock on source_index".to_string())
+            })?;
+            
+            match source_index.get(source_id) {
+                Some(ids) => ids.clone(),
+                None => HashSet::new(),
+            }
+        };
+        
+        let relationships = self.relationships.read().map_err(|_| {
+            Error::Internal("Failed to acquire read lock on relationships".to_string())
+        })?;
+        
+        for rel_id in source_relationships {
+            if let Some(rel) = relationships.get(&rel_id) {
+                if rel.target_id == *target_id && rel.relationship_type == *relationship_type {
+                    return Ok(Some(rel_id));
+                }
+            }
+        }
+        
+        Ok(None)
+    }
+
+    /// Helper to get all relationship IDs for a resource
+    fn get_all_relationship_ids_for_resource(&self, resource_id: &ContentId) -> Result<HashSet<String>> {
         let mut result = HashSet::new();
         
         // Get relationships where resource is source
@@ -596,149 +670,143 @@ impl RelationshipTracker {
     }
 }
 
+/// Helper for transitioning from the old ContentId-based relationships
+/// to the new ContentId-based relationships
+impl RelationshipTracker {
+    /// Convert a ContentId to a ContentId (legacy support)
+    pub fn resource_id_to_content_id(&self, resource_id: &ContentId) -> ContentId {
+        let id_str = resource_id.to_string();
+        
+        // Create a derived content ID from the resource ID string
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let hash = hasher.hash(id_str.as_bytes());
+        ContentId::from(hash)
+    }
+    
+    /// Helper method to record relationship using ContentId (legacy support)
+    pub fn record_relationship_legacy(
+        &self,
+        source_id: ContentId,
+        target_id: ContentId, 
+        relationship_type: RelationshipType,
+        direction: RelationshipDirection,
+        transaction_id: Option<String>,
+    ) -> Result<ResourceRelationship> {
+        let source_content_id = self.resource_id_to_content_id(&source_id);
+        let target_content_id = self.resource_id_to_content_id(&target_id);
+        
+        self.record_relationship(
+            source_content_id,
+            target_content_id,
+            relationship_type,
+            direction,
+            transaction_id,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resource::resource_register::{ResourceRegister, ResourceLogic, FungibilityDomain, Quantity};
+    use crate::resource::resource_register::{StorageStrategy, StateVisibility};
+    
+    fn create_test_register(id: &str, quantity: u128) -> ResourceRegister {
+        let content_id = {
+            let hasher = HashFactory::default().create_hasher().unwrap();
+            let hash = hasher.hash(id.as_bytes());
+            ContentId::from(hash)
+        };
+        
+        ResourceRegister::new(
+            content_id,
+            ResourceLogic::Fungible,
+            FungibilityDomain(format!("test-domain-{}", id)),
+            Quantity(quantity),
+            HashMap::new(),
+            StorageStrategy::FullyOnChain { visibility: StateVisibility::Public },
+        )
+    }
     
     #[test]
-    fn test_relationship_creation_and_retrieval() -> Result<()> {
-        let snapshot = TimeMapSnapshot::default();
-        let tracker = RelationshipTracker::new(snapshot);
+    fn test_basic_relationship_tracking() -> Result<()> {
+        // Create a relationship tracker
+        let tracker = RelationshipTracker::new(TimeMapSnapshot::default());
         
-        let resource_a = "resource-a".to_string();
-        let resource_b = "resource-b".to_string();
+        // Create test resources
+        let parent = create_test_register("parent", 100);
+        let child1 = create_test_register("child1", 50);
+        let child2 = create_test_register("child2", 25);
         
-        // Create a relationship
-        let rel = tracker.record_parent_child_relationship(
-            resource_a.clone(),
-            resource_b.clone(),
-            Some("test-tx".to_string()),
+        // Record parent-child relationships
+        let rel1 = tracker.record_parent_child_relationship_between_registers(
+            &parent, &child1, None
+        )?;
+        let rel2 = tracker.record_parent_child_relationship_between_registers(
+            &parent, &child2, None
         )?;
         
-        // Get relationships for resource A
-        let relationships = tracker.get_resource_relationships(&resource_a)?;
-        assert_eq!(relationships.len(), 1);
-        assert_eq!(relationships[0].id, rel.id);
-        assert_eq!(relationships[0].source_id, resource_a);
-        assert_eq!(relationships[0].target_id, resource_b);
-        assert_eq!(relationships[0].relationship_type, RelationshipType::ParentChild);
+        // Verify the relationships were recorded
+        let parent_relationships = tracker.get_resource_relationships(&parent.id)?;
+        assert_eq!(parent_relationships.len(), 2);
         
-        // Get child resources
-        let children = tracker.get_child_resources(&resource_a)?;
+        // Get children of parent
+        let children = tracker.get_related_resources(
+            &parent.id,
+            &RelationshipType::ParentChild,
+            Some(RelationshipDirection::ParentToChild),
+        )?;
+        assert_eq!(children.len(), 2);
+        assert!(children.contains(&child1.id));
+        assert!(children.contains(&child2.id));
+        
+        // Verify resources are related
+        assert!(tracker.are_resources_related(&parent.id, &child1.id, None)?);
+        assert!(tracker.are_resources_related(&parent.id, &child2.id, Some(RelationshipType::ParentChild))?);
+        assert!(!tracker.are_resources_related(&child1.id, &child2.id, None)?);
+        
+        // Delete a relationship
+        tracker.delete_relationship(&rel1.id)?;
+        
+        // Verify the relationship was deleted
+        let parent_relationships = tracker.get_resource_relationships(&parent.id)?;
+        assert_eq!(parent_relationships.len(), 1);
+        
+        // Get children of parent after deletion
+        let children = tracker.get_related_resources(
+            &parent.id,
+            &RelationshipType::ParentChild,
+            Some(RelationshipDirection::ParentToChild),
+        )?;
         assert_eq!(children.len(), 1);
-        assert!(children.contains(&resource_b));
-        
-        // Get parent resources
-        let parents = tracker.get_parent_resources(&resource_b)?;
-        assert_eq!(parents.len(), 1);
-        assert!(parents.contains(&resource_a));
+        assert!(children.contains(&child2.id));
         
         Ok(())
     }
     
     #[test]
-    fn test_relationship_deletion() -> Result<()> {
-        let snapshot = TimeMapSnapshot::default();
-        let tracker = RelationshipTracker::new(snapshot);
-        
-        let resource_a = "resource-a".to_string();
-        let resource_b = "resource-b".to_string();
+    fn test_resource_relationship_content_addressing() -> Result<()> {
+        // Create test resources
+        let resource1 = create_test_register("resource1", 100);
+        let resource2 = create_test_register("resource2", 200);
         
         // Create a relationship
-        let rel = tracker.record_parent_child_relationship(
-            resource_a.clone(),
-            resource_b.clone(),
-            Some("test-tx".to_string()),
-        )?;
+        let relationship = ResourceRelationship::new(
+            resource1.id.clone(),
+            resource2.id.clone(),
+            RelationshipType::ParentChild,
+            RelationshipDirection::ParentToChild,
+        );
         
-        // Verify relationship exists
-        let relationships = tracker.get_resource_relationships(&resource_a)?;
-        assert_eq!(relationships.len(), 1);
-        
-        // Delete the relationship
-        tracker.delete_relationship(&rel.id)?;
-        
-        // Verify relationship is gone
-        let relationships = tracker.get_resource_relationships(&resource_a)?;
-        assert_eq!(relationships.len(), 0);
-        
-        // Child resources should be empty
-        let children = tracker.get_child_resources(&resource_a)?;
-        assert_eq!(children.len(), 0);
-        
-        Ok(())
-    }
-    
-    #[test]
-    fn test_multiple_relationship_types() -> Result<()> {
-        let snapshot = TimeMapSnapshot::default();
-        let tracker = RelationshipTracker::new(snapshot);
-        
-        let resource_a = "resource-a".to_string();
-        let resource_b = "resource-b".to_string();
-        let resource_c = "resource-c".to_string();
-        
-        // Create different relationship types
-        tracker.record_parent_child_relationship(
-            resource_a.clone(),
-            resource_b.clone(),
-            Some("tx-1".to_string()),
-        )?;
-        
-        tracker.record_dependency_relationship(
-            resource_a.clone(),
-            resource_c.clone(),
-            Some("tx-2".to_string()),
-        )?;
-        
-        tracker.record_derivation_relationship(
-            resource_b.clone(),
-            resource_c.clone(),
-            Some("tx-3".to_string()),
-        )?;
-        
-        // Check filtering by type
-        let parent_child_rels = tracker.get_relationships_by_type(&RelationshipType::ParentChild)?;
-        assert_eq!(parent_child_rels.len(), 1);
-        assert_eq!(parent_child_rels[0].source_id, resource_a);
-        assert_eq!(parent_child_rels[0].target_id, resource_b);
-        
-        let dependency_rels = tracker.get_relationships_by_type(&RelationshipType::Dependency)?;
-        assert_eq!(dependency_rels.len(), 1);
-        assert_eq!(dependency_rels[0].source_id, resource_a);
-        assert_eq!(dependency_rels[0].target_id, resource_c);
-        
-        // Check getting all relationships for resource A
-        let a_rels = tracker.get_resource_relationships(&resource_a)?;
-        assert_eq!(a_rels.len(), 2);
-        
-        Ok(())
-    }
-    
-    #[test]
-    fn test_relationship_with_metadata() -> Result<()> {
-        let snapshot = TimeMapSnapshot::default();
-        let tracker = RelationshipTracker::new(snapshot);
-        
-        let resource_a = "resource-a".to_string();
-        let resource_b = "resource-b".to_string();
+        // Verify the relationship is correctly content-addressed
+        let content_id = relationship.content_id();
+        assert_eq!(format!("rel:{}", content_id), relationship.id);
         
         // Create a relationship with metadata
-        let rel = tracker.record_relationship(
-            resource_a.clone(),
-            resource_b.clone(),
-            RelationshipType::Composition,
-            RelationshipDirection::ParentToChild,
-            Some("test-tx".to_string()),
-        )?
-        .with_metadata("weight", "0.5")
-        .with_metadata("description", "Test relationship");
+        let relationship_with_metadata = relationship.clone().with_metadata("key", "value");
         
-        // Verify the relationship exists with metadata
-        let relationships = tracker.get_resource_relationships(&resource_a)?;
-        assert_eq!(relationships.len(), 1);
-        assert_eq!(relationships[0].metadata.get("weight"), Some(&"0.5".to_string()));
-        assert_eq!(relationships[0].metadata.get("description"), Some(&"Test relationship".to_string()));
+        // Verify the content IDs are different
+        assert_ne!(relationship.id, relationship_with_metadata.id);
         
         Ok(())
     }

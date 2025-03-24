@@ -9,21 +9,83 @@ use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use crate::error::{Error, Result};
 use crate::effect::EffectType;
 use crate::effect::content::ContentHash;
 use crate::effect::repository;
+use crate::crypto::hash::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 /// A unique identifier for an execution context
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ContextId(String);
 
+/// Content type for generating context IDs
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+struct ContextIdContent {
+    /// Optional parent context ID
+    parent: Option<String>,
+    /// Creation timestamp
+    timestamp: i64,
+    /// Random nonce for uniqueness
+    nonce: [u8; 8],
+    /// Optional description or purpose
+    description: Option<String>,
+}
+
+impl ContentAddressed for ContextIdContent {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 impl ContextId {
-    /// Create a new random context ID
+    /// Create a new content-derived context ID
     pub fn new() -> Self {
-        ContextId(Uuid::new_v4().to_string())
+        let content = ContextIdContent {
+            parent: None,
+            timestamp: chrono::Utc::now().timestamp(),
+            nonce: rand::random::<[u8; 8]>(),
+            description: None,
+        };
+        
+        let content_id = content.content_id();
+        ContextId(format!("ctx:{}", content_id))
+    }
+    
+    /// Create a context ID for a child of an existing context
+    pub fn new_child(parent: &ContextId, description: Option<String>) -> Self {
+        let content = ContextIdContent {
+            parent: Some(parent.as_str().to_string()),
+            timestamp: chrono::Utc::now().timestamp(),
+            nonce: rand::random::<[u8; 8]>(),
+            description,
+        };
+        
+        let content_id = content.content_id();
+        ContextId(format!("ctx:{}", content_id))
     }
     
     /// Create a context ID from a string
@@ -40,6 +102,12 @@ impl ContextId {
 impl fmt::Display for ContextId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl From<ContentId> for ContextId {
+    fn from(content_id: ContentId) -> Self {
+        Self(format!("ctx:{}", content_id))
     }
 }
 
@@ -270,7 +338,7 @@ pub struct ExecutionContext {
 }
 
 impl ExecutionContext {
-    /// Create a new execution context
+    /// Create a new execution context with the given ID
     pub fn new(
         context_id: ContextId,
         repository: Arc<dyn repository::CodeRepository>,
@@ -288,13 +356,21 @@ impl ExecutionContext {
         }
     }
     
-    /// Create a new execution context with a random ID
+    /// Create a new execution context with a content-derived ID
     pub fn new_with_random_id(
         repository: Arc<dyn repository::CodeRepository>,
         resource_allocator: Arc<dyn crate::resource::ResourceAllocator>,
         parent: Option<Arc<ExecutionContext>>,
     ) -> Self {
-        Self::new(ContextId::new(), repository, resource_allocator, parent)
+        let context_id = if let Some(parent_ctx) = &parent {
+            // Create ID that references the parent
+            ContextId::new_child(parent_ctx.id(), None)
+        } else {
+            // Create standalone context ID
+            ContextId::new()
+        };
+        
+        Self::new(context_id, repository, resource_allocator, parent)
     }
     
     /// Get the context ID
@@ -393,9 +469,12 @@ impl ExecutionContext {
         Ok(())
     }
     
-    /// Create a child context
+    /// Create a child execution context with content-derived ID
     pub fn create_child(&self) -> Self {
-        ExecutionContext::new_with_random_id(
+        let context_id = ContextId::new_child(self.id(), None);
+        
+        ExecutionContext::new(
+            context_id,
             self.repository.clone(),
             self.resource_allocator.clone(),
             Some(Arc::new(self.clone())),

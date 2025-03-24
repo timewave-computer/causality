@@ -1,0 +1,29 @@
+Analyzing src/log/effect.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+156:            id: uuid::Uuid::new_v4().to_string(),
+
+Detailed context for each occurrence:
+==============================================
+
+Line 156:             id: uuid::Uuid::new_v4().to_string(),
+---------------------------------------------
+            true, // success
+            None, // error
+        );
+        
+        let log_entry = LogEntry {
+            id: uuid::Uuid::new_v4().to_string(),
+            timestamp: Utc::now(),
+            entry_type: EntryType::Effect,
+            data: EntryData::Effect(effect_entry),
+            trace_id: Some(trace_id.to_string()),
+            parent_id: None,
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+14:pub struct EffectLogger {
+23:pub struct EffectMetadata {
+362:pub struct EffectMonitor {

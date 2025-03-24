@@ -8,7 +8,8 @@ use std::sync::Arc;
 
 use crate::error::{Error, Result};
 use crate::effect::{Effect, EffectOutcome};
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::verification::UnifiedProof;
 use crate::interpreter::Interpreter;
 use crate::resource::{ResourceRegisterTrait};
@@ -156,7 +157,7 @@ impl OperationManager {
     /// Create and execute a transfer operation
     pub async fn transfer_resource(
         &self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         from: &str,
         to: &str,
         domain_id: Option<DomainId>,
@@ -197,7 +198,7 @@ impl OperationManager {
     /// Create and execute a deposit operation
     pub async fn deposit_resource(
         &self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         owner: &str,
         initial_state: Option<&str>,
         domain_id: Option<DomainId>,
@@ -230,7 +231,7 @@ impl OperationManager {
     /// Create and execute a withdrawal operation
     pub async fn withdraw_resource(
         &self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         owner: &str,
         domain_id: Option<DomainId>,
     ) -> Result<OperationResult<RegisterContext>, ExecutionError> {
@@ -293,7 +294,7 @@ pub mod builder {
         }
         
         /// Add an input resource
-        pub fn with_input(mut self, resource_id: ResourceId, domain_id: Option<DomainId>, state: Option<&str>) -> Self {
+        pub fn with_input(mut self, resource_id: ContentId, domain_id: Option<DomainId>, state: Option<&str>) -> Self {
             let resource_ref = ResourceRef {
                 resource_id,
                 domain_id,
@@ -307,7 +308,7 @@ pub mod builder {
         }
         
         /// Add an output resource
-        pub fn with_output(mut self, resource_id: ResourceId, domain_id: Option<DomainId>, state: Option<&str>) -> Self {
+        pub fn with_output(mut self, resource_id: ContentId, domain_id: Option<DomainId>, state: Option<&str>) -> Self {
             let resource_ref = ResourceRef {
                 resource_id,
                 domain_id,
@@ -377,7 +378,7 @@ pub mod builder {
     
     /// Create a transfer operation
     pub fn transfer(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         from: &str,
         to: &str,
         domain_id: Option<DomainId>
@@ -412,7 +413,7 @@ pub mod builder {
     
     /// Create a deposit operation
     pub fn deposit(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         owner: &str,
         initial_state: Option<&str>,
         domain_id: Option<DomainId>
@@ -441,7 +442,7 @@ pub mod builder {
     
     /// Create a withdrawal operation
     pub fn withdraw(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         owner: &str,
         domain_id: Option<DomainId>
     ) -> OperationBuilder {

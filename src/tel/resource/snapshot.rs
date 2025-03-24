@@ -3,33 +3,50 @@
 // This module implements a snapshot system for resources,
 // allowing state recovery and point-in-time access to resource
 // states.
+//
+// Migration note: Updated to use the unified ResourceRegister model
 
 use std::sync::{Arc, RwLock};
 use std::collections::{HashMap, BTreeMap};
 use std::time::{Duration, SystemTime};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use borsh::{BorshSerialize, BorshDeserialize};
+use crypto::{
+    hash::{ContentId, HashError, HashFactory, HashOutput},
+    ContentAddressed,
+};
 
 use crate::tel::{
     error::{TelError, TelResult},
-    types::{ResourceId, Timestamp, Domain, Address},
+    types::{Timestamp, Domain, Address},
     resource::{
         ResourceManager,
-        Register,
-        RegisterId,
-        RegisterContents,
-        RegisterState,
     },
 };
+use crate::resource::resource_register::ResourceRegister;
 
 /// Snapshot identifier
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
 pub struct SnapshotId(String);
 
 impl SnapshotId {
     /// Create a new snapshot ID
     pub fn new() -> Self {
-        use uuid::Uuid;
-        Self(format!("snapshot-{}", Uuid::new_v4()))
+        // Generate a unique string based on the current time to hash
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+            
+        let snapshot_data = format!("snapshot-data-{}", now);
+        
+        // Generate a content ID
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let hash = hasher.hash(snapshot_data.as_bytes());
+        let content_id = ContentId::from(hash);
+        
+        // Format the snapshot ID with the content ID
+        Self(format!("snapshot-{}", content_id))
     }
     
     /// Create a snapshot ID from a string
@@ -40,6 +57,28 @@ impl SnapshotId {
     /// Get the ID as a string
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl ContentAddressed for SnapshotId {
+    fn content_hash(&self) -> HashOutput {
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        hasher.hash(self.0.as_bytes())
+    }
+    
+    fn verify(&self) -> bool {
+        self.0.starts_with("snapshot-")
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.0.as_bytes().to_vec()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        match std::str::from_utf8(bytes) {
+            Ok(s) => Ok(Self(s.to_string())),
+            Err(_) => Err(HashError::InvalidFormat)
+        }
     }
 }
 
@@ -298,19 +337,21 @@ impl SnapshotManager {
         Ok(snapshot_id)
     }
     
-    /// Create snapshot data for resources
+    /// Create the data for a snapshot
     fn create_snapshot_data(&self, domain: Option<&Domain>) -> TelResult<Vec<u8>> {
-        // Get all registers
-        let registers = if let Some(domain) = domain {
-            self.resource_manager.get_registers_by_domain(domain)?
+        // Get all resources
+        let resource_registers = if let Some(domain) = domain {
+            // Get resources from a specific domain
+            self.resource_manager.get_resource_registers_by_domain(domain)?
         } else {
-            self.resource_manager.get_all_registers()?
+            // Get all resources
+            self.resource_manager.get_all_resource_registers()?
         };
         
-        // Serialize the registers
+        // Serialize the resources
         // In a real implementation, this would use a binary serialization format
         // For the purposes of this implementation, we'll use JSON
-        let json = serde_json::to_vec(&registers)
+        let json = serde_json::to_vec(&resource_registers)
             .map_err(|e| TelError::InternalError(format!("Failed to serialize snapshot: {}", e)))?;
             
         Ok(json)
@@ -327,83 +368,86 @@ impl SnapshotManager {
             .ok_or_else(|| TelError::ResourceSnapshotNotFound(id.as_str().to_string()))?;
             
         // Deserialize the snapshot
-        let registers: Vec<Register> = serde_json::from_slice(&snapshot_data)
+        let resource_registers: Vec<ResourceRegister> = serde_json::from_slice(&snapshot_data)
             .map_err(|e| TelError::InternalError(format!("Failed to deserialize snapshot: {}", e)))?;
             
         // Apply the restore
         match options.mode {
             RestoreMode::Full => {
-                // Clear existing registers if needed
+                // Clear existing resources if needed
                 if options.clear_existing {
-                    self.resource_manager.clear_all_registers()?;
+                    self.resource_manager.clear_all_resource_registers()?;
                 }
                 
-                // Restore all registers
-                for register in registers {
-                    self.resource_manager.restore_register(&register)?;
+                // Restore all resource registers
+                let mut errors = Vec::new();
+                let mut restored = 0;
+                
+                for resource_register in resource_registers {
+                    match self.resource_manager.restore_resource_register(&resource_register) {
+                        Ok(_) => restored += 1,
+                        Err(e) => errors.push((resource_register.id.clone(), e.to_string())),
+                    }
                 }
                 
                 Ok(RestoreResult {
-                    restored_registers: registers.len(),
+                    restored_registers: restored,
                     skipped_registers: 0,
-                    errors: Vec::new(),
+                    errors,
                 })
             },
-            RestoreMode::Selective { ref register_ids } => {
-                let mut result = RestoreResult {
-                    restored_registers: 0,
-                    skipped_registers: 0,
-                    errors: Vec::new(),
-                };
+            RestoreMode::Selective { register_ids } => {
+                let mut restored = 0;
+                let mut skipped = 0;
+                let mut errors = Vec::new();
                 
-                // Filter registers by ID
-                for register in registers {
-                    if register_ids.contains(&register.id) {
-                        match self.resource_manager.restore_register(&register) {
-                            Ok(_) => {
-                                result.restored_registers += 1;
-                            },
-                            Err(e) => {
-                                result.errors.push((
-                                    register.id.clone(),
-                                    format!("Failed to restore register: {}", e),
-                                ));
-                            }
+                // Restore only specific resources
+                for resource_register in resource_registers {
+                    if register_ids.contains(&resource_register.id) {
+                        match self.resource_manager.restore_resource_register(&resource_register) {
+                            Ok(_) => restored += 1,
+                            Err(e) => errors.push((resource_register.id.clone(), e.to_string())),
                         }
                     } else {
-                        result.skipped_registers += 1;
+                        skipped += 1;
                     }
                 }
                 
-                Ok(result)
+                Ok(RestoreResult {
+                    restored_registers: restored,
+                    skipped_registers: skipped,
+                    errors,
+                })
             },
-            RestoreMode::DomainOnly { ref domain } => {
-                let mut result = RestoreResult {
-                    restored_registers: 0,
-                    skipped_registers: 0,
-                    errors: Vec::new(),
-                };
+            RestoreMode::DomainOnly { domain } => {
+                let mut restored = 0;
+                let mut skipped = 0;
+                let mut errors = Vec::new();
                 
-                // Filter registers by domain
-                for register in registers {
-                    if register.domain == *domain {
-                        match self.resource_manager.restore_register(&register) {
-                            Ok(_) => {
-                                result.restored_registers += 1;
-                            },
-                            Err(e) => {
-                                result.errors.push((
-                                    register.id.clone(),
-                                    format!("Failed to restore register: {}", e),
-                                ));
-                            }
+                // Get domain as string for comparison
+                let domain_str = domain.to_string();
+                
+                // Restore only resources from a specific domain
+                for resource_register in resource_registers {
+                    // Check if the resource is from the specified domain
+                    // This assumes that the domain information is stored in the metadata
+                    let resource_domain = resource_register.metadata.get("domain").map(|d| d.as_str()).unwrap_or("");
+                    
+                    if resource_domain == domain_str {
+                        match self.resource_manager.restore_resource_register(&resource_register) {
+                            Ok(_) => restored += 1,
+                            Err(e) => errors.push((resource_register.id.clone(), e.to_string())),
                         }
                     } else {
-                        result.skipped_registers += 1;
+                        skipped += 1;
                     }
                 }
                 
-                Ok(result)
+                Ok(RestoreResult {
+                    restored_registers: restored,
+                    skipped_registers: skipped,
+                    errors,
+                })
             },
         }
     }
@@ -557,16 +601,15 @@ impl SnapshotManager {
 }
 
 /// Mode for restoring a snapshot
-#[derive(Debug, Clone)]
 pub enum RestoreMode {
     /// Restore all resources from the snapshot
     Full,
-    /// Restore only specific registers
+    /// Restore only specific resources
     Selective {
-        /// Register IDs to restore
-        register_ids: Vec<RegisterId>,
+        /// Resource IDs to restore
+        register_ids: Vec<ContentId>,
     },
-    /// Restore only registers from a specific domain
+    /// Restore only resources from a specific domain
     DomainOnly {
         /// Domain to restore
         domain: Domain,
@@ -574,21 +617,19 @@ pub enum RestoreMode {
 }
 
 /// Options for restoring a snapshot
-#[derive(Debug, Clone)]
 pub struct RestoreOptions {
     /// Restore mode
     pub mode: RestoreMode,
-    /// Whether to clear existing registers before restoring
+    /// Whether to clear existing resources before restoring
     pub clear_existing: bool,
 }
 
-/// Result of a restore operation
-#[derive(Debug, Clone)]
+/// Result of a snapshot restore operation
 pub struct RestoreResult {
-    /// Number of registers restored
+    /// Number of resources restored
     pub restored_registers: usize,
-    /// Number of registers skipped
+    /// Number of resources skipped
     pub skipped_registers: usize,
     /// Errors encountered during restore
-    pub errors: Vec<(RegisterId, String)>,
+    pub errors: Vec<(ContentId, String)>,
 } 

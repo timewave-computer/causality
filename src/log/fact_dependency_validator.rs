@@ -3,12 +3,13 @@
 // This module provides validation for fact dependencies in effects.
 
 use std::collections::{HashMap, HashSet};
-use crate::types::{DomainId, ResourceId, Timestamp};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::error::{Error, Result};
 use crate::log::fact_types::{FactType, RegisterFact, ZKProofFact};
 use crate::log::fact_snapshot::{FactSnapshot, FactId, FactDependency, FactDependencyType, RegisterObservation};
 use crate::effect::Effect;
-use crate::resource::register::RegisterId;
+use crate::resource::register::ContentId;
 
 /// Validates fact dependencies for effects
 #[derive(Debug, Clone)]
@@ -16,7 +17,7 @@ pub struct FactDependencyValidator {
     /// Observed facts
     observed_facts: HashSet<FactId>,
     /// Register observations
-    register_observations: HashMap<RegisterId, RegisterObservation>,
+    register_observations: HashMap<ContentId, RegisterObservation>,
     /// Domains containing facts
     domains: HashSet<DomainId>,
     /// Map of fact IDs to verified status
@@ -70,7 +71,7 @@ impl FactDependencyValidator {
     }
     
     /// Validate register dependencies
-    pub fn validate_register_dependencies(&self, register_dependencies: &[RegisterId]) -> bool {
+    pub fn validate_register_dependencies(&self, register_dependencies: &[ContentId]) -> bool {
         for register_id in register_dependencies {
             if !self.register_observations.contains_key(register_id) {
                 return false;
@@ -85,7 +86,7 @@ impl FactDependencyValidator {
     }
     
     /// Get register observations
-    pub fn register_observations(&self) -> &HashMap<RegisterId, RegisterObservation> {
+    pub fn register_observations(&self) -> &HashMap<ContentId, RegisterObservation> {
         &self.register_observations
     }
     
@@ -116,7 +117,7 @@ impl FactDependencyValidator {
     }
     
     /// Check if a register is contained in the validator
-    pub fn contains_register(&self, register_id: &RegisterId) -> bool {
+    pub fn contains_register(&self, register_id: &ContentId) -> bool {
         self.register_observations.contains_key(register_id)
     }
     

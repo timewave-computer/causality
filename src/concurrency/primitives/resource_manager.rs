@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use crate::error::{Error, Result};
-use crate::types::ResourceId;
+use crate::crypto::hash::ContentId;
 
 use super::{SharedWaitQueue, WaitQueue};
 use super::ResourceGuard;
@@ -32,18 +32,18 @@ pub fn shared() -> SharedResourceManager {
 #[derive(Debug)]
 pub struct ResourceManager {
     // Resources and their current owners
-    resources: Mutex<HashMap<ResourceId, ResourceOwnership>>,
+    resources: Mutex<HashMap<ContentId, ResourceOwnership>>,
     // Wait queue for resource contention
     wait_queue: SharedWaitQueue,
     // Resource values
-    values: Mutex<HashMap<ResourceId, Box<dyn Any + Send + Sync>>>,
+    values: Mutex<HashMap<ContentId, Box<dyn Any + Send + Sync>>>,
 }
 
 /// Resource ownership information
 #[derive(Debug, Clone)]
 struct ResourceOwnership {
     /// The ID of the resource
-    id: ResourceId,
+    id: ContentId,
     /// The current owner, if any
     owner: Option<String>,
     /// Whether the resource is locked for exclusive access
@@ -67,7 +67,7 @@ impl ResourceManager {
     /// Register a new resource with the manager
     pub fn register_resource<T: Any + Send + Sync>(
         &self,
-        id: ResourceId,
+        id: ContentId,
         initial_value: T,
     ) -> Result<()> {
         let mut resources = self.resources.lock().map_err(|_| 
@@ -96,12 +96,12 @@ impl ResourceManager {
     /// Attempt to acquire a resource
     pub fn acquire_resource<T: Any + Send + Sync>(
         &self,
-        id: ResourceId,
+        id: ContentId,
         requestor: &str,
     ) -> impl Future<Output = Result<ResourceGuard<T>>> + '_ {
         struct AcquireResourceFuture<'a, T: Any + Send + Sync> {
             manager: &'a ResourceManager,
-            id: ResourceId,
+            id: ContentId,
             requestor: String,
             attempts: usize,
             _phantom: std::marker::PhantomData<T>,
@@ -179,7 +179,7 @@ impl ResourceManager {
     /// Try to acquire a resource without waiting
     pub fn try_acquire_resource<T: Any + Send + Sync>(
         &self,
-        id: ResourceId,
+        id: ContentId,
         requestor: &str,
     ) -> Result<Option<ResourceGuard<T>>> {
         let mut resources = self.resources.lock().map_err(|_| 
@@ -219,7 +219,7 @@ impl ResourceManager {
     }
     
     /// Get resources owned by a specific requestor
-    fn get_resources_owned_by(&self, requestor: &str) -> Result<HashSet<ResourceId>> {
+    fn get_resources_owned_by(&self, requestor: &str) -> Result<HashSet<ContentId>> {
         let resources = self.resources.lock().map_err(|_| 
             Error::InternalError("Failed to lock resources".to_string()))?;
         
@@ -235,7 +235,7 @@ impl ResourceManager {
     }
     
     /// Check if a resource is available
-    pub fn is_resource_available(&self, id: ResourceId) -> Result<bool> {
+    pub fn is_resource_available(&self, id: ContentId) -> Result<bool> {
         let resources = self.resources.lock().map_err(|_| 
             Error::InternalError("Failed to lock resources".to_string()))?;
         
@@ -246,7 +246,7 @@ impl ResourceManager {
     }
     
     /// Get the current owner of a resource
-    pub fn resource_owner(&self, id: ResourceId) -> Result<Option<String>> {
+    pub fn resource_owner(&self, id: ContentId) -> Result<Option<String>> {
         let resources = self.resources.lock().map_err(|_| 
             Error::InternalError("Failed to lock resources".to_string()))?;
         
@@ -257,7 +257,7 @@ impl ResourceManager {
     }
     
     /// Get the waiters for a resource
-    pub fn resource_waiters(&self, id: ResourceId) -> Result<HashSet<String>> {
+    pub fn resource_waiters(&self, id: ContentId) -> Result<HashSet<String>> {
         let resources = self.resources.lock().map_err(|_| 
             Error::InternalError("Failed to lock resources".to_string()))?;
         
@@ -268,7 +268,7 @@ impl ResourceManager {
     }
     
     /// Get a list of all resources managed by this resource manager
-    pub fn list_resources(&self) -> Result<Vec<ResourceId>> {
+    pub fn list_resources(&self) -> Result<Vec<ContentId>> {
         let resources = self.resources.lock().map_err(|_| 
             Error::InternalError("Failed to lock resources".to_string()))?;
             
@@ -278,7 +278,7 @@ impl ResourceManager {
     /// Release a resource
     ///
     /// This is typically called by the ResourceGuard's drop implementation.
-    pub(crate) fn release_resource(&self, id: ResourceId, owner: &str) -> Result<()> {
+    pub(crate) fn release_resource(&self, id: ContentId, owner: &str) -> Result<()> {
         let mut resources = self.resources.lock().map_err(|_| 
             Error::InternalError("Failed to lock resources".to_string()))?;
         
@@ -313,7 +313,7 @@ impl ResourceManager {
     /// when they release the resource.
     pub(crate) fn update_resource_value<T: Any + Send + Sync>(
         &self,
-        id: ResourceId,
+        id: ContentId,
         value: T,
     ) -> Result<()> {
         let mut values = self.values.lock().map_err(|_| 
@@ -357,28 +357,28 @@ mod tests {
         let manager = ResourceManager::new();
         
         // Register a resource
-        manager.register_resource(ResourceId::new("test"), String::from("test resource"))?;
+        manager.register_resource(ContentId::new("test"), String::from("test resource"))?;
         
         // Acquire the resource
-        let guard = manager.acquire_resource::<String>(ResourceId::new("test"), "requestor1").await?;
+        let guard = manager.acquire_resource::<String>(ContentId::new("test"), "requestor1").await?;
         
         // Verify the resource value
         assert_eq!(*guard, "test resource");
         
         // Check resource availability
-        assert!(!manager.is_resource_available(ResourceId::new("test"))?);
+        assert!(!manager.is_resource_available(ContentId::new("test"))?);
         
         // Check resource owner
-        assert_eq!(manager.resource_owner(ResourceId::new("test"))?, Some("requestor1".to_string()));
+        assert_eq!(manager.resource_owner(ContentId::new("test"))?, Some("requestor1".to_string()));
         
         // Release the resource
         drop(guard);
         
         // Check resource availability after release
-        assert!(manager.is_resource_available(ResourceId::new("test"))?);
+        assert!(manager.is_resource_available(ContentId::new("test"))?);
         
         // Check resource owner after release
-        assert_eq!(manager.resource_owner(ResourceId::new("test"))?, None);
+        assert_eq!(manager.resource_owner(ContentId::new("test"))?, None);
         
         Ok(())
     }
@@ -388,12 +388,12 @@ mod tests {
         let manager = Arc::new(ResourceManager::new());
         
         // Register a resource
-        manager.register_resource(ResourceId::new("test"), String::from("test resource"))?;
+        manager.register_resource(ContentId::new("test"), String::from("test resource"))?;
         
         // Spawn a task to acquire the resource
         let manager1 = manager.clone();
         let handle1 = tokio::spawn(async move {
-            let guard = manager1.acquire_resource::<String>(ResourceId::new("test"), "requestor1").await?;
+            let guard = manager1.acquire_resource::<String>(ContentId::new("test"), "requestor1").await?;
             tokio::time::sleep(Duration::from_millis(100)).await;
             Result::<(), Error>::Ok(())
         });
@@ -403,7 +403,7 @@ mod tests {
         
         // Try to acquire the resource in this task
         let start = Instant::now();
-        let guard = manager.acquire_resource::<String>(ResourceId::new("test"), "requestor2").await?;
+        let guard = manager.acquire_resource::<String>(ContentId::new("test"), "requestor2").await?;
         let elapsed = start.elapsed();
         
         // Verify that we waited for the resource
@@ -423,10 +423,10 @@ mod tests {
         let manager = ResourceManager::new();
         
         // Register a resource
-        manager.register_resource(ResourceId::new("test"), String::from("test resource"))?;
+        manager.register_resource(ContentId::new("test"), String::from("test resource"))?;
         
         // Acquire the resource
-        let mut guard = manager.acquire_resource::<String>(ResourceId::new("test"), "requestor1").await?;
+        let mut guard = manager.acquire_resource::<String>(ContentId::new("test"), "requestor1").await?;
         
         // Modify the resource
         guard.push_str(" modified");
@@ -435,7 +435,7 @@ mod tests {
         drop(guard);
         
         // Acquire the resource again
-        let guard = manager.acquire_resource::<String>(ResourceId::new("test"), "requestor2").await?;
+        let guard = manager.acquire_resource::<String>(ContentId::new("test"), "requestor2").await?;
         
         // Verify the modified resource value
         assert_eq!(*guard, "test resource modified");

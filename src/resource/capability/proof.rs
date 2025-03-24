@@ -34,7 +34,7 @@ pub struct CapabilityProof {
     pub owner: Address,
     
     /// Resource ID the capability grants access to
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     
     /// Right granted by the capability
     pub right: Right,
@@ -60,7 +60,7 @@ impl CapabilityProof {
     pub fn new(
         capability_id: CapabilityId,
         owner: Address,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         right: Right,
         verification_hash: String,
         ttl: Option<Duration>,

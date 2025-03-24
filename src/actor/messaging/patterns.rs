@@ -10,11 +10,14 @@ use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 use async_trait::async_trait;
+use borsh::{BorshSerialize, BorshDeserialize};
+use std::time::SystemTime;
 
 use crate::error::{Error, Result};
 use crate::types::Timestamp;
 use super::{Message, MessageId, MessageCategory, MessagePayload, MessageHandler};
 use crate::actor::ActorId;
+use crate::crypto::content_addressed::{ContentAddressed, ContentId};
 
 /// Timeout error for request-response pattern
 #[derive(Debug, thiserror::Error)]
@@ -157,6 +160,42 @@ impl Topic {
     }
 }
 
+/// Content data for subscription ID generation
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct SubscriptionContentData {
+    /// Topic name
+    pub topic_name: String,
+    
+    /// Creation timestamp
+    pub timestamp: u64,
+    
+    /// Random nonce for uniqueness
+    pub nonce: [u8; 8],
+}
+
+impl ContentAddressed for SubscriptionContentData {
+    fn content_hash(&self) -> Result<ContentId> {
+        let bytes = self.to_bytes()?;
+        Ok(ContentId::from_bytes(&bytes)?)
+    }
+    
+    fn verify(&self, content_id: &ContentId) -> Result<bool> {
+        let calculated_id = self.content_hash()?;
+        Ok(calculated_id == *content_id)
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>> {
+        let bytes = borsh::to_vec(self)
+            .map_err(|e| Error::Serialization(format!("Failed to serialize SubscriptionContentData: {}", e)))?;
+        Ok(bytes)
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        borsh::from_slice(bytes)
+            .map_err(|e| Error::Deserialization(format!("Failed to deserialize SubscriptionContentData: {}", e)))
+    }
+}
+
 /// Subscription ID
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SubscriptionId(String);
@@ -164,9 +203,51 @@ pub struct SubscriptionId(String);
 impl SubscriptionId {
     /// Create a new random subscription ID
     pub fn new() -> Self {
-        use uuid::Uuid;
-        SubscriptionId(Uuid::new_v4().to_string())
+        SubscriptionId(self::random_content_id().to_string())
     }
+    
+    /// Create a new subscription ID for a topic
+    pub fn for_topic(topic: &Topic) -> Self {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let mut nonce = [0u8; 8];
+        getrandom::getrandom(&mut nonce).expect("Failed to generate random nonce");
+        
+        let content_data = SubscriptionContentData {
+            topic_name: topic.name().to_string(),
+            timestamp: now,
+            nonce,
+        };
+        
+        let id = content_data.content_hash()
+            .map(|id| id.to_string())
+            .unwrap_or_else(|_| format!("error-generating-id-{}", now));
+            
+        SubscriptionId(id)
+    }
+}
+
+/// Helper function to generate a random content ID
+fn random_content_id() -> ContentId {
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+        
+    let mut nonce = [0u8; 8];
+    getrandom::getrandom(&mut nonce).expect("Failed to generate random nonce");
+    
+    let content_data = SubscriptionContentData {
+        topic_name: format!("random-{}", now),
+        timestamp: now,
+        nonce,
+    };
+    
+    content_data.content_hash()
+        .unwrap_or_else(|_| ContentId::from_bytes(&nonce.to_vec()).unwrap())
 }
 
 /// Subscription information
@@ -205,7 +286,7 @@ impl PubSubSystem {
         topic: Topic,
         buffer_size: usize,
     ) -> Result<(SubscriptionId, mpsc::Receiver<Message>)> {
-        let subscription_id = SubscriptionId::new();
+        let subscription_id = SubscriptionId::for_topic(&topic);
         let (tx, rx) = mpsc::channel(buffer_size);
         
         let subscription = Subscription {

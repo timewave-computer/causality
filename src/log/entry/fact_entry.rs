@@ -4,7 +4,8 @@
 
 use serde::{Serialize, Deserialize};
 
-use crate::types::{ResourceId, DomainId, Timestamp, BlockHeight, BlockHash};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 
 /// An entry representing an observed fact
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,7 +21,7 @@ pub struct FactEntry {
     /// The fact type
     pub fact_type: String,
     /// The resources related to this fact
-    pub resources: Vec<ResourceId>,
+    pub resources: Vec<ContentId>,
     /// The serialized fact data
     pub data: serde_json::Value,
     /// Whether the fact was verified
@@ -35,7 +36,7 @@ impl FactEntry {
         block_hash: Option<BlockHash>,
         observed_at: Timestamp,
         fact_type: String,
-        resources: Vec<ResourceId>,
+        resources: Vec<ContentId>,
         data: serde_json::Value,
         verified: bool,
     ) -> Self {
@@ -77,7 +78,7 @@ impl FactEntry {
     }
     
     /// Get the resources related to this fact
-    pub fn resources(&self) -> &[ResourceId] {
+    pub fn resources(&self) -> &[ContentId] {
         &self.resources
     }
     
@@ -115,7 +116,7 @@ mod tests {
         let block_hash = Some(BlockHash::new("abc123".to_string()));
         let observed_at = Timestamp::now();
         let fact_type = "balance".to_string();
-        let resources = vec![ResourceId::new(1)];
+        let resources = vec![ContentId::new(1)];
         let data = serde_json::json!({"balance": 100});
         
         let entry = FactEntry::new(

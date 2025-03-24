@@ -5,7 +5,8 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::effect::EffectType;
 
 /// An entry representing an effect operation
@@ -14,7 +15,7 @@ pub struct EffectEntry {
     /// The type of effect
     pub effect_type: EffectType,
     /// The resources affected by this effect
-    pub resources: Vec<ResourceId>,
+    pub resources: Vec<ContentId>,
     /// The domains involved in this effect
     pub domains: Vec<DomainId>,
     /// The hash of the effect code
@@ -33,7 +34,7 @@ impl EffectEntry {
     /// Create a new effect entry
     pub fn new(
         effect_type: EffectType,
-        resources: Vec<ResourceId>,
+        resources: Vec<ContentId>,
         domains: Vec<DomainId>,
         code_hash: Option<String>,
         parameters: HashMap<String, serde_json::Value>,
@@ -59,7 +60,7 @@ impl EffectEntry {
     }
     
     /// Get the resources affected by this effect
-    pub fn resources(&self) -> &[ResourceId] {
+    pub fn resources(&self) -> &[ContentId] {
         &self.resources
     }
     
@@ -122,7 +123,7 @@ mod tests {
     #[test]
     fn test_effect_entry_creation() {
         let effect_type = EffectType::Transfer;
-        let resources = vec![ResourceId::new(1), ResourceId::new(2)];
+        let resources = vec![ContentId::new(1), ContentId::new(2)];
         let domains = vec![DomainId::new(1), DomainId::new(2)];
         let code_hash = Some("abc123".to_string());
         let mut parameters = HashMap::new();

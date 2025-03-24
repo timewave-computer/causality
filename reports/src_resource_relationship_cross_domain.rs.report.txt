@@ -1,0 +1,29 @@
+Analyzing src/resource/relationship/cross_domain.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+107:        let id = Uuid::new_v4().to_string();
+
+Detailed context for each occurrence:
+==============================================
+
+Line 107:         let id = Uuid::new_v4().to_string();
+---------------------------------------------
+        relationship_type: CrossDomainRelationshipType,
+        metadata: CrossDomainMetadata,
+        bidirectional: bool,
+    ) -> Self {
+        // Generate a unique ID
+        let id = Uuid::new_v4().to_string();
+        
+        Self {
+            id,
+            source_resource,
+            source_domain,
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+37:pub struct CrossDomainMetadata {
+69:pub struct CrossDomainRelationship {
+145:pub struct CrossDomainRelationshipManager {

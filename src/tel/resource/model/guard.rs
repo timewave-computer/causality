@@ -2,14 +2,17 @@
 //
 // This module provides the ResourceGuard which enables safe and controlled
 // access to resources through the register-based model.
+// Migration note: This file has been migrated to use the unified ResourceRegister model.
 
 use std::sync::{Arc, RwLock};
 use std::fmt;
 use std::ops::{Deref, DerefMut, Drop};
 
-use crate::tel::types::{ResourceId, Address};
+use crate::tel::types::{Address};
 use crate::tel::error::{TelError, TelResult};
-use crate::tel::resource::model::{Register, RegisterId, RegisterContents, RegisterState};
+use crate::crypto::hash::ContentId;
+use crate::resource::ResourceRegister;
+use crate::resource::resource_register::RegisterState;
 use super::manager::ResourceManager;
 
 /// Types of access to a resource
@@ -37,7 +40,7 @@ pub struct ResourceAccessControl {
     /// The resource manager
     resource_manager: Arc<ResourceManager>,
     /// Access control lists for registers
-    acls: RwLock<Vec<(RegisterId, Vec<AclEntry>)>>,
+    acls: RwLock<Vec<(ContentId, Vec<AclEntry>)>>,
 }
 
 impl ResourceAccessControl {
@@ -52,7 +55,7 @@ impl ResourceAccessControl {
     /// Grant access to a register
     pub fn grant_access(
         &self,
-        register_id: &RegisterId,
+        register_id: &ContentId,
         address: Address,
         mode: AccessMode,
         expiry: Option<u64>,
@@ -110,7 +113,7 @@ impl ResourceAccessControl {
     /// Revoke access to a register
     pub fn revoke_access(
         &self,
-        register_id: &RegisterId,
+        register_id: &ContentId,
         address: &Address,
     ) -> TelResult<()> {
         let mut acls = self.acls.write().map_err(|_| 
@@ -134,7 +137,7 @@ impl ResourceAccessControl {
     /// Check if an address has access to a register
     pub fn check_access(
         &self,
-        register_id: &RegisterId,
+        register_id: &ContentId,
         address: &Address,
         required_mode: AccessMode,
     ) -> TelResult<bool> {
@@ -186,37 +189,30 @@ impl ResourceAccessControl {
         Ok(false)
     }
     
-    /// Acquire a register guard
+    /// Acquire a resource guard with the requested access mode
     pub fn acquire_guard(
         &self,
-        register_id: &RegisterId,
+        register_id: &ContentId,
         address: &Address,
         mode: AccessMode,
     ) -> TelResult<ResourceGuard> {
-        // Check if address has access
+        // Check if the address has proper access
         if !self.check_access(register_id, address, mode)? {
-            return Err(TelError::AuthorizationError(format!(
-                "Address {:?} does not have {:?} access to register {:?}",
+            return Err(TelError::AccessDenied(format!(
+                "Address {} does not have {:?} access to register {}",
                 address, mode, register_id
             )));
         }
         
-        // Get the register
-        let register = self.resource_manager.get_register(register_id)?;
+        // Get the resource register from the manager
+        let register = self.resource_manager.get_resource_register(register_id)?;
         
-        // Check if register is active
-        if !register.is_active() {
-            return Err(TelError::ResourceError(format!(
-                "Register {:?} is not in active state", register_id
-            )));
-        }
-        
-        // Create guard
+        // Create and return the guard
         Ok(ResourceGuard {
             register,
-            register_id: *register_id,
+            register_id: register_id.clone(),
             mode,
-            resource_manager: Arc::clone(&self.resource_manager),
+            resource_manager: self.resource_manager.clone(),
         })
     }
     
@@ -252,12 +248,13 @@ impl ResourceAccessControl {
     }
 }
 
-/// A guard for safe access to a register
+/// Resource guard for controlled access to resources
+#[derive(Clone)]
 pub struct ResourceGuard {
-    /// The register being guarded
-    register: Register,
+    /// The register being guarded (using unified ResourceRegister model)
+    register: ResourceRegister,
     /// ID of the register
-    register_id: RegisterId,
+    register_id: ContentId,
     /// Access mode
     mode: AccessMode,
     /// Resource manager
@@ -266,7 +263,7 @@ pub struct ResourceGuard {
 
 impl ResourceGuard {
     /// Get the register ID
-    pub fn register_id(&self) -> RegisterId {
+    pub fn register_id(&self) -> ContentId {
         self.register_id
     }
     
@@ -280,21 +277,20 @@ impl ResourceGuard {
         self.mode == AccessMode::ReadWrite
     }
     
-    /// Update the register contents
-    pub fn update_contents(&mut self, contents: RegisterContents) -> TelResult<()> {
-        if self.mode != AccessMode::ReadWrite {
-            return Err(TelError::AuthorizationError(
-                "Cannot update register with read-only access".to_string()
-            ));
+    /// Update the contents of the guarded register
+    pub fn update_contents(&mut self, contents: Vec<u8>) -> TelResult<()> {
+        if !self.can_write() {
+            return Err(TelError::AccessDenied("Write access required".to_string()));
         }
         
-        self.register.contents = contents.clone();
-        self.resource_manager.update_register(&self.register_id, contents)
+        // Update the register with new contents
+        self.register.update_contents(contents);
+        Ok(())
     }
 }
 
 impl Deref for ResourceGuard {
-    type Target = Register;
+    type Target = ResourceRegister;
     
     fn deref(&self) -> &Self::Target {
         &self.register
@@ -303,19 +299,18 @@ impl Deref for ResourceGuard {
 
 impl DerefMut for ResourceGuard {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        if self.mode != AccessMode::ReadWrite {
-            panic!("Cannot get mutable reference with read-only access");
-        }
-        
         &mut self.register
     }
 }
 
 impl Drop for ResourceGuard {
     fn drop(&mut self) {
-        // If changes were made with write access, update the register
+        // If this is a write access guard, make sure changes are persisted
         if self.mode == AccessMode::ReadWrite {
-            let _ = self.resource_manager.update_register(&self.register_id, self.register.contents.clone());
+            if let Err(e) = self.resource_manager.update_resource_register(&self.register_id, self.register.clone()) {
+                // Just log the error here since we can't propagate it from drop
+                eprintln!("Error updating register on guard drop: {:?}", e);
+            }
         }
     }
 }
@@ -324,8 +319,8 @@ impl fmt::Debug for ResourceGuard {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ResourceGuard")
             .field("register_id", &self.register_id)
+            .field("state", &self.register.state())
             .field("mode", &self.mode)
-            .field("register", &self.register)
             .finish()
     }
 }
@@ -360,10 +355,10 @@ impl SharedResourceManager {
         &self.access_control
     }
     
-    /// Acquire a register guard
+    /// Acquire a guard for a specific register
     pub fn acquire_guard(
         &self,
-        register_id: &RegisterId,
+        register_id: &ContentId,
         address: &Address,
         mode: AccessMode,
     ) -> TelResult<ResourceGuard> {

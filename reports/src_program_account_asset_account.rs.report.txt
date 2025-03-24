@@ -1,0 +1,76 @@
+Analyzing src/program_account/asset_account.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+120:        let collection_id = format!("col-{}", Uuid::new_v4());
+282:            id: format!("transfer-{}", Uuid::new_v4()),
+343:        let resource_id = ResourceId::from_str(&format!("asset-{}", Uuid::new_v4()));
+372:            id: format!("create-asset-{}", Uuid::new_v4()),
+
+Detailed context for each occurrence:
+==============================================
+
+Line 120:         let collection_id = format!("col-{}", Uuid::new_v4());
+---------------------------------------------
+                "Account does not have access to domain: {}", domain_id
+            )));
+        }
+        
+        // Create a new collection ID
+        let collection_id = format!("col-{}", Uuid::new_v4());
+        
+        // Create the collection
+        let collection = AssetCollection {
+            id: collection_id.clone(),
+            name,
+---------------------------------------------
+
+Line 282:             id: format!("transfer-{}", Uuid::new_v4()),
+---------------------------------------------
+        // 4. Update the local state
+        // 5. Return the result
+        
+        // For now, we just create a simulated result
+        let result = EffectResult {
+            id: format!("transfer-{}", Uuid::new_v4()),
+            status: EffectStatus::Completed,
+            transaction_id: trace_id.map(|id| id.to_string()),
+            new_resources: Vec::new(),
+            modified_resources: Vec::new(),
+            consumed_resources: Vec::new(),
+---------------------------------------------
+
+Line 343:         let resource_id = ResourceId::from_str(&format!("asset-{}", Uuid::new_v4()));
+---------------------------------------------
+                asset_type, collection.asset_type.to_str()
+            )));
+        }
+        
+        // Create a new resource ID
+        let resource_id = ResourceId::from_str(&format!("asset-{}", Uuid::new_v4()));
+        
+        // In a real implementation, this would:
+        // 1. Create a register for the asset
+        // 2. Set up the appropriate metadata
+        // 3. Update the collection
+---------------------------------------------
+
+Line 372:             id: format!("create-asset-{}", Uuid::new_v4()),
+---------------------------------------------
+            self.base.set_balance(&resource_id.to_string(), amount.unwrap())?;
+        }
+        
+        // Create a result
+        let result = EffectResult {
+            id: format!("create-asset-{}", Uuid::new_v4()),
+            status: EffectStatus::Completed,
+            transaction_id: trace_id.map(|id| id.to_string()),
+            new_resources: vec![resource],
+            modified_resources: Vec::new(),
+            consumed_resources: Vec::new(),
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+54:pub struct AssetAccount {
+64:pub struct AssetCollection {

@@ -3,7 +3,8 @@
 use std::fmt;
 use thiserror::Error;
 
-use crate::types::{ResourceId, DomainId, Asset, Amount};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::resource::RegisterId;
 
 /// The main error type for the Causality system

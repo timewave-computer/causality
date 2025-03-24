@@ -5,13 +5,55 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
+use std::any::Any;
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use crate::domain::{DomainId, DomainAdapter, FactQuery, FactType, FactObservationMeta};
 use crate::error::{Error, Result};
 use crate::effect::{Effect, EffectContext, EffectResult, EffectOutcome};
-use crate::log::fact_snapshot::{FactDependency, FactSnapshot};
+use crate::effect::boundary::ExecutionBoundary;
+use crate::crypto::{HashFactory, ContentId};
+use crate::crypto::hash::ContentAddressed;
+
+/// A dependency on a domain fact
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FactDependency {
+    /// Type of the fact
+    pub fact_type: String,
+    
+    /// Parameters for the fact query
+    pub parameters: HashMap<String, String>,
+    
+    /// Domain ID where the fact should be observed
+    pub domain_id: Option<String>,
+}
+
+/// A snapshot of a fact at a point in time
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FactSnapshot {
+    /// Type of the fact
+    pub fact_type: String,
+    
+    /// Parameters used to query the fact
+    pub parameters: HashMap<String, String>,
+    
+    /// Value of the fact (as a string)
+    pub value: String,
+    
+    /// Timestamp when the fact was observed
+    pub timestamp: u64,
+    
+    /// Source of the fact
+    pub source: String,
+    
+    /// Domain ID where the fact was observed
+    pub domain_id: Option<String>,
+    
+    /// Additional metadata
+    pub metadata: HashMap<String, String>,
+}
 
 /// A fact observed from a domain
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -464,10 +506,11 @@ pub trait DomainFactEffect: Effect {
     }
 }
 
-/// An effect for observing domain facts
+/// Effect for observing a domain fact
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct ObserveDomainFactEffect {
     /// Effect ID
-    id: uuid::Uuid,
+    id: ContentId,
     
     /// Fact query to observe
     query: FactQuery,
@@ -476,81 +519,143 @@ pub struct ObserveDomainFactEffect {
     cache_result: bool,
 }
 
+impl ContentAddressed for ObserveDomainFactEffect {
+    fn content_hash(&self) -> crate::crypto::HashOutput {
+        // Get the default hasher
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().expect("Failed to create hasher");
+        
+        // Create a canonical serialization of the effect
+        let data = self.to_bytes();
+        
+        // Compute hash with configured hasher
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let id = self.content_id();
+        id == self.id
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        borsh::to_vec(self).unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, crate::crypto::HashError> {
+        borsh::from_slice(bytes)
+            .map_err(|e| crate::crypto::HashError::SerializationError(e.to_string()))
+    }
+}
+
 impl ObserveDomainFactEffect {
-    /// Create a new observe domain fact effect
+    /// Create a new effect to observe a domain fact
     pub fn new(query: FactQuery) -> Self {
-        Self {
-            id: uuid::Uuid::new_v4(),
+        let effect = Self {
+            id: ContentId::nil(), // Temporary ID
             query,
             cache_result: true,
+        };
+        
+        // Generate a content-based ID
+        let id = effect.content_id();
+        
+        Self {
+            id,
+            query: effect.query,
+            cache_result: effect.cache_result,
         }
     }
     
-    /// Set whether to cache the result
+    /// Configure whether to cache the result
     pub fn with_cache(mut self, cache_result: bool) -> Self {
         self.cache_result = cache_result;
+        
+        // Regenerate ID after changing the cache setting
+        let id = self.content_id();
+        self.id = id;
+        
         self
     }
 }
 
 impl Effect for ObserveDomainFactEffect {
-    fn id(&self) -> &uuid::Uuid {
+    fn id(&self) -> &ContentId {
         &self.id
     }
     
-    fn name(&self) -> &str {
-        "observe_domain_fact"
+    fn boundary(&self) -> ExecutionBoundary {
+        ExecutionBoundary::Internal
     }
     
-    fn description(&self) -> String {
-        format!("Observe fact '{}' from domain '{}'", self.query.fact_type, self.query.domain_id)
-    }
-    
-    async fn execute_async(&self, context: &EffectContext) -> EffectResult<EffectOutcome> {
-        // Get the fact observer registry
-        let registry = context.get_service::<DomainFactObserverRegistry>()
-            .ok_or_else(|| {
-                EffectOutcome::error(
-                    self.id.clone(), 
-                    "No fact observer registry found in context"
-                )
-            })?;
+    async fn execute(&self, context: &EffectContext) -> EffectResult<EffectOutcome> {
+        // Get the fact observer registry from the context
+        let registry = context.params.get("observer_registry")
+            .ok_or_else(|| crate::effect::EffectError::InvalidParameter(
+                "Missing observer_registry parameter".to_string()
+            ))?;
+        
+        // Parse the registry from the param
+        let registry: &DomainFactObserverRegistry = registry.downcast_ref()
+            .ok_or_else(|| crate::effect::EffectError::InvalidParameter(
+                "Invalid observer_registry parameter".to_string()
+            ))?;
         
         // Observe the fact
         match registry.observe_fact(self.query.clone()).await {
             Ok(fact) => {
-                // Create the outcome
+                // Create outcome with the observed fact data
                 let mut outcome = EffectOutcome::success(self.id.clone());
                 
-                // Add the fact to the outcome data
-                outcome.add_data("fact", serde_json::to_value(&fact).unwrap_or_default());
-                outcome.add_data("fact_type", fact.query.clone());
+                // Add general data
+                outcome = outcome.with_data("domain_id", fact.domain_id.to_string())
+                    .with_data("fact_type", fact.fact_type.to_string());
                 
-                // Add the value as a string
+                // Add specific value based on fact type
                 if let Some(value) = fact.value_as_string() {
-                    outcome.add_data("value", value);
+                    outcome = outcome.with_data("value", value);
                 }
                 
-                // Add metadata
-                outcome.add_metadata("domain_id", fact.domain_id.to_string());
-                outcome.add_metadata("observed_at", fact.meta.observed_at.to_string());
-                
-                // If we should cache the result, add a fact snapshot
-                if self.cache_result {
-                    outcome.set_fact_snapshot(Some(fact.to_fact_snapshot()));
-                }
+                // Add observation metadata
+                outcome = outcome.with_data("observation_time", fact.meta.observed_at.to_string())
+                    .with_data("source", fact.meta.source.clone());
                 
                 Ok(outcome)
             },
             Err(err) => {
-                let error_message = format!("Failed to observe fact: {}", err);
-                Err(EffectOutcome::error(self.id.clone(), error_message))
+                // Create failure outcome
+                let outcome = EffectOutcome::failure(
+                    self.id.clone(),
+                    format!("Failed to observe fact: {}", err)
+                );
+                
+                Ok(outcome)
             }
         }
     }
     
-    fn fact_dependencies(&self) -> Vec<FactDependency> {
-        Vec::new() // No dependencies for this effect
+    fn description(&self) -> String {
+        format!("Observe fact {} from domain {}", self.query.fact_type, self.query.domain_id)
+    }
+    
+    async fn validate(&self, _context: &EffectContext) -> EffectResult<()> {
+        // Basic validation: ensure domain ID and fact type are not empty
+        if self.query.domain_id.is_empty() {
+            return Err(crate::effect::EffectError::InvalidParameter(
+                "Domain ID cannot be empty".to_string()
+            ));
+        }
+        
+        if self.query.fact_type.is_empty() {
+            return Err(crate::effect::EffectError::InvalidParameter(
+                "Fact type cannot be empty".to_string()
+            ));
+        }
+        
+        Ok(())
+    }
+    
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -773,7 +878,7 @@ mod tests {
         let effect = ObserveDomainFactEffect::new(query);
         
         // Execute the effect
-        let outcome = effect.execute_async(&context).await.unwrap();
+        let outcome = effect.execute(&context).await.unwrap();
         
         // Verify the result
         assert!(outcome.is_success());

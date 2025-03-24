@@ -2,8 +2,12 @@
 //
 // This module defines the effect system for Temporal Effect Language,
 // including resource effects, proofs, and adaptation to different domains.
+//
+// Migration note: Updated to use the unified ResourceRegister model
 
 pub mod proof;
+pub mod resource;
+pub mod validation;
 
 // Re-export core components
 pub use self::proof::{
@@ -15,15 +19,17 @@ pub use self::proof::{
 
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use uuid::Uuid;
+use serde::{Serialize, Deserialize};
+use crypto;
+use crate::crypto::hash::ContentId;
 
 use crate::tel::{
     error::{TelError, TelResult},
-    types::{ResourceId, Domain, Address, OperationId, Proof},
+    types::{ResourceId, Domain, Address, OperationId, Proof, Timestamp, Metadata},
     resource::{
         ResourceManager,
         ResourceOperation,
-        RegisterId,
+        ResourceRegister,
         RegisterState,
         ResourceOperationType,
         RegisterContents,
@@ -34,7 +40,7 @@ use crate::tel::{
 #[derive(Debug, Clone)]
 pub struct ResourceEffect {
     /// ID of the effect
-    pub id: Uuid,
+    pub id: ContentId,
     /// The operation this effect will perform
     pub operation: ResourceOperation,
     /// The proof associated with this effect (if any)
@@ -46,8 +52,31 @@ pub struct ResourceEffect {
 impl ResourceEffect {
     /// Create a new resource effect
     pub fn new(operation: ResourceOperation) -> Self {
+        // Generate a content-based ID from the operation
+        let operation_serialized = serde_json::to_vec(&operation).unwrap_or_default();
+        
+        // Add timestamp for uniqueness
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+            
+        let mut data_to_hash = operation_serialized;
+        data_to_hash.extend_from_slice(now.to_string().as_bytes());
+        
+        // Generate a content ID
+        let hasher = crypto::hash::HashFactory::default().create_hasher().unwrap();
+        let hash = hasher.hash(&data_to_hash);
+        
+        // Get UUID bytes from the hash (first 16 bytes)
+        let hash_bytes = hash.as_bytes();
+        let mut uuid_bytes = [0u8; 16];
+        for i in 0..std::cmp::min(16, hash_bytes.len()) {
+            uuid_bytes[i] = hash_bytes[i];
+        }
+        
         Self {
-            id: Uuid::new_v4(),
+            id: ContentId::from_bytes(uuid_bytes),
             operation,
             proof: None,
             requires_verification: false,
@@ -72,7 +101,7 @@ impl ResourceEffect {
 #[derive(Debug, Clone)]
 pub struct EffectResult {
     /// ID of the effect
-    pub effect_id: Uuid,
+    pub effect_id: ContentId,
     /// ID of the operation
     pub operation_id: OperationId,
     /// Whether the effect was successful
@@ -102,8 +131,8 @@ impl ResourceEffectAdapter {
         // Process the effect based on the operation type
         match &effect.operation.op_type {
             ResourceOperationType::Create { owner, domain, initial_data } => {
-                // Create a new resource
-                let result = self.resource_manager.create_resource(
+                // Create a new resource using the ResourceRegister model
+                let result = self.resource_manager.create_resource_register(
                     owner,
                     domain,
                     initial_data.clone(),
@@ -113,31 +142,35 @@ impl ResourceEffectAdapter {
                     effect_id: effect.id,
                     operation_id: effect.operation.id.clone(),
                     success: true,
-                    data: Some(RegisterContents::ResourceId(result)),
+                    data: Some(RegisterContents::Binary(result.to_bytes())),
                     error: None,
                 })
             },
             ResourceOperationType::Update { resource_id, new_data } => {
                 // Update an existing resource
-                let register_id = self.resource_manager.get_register(resource_id)?
-                    .id;
-
-                self.resource_manager.update_register(
-                    &register_id,
-                    new_data.clone(),
-                )?;
+                let mut resource_register = self.resource_manager.get_resource_register(resource_id)?;
+                
+                // Update the resource register with new data
+                resource_register.update_data(new_data.clone())?;
+                
+                // Save the updated resource
+                self.resource_manager.update_resource_register(&resource_register)?;
 
                 Ok(EffectResult {
                     effect_id: effect.id,
                     operation_id: effect.operation.id.clone(),
                     success: true,
-                    data: None,
+                    data: Some(RegisterContents::Binary(resource_register.to_bytes())),
                     error: None,
                 })
             },
             ResourceOperationType::Delete { resource_id } => {
                 // Delete a resource
-                self.resource_manager.delete_resource(resource_id)?;
+                let mut resource_register = self.resource_manager.get_resource_register(resource_id)?;
+                
+                // Mark the resource as consumed
+                resource_register.set_state(RegisterState::Tombstone)?;
+                self.resource_manager.update_resource_register(&resource_register)?;
 
                 Ok(EffectResult {
                     effect_id: effect.id,
@@ -147,24 +180,31 @@ impl ResourceEffectAdapter {
                     error: None,
                 })
             },
-            ResourceOperationType::Transfer { resource_id, new_owner } => {
-                // Transfer ownership of a resource
-                self.resource_manager.transfer_resource(resource_id, new_owner)?;
+            ResourceOperationType::Transfer { resource_id, from, to } => {
+                // Transfer a resource to another address
+                let mut resource_register = self.resource_manager.get_resource_register(resource_id)?;
+                
+                // Update the owner in the resource register
+                resource_register.transfer_ownership(from, to)?;
+                
+                // Save the updated resource
+                self.resource_manager.update_resource_register(&resource_register)?;
 
                 Ok(EffectResult {
                     effect_id: effect.id,
                     operation_id: effect.operation.id.clone(),
                     success: true,
-                    data: None,
+                    data: Some(RegisterContents::Binary(resource_register.to_bytes())),
                     error: None,
                 })
             },
             ResourceOperationType::Lock { resource_id } => {
                 // Lock a resource
-                let register_id = self.resource_manager.get_register(resource_id)?
-                    .id;
-
-                self.resource_manager.lock_register(&register_id)?;
+                let mut resource_register = self.resource_manager.get_resource_register(resource_id)?;
+                
+                // Lock the resource register
+                resource_register.set_state(RegisterState::Locked)?;
+                self.resource_manager.update_resource_register(&resource_register)?;
 
                 Ok(EffectResult {
                     effect_id: effect.id,
@@ -176,10 +216,11 @@ impl ResourceEffectAdapter {
             },
             ResourceOperationType::Unlock { resource_id } => {
                 // Unlock a resource
-                let register_id = self.resource_manager.get_register(resource_id)?
-                    .id;
-
-                self.resource_manager.unlock_register(&register_id)?;
+                let mut resource_register = self.resource_manager.get_resource_register(resource_id)?;
+                
+                // Unlock the resource register
+                resource_register.set_state(RegisterState::Active)?;
+                self.resource_manager.update_resource_register(&resource_register)?;
 
                 Ok(EffectResult {
                     effect_id: effect.id,
@@ -189,72 +230,200 @@ impl ResourceEffectAdapter {
                     error: None,
                 })
             },
-            ResourceOperationType::Custom { resource_id, action, params } => {
-                // Handle custom operations
-                // This would be extended for specific domain implementations
-                Err(TelError::UnsupportedOperation(format!(
-                    "Custom operation '{}' is not supported by this adapter",
-                    action
-                )))
-            }
+            ResourceOperationType::Merge { resource_ids, target_id } => {
+                // Merge multiple resources into one
+                let resources = resource_ids.iter()
+                    .map(|id| self.resource_manager.get_resource_register(id))
+                    .collect::<Result<Vec<_>, _>>()?;
+                
+                // We'll need a target resource for the merge result
+                let mut target = if let Some(id) = target_id {
+                    self.resource_manager.get_resource_register(id)?
+                } else {
+                    // Create a new resource register for the merge result
+                    let first = &resources[0];
+                    let mut target = ResourceRegister::new(
+                        first.logic_type(),
+                        first.domain(),
+                        first.fungibility_domain(),
+                    );
+                    target.set_state(RegisterState::Active)?;
+                    target
+                };
+                
+                // Perform the merge operation
+                self.resource_manager.merge_resources(&resources, &mut target)?;
+                
+                // Save the merged resource
+                self.resource_manager.update_resource_register(&target)?;
+                
+                // Mark the source resources as consumed
+                for mut resource in resources {
+                    resource.set_state(RegisterState::Tombstone)?;
+                    self.resource_manager.update_resource_register(&resource)?;
+                }
+
+                Ok(EffectResult {
+                    effect_id: effect.id,
+                    operation_id: effect.operation.id.clone(),
+                    success: true,
+                    data: Some(RegisterContents::Binary(target.to_bytes())),
+                    error: None,
+                })
+            },
+            ResourceOperationType::Split { resource_id, amounts } => {
+                // Split a resource into multiple parts
+                let mut source = self.resource_manager.get_resource_register(resource_id)?;
+                
+                // Create the new resources from the split
+                let results = self.resource_manager.split_resource(&mut source, amounts)?;
+                
+                // Convert the results to register contents for return
+                let result_data = results.iter()
+                    .map(|r| r.to_bytes())
+                    .collect::<Vec<_>>();
+                
+                // Combine all results into a single byte vector
+                let mut combined = Vec::new();
+                for bytes in result_data {
+                    combined.extend_from_slice(&bytes);
+                }
+
+                Ok(EffectResult {
+                    effect_id: effect.id,
+                    operation_id: effect.operation.id.clone(),
+                    success: true,
+                    data: Some(RegisterContents::Binary(combined)),
+                    error: None,
+                })
+            },
+            ResourceOperationType::Verify { resource_id } => {
+                // Verify a resource's integrity
+                let resource = self.resource_manager.get_resource_register(resource_id)?;
+                let is_valid = resource.verify();
+
+                Ok(EffectResult {
+                    effect_id: effect.id,
+                    operation_id: effect.operation.id.clone(),
+                    success: is_valid,
+                    data: None,
+                    error: if !is_valid {
+                        Some("Resource verification failed".to_string())
+                    } else {
+                        None
+                    },
+                })
+            },
+            ResourceOperationType::Commit { resource_id } => {
+                // Commit a resource's state
+                let resource_register = self.resource_manager.get_resource_register(resource_id)?;
+                
+                // In a unified model, committing means persisting the current state
+                self.resource_manager.update_resource_register(&resource_register)?;
+
+                Ok(EffectResult {
+                    effect_id: effect.id,
+                    operation_id: effect.operation.id.clone(),
+                    success: true,
+                    data: None,
+                    error: None,
+                })
+            },
+            ResourceOperationType::Rollback { resource_id } => {
+                // Rollback a resource to a previous state
+                // In a unified model, we would need to retrieve a historical version
+                let resource_register = self.resource_manager.rollback_resource_register(resource_id)?;
+
+                Ok(EffectResult {
+                    effect_id: effect.id,
+                    operation_id: effect.operation.id.clone(),
+                    success: true,
+                    data: Some(RegisterContents::Binary(resource_register.to_bytes())),
+                    error: None,
+                })
+            },
+            ResourceOperationType::Custom(code) => {
+                // Custom operation requires special handling
+                let result = match code {
+                    // Handle custom operation codes
+                    _ => return Err(TelError::UnsupportedOperation(
+                        format!("Unsupported custom operation code: {}", code)
+                    )),
+                };
+
+                Ok(EffectResult {
+                    effect_id: effect.id,
+                    operation_id: effect.operation.id.clone(),
+                    success: true,
+                    data: result,
+                    error: None,
+                })
+            },
         }
     }
 
-    /// Apply multiple effects in sequence
+    /// Apply a sequence of resource effects in order
     pub fn apply_sequence(&self, effects: Vec<ResourceEffect>) -> TelResult<Vec<EffectResult>> {
         let mut results = Vec::with_capacity(effects.len());
         
         for effect in effects {
             match self.apply(effect) {
-                Ok(result) => results.push(result),
-                Err(e) => return Err(e),
+                Ok(result) => {
+                    results.push(result);
+                },
+                Err(err) => {
+                    // Stop processing on first error
+                    return Err(err);
+                }
             }
         }
         
         Ok(results)
     }
     
-    /// Apply effects in parallel when possible
+    /// Apply multiple resource effects in parallel
     pub fn apply_parallel(&self, effects: Vec<ResourceEffect>) -> TelResult<Vec<EffectResult>> {
-        // This is a simplified implementation - in a real system, this would
-        // analyze dependencies between effects and execute independent effects
-        // in parallel. For now, we'll just use the sequential implementation.
+        // For now, we'll just apply sequentially since parallel processing requires
+        // more complex consistency handling with ResourceRegister operations
         self.apply_sequence(effects)
     }
     
-    /// Apply a repeating effect based on the specified schedule
+    /// Apply a repeating effect according to its schedule
     pub fn apply_repeating(&self, repeater: &RepeatingEffect) -> TelResult<Vec<EffectResult>> {
-        // Check if the repeater is active
         if !repeater.is_active() {
             return Ok(Vec::new());
         }
         
-        // Calculate how many iterations should be executed since the last run
-        let iterations = repeater.iterations_due();
-        
-        if iterations == 0 {
+        let iterations_due = repeater.iterations_due();
+        if iterations_due == 0 {
             return Ok(Vec::new());
         }
         
-        let mut results = Vec::with_capacity(iterations);
+        let mut results = Vec::with_capacity(iterations_due);
         
-        // Apply the effect the required number of times
-        for _ in 0..iterations {
-            match self.apply(repeater.effect.clone()) {
+        for _ in 0..iterations_due {
+            // Clone the effect for each application
+            let effect = repeater.effect.clone();
+            
+            match self.apply(effect) {
                 Ok(result) => {
                     results.push(result);
                     
-                    // If the effect fails, stop the iteration
-                    if !result.success {
+                    // Update the last execution time
+                    repeater.update_last_execution();
+                    
+                    // Check if we should continue after this result
+                    if !result.success && !repeater.config.retry_on_failure {
+                        // Stop on failure if not configured to retry
                         break;
                     }
                 },
-                Err(e) => return Err(e),
+                Err(err) => {
+                    // Stop processing on error
+                    return Err(err);
+                }
             }
         }
-        
-        // Update the last execution time
-        repeater.update_last_execution();
         
         Ok(results)
     }
@@ -527,7 +696,7 @@ mod tests {
         
         let effect = ResourceEffect::new(operation);
         
-        assert!(effect.id != Uuid::nil());
+        assert!(effect.id != ContentId::nil());
         assert!(!effect.requires_verification);
         assert!(effect.proof.is_none());
     }

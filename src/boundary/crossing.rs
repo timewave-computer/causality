@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 
 use super::annotation::{BoundaryType, CrossingType, BoundarySafe};
 use super::metrics;
+use crate::crypto::{HashFactory, HashOutput};
 
 /// Errors that can occur during boundary crossings
 #[derive(Debug, Error)]
@@ -96,11 +98,30 @@ impl BoundaryCrossingPayload {
         data: Vec<u8>,
         auth: BoundaryAuthentication,
     ) -> Self {
-        let crossing_id = uuid::Uuid::new_v4().to_string();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        // Generate a timestamp for the crossing
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
+        
+        // Create content-based deterministic ID using our crypto module
+        // Combine relevant data for the ID generation
+        let id_source = format!(
+            "crossing:{}:{}:{}:{}",
+            source.to_string(),
+            destination.to_string(),
+            crossing_type.to_string(),
+            now
+        );
+        
+        // Use the default HashFactory to create a hasher
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher()
+            .expect("Failed to create hasher");
+        
+        // Generate a content-based ID
+        let hash = hasher.hash(id_source.as_bytes());
+        let crossing_id = format!("bcr-{}", hash.to_hex().split_at(16).0);
         
         Self {
             crossing_id,

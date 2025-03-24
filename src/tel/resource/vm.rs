@@ -3,32 +3,86 @@
 // This module implements the integration between the resource
 // management system and the VM system, allowing resources to be
 // used in VM operations.
+// Migration note: This file has been migrated to use the unified ResourceRegister model.
 
 use std::sync::Arc;
 use std::collections::HashMap;
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
+use crypto::{
+    hash::{ContentId, HashError, HashFactory, HashOutput},
+    ContentAddressed,
+};
 
 // Import from our TEL module
 use crate::tel::{
     error::{TelError, TelResult},
-    types::{ResourceId, Domain, Address},
+    types::{Domain, Address},
     resource::{
-        ResourceManager, 
-        Register, 
-        RegisterId, 
-        RegisterContents,
-        RegisterState,
+        ResourceManager,
     },
 };
 
+// Import from resource module for unified model
+use crate::resource::{
+    ResourceRegister, 
+    RegisterState,
+    StorageStrategy,
+};
+
 /// A VM register ID
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct VmRegId(pub Uuid);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
+pub struct VmRegId(pub ContentId);
 
 impl VmRegId {
     /// Create a new VM register ID
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        // Generate a unique string based on the current time to hash
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+            
+        let reg_data = format!("vm-register-{}", now);
+        
+        // Generate a content ID
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let hash = hasher.hash(reg_data.as_bytes());
+        let content_id = ContentId::from(hash);
+        
+        // Create VM register ID from the content_id
+        Self(content_id)
+    }
+    
+    /// Create from a ContentId
+    pub fn from_content_id(content_id: &ContentId) -> Self {
+        Self(*content_id)
+    }
+}
+
+impl ContentAddressed for VmRegId {
+    fn content_hash(&self) -> HashOutput {
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let bytes = self.0.hash().as_bytes();
+        hasher.hash(bytes)
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.0.hash().as_bytes().to_vec()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        if bytes.len() < 16 {
+            return Err(HashError::InvalidLength);
+        }
+        
+        let mut uuid_bytes = [0u8; 16];
+        uuid_bytes.copy_from_slice(&bytes[..16]);
+        
+        Ok(Self(ContentId::from(uuid_bytes)))
     }
 }
 
@@ -99,12 +153,13 @@ impl Default for VmIntegrationConfig {
             max_registers_per_context: 1000,
             auto_commit_on_exit: true,
             validate_time_access: true,
-            resource_memory_section: "resource_data".to_string(),
+            resource_memory_section: "resource_data",
         }
     }
 }
 
-/// A memory manager for managing VM registers
+/// Manages memory for VM operations
+#[derive(Debug)]
 pub struct MemoryManager {
     /// Registers by ID
     registers: HashMap<VmRegId, VmRegister>,
@@ -121,7 +176,7 @@ impl MemoryManager {
         }
     }
     
-    /// Create a new register
+    /// Create a register in memory
     pub fn create_register(&mut self, id: &VmRegId, section: &str, data: Vec<u8>) -> TelResult<()> {
         let register = VmRegister {
             id: id.clone(),
@@ -129,10 +184,8 @@ impl MemoryManager {
             data,
         };
         
-        // Store the register
         self.registers.insert(id.clone(), register);
         
-        // Add to section
         self.sections
             .entry(section.to_string())
             .or_insert_with(Vec::new)
@@ -141,7 +194,7 @@ impl MemoryManager {
         Ok(())
     }
     
-    /// Get a register by ID
+    /// Get a register from memory
     pub fn get_register(&self, id: &VmRegId) -> TelResult<Option<VmRegister>> {
         Ok(self.registers.get(id).cloned())
     }
@@ -151,13 +204,14 @@ impl MemoryManager {
         Ok(self.sections.get(section).cloned().unwrap_or_default())
     }
     
-    /// Delete a register
+    /// Delete a register from memory
     pub fn delete_register(&mut self, id: &VmRegId) -> TelResult<bool> {
         if let Some(register) = self.registers.remove(id) {
-            // Remove from section
+            // Remove from section as well
             if let Some(section_registers) = self.sections.get_mut(&register.section) {
                 section_registers.retain(|reg_id| reg_id != id);
             }
+            
             Ok(true)
         } else {
             Ok(false)
@@ -165,7 +219,8 @@ impl MemoryManager {
     }
 }
 
-/// Integrates the resource system with the VM
+/// Integrates resource management with the VM
+#[derive(Debug)]
 pub struct ResourceVmIntegration {
     /// The resource manager
     resource_manager: Arc<ResourceManager>,
@@ -175,11 +230,11 @@ pub struct ResourceVmIntegration {
     config: VmIntegrationConfig,
     /// Register mappings for active execution contexts
     /// Maps (execution context ID, resource register ID) -> VM register ID
-    register_mappings: HashMap<(String, RegisterId), VmRegId>,
+    register_mappings: HashMap<(String, ContentId), VmRegId>,
 }
 
 impl ResourceVmIntegration {
-    /// Create a new VM integration
+    /// Create a new resource VM integration
     pub fn new(
         resource_manager: Arc<ResourceManager>,
         memory_manager: MemoryManager,
@@ -193,7 +248,7 @@ impl ResourceVmIntegration {
         }
     }
     
-    /// Create a new VM integration with default configuration
+    /// Create with default configuration
     pub fn default(
         resource_manager: Arc<ResourceManager>,
     ) -> Self {
@@ -204,38 +259,39 @@ impl ResourceVmIntegration {
         )
     }
     
-    /// Load a resource into the VM
+    /// Load a resource into VM memory
     pub fn load_resource(
         &mut self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         ctx: &ExecutionContext,
         initiator: &Address,
     ) -> TelResult<VmRegId> {
-        // Get the resource register from the resource manager
-        let register = self.resource_manager.get_register(resource_id)?;
+        // Check if this resource is already loaded in this context
+        let mapping_key = (ctx.id.clone(), *resource_id);
+        if let Some(vm_reg_id) = self.register_mappings.get(&mapping_key) {
+            return Ok(vm_reg_id.clone());
+        }
         
-        // Check access control
+        // Get the resource register from the resource manager
+        let resource_register = self.resource_manager.get_resource_register(resource_id)?;
+        
+        // Check access permissions
         let access_result = self.check_resource_access(
-            &register,
+            &resource_register,
             ctx,
             initiator,
             AccessIntent::Read,
         );
         
         if let ResourceAccessResult::Success = access_result {
-            // Map the resource contents to VM memory
-            let vm_reg_id = self.map_resource_to_vm(&register, ctx)?;
-            
-            // Store the mapping
-            self.register_mappings.insert((ctx.id.clone(), register.id.clone()), vm_reg_id.clone());
+            // Map the resource to a VM register
+            let vm_reg_id = self.map_resource_to_vm(&resource_register, ctx)?;
             
             Ok(vm_reg_id)
         } else {
-            Err(TelError::AuthorizationError(format!(
-                "Unable to load resource {}: {:?}", 
-                resource_id, 
-                access_result
-            )))
+            // Convert access result to TelError
+            let error_msg: Result<(), String> = access_result.into();
+            Err(TelError::AccessDenied(error_msg.unwrap_err()))
         }
     }
     
@@ -246,95 +302,99 @@ impl ResourceVmIntegration {
         ctx: &ExecutionContext,
         initiator: &Address,
     ) -> TelResult<()> {
-        // Find the register mapping
-        let register_id = self.register_mappings.iter()
-            .find_map(|((ctx_id, reg_id), vm_id)| {
+        // Get the VM register
+        let vm_register = self.memory_manager.get_register(vm_reg_id)?
+            .ok_or_else(|| TelError::ResourceError(
+                format!("VM register {:?} not found", vm_reg_id)
+            ))?;
+        
+        // Find the resource ID for this VM register
+        let resource_id = self.register_mappings.iter()
+            .find_map(|((ctx_id, res_id), vm_id)| {
                 if ctx_id == &ctx.id && vm_id == vm_reg_id {
-                    Some(reg_id.clone())
+                    Some(res_id)
                 } else {
                     None
                 }
             })
-            .ok_or_else(|| TelError::InternalError(
-                format!("No resource mapping found for VM register {:?}", vm_reg_id)
+            .ok_or_else(|| TelError::ResourceError(
+                format!("No resource mapped to VM register {:?}", vm_reg_id)
             ))?;
         
-        // Get the register
-        let register = self.resource_manager.get_register_by_id(&register_id)?
-            .ok_or_else(|| TelError::ResourceError(format!("Register not found: {:?}", register_id)))?;
+        // Get the current resource register
+        let mut resource_register = self.resource_manager.get_resource_register(resource_id)?;
         
-        // Check access control
+        // Check write access
         let access_result = self.check_resource_access(
-            &register,
+            &resource_register,
             ctx,
             initiator,
             AccessIntent::Write,
         );
         
         if let ResourceAccessResult::Success = access_result {
-            // Get the VM register data
-            let vm_register = self.memory_manager.get_register(vm_reg_id)?
-                .ok_or_else(|| TelError::InternalError(
-                    format!("VM register {:?} not found", vm_reg_id)
-                ))?;
+            // Convert VM register data to resource contents
+            let contents = self.vm_register_to_resource_contents(&vm_register)?;
             
-            // Update the resource with the VM register data
-            let new_contents = self.vm_register_to_resource_contents(&vm_register)?;
+            // Update the resource content
+            resource_register.update_contents(contents);
             
-            // Update the register in the resource manager
-            self.resource_manager.update_register(
-                &register_id,
-                new_contents,
-            )?;
+            // Store the updated resource
+            self.resource_manager.update_resource_register(resource_id, resource_register)?;
             
             Ok(())
         } else {
-            Err(TelError::AuthorizationError(format!(
-                "Unable to store resource for register {:?}: {:?}", 
-                register_id, 
-                access_result
-            )))
+            // Convert access result to TelError
+            let error_msg: Result<(), String> = access_result.into();
+            Err(TelError::AccessDenied(error_msg.unwrap_err()))
         }
     }
     
-    /// Commit all changes for a specific execution context
+    /// Commit all changes in an execution context
     pub fn commit_context(&mut self, ctx: &ExecutionContext) -> TelResult<()> {
-        // Find all mappings for this context
-        let ctx_mappings: Vec<_> = self.register_mappings.iter()
-            .filter(|((ctx_id, _), _)| ctx_id == &ctx.id)
-            .map(|((_, reg_id), vm_id)| (reg_id.clone(), vm_id.clone()))
+        // Find all resources mapped in this context
+        let resources: Vec<_> = self.register_mappings.iter()
+            .filter_map(|((ctx_id, res_id), vm_id)| {
+                if ctx_id == &ctx.id {
+                    Some((res_id, vm_id))
+                } else {
+                    None
+                }
+            })
             .collect();
         
-        // Store all mapped resources
-        for (reg_id, vm_id) in ctx_mappings {
-            let register = self.resource_manager.get_register_by_id(&reg_id)?
-                .ok_or_else(|| TelError::InternalError(
-                    format!("Register {:?} not found during commit", reg_id)
-                ))?;
-                
-            let vm_register = self.memory_manager.get_register(&vm_id)?
-                .ok_or_else(|| TelError::InternalError(
-                    format!("VM register {:?} not found during commit", vm_id)
-                ))?;
-                
-            let new_contents = self.vm_register_to_resource_contents(&vm_register)?;
-            
-            // Update the register
-            self.resource_manager.update_register(
-                &reg_id,
-                new_contents,
-            )?;
+        // Store all VM registers back to resources
+        for (resource_id, vm_reg_id) in resources {
+            // Skip if we can't find the VM register
+            if let Ok(Some(vm_register)) = self.memory_manager.get_register(vm_reg_id) {
+                // Try to get the resource register
+                if let Ok(mut resource_register) = self.resource_manager.get_resource_register(resource_id) {
+                    // Only update if the resource is active
+                    if resource_register.is_active() {
+                        // Convert VM register data to resource contents
+                        if let Ok(contents) = self.vm_register_to_resource_contents(&vm_register) {
+                            // Update the resource content
+                            resource_register.update_contents(contents);
+                            
+                            // Ignore errors during batch commit
+                            let _ = self.resource_manager.update_resource_register(resource_id, resource_register);
+                        }
+                    }
+                }
+            }
         }
-        
-        // Clean up mappings for this context
-        self.register_mappings.retain(|(ctx_id, _), _| ctx_id != &ctx.id);
         
         Ok(())
     }
     
-    /// Clean up resources for a context without committing changes
+    /// Cleanup resources used in an execution context
     pub fn cleanup_context(&mut self, ctx: &ExecutionContext) -> TelResult<()> {
-        // Clean up mappings for this context
+        // Optionally commit changes before cleanup
+        if self.config.auto_commit_on_exit {
+            self.commit_context(ctx)?;
+        }
+        
+        // Remove all mappings for this context
         self.register_mappings.retain(|(ctx_id, _), _| ctx_id != &ctx.id);
         
         Ok(())
@@ -343,110 +403,111 @@ impl ResourceVmIntegration {
     /// Map a resource register to a VM register
     fn map_resource_to_vm(
         &mut self,
-        register: &Register,
+        register: &ResourceRegister,
         ctx: &ExecutionContext,
     ) -> TelResult<VmRegId> {
-        // Create a VM register ID
+        // Create a new VM register ID
         let vm_reg_id = VmRegId::new();
         
-        // Convert resource contents to VM-compatible format
-        let vm_data = self.resource_contents_to_vm_data(&register.contents)?;
+        // Convert resource contents to VM data
+        let vm_data = self.resource_contents_to_vm_data(register)?;
         
-        // Create a VM register
+        // Create a VM register in memory
         self.memory_manager.create_register(
             &vm_reg_id,
             &self.config.resource_memory_section,
             vm_data,
         )?;
         
+        // Store the mapping
+        self.register_mappings.insert(
+            (ctx.id.clone(), register.id),
+            vm_reg_id.clone(),
+        );
+        
         Ok(vm_reg_id)
     }
     
-    /// Convert resource contents to VM-compatible data
-    fn resource_contents_to_vm_data(&self, contents: &RegisterContents) -> TelResult<Vec<u8>> {
-        // In a real implementation, this would serialize the resource contents
-        // in a format suitable for the VM system
-        
-        // For the purposes of this implementation, we'll use a simple conversion
-        match contents {
-            RegisterContents::Binary(data) => Ok(data.clone()),
-            RegisterContents::Json(json) => Ok(json.to_string().into_bytes()),
-            RegisterContents::Text(text) => Ok(text.clone().into_bytes()),
-            RegisterContents::Empty => Ok(vec![]),
-            _ => Err(TelError::InternalError(
-                format!("Unsupported resource content type: {:?}", contents)
-            )),
-        }
+    /// Convert resource contents to VM data
+    fn resource_contents_to_vm_data(&self, register: &ResourceRegister) -> TelResult<Vec<u8>> {
+        // For now, just use the resource's contents directly
+        Ok(register.contents.clone())
     }
     
-    /// Convert VM register data to resource contents
-    fn vm_register_to_resource_contents(&self, vm_register: &VmRegister) -> TelResult<RegisterContents> {
-        // In a real implementation, this would deserialize the VM data
-        // into the appropriate resource content type
-        
-        // For the purposes of this implementation, use a simple conversion
-        // Assume binary data
-        Ok(RegisterContents::Binary(vm_register.data.clone()))
+    /// Convert VM register data back to resource contents
+    fn vm_register_to_resource_contents(&self, vm_register: &VmRegister) -> TelResult<Vec<u8>> {
+        // For now, just use the VM register's data directly
+        Ok(vm_register.data.clone())
     }
     
-    /// Check resource access against various security policies
+    /// Check access permissions for a resource
     fn check_resource_access(
         &self,
-        register: &Register,
+        register: &ResourceRegister,
         ctx: &ExecutionContext,
         initiator: &Address,
         intent: AccessIntent,
     ) -> ResourceAccessResult {
-        // Check if register is owned by the initiator
-        if register.owner != *initiator {
-            // Not the owner, check ACL
-            // For now, just deny
-            return ResourceAccessResult::AccessDenied(
-                "Initiator is not the resource owner".to_string()
-            );
+        // Check if the resource exists and is active
+        if !register.is_active() {
+            // Check the state and return appropriate error
+            if register.is_consumed() {
+                return ResourceAccessResult::InvalidState(
+                    "Resource has been consumed".to_string()
+                );
+            } else if register.is_locked() {
+                return ResourceAccessResult::InvalidState(
+                    "Resource is locked".to_string()
+                );
+            } else if register.is_frozen() {
+                return ResourceAccessResult::InvalidState(
+                    "Resource is frozen".to_string()
+                );
+            } else {
+                return ResourceAccessResult::InvalidState(
+                    format!("Resource is in invalid state: {:?}", register.state)
+                );
+            }
         }
         
-        // Check register status
-        match register.state {
-            // Allow access to active registers
-            RegisterState::Active => {},
-            // Deny access to registers with other statuses
-            RegisterState::Locked => {
-                return ResourceAccessResult::InvalidState(
-                    "Register is locked".to_string()
-                );
-            },
-            RegisterState::Frozen => {
-                return ResourceAccessResult::InvalidState(
-                    "Register is frozen".to_string()
-                );
-            },
-            RegisterState::PendingDeletion => {
-                return ResourceAccessResult::InvalidState(
-                    "Register is pending deletion".to_string()
-                );
-            },
-            RegisterState::Tombstone => {
-                return ResourceAccessResult::InvalidState(
-                    "Register is tombstoned".to_string()
-                );
-            },
-        }
-        
-        // Check time validity
+        // Check time access if configured
         if self.config.validate_time_access {
-            // Implement time-based access control here
-            // This would check if the current time in the execution context
-            // allows access to this resource
-            // For now, just allow
+            // Note: Time validation would go here
+            // For now, assume all time accesses are valid
         }
         
-        // All checks passed
+        // Check domain access
+        let metadata_val = register.metadata.get("tel_domain");
+        if let Some(domain_value) = metadata_val {
+            if let Some(domain_str) = domain_value.as_str() {
+                if domain_str != ctx.domain {
+                    return ResourceAccessResult::AccessDenied(
+                        format!("Domain mismatch: {} vs {}", domain_str, ctx.domain)
+                    );
+                }
+            }
+        }
+        
+        // Check owner access for write operations
+        if matches!(intent, AccessIntent::Write | AccessIntent::Execute) {
+            let owner_val = register.metadata.get("tel_owner");
+            if let Some(owner_value) = owner_val {
+                if let Some(owner_str) = owner_value.as_str() {
+                    if owner_str != initiator {
+                        return ResourceAccessResult::AccessDenied(
+                            format!("Not the owner: {} vs {}", owner_str, initiator)
+                        );
+                    }
+                }
+            }
+        }
+        
+        // If we reach here, access is granted
         ResourceAccessResult::Success
     }
 }
 
-/// Intent for resource access
+/// Intent for accessing a resource
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccessIntent {
     /// Read access

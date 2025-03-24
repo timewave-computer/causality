@@ -8,7 +8,8 @@ use clap::{Arg, Command, ArgMatches, value_parser};
 use serde_json::json;
 
 use crate::error::{Error, Result};
-use crate::types::{DomainId, ResourceId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::resource::relationship::{
     CrossDomainRelationship,
     CrossDomainRelationshipType,

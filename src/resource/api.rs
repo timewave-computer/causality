@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use crate::address::Address;
-use crate::resource::{CapabilityId, ResourceId};
+use crate::resource::{CapabilityId, ContentId};
 use crate::error::{Error, Result};
 
 /// Type alias for capability references
@@ -171,7 +171,7 @@ pub enum ResourceState {
 #[async_trait]
 pub trait ResourceReader {
     /// Get the resource ID
-    fn id(&self) -> &ResourceId;
+    fn id(&self) -> &ContentId;
     
     /// Get the resource type
     fn resource_type(&self) -> &str;
@@ -301,7 +301,7 @@ pub trait ResourceAPI: Send + Sync {
         owner: &Address,
         data: Vec<u8>,
         metadata: Option<HashMap<String, String>>,
-    ) -> ResourceApiResult<(ResourceId, CapabilityRef)>;
+    ) -> ResourceApiResult<(ContentId, CapabilityRef)>;
     
     /// Create a resource with structured data
     async fn create_structured_resource<T: serde::Serialize + Send + Sync>(
@@ -311,7 +311,7 @@ pub trait ResourceAPI: Send + Sync {
         owner: &Address,
         data: &T,
         metadata: Option<HashMap<String, String>>,
-    ) -> ResourceApiResult<(ResourceId, CapabilityRef)> {
+    ) -> ResourceApiResult<(ContentId, CapabilityRef)> {
         let serialized = serde_json::to_vec(data)
             .map_err(|e| ResourceApiError::SerializationError(e.to_string()))?;
         self.create_resource(capability, resource_type, owner, serialized, metadata).await
@@ -321,14 +321,14 @@ pub trait ResourceAPI: Send + Sync {
     async fn get_resource(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
     ) -> ResourceApiResult<Box<dyn ResourceReader + Send + Sync>>;
     
     /// Get a mutable resource by ID
     async fn get_resource_mut(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
     ) -> ResourceApiResult<Box<dyn ResourceWriter + Send + Sync>>;
     
     /// Find resources based on a query
@@ -342,7 +342,7 @@ pub trait ResourceAPI: Send + Sync {
     async fn update_resource(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         data: Option<Vec<u8>>,
         options: Option<ResourceUpdateOptions>,
     ) -> ResourceApiResult<()>;
@@ -351,21 +351,21 @@ pub trait ResourceAPI: Send + Sync {
     async fn delete_resource(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
     ) -> ResourceApiResult<()>;
     
     /// Check if a resource exists
     async fn resource_exists(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
     ) -> ResourceApiResult<bool>;
     
     /// Create a capability for a resource
     async fn create_capability(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         rights: Vec<Right>,
         holder: &Address,
     ) -> ResourceApiResult<CapabilityRef>;
@@ -374,7 +374,7 @@ pub trait ResourceAPI: Send + Sync {
     async fn get_capabilities(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
     ) -> ResourceApiResult<Vec<CapabilityRef>>;
     
     /// Revoke a capability
@@ -388,7 +388,7 @@ pub trait ResourceAPI: Send + Sync {
     async fn delegate_capability(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         rights: Vec<Right>,
         new_holder: &Address,
     ) -> ResourceApiResult<CapabilityRef>;
@@ -403,7 +403,7 @@ pub trait ResourceAPI: Send + Sync {
 
 /// A memory-backed implementation of ResourceWriter
 pub struct MemoryResourceWriter {
-    id: ResourceId,
+    id: ContentId,
     resource_type: String,
     owner: Address,
     data: Vec<u8>,
@@ -413,7 +413,7 @@ pub struct MemoryResourceWriter {
 
 #[async_trait]
 impl ResourceReader for MemoryResourceWriter {
-    fn id(&self) -> &ResourceId {
+    fn id(&self) -> &ContentId {
         &self.id
     }
     

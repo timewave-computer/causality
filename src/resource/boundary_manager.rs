@@ -7,16 +7,16 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 use crate::boundary::{BoundaryType, CrossingType, BoundarySafe};
-use crate::resource::{ResourceId, ResourceRegister};
+use crate::resource::{ContentId};
 use crate::resource::lifecycle_manager::ResourceRegisterLifecycleManager;
-use crate::resource::resource_register::{RegisterState, StorageStrategy};
+use crate::resource::resource_register::{RegisterState, StorageStrategy, ResourceRegister};
 use crate::error::{Error, Result};
 
 /// Represents a resource crossing operation across boundaries
 #[derive(Debug, Clone)]
 pub struct ResourceBoundaryCrossing {
     /// The resource ID being crossed
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     
     /// Source boundary
     pub source_boundary: BoundaryType,
@@ -53,7 +53,7 @@ pub struct BoundaryAwareResourceManager {
     lifecycle_manager: Arc<ResourceRegisterLifecycleManager>,
     
     /// Resources that have crossed boundaries
-    crossed_resources: RwLock<HashMap<ResourceId, HashSet<BoundaryType>>>,
+    crossed_resources: RwLock<HashMap<ContentId, HashSet<BoundaryType>>>,
     
     /// Default crossing strategies by boundary type
     default_strategies: RwLock<HashMap<(BoundaryType, BoundaryType), ResourceCrossingStrategy>>,
@@ -117,7 +117,7 @@ impl BoundaryAwareResourceManager {
     /// Check if a resource can cross a boundary
     pub fn can_cross_boundary(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         source: BoundaryType,
         target: BoundaryType
     ) -> Result<bool> {
@@ -158,7 +158,7 @@ impl BoundaryAwareResourceManager {
     /// Prepare a resource for crossing a boundary
     pub fn prepare_for_crossing(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         source: BoundaryType,
         target: BoundaryType
     ) -> Result<ResourceBoundaryCrossing> {
@@ -217,7 +217,7 @@ impl BoundaryAwareResourceManager {
     }
     
     /// Get all boundaries that a resource exists in
-    pub fn resource_boundaries(&self, resource_id: &ResourceId) -> HashSet<BoundaryType> {
+    pub fn resource_boundaries(&self, resource_id: &ContentId) -> HashSet<BoundaryType> {
         let crossed = self.crossed_resources.read().unwrap();
         crossed.get(resource_id)
             .cloned()

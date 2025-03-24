@@ -57,7 +57,7 @@ pub enum RegisterFact {
     /// Fact about register creation
     RegisterCreation {
         /// ID of the created register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// Initial data of the register
         initial_data: Vec<u8>,
         /// Owner of the register
@@ -69,7 +69,7 @@ pub enum RegisterFact {
     /// Fact about register update
     RegisterUpdate {
         /// ID of the updated register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// New data of the register
         new_data: Vec<u8>,
         /// Previous version of the register data (hash)
@@ -79,7 +79,7 @@ pub enum RegisterFact {
     /// Fact about register transfer across domains
     RegisterTransfer {
         /// ID of the transferred register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// Source domain
         source_domain: String,
         /// Target domain
@@ -91,13 +91,13 @@ pub enum RegisterFact {
         /// IDs of the source registers
         source_registers: Vec<RegisterId>,
         /// ID of the resulting register
-        result_register: RegisterId,
+        result_register: ContentId,
     },
     
     /// Fact about register split
     RegisterSplit {
         /// ID of the source register
-        source_register: RegisterId,
+        source_register: ContentId,
         /// IDs of the resulting registers
         result_registers: Vec<RegisterId>,
     },
@@ -105,7 +105,7 @@ pub enum RegisterFact {
     /// Fact about register consumption (one-time use)
     RegisterConsumption {
         /// ID of the consumed register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// Transaction ID that consumed this register
         transaction_id: String,
         /// Nullifier created by consumption
@@ -119,7 +119,7 @@ pub enum RegisterFact {
     /// Fact about register state change
     RegisterStateChange {
         /// ID of the register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// Previous state
         previous_state: RegisterState,
         /// New state
@@ -131,7 +131,7 @@ pub enum RegisterFact {
     /// Fact about register ownership transfer
     RegisterOwnershipTransfer {
         /// ID of the register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// Previous owner
         previous_owner: String,
         /// New owner
@@ -141,7 +141,7 @@ pub enum RegisterFact {
     /// Fact about register locking
     RegisterLock {
         /// ID of the register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// Reason for locking
         reason: String,
     },
@@ -149,7 +149,7 @@ pub enum RegisterFact {
     /// Fact about register unlocking
     RegisterUnlock {
         /// ID of the register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// Reason for unlocking
         reason: String,
     },
@@ -157,7 +157,7 @@ pub enum RegisterFact {
     /// Fact about register epoch transition
     RegisterEpochTransition {
         /// ID of the register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// Previous epoch
         previous_epoch: u64,
         /// New epoch
@@ -169,7 +169,7 @@ pub enum RegisterFact {
         /// IDs of the summarized registers
         summarized_registers: Vec<RegisterId>,
         /// ID of the summary register
-        summary_register_id: RegisterId,
+        summary_register_id: ContentId,
         /// Type of summarization performed
         summary_type: String,
         /// Epoch for this summary
@@ -179,7 +179,7 @@ pub enum RegisterFact {
     /// Fact about register archival
     RegisterArchival {
         /// ID of the register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// Archive ID where the register is stored
         archive_id: String,
         /// Hash of the archived data for validation
@@ -189,7 +189,7 @@ pub enum RegisterFact {
     /// Fact about register authorization
     RegisterAuthorization {
         /// ID of the register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// Type of authorization used
         authorization_type: String,
         /// ID of the authorization (e.g., signature, proof hash)
@@ -201,7 +201,7 @@ pub enum RegisterFact {
     /// Fact about register nullifier creation
     RegisterNullifierCreation {
         /// ID of the register
-        register_id: RegisterId,
+        register_id: ContentId,
         /// The nullifier value
         nullifier: String,
         /// Block height when nullifier was created

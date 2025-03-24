@@ -5,7 +5,7 @@
 
 use std::fmt;
 use serde::{Serialize, Deserialize};
-use crate::types::ResourceId;
+use crate::crypto::hash::ContentId;
 
 /// The type of effect being performed
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -89,13 +89,73 @@ pub enum ResourceChangeType {
     Consumed,
     /// Resource ownership was transferred
     Transferred,
+    /// Resource was merged with another
+    Merged,
+    /// Resource was split into multiple resources
+    Split,
+    /// Resource was locked for exclusive access
+    Locked,
+    /// Resource was unlocked after exclusive access
+    Unlocked,
+    /// Resource was published to a public registry
+    Published,
+    /// Resource was unpublished from a public registry
+    Unpublished,
+    /// Resource was archived (still stored but inactive)
+    Archived,
+    /// Resource was restored from archive
+    Restored,
+    /// Resource was versioned (new version created)
+    Versioned,
+    /// Resource was attached to another resource
+    Attached,
+    /// Resource was detached from another resource
+    Detached,
+    /// Resource was tagged with metadata
+    Tagged,
+    /// Resource was committed to persistent storage
+    Committed,
+    /// Resource state was rolled back
+    RolledBack,
+    /// Resource content was hashed for verification
+    ContentHashed,
+    /// Resource was computed from other resources
+    Computed,
+}
+
+impl fmt::Display for ResourceChangeType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ResourceChangeType::Created => write!(f, "Created"),
+            ResourceChangeType::Updated => write!(f, "Updated"),
+            ResourceChangeType::Deleted => write!(f, "Deleted"),
+            ResourceChangeType::Consumed => write!(f, "Consumed"),
+            ResourceChangeType::Transferred => write!(f, "Transferred"),
+            ResourceChangeType::Merged => write!(f, "Merged"),
+            ResourceChangeType::Split => write!(f, "Split"),
+            ResourceChangeType::Locked => write!(f, "Locked"),
+            ResourceChangeType::Unlocked => write!(f, "Unlocked"),
+            ResourceChangeType::Published => write!(f, "Published"),
+            ResourceChangeType::Unpublished => write!(f, "Unpublished"),
+            ResourceChangeType::Archived => write!(f, "Archived"),
+            ResourceChangeType::Restored => write!(f, "Restored"),
+            ResourceChangeType::Versioned => write!(f, "Versioned"),
+            ResourceChangeType::Attached => write!(f, "Attached"),
+            ResourceChangeType::Detached => write!(f, "Detached"),
+            ResourceChangeType::Tagged => write!(f, "Tagged"),
+            ResourceChangeType::Committed => write!(f, "Committed"),
+            ResourceChangeType::RolledBack => write!(f, "RolledBack"),
+            ResourceChangeType::ContentHashed => write!(f, "ContentHashed"),
+            ResourceChangeType::Computed => write!(f, "Computed"),
+        }
+    }
 }
 
 /// Represents a change to a resource
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceChange {
     /// ID of the resource that was changed
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     /// Type of change that occurred
     pub change_type: ResourceChangeType,
     /// Hash of the previous state (if any)

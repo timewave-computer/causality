@@ -2,13 +2,51 @@ use std::sync::{Arc, Mutex};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
-use uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
+use rand;
 
 use crate::error::{Error, Result};
 use crate::log::{LogEntry, EffectEntry, LogStorage};
 use crate::log::{EntryType, EntryData};
-use crate::types::{ResourceId, DomainId, TraceId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::effect::EffectType;
+use crate::crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+
+/// Data for content-addressed log entry IDs
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+struct LogContentData {
+    /// Timestamp for the entry
+    timestamp: i64,
+    /// Trace ID for the entry
+    trace_id: Option<String>,
+    /// Type of entry
+    entry_type: String,
+    /// Random nonce for uniqueness
+    nonce: [u8; 8],
+}
+
+impl ContentAddressed for LogContentData {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
 
 /// Manages effect logging
 pub struct EffectLogger {
@@ -126,7 +164,7 @@ impl EffectLogger {
         &self,
         trace_id: TraceId,
         effect_type: EffectType,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         data: &T,
         metadata: Option<EffectMetadata>,
     ) -> Result<()> {
@@ -152,8 +190,19 @@ impl EffectLogger {
             None, // error
         );
         
+        // Create content data for ID generation
+        let content_data = LogContentData {
+            timestamp: Utc::now().timestamp(),
+            trace_id: Some(trace_id.to_string()),
+            entry_type: "effect".to_string(),
+            nonce: rand::random::<[u8; 8]>(),
+        };
+        
+        // Generate a content-derived ID
+        let entry_id = format!("log:{}", content_data.content_id());
+        
         let log_entry = LogEntry {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: entry_id,
             timestamp: Utc::now(),
             entry_type: EntryType::Effect,
             data: EntryData::Effect(effect_entry),
@@ -173,7 +222,7 @@ impl EffectLogger {
     pub fn log_state_change<T: Serialize>(
         &self,
         trace_id: TraceId,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         old_state: &T,
         new_state: &T,
         metadata: Option<EffectMetadata>,
@@ -198,7 +247,7 @@ impl EffectLogger {
     pub fn log_resource_creation<T: Serialize>(
         &self,
         trace_id: TraceId,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         initial_state: &T,
         metadata: Option<EffectMetadata>,
     ) -> Result<()> {
@@ -215,7 +264,7 @@ impl EffectLogger {
     pub fn log_resource_deletion<T: Serialize>(
         &self,
         trace_id: TraceId,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         final_state: &T,
         metadata: Option<EffectMetadata>,
     ) -> Result<()> {
@@ -232,7 +281,7 @@ impl EffectLogger {
     pub fn log_lock_acquisition(
         &self,
         trace_id: TraceId,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         lock_type: &str,
         lock_timeout_ms: Option<u64>,
         metadata: Option<EffectMetadata>,
@@ -255,7 +304,7 @@ impl EffectLogger {
     pub fn log_lock_release(
         &self,
         trace_id: TraceId,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         lock_type: &str,
         metadata: Option<EffectMetadata>,
     ) -> Result<()> {
@@ -277,7 +326,7 @@ impl EffectLogger {
     pub fn log_computation<T: Serialize, U: Serialize>(
         &self,
         trace_id: TraceId,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         input: &T,
         output: &U,
         metadata: Option<EffectMetadata>,
@@ -302,7 +351,7 @@ impl EffectLogger {
     pub fn log_resource_transfer(
         &self,
         trace_id: TraceId,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         from_owner: &str,
         to_owner: &str,
         metadata: Option<EffectMetadata>,
@@ -374,7 +423,7 @@ struct ActiveEffect {
     /// The effect type
     pub effect_type: EffectType,
     /// The resource ID
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     /// The metadata
     pub metadata: EffectMetadata,
     /// The serialized data
@@ -398,7 +447,7 @@ impl EffectMonitor {
         &self,
         trace_id: TraceId,
         effect_type: EffectType,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         data: &T,
         initiator: &str,
     ) -> Result<u64> {
@@ -495,7 +544,7 @@ impl EffectMonitor {
     }
     
     /// Get active effects for a resource
-    pub fn get_active_effects_for_resource(&self, resource_id: ResourceId) -> Result<Vec<(u64, EffectType)>> {
+    pub fn get_active_effects_for_resource(&self, resource_id: ContentId) -> Result<Vec<(u64, EffectType)>> {
         let active_effects = self.active_effects.lock()
             .map_err(|_| Error::LockError("Failed to lock active effects".to_string()))?;
             

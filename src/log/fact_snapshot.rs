@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use serde::{Serialize, Deserialize};
 use crate::types::{DomainId, Timestamp};
 use crate::log::fact_types::{FactType, RegisterFact, ZKProofFact};
-use crate::resource::register::RegisterId;
+use crate::resource::register::ContentId;
 
 /// A unique identifier for a fact
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -27,7 +27,7 @@ pub struct FactSnapshot {
     pub created_at: Timestamp,
     
     /// Register observations included in this snapshot
-    pub register_observations: HashMap<RegisterId, RegisterObservation>,
+    pub register_observations: HashMap<ContentId, RegisterObservation>,
     
     /// Domains that contributed facts to this snapshot
     pub domains: HashSet<DomainId>,
@@ -40,7 +40,7 @@ pub struct FactSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterObservation {
     /// The observed register ID
-    pub register_id: RegisterId,
+    pub register_id: ContentId,
     
     /// The fact ID of the register observation
     pub fact_id: FactId,
@@ -77,7 +77,7 @@ impl FactSnapshot {
     /// Add a register observation to the snapshot
     pub fn add_register_observation(
         &mut self,
-        register_id: RegisterId,
+        register_id: ContentId,
         fact_id: FactId,
         domain_id: DomainId,
         data_hash: &str,
@@ -105,7 +105,7 @@ impl FactSnapshot {
     }
     
     /// Check if the snapshot contains an observation for a register
-    pub fn contains_register(&self, register_id: &RegisterId) -> bool {
+    pub fn contains_register(&self, register_id: &ContentId) -> bool {
         self.register_observations.contains_key(register_id)
     }
     

@@ -5,16 +5,53 @@
 
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
+use std::str::FromStr;
+use std::fmt;
+use borsh::{BorshSerialize, BorshDeserialize};
+use crate::crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 /// Identifier for a resource
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ResourceId(pub Uuid);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+pub struct ResourceId(pub ContentId);
 
 impl ResourceId {
     /// Create a new random resource ID
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        // Generate a unique string to create a content-derived ID
+        let unique_data = format!("resource-{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos());
+        
+        // Hash the unique data to create a content ID
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let content_id = ContentId::from(hasher.hash(unique_data.as_bytes()));
+        
+        Self(content_id)
+    }
+}
+
+impl ContentAddressed for ResourceId {
+    fn content_hash(&self) -> HashOutput {
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        hasher.hash(self.0.hash().as_bytes())
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.0.hash().as_bytes().to_vec()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        if bytes.len() < 16 {
+            return Err(HashError::InvalidLength);
+        }
+        
+        let content_id = ContentId::from(bytes.to_vec());
+        Ok(Self(content_id))
     }
 }
 
@@ -112,13 +149,57 @@ impl Metadata {
 }
 
 /// Identifier for an operation
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct OperationId(pub Uuid);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+pub struct OperationId(pub ContentId);
 
 impl OperationId {
     /// Create a new random operation ID
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        // Generate a unique string based on the current time to hash
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+            
+        let operation_data = format!("operation-{}", now);
+        
+        // Generate a content ID
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let hash = hasher.hash(operation_data.as_bytes());
+        let content_id = ContentId::from(hash);
+        
+        // Create an OperationId from the content_id
+        Self::from_content_id(&content_id)
+    }
+    
+    /// Create from a ContentId
+    pub fn from_content_id(content_id: &ContentId) -> Self {
+        Self(content_id.clone())
+    }
+}
+
+impl ContentAddressed for OperationId {
+    fn content_hash(&self) -> HashOutput {
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let bytes = self.0.hash().as_bytes();
+        hasher.hash(bytes)
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.0.hash().as_bytes().to_vec()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        if bytes.len() < 16 {
+            return Err(HashError::InvalidLength);
+        }
+        
+        let content_id = ContentId::from(bytes.to_vec());
+        Ok(Self(content_id))
     }
 }
 
@@ -165,13 +246,44 @@ pub enum EffectType {
 }
 
 /// Effect identifier
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct EffectId(pub String);
 
 impl EffectId {
     /// Create a new random effect ID
     pub fn new() -> Self {
-        Self(format!("effect-{}", Uuid::new_v4()))
+        // Generate a unique string to create a content-derived ID
+        let unique_data = format!("effect-{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos());
+        
+        // Hash the unique data to create a content ID
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let content_id = ContentId::from(hasher.hash(unique_data.as_bytes()));
+        
+        Self(format!("effect-{}", content_id))
+    }
+}
+
+impl ContentAddressed for EffectId {
+    fn content_hash(&self) -> HashOutput {
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        hasher.hash(self.0.as_bytes())
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.0.as_bytes().to_vec()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        let s = std::str::from_utf8(bytes)
+            .map_err(|_| HashError::SerializationError("Invalid UTF-8".to_string()))?;
+        Ok(Self(s.to_string()))
     }
 }
 

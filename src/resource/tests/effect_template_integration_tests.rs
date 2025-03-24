@@ -8,7 +8,10 @@ use std::collections::{HashMap, HashSet};
 
 use crate::address::Address;
 use crate::error::Result;
-use crate::types::{ResourceId, DomainId, Metadata};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
+use crate::crypto::hash::{ContentAddressed, ContentId, HashOutput, HashFactory};
+use borsh::{BorshSerialize, BorshDeserialize};
 use crate::resource::{
     ResourceRegister,
     RegisterState,
@@ -41,6 +44,77 @@ use crate::effect::templates::{
     resource_operation_with_commitment_effect,
 };
 use crate::time::TimeMapSnapshot;
+
+// Helper struct to derive content-based IDs for test contexts
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+struct TestExecutionContext {
+    invoker: Option<Address>,
+    domains: Vec<DomainId>,
+    capabilities: Vec<String>,
+    resource_id: Option<ResourceId>,
+    operation_type: String,
+}
+
+impl ContentAddressed for TestExecutionContext {
+    fn content_hash(&self) -> HashOutput {
+        // Get the configured hasher
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        
+        // Create a canonical serialization
+        let data = self.try_to_vec().unwrap();
+        
+        // Compute hash with configured hasher
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> std::result::Result<Self, crate::crypto::hash::HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| crate::crypto::hash::HashError::SerializationError(e.to_string()))
+    }
+}
+
+// Helper function to create a content-derived execution ID
+fn create_content_execution_id(
+    invoker: Option<&Address>,
+    domains: &[DomainId],
+    capabilities: &[String],
+    resource_id: Option<&ResourceId>,
+    operation_type: &str
+) -> uuid::Uuid {
+    let test_context = TestExecutionContext {
+        invoker: invoker.cloned(),
+        domains: domains.to_vec(),
+        capabilities: capabilities.to_vec(),
+        resource_id: resource_id.cloned(),
+        operation_type: operation_type.to_string(),
+    };
+    
+    // Get content ID and convert to UUID for compatibility
+    let content_id = test_context.content_id();
+    let hash_bytes = content_id.as_bytes();
+    
+    // Use first 16 bytes to create a UUID
+    let mut uuid_bytes = [0u8; 16];
+    for i in 0..std::cmp::min(16, hash_bytes.len()) {
+        uuid_bytes[i] = hash_bytes[i];
+    }
+    
+    uuid::Uuid::from_bytes(uuid_bytes)
+}
 
 // Helper to create a test resource
 fn create_test_resource(id: &str) -> ResourceRegister {
@@ -94,7 +168,13 @@ async fn test_create_resource_effect_integration() -> Result<()> {
     
     // Create a mock context
     let context = EffectContext {
-        execution_id: Some(uuid::Uuid::new_v4()),
+        execution_id: Some(create_content_execution_id(
+            invoker.as_ref(),
+            &domain_id.clone().into_iter().collect::<Vec<_>>(),
+            &vec![],
+            Some(&resource.id),
+            "activate"
+        )),
         invoker: Some(invoker.clone()),
         domains: vec![domain_id.clone()],
         capabilities: vec![],
@@ -144,7 +224,13 @@ async fn test_lifecycle_state_transition_chain() -> Result<()> {
     
     // Create a mock context
     let context = EffectContext {
-        execution_id: Some(uuid::Uuid::new_v4()),
+        execution_id: Some(create_content_execution_id(
+            invoker.as_ref(),
+            &domain_id.clone().into_iter().collect::<Vec<_>>(),
+            &vec![],
+            Some(&active_resource.id),
+            "lock"
+        )),
         invoker: Some(invoker.clone()),
         domains: vec![domain_id.clone()],
         capabilities: vec![],
@@ -209,7 +295,13 @@ async fn test_invalid_state_transition() -> Result<()> {
     
     // Create a mock context
     let context = EffectContext {
-        execution_id: Some(uuid::Uuid::new_v4()),
+        execution_id: Some(create_content_execution_id(
+            invoker.as_ref(),
+            &domain_id.clone().into_iter().collect::<Vec<_>>(),
+            &vec![],
+            Some(&resource.id),
+            "transition"
+        )),
         invoker: Some(invoker.clone()),
         domains: vec![domain_id.clone()],
         capabilities: vec![],
@@ -256,7 +348,13 @@ async fn test_boundary_aware_resource_creation() -> Result<()> {
     
     // Create a mock context
     let context = EffectContext {
-        execution_id: Some(uuid::Uuid::new_v4()),
+        execution_id: Some(create_content_execution_id(
+            invoker.as_ref(),
+            &domain_id.clone().into_iter().collect::<Vec<_>>(),
+            &vec![],
+            Some(&resource.id),
+            "boundary_crossing"
+        )),
         invoker: Some(invoker.clone()),
         domains: vec![domain_id.clone()],
         capabilities: vec![],
@@ -315,7 +413,13 @@ async fn test_capability_validated_operation() -> Result<()> {
     
     // Create a mock context with authorization service
     let context = EffectContext {
-        execution_id: Some(uuid::Uuid::new_v4()),
+        execution_id: Some(create_content_execution_id(
+            invoker.as_ref(),
+            &domain_id.clone().into_iter().collect::<Vec<_>>(),
+            &capability_ids,
+            Some(&resource.id),
+            "authorized_op"
+        )),
         invoker: Some(invoker.clone()),
         domains: vec![domain_id.clone()],
         capabilities: capability_ids.clone(),
@@ -371,7 +475,13 @@ async fn test_time_map_validated_operation() -> Result<()> {
     
     // Create a mock context with time service
     let context = EffectContext {
-        execution_id: Some(uuid::Uuid::new_v4()),
+        execution_id: Some(create_content_execution_id(
+            invoker.as_ref(),
+            &domain_id.clone().into_iter().collect::<Vec<_>>(),
+            &vec![],
+            Some(&resource.id),
+            "time_op"
+        )),
         invoker: Some(invoker.clone()),
         domains: vec![domain_id.clone()],
         capabilities: vec![],

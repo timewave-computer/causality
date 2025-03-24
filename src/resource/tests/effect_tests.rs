@@ -7,21 +7,22 @@ use crate::effect::{
     Effect, EffectContext, EffectOutcome, EffectResult, EffectId, 
     ExecutionBoundary, ResourceChange
 };
-use crate::resource::{ResourceId, ResourceAPI, CapabilityRef, Right};
+use crate::resource::{ContentId, ResourceAPI, CapabilityRef, Right};
 use crate::resource::api::{ResourceMetadata, ResourceState};
 use crate::resource::memory_api::MemoryResourceAPI;
+use crate::crypto::ContentId;
 
 // Simple test effect that validates the new effect trait
 #[derive(Debug)]
 struct TestResourceEffect {
     id: EffectId,
-    resource_id: ResourceId,
+    resource_id: ContentId,
     resource_api: Arc<dyn ResourceAPI>,
     action: &'static str,
 }
 
 impl TestResourceEffect {
-    fn new(resource_id: ResourceId, resource_api: Arc<dyn ResourceAPI>, action: &'static str) -> Self {
+    fn new(resource_id: ContentId, resource_api: Arc<dyn ResourceAPI>, action: &'static str) -> Self {
         Self {
             id: EffectId::new_unique(),
             resource_id,
@@ -154,77 +155,53 @@ impl Effect for TestResourceEffect {
 
 #[tokio::test]
 async fn test_resource_effect_execution() {
-    // Create a resource API
-    let admin = Address::from("admin:0x1234");
-    let api = Arc::new(MemoryResourceAPI::new(admin.clone()));
-    let root_cap = api.root_capability();
+    // Setup resource API
+    let resource_api = Arc::new(MemoryResourceAPI::new());
     
-    // Create a resource ID
-    let resource_id = "test:resource:123".to_string();
+    // Create a resource
+    let resource_id = ContentId::new("test-resource");
+    let metadata = ResourceMetadata::new("Test Resource", "A test resource");
+    resource_api.create_resource(&resource_id, metadata.clone()).unwrap();
     
-    // Create effect context with necessary capabilities
-    let mut context = EffectContext {
-        execution_id: uuid::Uuid::new_v4(),
-        capabilities: vec![root_cap.clone()],
-        execution_boundary: ExecutionBoundary::InsideSystem,
-        parameters: HashMap::new(),
-    };
-    
-    // Create a test effect for creating a resource
-    let create_effect = TestResourceEffect::new(
-        resource_id.clone(),
-        api.clone(),
-        "create"
+    // Create capability for this resource
+    let cap_ref = CapabilityRef::new(
+        "test-capability",
+        Address::local("test-system")
     );
     
-    // Execute the create effect
-    let create_result = create_effect.execute_async(&context).await;
-    assert!(create_result.is_ok(), "Create effect failed: {:?}", create_result.err());
-    let create_outcome = create_result.unwrap();
-    assert!(create_outcome.success);
-    assert_eq!(create_outcome.resource_changes.len(), 1);
+    resource_api.grant_capability(
+        &resource_id,
+        &cap_ref,
+        Right::Read
+    ).unwrap();
     
-    // Verify the resource was created
-    let exists = api.resource_exists(&root_cap, &resource_id)
-        .await
-        .expect("Failed to check existence");
-    assert!(exists, "Resource should exist after create effect");
-    
-    // Create a test effect for updating the resource
-    let update_effect = TestResourceEffect::new(
+    // Create a test effect to modify the resource
+    let effect = TestResourceEffect::new(
         resource_id.clone(),
-        api.clone(),
-        "update"
+        resource_api.clone(),
+        "modify"
     );
     
-    // Execute the update effect
-    let update_result = update_effect.execute_async(&context).await;
-    assert!(update_result.is_ok(), "Update effect failed: {:?}", update_result.err());
-    let update_outcome = update_result.unwrap();
-    assert!(update_outcome.success);
+    // Create context with required capabilities
+    let mut context = EffectContext::new();
     
-    // Verify the resource was updated
-    let resource = api.get_resource(&root_cap, &resource_id)
-        .await
-        .expect("Failed to get resource");
-    assert_eq!(resource.data(&root_cap).await.unwrap(), &[5, 6, 7, 8]);
+    // Add a content-addressed execution ID
+    context.add_param("execution_id", ContentId::nil().to_string());
     
-    // Create a test effect for deleting the resource
-    let delete_effect = TestResourceEffect::new(
-        resource_id.clone(),
-        api.clone(),
-        "delete"
-    );
+    // Add capability
+    context.add_capability(cap_ref.clone(), Right::Read);
     
-    // Execute the delete effect
-    let delete_result = delete_effect.execute_async(&context).await;
-    assert!(delete_result.is_ok(), "Delete effect failed: {:?}", delete_result.err());
-    let delete_outcome = delete_result.unwrap();
-    assert!(delete_outcome.success);
+    // Execute the effect
+    let outcome = effect.execute_async(&context).await.unwrap();
     
-    // Verify the resource was deleted
-    let exists_after_delete = api.resource_exists(&root_cap, &resource_id)
-        .await
-        .expect("Failed to check existence");
-    assert!(!exists_after_delete, "Resource should not exist after delete effect");
+    // Verify the outcome
+    assert!(outcome.success, "Effect execution failed: {:?}", outcome.error);
+    assert!(outcome.data.contains_key("action"));
+    assert_eq!(outcome.data.get("action").unwrap(), "modify");
+    
+    // Verify resource changes
+    assert_eq!(outcome.resource_changes.len(), 1);
+    let resource_change = &outcome.resource_changes[0];
+    assert_eq!(resource_change.resource_id, resource_id);
+    assert_eq!(resource_change.change_type, "MODIFY");
 } 

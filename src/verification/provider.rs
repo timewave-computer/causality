@@ -5,7 +5,8 @@
 use std::sync::Arc;
 use async_trait::async_trait;
 
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::verification::{
     VerificationError, 
     VerificationResult, 

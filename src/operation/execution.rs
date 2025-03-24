@@ -6,11 +6,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use async_trait::async_trait;
+use log::{debug, warn};
 
 use crate::error::{Error, Result};
 use crate::effect::{Effect, EffectOutcome};
-use crate::interpreter::Interpreter;
 use crate::resource::ResourceRegisterTrait;
+use crate::crypto::hash::ContentId;
 use crate::verification::{VerificationService, VerificationContext, VerificationOptions};
 
 use super::{
@@ -134,14 +135,14 @@ impl OperationExecutor<AbstractContext> for AbstractExecutor {
 
 /// Executor for register operations
 pub struct RegisterExecutor {
-    resource_register: Arc<dyn ResourceRegister>,
+    resource_register: Arc<dyn ResourceRegisterTrait>,
     verification_service: Arc<VerificationService>,
 }
 
 impl RegisterExecutor {
     /// Create a new register executor
     pub fn new(
-        resource_register: Arc<dyn ResourceRegister>,
+        resource_register: Arc<dyn ResourceRegisterTrait>,
         verification_service: Arc<VerificationService>
     ) -> Self {
         Self {
@@ -205,6 +206,21 @@ impl RegisterExecutor {
         
         result
     }
+
+    /// Execute abstract effect if available
+    async fn execute_abstract_effect(&self, effect: &Option<Box<dyn Effect>>) -> Result<EffectOutcome, Error> {
+        if let Some(effect) = effect {
+            // Execute the effect (implementation would depend on your effect system)
+            // This is a placeholder for the actual implementation
+            Ok(EffectOutcome {
+                success: true,
+                error: None,
+                data: HashMap::new(),
+            })
+        } else {
+            Err(Error::InvalidArgument("No abstract effect to execute".to_string()))
+        }
+    }
 }
 
 #[async_trait]
@@ -239,37 +255,18 @@ impl OperationExecutor<RegisterContext> for RegisterExecutor {
             .map_err(|e| ExecutionError::RegisterOperationFailed(e.to_string()))?;
         
         // Execute the abstract effect if available
-        let effect_outcome = match self.execute_abstract_effect(&operation.abstract_representation).await {
-            Ok(outcome) => Some(outcome),
-            Err(_) => None, // We don't fail if the abstract effect execution fails
-        };
+        let effect_outcome = self.execute_abstract_effect(&operation.abstract_representation).await?;
         
         // Create the result
         let result = OperationResult {
             operation: operation.clone(),
-            effect_outcome,
+            effect_outcome: Some(effect_outcome),
             success: true,
             error: None,
             result_data,
         };
         
         Ok(result)
-    }
-}
-
-impl RegisterExecutor {
-    async fn execute_abstract_effect(&self, effect: &Box<dyn Effect>) -> Result<EffectOutcome, Error> {
-        // This is a simulated execution of the abstract effect
-        // In a real implementation, this would call the interpreter
-        Ok(EffectOutcome {
-            id: effect.id().to_string(),
-            success: true,
-            data: HashMap::new(),
-            error: None,
-            execution_id: None,
-            resource_changes: Vec::new(),
-            metadata: HashMap::new(),
-        })
     }
 }
 
@@ -360,7 +357,7 @@ async fn record_operation_execution<C: ExecutionContext>(
 mod tests {
     use super::*;
     use crate::effect::EmptyEffect;
-    use crate::types::ResourceId;
+    use crate::crypto::hash::ContentId;
     
     #[tokio::test]
     async fn test_abstract_executor() {

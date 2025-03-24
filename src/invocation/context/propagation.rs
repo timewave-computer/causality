@@ -5,13 +5,49 @@
 
 use std::sync::{Arc, RwLock, Mutex};
 use std::collections::HashMap;
+use borsh::{BorshSerialize, BorshDeserialize};
 use chrono::Utc;
-use uuid::Uuid;
-
+use rand;
+use crate::crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 use crate::error::{Error, Result};
 use crate::types::TraceId;
 use crate::domain::map::map::TimeMap;
 use super::InvocationContext;
+
+/// Invocation context data for ID generation
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+struct InvocationData {
+    /// Timestamp when created
+    timestamp: i64,
+    /// Trace ID
+    trace_id: String,
+    /// Parent ID if any
+    parent_id: Option<String>,
+    /// Random nonce
+    nonce: [u8; 8],
+}
+
+impl ContentAddressed for InvocationData {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
 
 /// Storage for active invocation contexts
 #[derive(Debug)]
@@ -121,11 +157,19 @@ impl ContextPropagator {
         parent_id: Option<String>,
         time_map: TimeMap,
     ) -> Result<Arc<RwLock<InvocationContext>>> {
-        // Generate a new invocation ID
-        let invocation_id = Uuid::new_v4().to_string();
-        
         // Use provided trace ID or create a new one
         let trace_id = trace_id.unwrap_or_else(TraceId::new);
+        
+        // Create invocation data for generating content ID
+        let invocation_data = InvocationData {
+            timestamp: Utc::now().timestamp(),
+            trace_id: trace_id.to_string(),
+            parent_id: parent_id.clone(),
+            nonce: rand::random::<[u8; 8]>(),
+        };
+        
+        // Generate a content-derived invocation ID
+        let invocation_id = format!("invocation:{}", invocation_data.content_id());
         
         // Create the context
         let mut context = InvocationContext::new(
@@ -159,16 +203,22 @@ impl ContextPropagator {
         let parent_ctx = self.storage.get(parent_id)?
             .ok_or_else(|| Error::NotFound(format!("Parent context not found: {}", parent_id)))?;
         
-        // Generate a new invocation ID
-        let invocation_id = Uuid::new_v4().to_string();
+        // Create invocation data for generating content ID
+        let parent_guard = parent_ctx.read().map_err(|_| 
+            Error::InternalError("Failed to acquire read lock on parent context".to_string()))?;
+        
+        let invocation_data = InvocationData {
+            timestamp: Utc::now().timestamp(),
+            trace_id: parent_guard.trace_id.to_string(),
+            parent_id: Some(parent_id.to_string()),
+            nonce: rand::random::<[u8; 8]>(),
+        };
+        
+        // Generate a content-derived invocation ID
+        let invocation_id = format!("invocation:{}", invocation_data.content_id());
         
         // Create the child context
-        let child_context = {
-            let parent_guard = parent_ctx.read().map_err(|_| 
-                Error::InternalError("Failed to acquire read lock on parent context".to_string()))?;
-            
-            parent_guard.create_child(invocation_id)
-        };
+        let child_context = parent_guard.create_child(invocation_id);
         
         // Add this as a child to the parent
         {
@@ -216,7 +266,7 @@ impl ContextPropagator {
     }
     
     /// Wait for a resource
-    pub fn wait_for_resource(&self, invocation_id: &str, resource_id: crate::types::ResourceId) -> Result<()> {
+    pub fn wait_for_resource(&self, invocation_id: &str, resource_id: crate::types::ContentId) -> Result<()> {
         let context = self.storage.get(invocation_id)?
             .ok_or_else(|| Error::NotFound(format!("Context not found: {}", invocation_id)))?;
         
@@ -328,7 +378,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ResourceId, DomainId};
+    use crate::types::{*};
+use crate::crypto::hash::ContentId;;
     
     fn create_time_map() -> TimeMap {
         TimeMap::new()

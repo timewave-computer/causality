@@ -378,7 +378,7 @@ mod tests {
         
         // Create a test register
         let mut register = Register {
-            register_id: RegisterId::new("test_register"),
+            register_id: ContentId::new("test_register"),
             state: RegisterState::Active,
             owner: crate::types::Address::new("owner"),
             domain: crate::types::Domain::new("test_domain"),

@@ -13,7 +13,8 @@ use crate::effect::{
     Effect, EffectId, EffectContext, EffectResult, EffectOutcome, 
     EffectError, ExecutionBoundary
 };
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::error::{Error, Result};
 use crate::log::fact_snapshot::{FactSnapshot, FactId, FactDependency, FactDependencyType};
 use crate::log::fact_types::FactType;
@@ -104,7 +105,7 @@ impl Effect for CosmWasmZkCompileEffect {
         "Compiles RISC-V program for ZK circuit generation on CosmWasm".to_string()
     }
     
-    fn resource_id(&self) -> &ResourceId {
+    fn resource_id(&self) -> &ContentId {
         &self.contract_address
     }
     
@@ -409,7 +410,7 @@ impl Effect for CosmWasmZkProveEffect {
         "Generates a zero-knowledge proof on CosmWasm".to_string()
     }
     
-    fn resource_id(&self) -> &ResourceId {
+    fn resource_id(&self) -> &ContentId {
         &self.contract_address
     }
     
@@ -553,7 +554,7 @@ impl Effect for CosmWasmZkVerifyEffect {
         "Verifies a zero-knowledge proof on CosmWasm".to_string()
     }
     
-    fn resource_id(&self) -> &ResourceId {
+    fn resource_id(&self) -> &ContentId {
         &self.contract_address
     }
     
@@ -690,7 +691,7 @@ impl CosmWasmZkEffectFactory {
     /// Create a new CosmWasm ZK compile effect
     pub fn create_compile_effect(
         &self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         name: String,
         code: Vec<u8>,
         target: String,
@@ -709,7 +710,7 @@ impl CosmWasmZkEffectFactory {
     /// Create a new CosmWasm ZK witness generation effect
     pub fn create_witness_effect(
         &self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         program: RiscVProgram,
         public_inputs: Vec<String>,
         private_inputs: Vec<String>,
@@ -728,7 +729,7 @@ impl CosmWasmZkEffectFactory {
     /// Create a new CosmWasm ZK proof generation effect
     pub fn create_prove_effect(
         &self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         witness: Witness,
     ) -> CosmWasmZkProveEffect {
         CosmWasmZkProveEffect::new(
@@ -743,7 +744,7 @@ impl CosmWasmZkEffectFactory {
     /// Create a new CosmWasm ZK proof verification effect
     pub fn create_verify_effect(
         &self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         proof: Proof,
         public_inputs: Vec<String>,
     ) -> CosmWasmZkVerifyEffect {

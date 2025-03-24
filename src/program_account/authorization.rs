@@ -6,15 +6,17 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use crate::domain::DomainId;
 use crate::error::{Error, Result};
 use crate::resource::{
-    Register, RegisterId, ResourceId, 
+    Register, RegisterId, ContentId, 
     AuthorizationMethod, ResourceAllocator, ResourceRequest
 };
 use crate::program_account::ProgramAccountCapability;
 use crate::types::{Address, TraceId};
+use crate::crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 /// Authorization level for resources and capabilities
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,7 +42,7 @@ pub struct AuthorizationContext {
     /// The account performing the action
     pub account_id: String,
     /// The resource being accessed (if applicable)
-    pub resource_id: Option<ResourceId>,
+    pub resource_id: Option<ContentId>,
     /// The authorization level being requested
     pub level: AuthorizationLevel,
     /// The specific action being performed
@@ -84,7 +86,7 @@ impl AuthorizationContext {
     }
     
     /// Add a resource ID to the context
-    pub fn with_resource(mut self, resource_id: ResourceId) -> Self {
+    pub fn with_resource(mut self, resource_id: ContentId) -> Self {
         self.resource_id = Some(resource_id);
         self
     }
@@ -131,7 +133,7 @@ pub struct Role {
 }
 
 /// A delegate authorization that allows one account to act on behalf of another
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct DelegateAuthorization {
     /// ID of this delegation
     pub id: String,
@@ -147,6 +149,63 @@ pub struct DelegateAuthorization {
     pub expires_at: Option<u64>,
     /// Whether this delegation can be further delegated
     pub can_redelegate: bool,
+}
+
+impl ContentAddressed for DelegateAuthorization {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        
+        // Since HashSet and HashMap don't implement BorshSerialize,
+        // we need to create a serializable version of the data
+        let actions_vec: Vec<String> = self.actions.iter().cloned().collect();
+        let restrictions_vec: Option<Vec<(String, String)>> = self.restrictions.as_ref().map(|r| {
+            r.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        });
+        
+        // Create a serializable struct for content hashing
+        #[derive(BorshSerialize)]
+        struct DelegateAuthorizationData<'a> {
+            delegator: &'a str,
+            delegate: &'a str,
+            actions: &'a [String],
+            restrictions: Option<&'a [(String, String)]>,
+            expires_at: Option<u64>,
+            can_redelegate: bool,
+            timestamp: u64, // Add timestamp for uniqueness
+        }
+        
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        let data = DelegateAuthorizationData {
+            delegator: &self.delegator,
+            delegate: &self.delegate,
+            actions: &actions_vec,
+            restrictions: restrictions_vec.as_ref().map(|r| r.as_slice()),
+            expires_at: self.expires_at,
+            can_redelegate: self.can_redelegate,
+            timestamp,
+        };
+        
+        let serialized = data.try_to_vec().unwrap_or_default();
+        hasher.hash(&serialized)
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
 }
 
 /// A signature verification result
@@ -230,9 +289,22 @@ impl AuthorizationManager {
         expires_at: Option<u64>,
         can_redelegate: bool,
     ) -> Result<String> {
-        // Create a unique ID for this delegation
-        let id = uuid::Uuid::new_v4().to_string();
+        // Create a temporary delegation for content ID generation
+        let temp_delegation = DelegateAuthorization {
+            id: String::new(), // Temporary
+            delegator: delegator.to_string(),
+            delegate: delegate.to_string(),
+            actions: actions.clone(),
+            restrictions: restrictions.clone(),
+            expires_at,
+            can_redelegate,
+        };
         
+        // Generate a content-derived ID
+        let content_id = temp_delegation.content_id();
+        let id = format!("delegation:{}", content_id);
+        
+        // Create the final delegation with the content ID
         let delegation = DelegateAuthorization {
             id: id.clone(),
             delegator: delegator.to_string(),
@@ -478,14 +550,14 @@ mod tests {
             "transfer".to_string(),
             AuthorizationLevel::ReadWrite,
         )
-        .with_resource(ResourceId::from_str("res-1"))
+        .with_resource(ContentId::from_str("res-1"))
         .with_domain(DomainId::new("domain-1"));
         
         assert_eq!(context.account_id, "acc-1");
         assert_eq!(context.account_owner, Address::new("owner-1"));
         assert_eq!(context.action, "transfer");
         assert_eq!(context.level, AuthorizationLevel::ReadWrite);
-        assert_eq!(context.resource_id, Some(ResourceId::from_str("res-1")));
+        assert_eq!(context.resource_id, Some(ContentId::from_str("res-1")));
         assert_eq!(context.domain_id, Some(DomainId::new("domain-1")));
     }
     

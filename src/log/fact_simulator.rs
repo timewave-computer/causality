@@ -5,7 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use crate::types::{ResourceId, DomainId, TraceId, Timestamp};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::error::{Error, Result};
 use crate::log::{FactLogger, FactMetadata, FactEntry, LogStorage};
 use crate::log::fact_types::{FactType, RegisterFact, ZKProofFact};
@@ -47,7 +48,7 @@ pub struct SimulatedFactBuilder {
     /// The fact type
     fact_type: FactType,
     /// The resource ID
-    resource_id: Option<ResourceId>,
+    resource_id: Option<ContentId>,
     /// The domain ID
     domain_id: DomainId,
     /// The timestamp
@@ -72,7 +73,7 @@ impl SimulatedFactBuilder {
     }
     
     /// Set the resource ID
-    pub fn with_resource(mut self, resource_id: ResourceId) -> Self {
+    pub fn with_resource(mut self, resource_id: ContentId) -> Self {
         self.resource_id = Some(resource_id);
         self
     }
@@ -120,7 +121,7 @@ pub struct SimulatedFact {
     /// The fact type
     pub fact_type: FactType,
     /// The resource ID
-    pub resource_id: Option<ResourceId>,
+    pub resource_id: Option<ContentId>,
     /// The domain ID
     pub domain_id: DomainId,
     /// The timestamp
@@ -180,7 +181,7 @@ impl FactSimulator {
     pub fn simulate_register_creation(
         &mut self,
         trace_id: TraceId,
-        register_id: ResourceId,
+        register_id: ContentId,
         initial_data: Vec<u8>,
     ) -> Result<FactId> {
         let register_fact = RegisterFact::RegisterCreation {
@@ -210,7 +211,7 @@ impl FactSimulator {
     pub fn simulate_register_update(
         &mut self,
         trace_id: TraceId,
-        register_id: ResourceId,
+        register_id: ContentId,
         new_data: Vec<u8>,
     ) -> Result<FactId> {
         let register_fact = RegisterFact::RegisterUpdate {
@@ -241,7 +242,7 @@ impl FactSimulator {
     pub fn simulate_balance_fact(
         &mut self,
         trace_id: TraceId,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         balance: u64,
     ) -> Result<FactId> {
         // Create a balance fact

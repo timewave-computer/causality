@@ -11,11 +11,13 @@ use serde::{Serialize, Deserialize};
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
+use getrandom;
 
 use crate::error::{Error, Result};
 use crate::types::{ContentId, ContentHash, TraceId};
 use crate::actor::{ActorIdBox, ActorCapability, ActorRole};
+use crate::crypto::content_addressed::{ContentAddressed, ContentId as CryptoContentId};
 
 /// Message priority levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
@@ -141,6 +143,48 @@ impl Default for DeliveryOptions {
     }
 }
 
+/// Content data for message ID generation
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct MessageContentData {
+    /// Sender ID
+    pub sender: String,
+    
+    /// Recipients (hashed together)
+    pub recipients_hash: String,
+    
+    /// Content hash of the message payload
+    pub payload_hash: String,
+    
+    /// Timestamp
+    pub timestamp: u64,
+    
+    /// Random nonce for uniqueness
+    pub nonce: [u8; 8],
+}
+
+impl ContentAddressed for MessageContentData {
+    fn content_hash(&self) -> Result<CryptoContentId> {
+        let bytes = self.to_bytes()?;
+        Ok(CryptoContentId::from_bytes(&bytes)?)
+    }
+    
+    fn verify(&self, content_id: &CryptoContentId) -> Result<bool> {
+        let calculated_id = self.content_hash()?;
+        Ok(calculated_id == *content_id)
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>> {
+        let bytes = borsh::to_vec(self)
+            .map_err(|e| Error::Serialization(format!("Failed to serialize MessageContentData: {}", e)))?;
+        Ok(bytes)
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        borsh::from_slice(bytes)
+            .map_err(|e| Error::Deserialization(format!("Failed to deserialize MessageContentData: {}", e)))
+    }
+}
+
 /// Message envelope containing a message and metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageEnvelope {
@@ -170,7 +214,29 @@ impl MessageEnvelope {
         delivery_options: DeliveryOptions,
     ) -> Self {
         let now = Timestamp::now();
-        let message_id = Uuid::new_v4().to_string();
+        let content_bytes = content.as_ref().to_vec();
+        
+        // Generate a content-based message ID
+        let recipients_str = recipients.iter()
+            .map(|r| r.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+            
+        let mut nonce = [0u8; 8];
+        getrandom::getrandom(&mut nonce).expect("Failed to generate random nonce");
+        
+        let content_data = MessageContentData {
+            sender: sender.to_string(),
+            recipients_hash: format!("recipients:{}", ContentHash::new(recipients_str.as_bytes())),
+            payload_hash: format!("payload:{}", ContentHash::new(&content_bytes)),
+            timestamp: now.to_seconds(),
+            nonce,
+        };
+        
+        let message_id = content_data.content_hash()
+            .map(|id| id.to_string())
+            .unwrap_or_else(|_| format!("msg-error-{}", now.to_seconds()));
+        
         let trace_id = TraceId::new();
             
         MessageEnvelope {
@@ -178,7 +244,7 @@ impl MessageEnvelope {
             sender,
             recipients,
             category: MessageCategory::Normal,
-            payload: MessagePayload::new(content, content_type.into()),
+            payload: MessagePayload::new(content_bytes, content_type.into()),
             timestamp: now,
             trace_id: Some(trace_id),
         }

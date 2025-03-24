@@ -32,13 +32,13 @@ pub use storage_tests::create_test_storage_with_id;
 // fixtures, helpers, and test data generators.
 
 use crate::error::Result;
-use crate::types::{ResourceId, RegisterState, DomainId, Metadata};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::resource::{ResourceRegister, ResourceManager};
 use crate::resource::lifecycle_manager::ResourceRegisterLifecycleManager;
 use crate::resource::resource_register::ResourceRegister;
 use crate::address::Address;
 use std::sync::{Arc, Mutex};
-use uuid::Uuid;
 
 /// Helper for testing resource state transitions
 ///
@@ -77,12 +77,12 @@ impl ResourceStateTransitionHelper {
     }
     
     /// Get a resource from the manager
-    pub fn get_resource(&self, resource_id: &ResourceId) -> Result<ResourceRegister> {
+    pub fn get_resource(&self, resource_id: &ContentId) -> Result<ResourceRegister> {
         self.resource_manager.get_resource(resource_id)
     }
     
     /// Transition a resource to the active state
-    pub fn activate(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn activate(&mut self, resource_id: &ContentId) -> Result<()> {
         if self.synchronous {
             self.resource_manager.activate_resource(resource_id)
         } else {
@@ -93,42 +93,42 @@ impl ResourceStateTransitionHelper {
     }
     
     /// Transition a resource to the locked state
-    pub fn lock(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn lock(&mut self, resource_id: &ContentId) -> Result<()> {
         self.resource_manager.lock_resource(resource_id)
     }
     
     /// Transition a resource to the active state from locked
-    pub fn unlock(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn unlock(&mut self, resource_id: &ContentId) -> Result<()> {
         self.resource_manager.unlock_resource(resource_id)
     }
     
     /// Transition a resource to the frozen state
-    pub fn freeze(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn freeze(&mut self, resource_id: &ContentId) -> Result<()> {
         self.resource_manager.freeze_resource(resource_id)
     }
     
     /// Transition a resource to the active state from frozen
-    pub fn unfreeze(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn unfreeze(&mut self, resource_id: &ContentId) -> Result<()> {
         self.resource_manager.unfreeze_resource(resource_id)
     }
     
     /// Transition a resource to the consumed state
-    pub fn consume(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn consume(&mut self, resource_id: &ContentId) -> Result<()> {
         self.resource_manager.consume_resource(resource_id)
     }
     
     /// Transition a resource to the archived state
-    pub fn archive(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn archive(&mut self, resource_id: &ContentId) -> Result<()> {
         self.resource_manager.archive_resource(resource_id)
     }
     
     /// Mark a resource as pending
-    pub fn mark_pending(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn mark_pending(&mut self, resource_id: &ContentId) -> Result<()> {
         self.resource_manager.mark_resource_pending(resource_id)
     }
     
     /// Execute a common transition sequence (Initial -> Active -> Locked -> Active -> Consumed)
-    pub fn execute_common_sequence(&mut self, resource_id: &ResourceId) -> Result<Vec<RegisterState>> {
+    pub fn execute_common_sequence(&mut self, resource_id: &ContentId) -> Result<Vec<RegisterState>> {
         let mut states = Vec::new();
         
         // Record initial state
@@ -159,7 +159,7 @@ impl ResourceStateTransitionHelper {
     }
     
     /// Execute a freezing sequence (Initial -> Active -> Frozen -> Active -> Archived)
-    pub fn execute_freezing_sequence(&mut self, resource_id: &ResourceId) -> Result<Vec<RegisterState>> {
+    pub fn execute_freezing_sequence(&mut self, resource_id: &ContentId) -> Result<Vec<RegisterState>> {
         let mut states = Vec::new();
         
         // Record initial state

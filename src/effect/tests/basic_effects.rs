@@ -12,7 +12,7 @@ use crate::effect::{
     AlgebraicEffect, EffectContext, EffectResult, EffectError, EffectOutcome,
     TransferEffect, StorageEffect, StorageVisibility, TelHints
 };
-use crate::resource::{ResourceId, ResourceCapability, Right};
+use crate::resource::{ContentId, ResourceCapability, Right};
 use crate::address::Address;
 use crate::domain::DomainId;
 
@@ -31,7 +31,7 @@ pub struct TestTransferEffect {
     destination: Address,
     
     /// Resource to transfer
-    resource_id: ResourceId,
+    resource_id: ContentId,
     
     /// Amount to transfer
     amount: u128,
@@ -45,7 +45,7 @@ impl TestTransferEffect {
     pub fn new(
         source: Address,
         destination: Address,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         amount: u128,
         domain_id: DomainId,
     ) -> Self {
@@ -75,7 +75,7 @@ impl AlgebraicEffect for TestTransferEffect {
         &self.description
     }
     
-    fn resource_ids(&self) -> Vec<ResourceId> {
+    fn resource_ids(&self) -> Vec<ContentId> {
         vec![self.resource_id.clone()]
     }
     
@@ -92,7 +92,7 @@ impl AlgebraicEffect for TestTransferEffect {
         params
     }
     
-    fn required_capabilities(&self) -> Vec<(ResourceId, Right)> {
+    fn required_capabilities(&self) -> Vec<(ContentId, Right)> {
         vec![
             (self.resource_id.clone(), Right::Read),
             (self.resource_id.clone(), Right::Write),
@@ -190,7 +190,7 @@ impl TransferEffect for TestTransferEffect {
         &self.destination
     }
     
-    fn resource_id(&self) -> &ResourceId {
+    fn resource_id(&self) -> &ContentId {
         &self.resource_id
     }
     
@@ -212,7 +212,7 @@ pub struct TestStorageEffect {
     description: String,
     
     /// Resource to store
-    resource_id: ResourceId,
+    resource_id: ContentId,
     
     /// Storage domain
     domain_id: DomainId,
@@ -230,7 +230,7 @@ pub struct TestStorageEffect {
 impl TestStorageEffect {
     /// Create a new test storage effect
     pub fn new(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         domain_id: DomainId,
         fields: HashSet<String>,
         visibility: StorageVisibility,
@@ -262,7 +262,7 @@ impl AlgebraicEffect for TestStorageEffect {
         &self.description
     }
     
-    fn resource_ids(&self) -> Vec<ResourceId> {
+    fn resource_ids(&self) -> Vec<ContentId> {
         vec![self.resource_id.clone()]
     }
     
@@ -279,7 +279,7 @@ impl AlgebraicEffect for TestStorageEffect {
         params
     }
     
-    fn required_capabilities(&self) -> Vec<(ResourceId, Right)> {
+    fn required_capabilities(&self) -> Vec<(ContentId, Right)> {
         vec![
             (self.resource_id.clone(), Right::Write),
         ]
@@ -368,7 +368,7 @@ impl AlgebraicEffect for TestStorageEffect {
 
 #[async_trait]
 impl StorageEffect for TestStorageEffect {
-    fn resource_id(&self) -> &ResourceId {
+    fn resource_id(&self) -> &ContentId {
         &self.resource_id
     }
     
@@ -398,7 +398,7 @@ pub struct TestQueryEffect {
     description: String,
     
     /// Resource to query
-    resource_id: ResourceId,
+    resource_id: ContentId,
     
     /// Query domain
     domain_id: DomainId,
@@ -410,7 +410,7 @@ pub struct TestQueryEffect {
 impl TestQueryEffect {
     /// Create a new test query effect
     pub fn new(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         domain_id: DomainId,
         query_params: HashMap<String, serde_json::Value>,
     ) -> Self {
@@ -438,7 +438,7 @@ impl AlgebraicEffect for TestQueryEffect {
         &self.description
     }
     
-    fn resource_ids(&self) -> Vec<ResourceId> {
+    fn resource_ids(&self) -> Vec<ContentId> {
         vec![self.resource_id.clone()]
     }
     
@@ -453,7 +453,7 @@ impl AlgebraicEffect for TestQueryEffect {
         params
     }
     
-    fn required_capabilities(&self) -> Vec<(ResourceId, Right)> {
+    fn required_capabilities(&self) -> Vec<(ContentId, Right)> {
         vec![
             (self.resource_id.clone(), Right::Read),
         ]
@@ -635,7 +635,7 @@ mod tests {
 
 #[async_trait]
 impl crate::effect::QueryEffect for TestQueryEffect {
-    fn resource_id(&self) -> &ResourceId {
+    fn resource_id(&self) -> &ContentId {
         &self.resource_id
     }
     

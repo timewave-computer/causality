@@ -6,10 +6,11 @@
 use std::fmt;
 use std::hash::Hash;
 use std::any::Any;
+use borsh::{BorshSerialize, BorshDeserialize};
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
 use std::hash::{Hasher, BuildHasher};
 use std::collections::hash_map::DefaultHasher;
+use crate::crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 /// Concrete implementation of an actor ID using a string
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -18,7 +19,10 @@ pub struct GenericActorId(pub String);
 impl GenericActorId {
     /// Create a new random actor ID
     pub fn new() -> Self {
-        Self(Uuid::new_v4().to_string())
+        // Create a simple content-derived ID
+        let data = format!("actor:{}", rand::random::<u64>());
+        let id = format!("actor:{}", HashFactory::default().create_hasher().unwrap().hash(data.as_bytes()));
+        Self(id)
     }
     
     /// Create an actor ID from a string
@@ -64,30 +68,104 @@ impl From<&str> for GenericActorId {
     }
 }
 
-/// Implementation for a UUID-based actor ID
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct UuidActorId(pub Uuid);
+/// Implementation for a content-addressed actor ID
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+pub struct ContentAddressedActorId {
+    /// Actor data for content addressing
+    data: ActorData,
+    /// Content ID
+    id: ContentId,
+}
 
-impl UuidActorId {
+/// Actor data used for content addressing
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+struct ActorData {
+    /// Timestamp
+    timestamp: i64,
+    /// Random nonce
+    nonce: [u8; 8],
+    /// Optional name
+    name: Option<String>,
+}
+
+impl ContentAddressed for ActorData {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
+impl ContentAddressedActorId {
     /// Create a new random actor ID
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        let data = ActorData {
+            timestamp: chrono::Utc::now().timestamp(),
+            nonce: rand::random::<[u8; 8]>(),
+            name: None,
+        };
+        
+        let id = data.content_id();
+        
+        Self {
+            data,
+            id,
+        }
     }
     
-    /// Create an actor ID from a UUID
-    pub fn from_uuid(id: Uuid) -> Self {
-        Self(id)
+    /// Create an actor ID with a name
+    pub fn with_name(name: impl Into<String>) -> Self {
+        let data = ActorData {
+            timestamp: chrono::Utc::now().timestamp(),
+            nonce: rand::random::<[u8; 8]>(),
+            name: Some(name.into()),
+        };
+        
+        let id = data.content_id();
+        
+        Self {
+            data,
+            id,
+        }
     }
     
-    /// Get the underlying UUID
-    pub fn uuid(&self) -> Uuid {
-        self.0
+    /// Create an actor ID from a ContentId
+    pub fn from_content_id(id: ContentId) -> Self {
+        let data = ActorData {
+            timestamp: chrono::Utc::now().timestamp(),
+            nonce: rand::random::<[u8; 8]>(),
+            name: None,
+        };
+        
+        Self {
+            data,
+            id,
+        }
+    }
+    
+    /// Get the content ID
+    pub fn content_id(&self) -> ContentId {
+        self.id.clone()
     }
 
     /// Hash the ID
     pub fn hash(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
-        self.0.hash(&mut hasher);
+        self.id.hash(&mut hasher);
         hasher.finish()
     }
 
@@ -97,16 +175,16 @@ impl UuidActorId {
     }
 }
 
-impl fmt::Display for UuidActorId {
+impl fmt::Display for ContentAddressedActorId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "actor:{}", self.id)
     }
 }
 
-// Implement From<Uuid> for UuidActorId
-impl From<Uuid> for UuidActorId {
-    fn from(id: Uuid) -> Self {
-        UuidActorId(id)
+// Implement From<ContentId> for ContentAddressedActorId
+impl From<ContentId> for ContentAddressedActorId {
+    fn from(id: ContentId) -> Self {
+        ContentAddressedActorId::from_content_id(id)
     }
 }
 
@@ -115,14 +193,14 @@ impl From<Uuid> for UuidActorId {
 pub enum ActorIdBox {
     /// Generic string-based ID
     Generic(GenericActorId),
-    /// UUID-based ID
-    Uuid(UuidActorId),
+    /// Content-addressed ID
+    ContentAddressed(ContentAddressedActorId),
 }
 
 impl ActorIdBox {
     /// Create a new random actor ID using GenericActorId
     pub fn new() -> Self {
-        Self::Generic(GenericActorId::new())
+        Self::ContentAddressed(ContentAddressedActorId::new())
     }
     
     /// Create from a GenericActorId
@@ -130,16 +208,16 @@ impl ActorIdBox {
         Self::Generic(id)
     }
     
-    /// Create from a UuidActorId
-    pub fn from_uuid(id: UuidActorId) -> Self {
-        Self::Uuid(id)
+    /// Create from a ContentAddressedActorId
+    pub fn from_content_addressed(id: ContentAddressedActorId) -> Self {
+        Self::ContentAddressed(id)
     }
     
     /// Get the string representation
     pub fn as_str(&self) -> String {
         match self {
             Self::Generic(id) => id.as_str().to_string(),
-            Self::Uuid(id) => id.to_string(),
+            Self::ContentAddressed(id) => id.to_string(),
         }
     }
 
@@ -147,7 +225,7 @@ impl ActorIdBox {
     pub fn hash(&self) -> u64 {
         match self {
             Self::Generic(id) => id.hash(),
-            Self::Uuid(id) => id.hash(),
+            Self::ContentAddressed(id) => id.hash(),
         }
     }
 
@@ -161,7 +239,7 @@ impl fmt::Display for ActorIdBox {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Generic(id) => write!(f, "{}", id),
-            Self::Uuid(id) => write!(f, "{}", id),
+            Self::ContentAddressed(id) => write!(f, "{}", id),
         }
     }
 }
@@ -173,9 +251,9 @@ impl From<GenericActorId> for ActorIdBox {
     }
 }
 
-impl From<UuidActorId> for ActorIdBox {
-    fn from(id: UuidActorId) -> Self {
-        Self::Uuid(id)
+impl From<ContentAddressedActorId> for ActorIdBox {
+    fn from(id: ContentAddressedActorId) -> Self {
+        Self::ContentAddressed(id)
     }
 }
 
@@ -191,8 +269,8 @@ impl From<&str> for ActorIdBox {
     }
 }
 
-impl From<Uuid> for ActorIdBox {
-    fn from(id: Uuid) -> Self {
-        Self::Uuid(UuidActorId(id))
+impl From<ContentId> for ActorIdBox {
+    fn from(id: ContentId) -> Self {
+        Self::ContentAddressed(ContentAddressedActorId::from_content_id(id))
     }
 } 

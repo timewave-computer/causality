@@ -1,0 +1,29 @@
+Analyzing src/resource/content_addressed_register.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+352:            operation_id: format!("op-{}", uuid::Uuid::new_v4()),
+
+Detailed context for each occurrence:
+==============================================
+
+Line 352:             operation_id: format!("op-{}", uuid::Uuid::new_v4()),
+---------------------------------------------
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+            
+        Self {
+            operation_id: format!("op-{}", uuid::Uuid::new_v4()),
+            operation_type,
+            target_register,
+            related_registers: Vec::new(),
+            pre_state: None,
+            post_state: None,
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+28:pub struct ContentAddressedRegister {
+63:pub struct ContentAddressedRegisterOperation {
+408:pub struct ContentAddressedRegisterRegistry {

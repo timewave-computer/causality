@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, Mutex};
 use crate::types::{DomainId, TraceId, Timestamp};
-use crate::resource::register::RegisterId;
+use crate::resource::register::ContentId;
 use crate::error::{Error, Result};
 use crate::log::{
     FactLogger, FactMetadata, LogStorage, MemoryLogStorage, 
@@ -59,9 +59,9 @@ pub fn create_test_fact_replay_engine() -> (FactReplayEngine, Arc<Mutex<MemoryLo
 }
 
 /// Creates test register facts
-pub fn create_test_register_facts() -> Vec<(RegisterId, RegisterFact)> {
-    let register_id = RegisterId::new("test-register-1");
-    let register_id2 = RegisterId::new("test-register-2");
+pub fn create_test_register_facts() -> Vec<(ContentId, RegisterFact)> {
+    let register_id = ContentId::new("test-register-1");
+    let register_id2 = ContentId::new("test-register-2");
     
     vec![
         (
@@ -136,7 +136,7 @@ pub fn create_test_zkproof_facts() -> Vec<ZKProofFact> {
 /// Creates a test fact snapshot
 pub fn create_test_fact_snapshot(observer: &str) -> FactSnapshot {
     let domain_id = DomainId::new("test-domain");
-    let register_id = RegisterId::new("test-register-1");
+    let register_id = ContentId::new("test-register-1");
     
     let mut snapshot = FactSnapshot::new(observer);
     

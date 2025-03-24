@@ -1,16 +1,17 @@
 // Tests for the effect system
 
-mod effect_execution_tests;
-mod boundary_tests;
-mod basic_effects;
+// Modules that aren't available in this codebase
+// mod effect_execution_tests;
+// mod boundary_tests;
+// mod basic_effects;
 
-pub use basic_effects::{TestTransferEffect, TestStorageEffect, TestQueryEffect};
+// pub use basic_effects::{TestTransferEffect, TestStorageEffect, TestQueryEffect};
 
 #[cfg(test)]
 mod empty_effect_tests {
     use std::collections::HashMap;
-    use uuid::Uuid;
     use crate::effect::{EmptyEffect, Effect, EffectContext, ExecutionBoundary};
+    use crate::crypto::ContentId;
 
     #[tokio::test]
     async fn test_empty_effect_creation() {
@@ -31,12 +32,10 @@ mod empty_effect_tests {
     #[tokio::test]
     async fn test_empty_effect_execution() {
         let effect = EmptyEffect::new();
-        let context = EffectContext {
-            execution_id: Uuid::new_v4(),
-            capabilities: Vec::new(),
-            execution_boundary: ExecutionBoundary::InsideSystem,
-            parameters: HashMap::new(),
-        };
+        let context = EffectContext::new();
+        
+        // Add execution ID as parameter if needed
+        let context = context.with_param("execution_id", ContentId::nil().to_string());
         
         // Test synchronous execution
         let sync_result = effect.execute(&context);

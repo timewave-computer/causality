@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::address::Address;
-use crate::resource::{ResourceId, Quantity};
+use crate::resource::{ContentId, Quantity};
 use crate::domain::{DomainId, DomainRegistry, DomainType};
 use crate::effect::{
     Effect, EffectContext, EffectOutcome, EffectResult,
@@ -21,6 +21,7 @@ use crate::tel::handlers::{
     StorageTelHandler, QueryTelHandler, TransferParams
 };
 use crate::domain_adapters::cosmwasm::{CosmWasmAdapter, CosmWasmConfig};
+use crate::crypto;
 
 /// CosmWasm transfer effect implementation
 pub struct CosmWasmTransferEffect {
@@ -34,7 +35,7 @@ pub struct CosmWasmTransferEffect {
     amount: Quantity,
     
     /// Token/resource ID
-    token: ResourceId,
+    token: ContentId,
     
     /// Domain ID
     domain_id: DomainId,
@@ -55,7 +56,7 @@ impl CosmWasmTransferEffect {
         source: Address,
         destination: Address,
         amount: Quantity,
-        token: ResourceId,
+        token: ContentId,
         domain_id: DomainId,
         config: CosmWasmConfig,
         gas_limit: u64,
@@ -84,7 +85,7 @@ impl Effect for CosmWasmTransferEffect {
         "Transfer assets on a CosmWasm-compatible chain"
     }
     
-    fn required_capabilities(&self) -> Vec<(ResourceId, crate::resource::Right)> {
+    fn required_capabilities(&self) -> Vec<(ContentId, crate::resource::Right)> {
         vec![(self.token.clone(), crate::resource::Right::Transfer)]
     }
     
@@ -144,7 +145,7 @@ impl TransferEffect for CosmWasmTransferEffect {
         &self.amount
     }
     
-    fn token(&self) -> &ResourceId {
+    fn token(&self) -> &ContentId {
         &self.token
     }
     
@@ -372,7 +373,13 @@ mod tests {
         
         // Create context
         let context = EffectContext {
-            execution_id: uuid::Uuid::new_v4(),
+            execution_id: {
+                // Generate a unique content ID for testing
+                let test_data = "test-execution-context-cosmwasm-transfer";
+                let hasher = crypto::hash::HashFactory::default().create_hasher().unwrap();
+                let hash = hasher.hash(test_data.as_bytes());
+                crypto::hash::ContentId::from(hash)
+            },
             invoker: Address::new("test-user"),
             boundary: crate::effect::ExecutionBoundary::OutsideSystem,
             capabilities: Vec::new(),

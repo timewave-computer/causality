@@ -9,11 +9,12 @@ use std::future::Future;
 use std::pin::Pin;
 use async_trait::async_trait;
 use rand::Rng;
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use crate::effect::{Effect, EffectId, EffectContext, EffectResult, EffectOutcome, EffectError};
 use crate::log::fact_snapshot::{FactDependency, FactSnapshot};
 use crate::error::Result;
+use crate::crypto::hash::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 /// Types of random number generation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,27 +74,66 @@ pub trait RandomEffect: Send + Sync + std::fmt::Debug {
 }
 
 /// Standard random effect implementation using the rand crate
-#[derive(Debug)]
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct StandardRandomEffect {
     id: EffectId,
     seed: Option<u64>,
 }
 
+impl ContentAddressed for StandardRandomEffect {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 impl StandardRandomEffect {
     /// Create a new standard random effect
     pub fn new() -> Self {
-        Self {
-            id: EffectId::from_string(format!("random-standard-{}", Uuid::new_v4())),
+        let mut effect = Self {
+            id: EffectId::new(""), // Temporary placeholder
             seed: None,
-        }
+        };
+        
+        // Derive content ID and use it for the ID
+        let content_id = effect.content_id();
+        effect.id = EffectId::from_string(format!("random-standard-{}", content_id));
+        
+        effect
     }
     
     /// Create a standard random effect with a seed for deterministic behavior
     pub fn with_seed(seed: u64) -> Self {
-        Self {
-            id: EffectId::from_string(format!("random-standard-{}-seed-{}", Uuid::new_v4(), seed)),
+        let mut effect = Self {
+            id: EffectId::new(""), // Temporary placeholder
             seed: Some(seed),
-        }
+        };
+        
+        // Derive content ID and use it for the ID
+        let content_id = effect.content_id();
+        effect.id = EffectId::from_string(format!("random-standard-{}-seed-{}", content_id, seed));
+        
+        effect
     }
 }
 
@@ -196,17 +236,50 @@ impl RandomEffect for StandardRandomEffect {
 }
 
 /// Cryptographically secure random effect implementation
-#[derive(Debug)]
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct SecureRandomEffect {
     id: EffectId,
+}
+
+impl ContentAddressed for SecureRandomEffect {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
 }
 
 impl SecureRandomEffect {
     /// Create a new cryptographically secure random effect
     pub fn new() -> Self {
-        Self {
-            id: EffectId::from_string(format!("random-secure-{}", Uuid::new_v4())),
-        }
+        let mut effect = Self {
+            id: EffectId::new(""), // Temporary placeholder
+        };
+        
+        // Derive content ID and use it for the ID
+        let content_id = effect.content_id();
+        effect.id = EffectId::from_string(format!("random-secure-{}", content_id));
+        
+        effect
     }
 }
 

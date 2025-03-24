@@ -12,7 +12,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 use crate::error::{Error, Result};
-use crate::types::ResourceId;
+use crate::crypto::hash::ContentId;
 use crate::concurrency::primitives::{TaskId, ResourceManager, SharedResourceManager, ResourceGuard};
 
 /// A task scheduler for managing concurrent tasks

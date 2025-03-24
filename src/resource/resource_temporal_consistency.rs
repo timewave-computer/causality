@@ -7,10 +7,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
 
 use crate::error::{Error, Result};
-use crate::types::{ResourceId, DomainId, Timestamp, Metadata};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::time::{TimeMap, TimeMapSnapshot, TimeObserver, TimeEvent};
 use crate::resource::{ResourceRegister, RegisterState};
 use crate::resource::manager::ResourceManager;
@@ -22,7 +22,7 @@ use crate::relationship::cross_domain_query::{RelationshipQueryExecutor, Relatio
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceTimeSnapshot {
     /// Resource ID
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     
     /// State of the resource
     pub state: RegisterState,

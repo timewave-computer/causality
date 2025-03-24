@@ -5,9 +5,10 @@
 // of effect execution.
 
 use std::collections::HashMap;
-use uuid::Uuid;
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
+use std::io::{Read, Write};
+use crypto;
 
 use crate::tel::{
     error::{TelError, TelResult},
@@ -131,8 +132,10 @@ impl EffectProofGenerator {
 
         // In a real implementation, this would call into a cryptographic library
         // to generate an actual zero-knowledge proof. For this implementation,
-        // we'll use a placeholder that just wraps the serialized data.
-        let proof_id = Uuid::new_v4().to_string();
+        // we'll use a content-derived ID based on the hash of the proof data.
+        let hasher = crypto::hash::HashFactory::default().create_hasher().unwrap();
+        let content_id = crypto::hash::ContentId::from(hasher.hash(&proof_data));
+        let proof_id = content_id.to_string();
         
         Ok(Proof::new(
             &proof_id,

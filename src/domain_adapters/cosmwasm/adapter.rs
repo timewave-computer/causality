@@ -15,7 +15,8 @@ use crate::effect::{
     Effect, EffectId, EffectContext, EffectResult, EffectOutcome, 
     EffectError, ExecutionBoundary
 };
-use crate::types::{ResourceId, DomainId, BlockHeight, BlockHash, Timestamp, ContentId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::error::{Error, Result};
 use crate::log::fact_snapshot::{FactSnapshot, FactDependency};
 use crate::fact::{Fact, FactId, FactResult};

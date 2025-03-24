@@ -8,28 +8,29 @@ use std::sync::{Arc, RwLock};
 use crate::error::{Error, Result};
 use crate::types::{Address, Domain};
 use crate::resource::{
-    Register, RegisterId, RegisterContents, RegisterState, RegisterOperation, OperationType,
+    Register, ContentId, RegisterContents, RegisterState, RegisterOperation, OperationType,
     OneTimeRegisterSystem, RegisterResult, RegisterError, TimeMap, TimeMapEntry
 };
 use crate::domain::{DomainId, DomainRegistry};
+use crate::crypto::hash::{ContentId, HashOutput, HashFactory, HashError};
 
 // TEL resource types
 use crate::tel::resource::model::{
     Register as TelRegister, 
-    RegisterId as TelRegisterId,
+    ContentId as TelContentId,
     ResourceManager as TelResourceManager
 };
-use crate::tel::types::{ResourceId, Address as TelAddress, Domain as TelDomain};
+use crate::tel::types::{ContentId, Address as TelAddress, Domain as TelDomain};
 use crate::tel::resource::operations::{ResourceOperation, ResourceOperationType};
 
 /// Mapping between TEL resources and register system resources
 #[derive(Default)]
 pub struct TelResourceMapping {
     /// Mapping from TEL resource IDs to register IDs
-    tel_to_register: RwLock<HashMap<ResourceId, RegisterId>>,
+    tel_to_register: RwLock<HashMap<ContentId, ContentId>>,
     
     /// Mapping from register IDs to TEL resource IDs
-    register_to_tel: RwLock<HashMap<RegisterId, ResourceId>>,
+    register_to_tel: RwLock<HashMap<ContentId, ContentId>>,
 }
 
 impl TelResourceMapping {
@@ -42,7 +43,7 @@ impl TelResourceMapping {
     }
     
     /// Map a TEL resource ID to a register ID
-    pub fn map_resource(&self, tel_id: ResourceId, register_id: RegisterId) -> Result<()> {
+    pub fn map_resource(&self, tel_id: ContentId, register_id: ContentId) -> Result<()> {
         let mut tel_to_register = self.tel_to_register.write()
             .map_err(|_| Error::LockError("Failed to acquire tel_to_register lock".to_string()))?;
         
@@ -56,7 +57,7 @@ impl TelResourceMapping {
     }
     
     /// Get the register ID for a TEL resource ID
-    pub fn get_register_id(&self, tel_id: &ResourceId) -> Result<Option<RegisterId>> {
+    pub fn get_register_id(&self, tel_id: &ContentId) -> Result<Option<ContentId>> {
         let tel_to_register = self.tel_to_register.read()
             .map_err(|_| Error::LockError("Failed to acquire tel_to_register lock".to_string()))?;
         
@@ -64,7 +65,7 @@ impl TelResourceMapping {
     }
     
     /// Get the TEL resource ID for a register ID
-    pub fn get_tel_id(&self, register_id: &RegisterId) -> Result<Option<ResourceId>> {
+    pub fn get_tel_id(&self, register_id: &ContentId) -> Result<Option<ContentId>> {
         let register_to_tel = self.register_to_tel.read()
             .map_err(|_| Error::LockError("Failed to acquire register_to_tel lock".to_string()))?;
         
@@ -72,7 +73,7 @@ impl TelResourceMapping {
     }
     
     /// Remove a mapping
-    pub fn remove_mapping(&self, tel_id: &ResourceId, register_id: &RegisterId) -> Result<()> {
+    pub fn remove_mapping(&self, tel_id: &ContentId, register_id: &ContentId) -> Result<()> {
         let mut tel_to_register = self.tel_to_register.write()
             .map_err(|_| Error::LockError("Failed to acquire tel_to_register lock".to_string()))?;
         
@@ -86,7 +87,7 @@ impl TelResourceMapping {
     }
     
     /// Get all TEL resource IDs
-    pub fn get_all_tel_ids(&self) -> Result<HashSet<ResourceId>> {
+    pub fn get_all_tel_ids(&self) -> Result<HashSet<ContentId>> {
         let tel_to_register = self.tel_to_register.read()
             .map_err(|_| Error::LockError("Failed to acquire tel_to_register lock".to_string()))?;
         
@@ -94,7 +95,7 @@ impl TelResourceMapping {
     }
     
     /// Get all register IDs
-    pub fn get_all_register_ids(&self) -> Result<HashSet<RegisterId>> {
+    pub fn get_all_register_ids(&self) -> Result<HashSet<ContentId>> {
         let register_to_tel = self.register_to_tel.read()
             .map_err(|_| Error::LockError("Failed to acquire register_to_tel lock".to_string()))?;
         
@@ -157,7 +158,7 @@ impl TelResourceAdapter {
         };
         
         // Create register ID based on TEL register ID
-        let register_id = RegisterId::from_uuid(tel_register.id.0);
+        let register_id = ContentId::from_uuid(tel_register.id.0);
         
         // Create metadata from TEL register metadata
         let mut metadata = HashMap::new();
@@ -216,14 +217,14 @@ impl TelResourceAdapter {
     }
     
     /// Import a TEL register into the register system
-    pub fn import_tel_register(&self, tel_id: &ResourceId) -> Result<RegisterId> {
+    pub fn import_tel_register(&self, tel_id: &ContentId) -> Result<ContentId> {
         // Check if already imported
         if let Some(register_id) = self.mapping.get_register_id(tel_id)? {
             return Ok(register_id);
         }
         
         // Get the TEL register
-        let tel_register_id = TelRegisterId(uuid::Uuid::parse_str(&tel_id.to_string())
+        let tel_register_id = TelContentId::new(ContentId::parse(&tel_id.to_string())
             .map_err(|e| Error::ParseError(format!("Invalid TEL register ID: {}", e)))?);
         
         let tel_register = self.tel_resource_manager.get_register(&tel_register_id)
@@ -244,7 +245,7 @@ impl TelResourceAdapter {
     }
     
     /// Export a register to TEL
-    pub fn export_register_to_tel(&self, register_id: &RegisterId) -> Result<ResourceId> {
+    pub fn export_register_to_tel(&self, register_id: &ContentId) -> Result<ContentId> {
         // Check if already exported
         if let Some(tel_id) = self.mapping.get_tel_id(register_id)? {
             return Ok(tel_id);
@@ -269,7 +270,7 @@ impl TelResourceAdapter {
         ).map_err(|e| Error::ExternalError(format!("Failed to create TEL register: {}", e)))?;
         
         // Create resource ID from TEL register ID
-        let tel_resource_id = ResourceId::from(tel_register_id.0.to_string());
+        let tel_resource_id = ContentId::from(tel_register_id.0.to_string());
         
         // Map the IDs
         self.mapping.map_resource(tel_resource_id.clone(), register_id.clone())?;
@@ -278,13 +279,13 @@ impl TelResourceAdapter {
     }
     
     /// Sync a register with its TEL counterpart (from TEL to register)
-    pub fn sync_from_tel(&self, tel_id: &ResourceId) -> Result<()> {
+    pub fn sync_from_tel(&self, tel_id: &ContentId) -> Result<()> {
         // Get the register ID
         let register_id = self.mapping.get_register_id(tel_id)?
             .ok_or_else(|| Error::NotFound(format!("No mapping for TEL resource ID {}", tel_id)))?;
         
         // Get the TEL register
-        let tel_register_id = TelRegisterId(uuid::Uuid::parse_str(&tel_id.to_string())
+        let tel_register_id = TelContentId::new(ContentId::parse(&tel_id.to_string())
             .map_err(|e| Error::ParseError(format!("Invalid TEL register ID: {}", e)))?);
         
         let tel_register = self.tel_resource_manager.get_register(&tel_register_id)
@@ -311,7 +312,7 @@ impl TelResourceAdapter {
     }
     
     /// Sync a TEL register with its register counterpart (from register to TEL)
-    pub fn sync_to_tel(&self, register_id: &RegisterId) -> Result<()> {
+    pub fn sync_to_tel(&self, register_id: &ContentId) -> Result<()> {
         // Get the TEL resource ID
         let tel_id = self.mapping.get_tel_id(register_id)?
             .ok_or_else(|| Error::NotFound(format!("No mapping for register ID {}", register_id)))?;
@@ -321,7 +322,7 @@ impl TelResourceAdapter {
             .ok_or_else(|| Error::NotFound(format!("Register {} not found", register_id)))?;
         
         // Get the TEL register
-        let tel_register_id = TelRegisterId(uuid::Uuid::parse_str(&tel_id.to_string())
+        let tel_register_id = TelContentId::new(ContentId::parse(&tel_id.to_string())
             .map_err(|e| Error::ParseError(format!("Invalid TEL register ID: {}", e)))?);
         
         let tel_register = self.tel_resource_manager.get_register(&tel_register_id)
@@ -462,7 +463,7 @@ impl TelResourceAdapter {
     /// Validate a TEL operation against domain and time constraints
     pub fn validate_operation(
         &self,
-        register_id: &RegisterId,
+        register_id: &ContentId,
         operation: &ResourceOperation
     ) -> Result<()> {
         // Convert TEL operation to register operation
@@ -520,17 +521,17 @@ impl TelResourceAdapter {
     /// Create a register in a specific domain using TEL operation
     pub fn create_register_in_domain(
         &self,
-        tel_id: &ResourceId,
+        tel_id: &ContentId,
         domain_id: &DomainId,
         transaction_id: &str
-    ) -> Result<RegisterId> {
+    ) -> Result<ContentId> {
         // If already mapped, return existing register
         if let Some(register_id) = self.mapping.get_register_id(tel_id)? {
             return Ok(register_id);
         }
         
         // Get the TEL register
-        let tel_register_id = TelRegisterId(uuid::Uuid::parse_str(&tel_id.to_string())
+        let tel_register_id = TelContentId::new(ContentId::parse(&tel_id.to_string())
             .map_err(|e| Error::ParseError(format!("Invalid TEL register ID: {}", e)))?);
         
         let tel_register = self.tel_resource_manager.get_register(&tel_register_id)
@@ -557,16 +558,16 @@ impl TelResourceAdapter {
     /// Create a register with time information
     pub fn create_register_with_time_info(
         &self,
-        tel_id: &ResourceId,
+        tel_id: &ContentId,
         transaction_id: &str
-    ) -> Result<RegisterId> {
+    ) -> Result<ContentId> {
         // If already mapped, return existing register
         if let Some(register_id) = self.mapping.get_register_id(tel_id)? {
             return Ok(register_id);
         }
         
         // Get the TEL register
-        let tel_register_id = TelRegisterId(uuid::Uuid::parse_str(&tel_id.to_string())
+        let tel_register_id = TelContentId::new(ContentId::parse(&tel_id.to_string())
             .map_err(|e| Error::ParseError(format!("Invalid TEL register ID: {}", e)))?);
         
         let tel_register = self.tel_resource_manager.get_register(&tel_register_id)
@@ -592,7 +593,7 @@ impl TelResourceAdapter {
     /// Update a register with time and domain information
     pub fn update_register_with_time_and_domain(
         &self,
-        tel_id: &ResourceId
+        tel_id: &ContentId
     ) -> Result<()> {
         // Get register ID
         let register_id = self.mapping.get_register_id(tel_id)?
@@ -652,8 +653,8 @@ mod tests {
         let mapping = TelResourceMapping::new();
         
         // Create test IDs
-        let tel_id = ResourceId::from("test_resource");
-        let register_id = RegisterId::new_unique();
+        let tel_id = ContentId::from("test_resource");
+        let register_id = ContentId::new_unique();
         
         // Map the IDs
         mapping.map_resource(tel_id.clone(), register_id.clone())?;
@@ -690,7 +691,7 @@ mod tests {
             tel_contents,
         ).map_err(|e| Error::ExternalError(format!("Failed to create TEL register: {}", e)))?;
         
-        let tel_resource_id = ResourceId::from(tel_register_id.0.to_string());
+        let tel_resource_id = ContentId::from(tel_register_id.0.to_string());
         
         // Import the TEL register
         let register_id = adapter.import_tel_register(&tel_resource_id)?;
@@ -737,7 +738,7 @@ mod tests {
             tel_contents,
         ).map_err(|e| Error::ExternalError(format!("Failed to create TEL register: {}", e)))?;
         
-        let tel_resource_id = ResourceId::from(tel_register_id.0.to_string());
+        let tel_resource_id = ContentId::from(tel_register_id.0.to_string());
         
         // Import the TEL register
         let register_id = adapter.import_tel_register(&tel_resource_id)?;

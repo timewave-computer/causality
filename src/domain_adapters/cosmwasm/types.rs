@@ -7,7 +7,8 @@ use std::fmt;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 
 /// Represents a CosmWasm contract address
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

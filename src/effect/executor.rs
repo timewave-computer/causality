@@ -5,18 +5,19 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
+use borsh::{BorshSerialize, BorshDeserialize};
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
 
 use crate::error::{Error, Result};
 use crate::effect::{Effect, EffectOutcome};
 use crate::effect::content::ContentHash;
 use crate::effect::repository::{CodeRepository, CodeEntry};
-use crate::types::ResourceId;
+use crate::crypto::hash::ContentId;
+use crate::crypto::content_addressed::{ContentAddressed, ContentId};
 
 /// Value type for the execution environment
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +109,42 @@ impl Value {
     }
 }
 
+/// Content data for context ID generation
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct ContextIdContentData {
+    /// Creation timestamp
+    pub timestamp: u64,
+    
+    /// Creator information (optional)
+    pub creator: Option<String>,
+    
+    /// Random nonce for uniqueness
+    pub nonce: [u8; 16],
+}
+
+impl ContentAddressed for ContextIdContentData {
+    fn content_hash(&self) -> Result<ContentId> {
+        let bytes = self.to_bytes()?;
+        Ok(ContentId::from_bytes(&bytes)?)
+    }
+    
+    fn verify(&self, content_id: &ContentId) -> Result<bool> {
+        let calculated_id = self.content_hash()?;
+        Ok(calculated_id == *content_id)
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>> {
+        let bytes = borsh::to_vec(self)
+            .map_err(|e| Error::Serialization(format!("Failed to serialize ContextIdContentData: {}", e)))?;
+        Ok(bytes)
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        borsh::from_slice(bytes)
+            .map_err(|e| Error::Deserialization(format!("Failed to deserialize ContextIdContentData: {}", e)))
+    }
+}
+
 /// A unique identifier for an execution context
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ContextId(pub String);
@@ -115,12 +152,54 @@ pub struct ContextId(pub String);
 impl ContextId {
     /// Create a new random context ID
     pub fn new() -> Self {
-        ContextId(Uuid::new_v4().to_string())
+        // Generate content data for the context ID
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let mut nonce = [0u8; 16];
+        getrandom::getrandom(&mut nonce).expect("Failed to generate random nonce");
+        
+        let content_data = ContextIdContentData {
+            timestamp: now,
+            creator: None,
+            nonce,
+        };
+        
+        let id = content_data.content_hash()
+            .map(|id| id.to_string())
+            .unwrap_or_else(|_| format!("ctx-error-{}", now));
+            
+        ContextId(id)
     }
     
     /// Create a context ID from a string
     pub fn from_string(id: &str) -> Self {
         ContextId(id.to_string())
+    }
+    
+    /// Create a context ID with creator information
+    pub fn with_creator(creator: &str) -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let mut nonce = [0u8; 16];
+        getrandom::getrandom(&mut nonce).expect("Failed to generate random nonce");
+        
+        let content_data = ContextIdContentData {
+            timestamp: now,
+            creator: Some(creator.to_string()),
+            nonce,
+        };
+        
+        let id = content_data.content_hash()
+            .map(|id| id.to_string())
+            .unwrap_or_else(|_| format!("ctx-error-{}", now));
+            
+        ContextId(id)
     }
 }
 
@@ -189,7 +268,7 @@ pub enum ExecutionEvent {
         /// Context ID
         context_id: ContextId,
         /// Resource ID
-        resource_id: ResourceId,
+        resource_id: ContentId,
         /// Access type (read/write)
         access_type: String,
         /// Access timestamp
@@ -203,7 +282,7 @@ pub trait SecuritySandbox: Send + Sync {
     fn check_operation(&self, operation: &str, args: &[Value]) -> Result<()>;
     
     /// Check if access to a resource is allowed
-    fn check_resource_access(&self, resource_id: &ResourceId, access_type: &str) -> Result<()>;
+    fn check_resource_access(&self, resource_id: &ContentId, access_type: &str) -> Result<()>;
     
     /// Get the maximum execution time allowed
     fn max_execution_time(&self) -> Duration;
@@ -242,7 +321,7 @@ impl SecuritySandbox for DefaultSecuritySandbox {
         Ok(())
     }
     
-    fn check_resource_access(&self, _resource_id: &ResourceId, _access_type: &str) -> Result<()> {
+    fn check_resource_access(&self, _resource_id: &ContentId, _access_type: &str) -> Result<()> {
         // All resource access allowed by default
         Ok(())
     }
@@ -389,7 +468,7 @@ impl ExecutionContext {
     }
     
     /// Check if resource access is allowed
-    pub fn check_resource_access(&self, resource_id: &ResourceId, access_type: &str) -> Result<()> {
+    pub fn check_resource_access(&self, resource_id: &ContentId, access_type: &str) -> Result<()> {
         self.security.check_resource_access(resource_id, access_type)
     }
 }

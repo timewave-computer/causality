@@ -8,7 +8,8 @@ use std::collections::HashMap;
 
 use crate::address::Address;
 use crate::error::Result;
-use crate::types::{ResourceId, DomainId, Metadata};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::resource::{
     ResourceRegister,
     RegisterState,

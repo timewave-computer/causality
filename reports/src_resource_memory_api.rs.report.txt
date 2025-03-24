@@ -1,0 +1,27 @@
+Analyzing src/resource/memory_api.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+67:        let uuid = Uuid::new_v4();
+
+Detailed context for each occurrence:
+==============================================
+
+Line 67:         let uuid = Uuid::new_v4();
+---------------------------------------------
+    }
+    
+    /// Create a resource ID
+    fn create_resource_id(&self, resource_type: &str) -> ResourceId {
+        // In a real implementation, this would create a deterministic ID based on more factors
+        let uuid = Uuid::new_v4();
+        ResourceId::from(format!("{}:{}", resource_type, uuid))
+    }
+    
+    /// Check if a capability can access a resource
+    async fn check_resource_access(
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+17:pub struct MemoryResourceAPI {

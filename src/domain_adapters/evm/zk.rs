@@ -7,20 +7,22 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use async_trait::async_trait;
-use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 use ethers::types::Address;
+use borsh::{BorshSerialize, BorshDeserialize};
+use std::any::Any;
 
 use crate::domain::DomainId;
-use crate::resource::ResourceId;
+use crate::resource::ContentId;
 use crate::effect::{
     Effect, EffectContext, EffectResult, EffectError, EffectOutcome,
-    FactDependency, ExecutionBoundary
+    FactDependency, ExecutionBoundary, EffectId
 };
 use crate::fact::{Fact, FactId, FactSnapshot};
+use crate::crypto::hash::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 /// Represents a RISC-V program for ZK operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct RiscVProgram {
     /// Name of the program
     pub name: String,
@@ -30,8 +32,35 @@ pub struct RiscVProgram {
     pub code: Vec<u8>,
 }
 
+impl ContentAddressed for RiscVProgram {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 /// Represents a witness for a ZK proof
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Witness {
     /// Program this witness is for
     pub program_name: String,
@@ -39,8 +68,35 @@ pub struct Witness {
     pub data: Vec<u8>,
 }
 
+impl ContentAddressed for Witness {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 /// Represents a generated ZK proof
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Proof {
     /// Program this proof is for
     pub program_name: String,
@@ -48,13 +104,40 @@ pub struct Proof {
     pub data: Vec<u8>,
 }
 
-/// EVM ZK compilation effect
-#[derive(Debug)]
+impl ContentAddressed for Proof {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
+/// Uniquely identifies an effect
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
 pub struct EvmZkCompileEffect {
     /// Unique identifier for this effect
-    id: Uuid,
+    id: EffectId,
     /// The resource register ID
-    resource_id: ResourceId,
+    resource_id: ContentId,
     /// Name of the program to compile
     pub name: String,
     /// Source code to compile
@@ -73,10 +156,37 @@ pub struct EvmZkCompileEffect {
     fact_snapshot: Option<FactSnapshot>,
 }
 
+impl ContentAddressed for EvmZkCompileEffect {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 impl EvmZkCompileEffect {
     /// Create a new EVM ZK compilation effect
     pub fn new(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         name: String,
         code: Vec<u8>,
         target: String,
@@ -84,8 +194,8 @@ impl EvmZkCompileEffect {
         invoker_address: String,
         contract_address: Address,
     ) -> Self {
-        Self {
-            id: Uuid::new_v4(),
+        let mut effect = Self {
+            id: EffectId::new_unique(), // Use EffectId's new_unique method
             resource_id,
             name,
             code,
@@ -95,7 +205,9 @@ impl EvmZkCompileEffect {
             contract_address,
             fact_dependencies: Vec::new(),
             fact_snapshot: None,
-        }
+        };
+        
+        effect
     }
     
     /// Add a fact dependency to this effect
@@ -112,8 +224,8 @@ impl EvmZkCompileEffect {
 }
 
 impl Effect for EvmZkCompileEffect {
-    fn id(&self) -> &Uuid {
-        &self.id
+    fn id(&self) -> EffectId {
+        self.id.clone()
     }
     
     fn name(&self) -> &str {
@@ -128,7 +240,7 @@ impl Effect for EvmZkCompileEffect {
         "Compiles RISC-V program for ZK circuit generation on Ethereum".to_string()
     }
     
-    fn resource_id(&self) -> &ResourceId {
+    fn resource_id(&self) -> &ContentId {
         &self.resource_id
     }
     
@@ -203,12 +315,12 @@ impl Effect for EvmZkCompileEffect {
 }
 
 /// EVM ZK witness generation effect
-#[derive(Debug)]
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct EvmZkWitnessEffect {
     /// Unique identifier for this effect
-    id: Uuid,
+    id: EffectId,
     /// The resource register ID
-    resource_id: ResourceId,
+    resource_id: ContentId,
     /// The compiled program to generate a witness for
     pub program: RiscVProgram,
     /// Public inputs to the program
@@ -227,10 +339,37 @@ pub struct EvmZkWitnessEffect {
     fact_snapshot: Option<FactSnapshot>,
 }
 
+impl ContentAddressed for EvmZkWitnessEffect {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 impl EvmZkWitnessEffect {
     /// Create a new EVM ZK witness generation effect
     pub fn new(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         program: RiscVProgram,
         public_inputs: Vec<String>,
         private_inputs: Vec<String>,
@@ -238,8 +377,8 @@ impl EvmZkWitnessEffect {
         invoker_address: String,
         contract_address: Address,
     ) -> Self {
-        Self {
-            id: Uuid::new_v4(),
+        let mut effect = Self {
+            id: EffectId::new_unique(),
             resource_id,
             program,
             public_inputs,
@@ -249,7 +388,9 @@ impl EvmZkWitnessEffect {
             contract_address,
             fact_dependencies: Vec::new(),
             fact_snapshot: None,
-        }
+        };
+        
+        effect
     }
     
     /// Add a fact dependency to this effect
@@ -267,8 +408,8 @@ impl EvmZkWitnessEffect {
 
 #[async_trait]
 impl Effect for EvmZkWitnessEffect {
-    fn id(&self) -> &Uuid {
-        &self.id
+    fn id(&self) -> EffectId {
+        self.id.clone()
     }
     
     fn name(&self) -> &str {
@@ -283,7 +424,7 @@ impl Effect for EvmZkWitnessEffect {
         "Generates a witness for a ZK circuit on EVM"
     }
     
-    fn resource_id(&self) -> &ResourceId {
+    fn resource_id(&self) -> &ContentId {
         &self.resource_id
     }
     
@@ -338,12 +479,12 @@ impl Effect for EvmZkWitnessEffect {
 }
 
 /// EVM ZK proof generation effect
-#[derive(Debug)]
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct EvmZkProveEffect {
     /// Unique identifier for this effect
-    id: Uuid,
+    id: EffectId,
     /// The resource register ID
-    resource_id: ResourceId,
+    resource_id: ContentId,
     /// The witness to generate a proof from
     pub witness: Witness,
     /// The domain ID
@@ -358,17 +499,44 @@ pub struct EvmZkProveEffect {
     fact_snapshot: Option<FactSnapshot>,
 }
 
+impl ContentAddressed for EvmZkProveEffect {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 impl EvmZkProveEffect {
-    /// Create a new EVM ZK proof generation effect
+    /// Create a new EVM ZK prove effect
     pub fn new(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         witness: Witness,
         domain_id: DomainId,
         invoker_address: String,
         contract_address: Address,
     ) -> Self {
-        Self {
-            id: Uuid::new_v4(),
+        let mut effect = Self {
+            id: EffectId::new_unique(),
             resource_id,
             witness,
             domain_id,
@@ -376,7 +544,9 @@ impl EvmZkProveEffect {
             contract_address,
             fact_dependencies: Vec::new(),
             fact_snapshot: None,
-        }
+        };
+        
+        effect
     }
     
     /// Add a fact dependency to this effect
@@ -394,8 +564,8 @@ impl EvmZkProveEffect {
 
 #[async_trait]
 impl Effect for EvmZkProveEffect {
-    fn id(&self) -> &Uuid {
-        &self.id
+    fn id(&self) -> EffectId {
+        self.id.clone()
     }
     
     fn name(&self) -> &str {
@@ -410,7 +580,7 @@ impl Effect for EvmZkProveEffect {
         "Generates a zero-knowledge proof on Ethereum".to_string()
     }
     
-    fn resource_id(&self) -> &ResourceId {
+    fn resource_id(&self) -> &ContentId {
         &self.resource_id
     }
     
@@ -482,12 +652,12 @@ impl Effect for EvmZkProveEffect {
 }
 
 /// EVM ZK proof verification effect
-#[derive(Debug)]
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct EvmZkVerifyEffect {
     /// Unique identifier for this effect
-    id: Uuid,
+    id: EffectId,
     /// The resource register ID
-    resource_id: ResourceId,
+    resource_id: ContentId,
     /// The proof to verify
     pub proof: Proof,
     /// Public inputs to the verification
@@ -504,18 +674,45 @@ pub struct EvmZkVerifyEffect {
     fact_snapshot: Option<FactSnapshot>,
 }
 
+impl ContentAddressed for EvmZkVerifyEffect {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 impl EvmZkVerifyEffect {
-    /// Create a new EVM ZK proof verification effect
+    /// Create a new EVM ZK verify effect
     pub fn new(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         proof: Proof,
         public_inputs: Vec<String>,
         domain_id: DomainId,
         invoker_address: String,
         contract_address: Address,
     ) -> Self {
-        Self {
-            id: Uuid::new_v4(),
+        let mut effect = Self {
+            id: EffectId::new_unique(),
             resource_id,
             proof,
             public_inputs,
@@ -524,7 +721,9 @@ impl EvmZkVerifyEffect {
             contract_address,
             fact_dependencies: Vec::new(),
             fact_snapshot: None,
-        }
+        };
+        
+        effect
     }
     
     /// Add a fact dependency to this effect
@@ -542,8 +741,8 @@ impl EvmZkVerifyEffect {
 
 #[async_trait]
 impl Effect for EvmZkVerifyEffect {
-    fn id(&self) -> &Uuid {
-        &self.id
+    fn id(&self) -> EffectId {
+        self.id.clone()
     }
     
     fn name(&self) -> &str {
@@ -558,7 +757,7 @@ impl Effect for EvmZkVerifyEffect {
         "Verifies a zero-knowledge proof on Ethereum".to_string()
     }
     
-    fn resource_id(&self) -> &ResourceId {
+    fn resource_id(&self) -> &ContentId {
         &self.resource_id
     }
     
@@ -655,7 +854,7 @@ impl EvmZkEffectFactory {
     /// Create a new EVM ZK compile effect
     pub fn create_compile_effect(
         &self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         name: String,
         code: Vec<u8>,
         target: String,
@@ -674,7 +873,7 @@ impl EvmZkEffectFactory {
     /// Create a new EVM ZK witness generation effect
     pub fn create_witness_effect(
         &self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         program: RiscVProgram,
         public_inputs: Vec<String>,
         private_inputs: Vec<String>,
@@ -693,7 +892,7 @@ impl EvmZkEffectFactory {
     /// Create a new EVM ZK proof generation effect
     pub fn create_prove_effect(
         &self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         witness: Witness,
     ) -> EvmZkProveEffect {
         EvmZkProveEffect::new(
@@ -708,7 +907,7 @@ impl EvmZkEffectFactory {
     /// Create a new EVM ZK proof verification effect
     pub fn create_verify_effect(
         &self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         proof: Proof,
         public_inputs: Vec<String>,
     ) -> EvmZkVerifyEffect {

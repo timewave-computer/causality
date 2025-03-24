@@ -1,0 +1,32 @@
+Analyzing src/tel/resource/model/register.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+21:        Self(Uuid::new_v4())
+
+Detailed context for each occurrence:
+==============================================
+
+Line 21:         Self(Uuid::new_v4())
+---------------------------------------------
+pub struct RegisterId(pub Uuid);
+
+impl RegisterId {
+    /// Create a new random register ID
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+    
+    /// Create a register ID from a string
+    pub fn from_str(s: &str) -> TelResult<Self> {
+        let uuid = Uuid::parse_str(s).map_err(|e| 
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+16:pub struct RegisterId(pub Uuid);
+141:pub struct ControllerLabel {
+171:pub struct TimeRange {
+218:pub struct ResourceTimeData {
+290:pub struct Resource {
+372:pub struct Register {

@@ -7,9 +7,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crate::resource::{
-    ResourceId, ResourceState, RegisterState, ResourceRegister,
-    TransitionReason, RelationshipType, RelationshipDirection,
-    ResourceRelationship
+    ContentId, ResourceRegister
+};
+use crate::resource::resource_register::RegisterState;
+use crate::resource::lifecycle::TransitionReason;
+use crate::resource::relationship_tracker::{
+    RelationshipType, RelationshipDirection, ResourceRelationship
 };
 use crate::resource::lifecycle_manager::ResourceRegisterLifecycleManager;
 use crate::resource::relationship_tracker::RelationshipTracker;
@@ -23,7 +26,7 @@ pub struct ResourceRegisterFacade {
     relationship_tracker: Arc<RelationshipTracker>,
     
     // Cache to avoid redundant lookups
-    cache: Mutex<HashMap<ResourceId, ResourceRegister>>,
+    cache: Mutex<HashMap<ContentId, ResourceRegister>>,
 }
 
 impl ResourceRegisterFacade {
@@ -40,7 +43,7 @@ impl ResourceRegisterFacade {
     }
     
     /// Get a ResourceRegister by ID
-    pub fn get_resource_register(&self, id: &ResourceId) -> Result<ResourceRegister> {
+    pub fn get_resource_register(&self, id: &ContentId) -> Result<ResourceRegister> {
         // Check cache first
         {
             let cache = self.cache.lock().unwrap();
@@ -62,7 +65,7 @@ impl ResourceRegisterFacade {
     }
     
     /// Create a new ResourceRegister
-    pub fn create_resource_register(&self, resource_register: ResourceRegister) -> Result<ResourceId> {
+    pub fn create_resource_register(&self, resource_register: ResourceRegister) -> Result<ContentId> {
         // Use the lifecycle manager to create the register
         let id = self.lifecycle_manager.create_register(resource_register.clone())?;
         
@@ -76,7 +79,7 @@ impl ResourceRegisterFacade {
     }
     
     /// Update a ResourceRegister's state
-    pub fn update_resource_register(&self, id: &ResourceId, new_state: ResourceState) -> Result<()> {
+    pub fn update_resource_register(&self, id: &ContentId, new_state: RegisterState) -> Result<()> {
         // Transition the resource register to the new state
         self.lifecycle_manager.transition_state(
             id, 
@@ -95,11 +98,11 @@ impl ResourceRegisterFacade {
     }
     
     /// Delete a ResourceRegister 
-    pub fn delete_resource_register(&self, id: &ResourceId) -> Result<()> {
+    pub fn delete_resource_register(&self, id: &ContentId) -> Result<()> {
         // Mark the register as consumed (soft delete)
         self.lifecycle_manager.transition_state(
             id,
-            ResourceState::Consumed,
+            RegisterState::Consumed,
             TransitionReason::UserInitiated
         )?;
         
@@ -115,29 +118,28 @@ impl ResourceRegisterFacade {
     /// Create a relationship between two resources
     pub fn create_relationship(
         &self,
-        source_id: &ResourceId,
-        target_id: &ResourceId,
+        source_id: &ContentId,
+        target_id: &ContentId,
         relationship_type: RelationshipType,
         direction: RelationshipDirection,
     ) -> Result<()> {
         self.relationship_tracker.add_relationship(
-            ResourceRelationship {
-                source_id: source_id.clone(),
-                target_id: target_id.clone(),
+            ResourceRelationship::new(
+                source_id.clone(),
+                target_id.clone(),
                 relationship_type,
-                direction,
-                metadata: HashMap::new(),
-            }
+                direction
+            )
         )
     }
     
     /// Find resources related to the given resource
     pub fn find_related_resources(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         relationship_type: Option<RelationshipType>,
         direction: Option<RelationshipDirection>,
-    ) -> Result<Vec<ResourceId>> {
+    ) -> Result<Vec<ContentId>> {
         self.relationship_tracker.find_related_resources(
             resource_id,
             relationship_type,
@@ -148,8 +150,8 @@ impl ResourceRegisterFacade {
     /// Check if a relationship exists between two resources
     pub fn has_relationship(
         &self,
-        source_id: &ResourceId,
-        target_id: &ResourceId,
+        source_id: &ContentId,
+        target_id: &ContentId,
         relationship_type: Option<RelationshipType>,
         direction: Option<RelationshipDirection>,
     ) -> Result<bool> {
@@ -164,19 +166,19 @@ impl ResourceRegisterFacade {
 
 // Implementation of the ResourceRegistryAdapter trait
 impl crate::resource::ResourceRegistryAdapter for ResourceRegisterFacade {
-    fn get_register(&self, id: &ResourceId) -> Result<ResourceRegister> {
+    fn get_register(&self, id: &ContentId) -> Result<ResourceRegister> {
         self.get_resource_register(id)
     }
     
-    fn create_register(&self, register: ResourceRegister) -> Result<ResourceId> {
+    fn create_register(&self, register: ResourceRegister) -> Result<ContentId> {
         self.create_resource_register(register)
     }
     
-    fn update_state(&self, id: &ResourceId, new_state: ResourceState) -> Result<()> {
+    fn update_state(&self, id: &ContentId, new_state: RegisterState) -> Result<()> {
         self.update_resource_register(id, new_state)
     }
     
-    fn delete_register(&self, id: &ResourceId) -> Result<()> {
+    fn delete_register(&self, id: &ContentId) -> Result<()> {
         self.delete_resource_register(id)
     }
 } 

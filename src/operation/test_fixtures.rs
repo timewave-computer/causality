@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::effect::{Effect, EffectOutcome, EmptyEffect};
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::capabilities::Capability;
 use crate::verification::UnifiedProof;
 

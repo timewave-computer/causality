@@ -1,0 +1,29 @@
+Analyzing src/tel/resource/model/manager.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+280:        let operation_id = OperationId(Uuid::new_v4());
+
+Detailed context for each occurrence:
+==============================================
+
+Line 280:         let operation_id = OperationId(Uuid::new_v4());
+---------------------------------------------
+        Ok(())
+    }
+    
+    /// Apply a resource operation
+    pub fn apply_operation(&self, operation: ResourceOperation) -> TelResult<OperationId> {
+        let operation_id = OperationId(Uuid::new_v4());
+        
+        // Process the operation based on type
+        match operation.operation_type {
+            ResourceOperationType::Create => {
+                // Check if target register exists
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+23:pub struct CollectionStats {
+36:pub struct GarbageCollectionConfig {
+60:pub struct ResourceManager {

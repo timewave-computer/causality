@@ -1,7 +1,6 @@
 // Common types used throughout the Causality system
 
 use std::fmt;
-use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 use std::str::FromStr;
 use std::hash::{Hash, Hasher};
@@ -9,6 +8,13 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json;
+use borsh::{BorshSerialize, BorshDeserialize};
+
+// Re-export only hash types that aren't defined in this file
+use crate::crypto::hash::{ContentAddressed, HashOutput, HashFactory, HashError, HashAlgorithm, HashFunction};
+
+// LamportTime definition for logical clock timestamps
+pub type LamportTime = u64;
 
 // Export all types for use throughout the codebase
 pub use self::domain::DomainId;
@@ -39,10 +45,71 @@ pub mod trace {
     #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
     pub struct TraceId(pub String);
     
+    /// Content type for trace ID generation
+    #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+    struct TraceIdContent {
+        /// Creation timestamp
+        timestamp: i64,
+        /// Random nonce for uniqueness
+        nonce: [u8; 16],
+        /// Optional parent trace ID
+        parent: Option<String>,
+        /// Optional operation name
+        operation: Option<String>,
+    }
+    
+    impl ContentAddressed for TraceIdContent {
+        fn content_hash(&self) -> HashOutput {
+            let hash_factory = HashFactory::default();
+            let hasher = hash_factory.create_hasher().unwrap();
+            let data = self.try_to_vec().unwrap();
+            hasher.hash(&data)
+        }
+        
+        fn verify(&self) -> bool {
+            let hash = self.content_hash();
+            let serialized = self.to_bytes();
+            
+            let hash_factory = HashFactory::default();
+            let hasher = hash_factory.create_hasher().unwrap();
+            hasher.hash(&serialized) == hash
+        }
+        
+        fn to_bytes(&self) -> Vec<u8> {
+            self.try_to_vec().unwrap()
+        }
+        
+        fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+            BorshDeserialize::try_from_slice(bytes)
+                .map_err(|e| HashError::SerializationError(e.to_string()))
+        }
+    }
+    
     impl TraceId {
-        /// Create a new trace ID with a random UUID
+        /// Create a new trace ID with content-derived identifier
         pub fn new() -> Self {
-            TraceId(Uuid::new_v4().to_string())
+            let content = TraceIdContent {
+                timestamp: chrono::Utc::now().timestamp(),
+                nonce: rand::random::<[u8; 16]>(),
+                parent: None,
+                operation: None,
+            };
+            
+            let content_id = content.content_id();
+            TraceId(format!("trace:{}", content_id))
+        }
+        
+        /// Create a child trace ID from a parent trace ID
+        pub fn child_of(parent: &TraceId, operation: Option<&str>) -> Self {
+            let content = TraceIdContent {
+                timestamp: chrono::Utc::now().timestamp(),
+                nonce: rand::random::<[u8; 16]>(),
+                parent: Some(parent.as_str().to_string()),
+                operation: operation.map(|s| s.to_string()),
+            };
+            
+            let content_id = content.content_id();
+            TraceId(format!("trace:{}", content_id))
         }
         
         /// Create a trace ID from a string
@@ -65,6 +132,12 @@ pub mod trace {
     impl fmt::Display for TraceId {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "{}", self.0)
+        }
+    }
+    
+    impl From<ContentId> for TraceId {
+        fn from(content_id: ContentId) -> Self {
+            Self(format!("trace:{}", content_id))
         }
     }
 }
@@ -538,27 +611,48 @@ impl fmt::Display for Amount {
 
 /// Resource identifier
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ResourceId(pub String);
+pub struct ContentId::new(pub String);
 
-impl fmt::Display for ResourceId {
+impl fmt::Display for ContentId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl From<String> for ResourceId {
+impl From<String> for ContentId {
     fn from(s: String) -> Self {
-        ResourceId(s)
+        ContentId::new(s)
     }
 }
 
-impl From<&str> for ResourceId {
+impl From<&str> for ContentId {
     fn from(s: &str) -> Self {
-        ResourceId(s.to_string())
+        ContentId::new(s.to_string())
     }
 }
 
-impl Serialize for ResourceId {
+// Add conversion from ContentId to ContentId
+impl From<ContentId> for ContentId {
+    fn from(resource_id: ContentId) -> Self {
+        // For compatibility during migration, we create a deterministic ContentId
+        // from the resource ID string. This is not cryptographically secure but
+        // allows for gradual migration.
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().expect("Failed to create hasher");
+        ContentId::from(hasher.hash(resource_id.0.as_bytes()))
+    }
+}
+
+// Add conversion from ContentId to ContentId
+impl From<ContentId> for ContentId {
+    fn from(content_id: ContentId) -> Self {
+        // For compatibility during migration, we use the hex representation
+        // of the content ID as the resource ID string
+        ContentId::new(content_id.to_string())
+    }
+}
+
+impl Serialize for ContentId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -567,12 +661,12 @@ impl Serialize for ResourceId {
     }
 }
 
-impl<'de> Deserialize<'de> for ResourceId {
+impl<'de> Deserialize<'de> for ContentId {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        String::deserialize(deserializer).map(ResourceId)
+        String::deserialize(deserializer).map(ContentId)
     }
 }
 
@@ -614,9 +708,6 @@ impl fmt::Display for RegisterState {
         }
     }
 }
-
-// Re-export time types from time module
-pub use crate::time::LamportTime;
 
 /// A general purpose metadata struct for storing key-value pairs
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -685,21 +776,6 @@ impl Metadata {
     }
 }
 
-/// Represents an ID for a resource
-pub type ResourceId = String;
-
-/// Represents an ID for a domain
-pub type DomainId = String;
-
-/// Represents a trace ID for tracking operations
-pub type TraceId = String;
-
-/// Represents a point in time (Unix timestamp)
-pub type Timestamp = u64;
-
-/// Metadata is a collection of key-value pairs
-pub type Metadata = HashMap<String, serde_json::Value>;
-
 /// Represents a version string, typically a hash or incrementing number
 pub type Version = String;
 
@@ -732,7 +808,7 @@ pub enum Visibility {
     Restricted(Vec<String>),
 }
 
-/// Extension methods for types
+/// Trait for extended type operations
 pub trait TypeExtensions {
     /// Get a string representation of the type
     fn to_string_representation(&self) -> String;
@@ -741,32 +817,33 @@ pub trait TypeExtensions {
     fn stable_hash(&self) -> u64;
 }
 
-/// Implementation of TypeExtensions for ResourceId
-impl TypeExtensions for ResourceId {
+// Implement TypeExtensions for the ContentId struct
+impl TypeExtensions for ContentId {
     fn to_string_representation(&self) -> String {
-        format!("resource:{}", self)
+        self.0.clone()
     }
     
     fn stable_hash(&self) -> u64 {
         // Simple hash function for example purposes
         let mut hash = 0;
-        for byte in self.as_bytes() {
+        for byte in self.0.as_bytes() {
             hash = hash.wrapping_mul(31).wrapping_add(*byte as u64);
         }
         hash
     }
 }
 
-/// Implementation of TypeExtensions for DomainId
-impl TypeExtensions for DomainId {
+// Use the DomainId struct from the domain module
+// Avoid having two implementations for the same underlying type
+impl TypeExtensions for domain::DomainId {
     fn to_string_representation(&self) -> String {
-        format!("domain:{}", self)
+        self.as_str().to_string()
     }
     
     fn stable_hash(&self) -> u64 {
         // Simple hash function for example purposes
         let mut hash = 0;
-        for byte in self.as_bytes() {
+        for byte in self.as_str().as_bytes() {
             hash = hash.wrapping_mul(31).wrapping_add(*byte as u64);
         }
         hash
@@ -826,9 +903,9 @@ mod tests {
 
     #[test]
     fn test_resource_id_creation() {
-        let id1 = ResourceId("resource-1".to_string());
-        let id2: ResourceId = "resource-2".into();
-        let id3: ResourceId = String::from("resource-3").into();
+        let id1 = ContentId::new("resource-1".to_string());
+        let id2: ContentId = "resource-2".into();
+        let id3: ContentId = String::from("resource-3").into();
         
         assert_eq!(id1.0, "resource-1");
         assert_eq!(id2.0, "resource-2");

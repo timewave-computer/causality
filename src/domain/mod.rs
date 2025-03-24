@@ -9,6 +9,8 @@ pub mod time_map;
 pub mod resource_integration;
 pub mod capability;
 pub mod fact_observer;
+pub mod content_addressed_interface;
+pub mod content_addressed_transaction;
 
 pub use adapter::{DomainAdapter, DomainAdapterFactory};
 pub use registry::DomainRegistry;
@@ -32,6 +34,15 @@ pub use fact_observer::{
     DomainFact, DomainFactObserver, DomainFactObserverRegistry,
     AdapterFactObserver, DomainFactObserverExtension,
     DomainFactEffect, ObserveDomainFactEffect
+};
+pub use content_addressed_interface::{
+    ContentAddressedDomainInterface, ContentAddressedDomainRegistry,
+    CommitmentProof, CrossDomainError
+};
+pub use content_addressed_transaction::{
+    ContentAddressedTransaction, ContentAddressedTransactionVerifier,
+    ContentAddressedTransactionVerifierImpl, TransactionVerificationResult,
+    TransactionVerificationError
 };
 
 use serde::{Serialize, Deserialize};

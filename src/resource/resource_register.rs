@@ -8,21 +8,23 @@
 use std::fmt;
 use std::collections::HashSet;
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
 
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::tel::types::Metadata;
 use crate::error::{Error, Result};
 use crate::time::TimeMapSnapshot;
 use crate::crypto::merkle::Commitment;
 use crate::resource::{StorageStrategy, StateVisibility};
 use crate::resource::lifecycle_manager::ResourceRegisterLifecycleManager;
+use crate::crypto::hash::{ContentAddressed, HashOutput, ContentId, HashFactory};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 /// The unified ResourceRegister abstraction
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceRegister {
     // Identity
-    pub id: ResourceId,
+    pub id: ContentId,
     
     // Logical properties (previously in Resource)
     pub resource_logic: ResourceLogic,
@@ -135,7 +137,7 @@ pub struct PermissionedEntity(pub String);
 impl ResourceRegister {
     /// Create a new ResourceRegister
     pub fn new(
-        id: ResourceId,
+        id: ContentId,
         resource_logic: ResourceLogic,
         fungibility_domain: FungibilityDomain,
         quantity: Quantity,
@@ -160,9 +162,29 @@ impl ResourceRegister {
         }
     }
     
+    /// Create a new ResourceRegister from a ContentId (for backward compatibility)
+    pub fn from_resource_id(
+        resource_id: ContentId,
+        resource_logic: ResourceLogic,
+        fungibility_domain: FungibilityDomain,
+        quantity: Quantity,
+        metadata: Metadata,
+        storage_strategy: StorageStrategy,
+    ) -> Self {
+        let id = ContentId::from(resource_id);
+        Self::new(
+            id, 
+            resource_logic, 
+            fungibility_domain,
+            quantity,
+            metadata,
+            storage_strategy,
+        )
+    }
+    
     /// Create a new ResourceRegister with active state
     pub fn new_active(
-        id: ResourceId,
+        id: ContentId,
         resource_logic: ResourceLogic,
         fungibility_domain: FungibilityDomain,
         quantity: Quantity,
@@ -185,6 +207,31 @@ impl ResourceRegister {
             controller: None,
             lifecycle_manager: ResourceRegisterLifecycleManager::new(),
         }
+    }
+    
+    /// Create a new ResourceRegister with active state from a ContentId (for backward compatibility)
+    pub fn from_resource_id_active(
+        resource_id: ContentId,
+        resource_logic: ResourceLogic,
+        fungibility_domain: FungibilityDomain,
+        quantity: Quantity,
+        metadata: Metadata,
+        storage_strategy: StorageStrategy,
+    ) -> Self {
+        let id = ContentId::from(resource_id);
+        Self::new_active(
+            id, 
+            resource_logic, 
+            fungibility_domain,
+            quantity,
+            metadata,
+            storage_strategy,
+        )
+    }
+    
+    /// Get the resource ID corresponding to this ResourceRegister (for backward compatibility)
+    pub fn resource_id(&self) -> ContentId {
+        ContentId::from(self.id.clone())
     }
     
     /// Get all fields of the resource register
@@ -395,7 +442,7 @@ impl ResourceRegister {
 /// ResourceState is the simplified state object used by lifecycle_manager
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResourceState {
-    pub id: ResourceId,
+    pub id: ContentId,
     pub contents: Vec<u8>,
     pub metadata: Metadata,
     pub state: RegisterState,
@@ -411,7 +458,7 @@ impl From<ResourceRegister> for ResourceState {
         )).unwrap_or_default();
         
         ResourceState {
-            id: register.id,
+            id: register.id.into(),
             contents,
             metadata: register.metadata,
             state: register.state,
@@ -461,9 +508,9 @@ mod tests {
     
     #[test]
     fn test_resource_register_state_transitions() {
-        let id = ResourceId("test-resource".to_string());
+        let id = ContentId::new("test-resource".to_string());
         let mut register = ResourceRegister::new(
-            id.clone(),
+            id.clone().into(),
             ResourceLogic::Data,
             FungibilityDomain("test-domain".to_string()),
             Quantity(1),
@@ -517,9 +564,9 @@ mod tests {
     
     #[test]
     fn test_resource_state_conversion() {
-        let id = ResourceId("test-resource".to_string());
+        let id = ContentId::new("test-resource".to_string());
         let register = ResourceRegister::new(
-            id.clone(),
+            id.clone().into(),
             ResourceLogic::Data,
             FungibilityDomain("test-domain".to_string()),
             Quantity(1),
@@ -529,9 +576,164 @@ mod tests {
         
         let state: ResourceState = register.clone().into();
         
-        assert_eq!(state.id, register.id);
+        assert_eq!(state.id, id.into());
         assert_eq!(state.state, register.state);
         assert_eq!(state.metadata, register.metadata);
         assert!(!state.contents.is_empty()); // Content should be serialized properties
     }
+}
+
+// Add implement ContentAddressed trait for ResourceRegister
+impl ContentAddressed for ResourceRegister {
+    fn content_hash(&self) -> HashOutput {
+        // Get the configured hasher from the registry
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        
+        // Create a canonical serialization of the resource register
+        let mut data = Vec::new();
+        
+        // Add all fields for hashing (except lifecycle_manager which is transient)
+        data.extend_from_slice(self.id.as_bytes());
+        
+        // Add the resource logic type
+        let logic_str = match &self.resource_logic {
+            ResourceLogic::Fungible => "fungible",
+            ResourceLogic::NonFungible => "non_fungible",
+            ResourceLogic::Capability => "capability",
+            ResourceLogic::Data => "data",
+            ResourceLogic::Custom(s) => s.as_str(),
+        };
+        data.extend_from_slice(logic_str.as_bytes());
+        
+        // Add fungibility domain
+        data.extend_from_slice(self.fungibility_domain.0.as_bytes());
+        
+        // Add quantity as bytes
+        let quantity_bytes = self.quantity.0.to_le_bytes();
+        data.extend_from_slice(&quantity_bytes);
+        
+        // Add metadata serialized
+        if let Ok(metadata_json) = serde_json::to_vec(&self.metadata) {
+            data.extend_from_slice(&metadata_json);
+        }
+        
+        // Add state
+        let state_str = match self.state {
+            RegisterState::Initial => "initial",
+            RegisterState::Active => "active",
+            RegisterState::Consumed => "consumed",
+            RegisterState::Pending => "pending",
+            RegisterState::Locked => "locked",
+            RegisterState::Frozen => "frozen",
+            RegisterState::Archived => "archived",
+        };
+        data.extend_from_slice(state_str.as_bytes());
+        
+        // Add nullifier key if present
+        if let Some(key) = &self.nullifier_key {
+            data.extend_from_slice(&key.0);
+        }
+        
+        // Add controller label if present
+        if let Some(label) = &self.controller_label {
+            data.extend_from_slice(label.0.as_bytes());
+        }
+        
+        // Add observed timestamp
+        if let Ok(time_bytes) = self.observed_at.to_bytes() {
+            data.extend_from_slice(&time_bytes);
+        }
+        
+        // Add storage strategy
+        let strategy_str = match &self.storage_strategy {
+            StorageStrategy::FullyOnChain { .. } => "fully_on_chain",
+            StorageStrategy::CommitmentBased { .. } => "commitment_based",
+            StorageStrategy::Hybrid { .. } => "hybrid",
+        };
+        data.extend_from_slice(strategy_str.as_bytes());
+        
+        // Add contents
+        data.extend_from_slice(&self.contents);
+        
+        // Add version
+        data.extend_from_slice(self.version.as_bytes());
+        
+        // Add controller if present
+        if let Some(controller) = &self.controller {
+            data.extend_from_slice(controller.as_bytes());
+        }
+        
+        // Compute hash with configured hasher
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let id_hash = self.id.hash();
+        hash == *id_hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        // Create a serializable version without the lifecycle manager
+        let serializable = ResourceRegisterSerializable {
+            id: self.id.clone(),
+            resource_logic: self.resource_logic.clone(),
+            fungibility_domain: self.fungibility_domain.clone(),
+            quantity: self.quantity,
+            metadata: self.metadata.clone(),
+            state: self.state.clone(),
+            nullifier_key: self.nullifier_key.clone(),
+            controller_label: self.controller_label.clone(),
+            observed_at: self.observed_at.clone(),
+            storage_strategy: self.storage_strategy.clone(),
+            contents: self.contents.clone(),
+            version: self.version.clone(),
+            controller: self.controller.clone(),
+        };
+        
+        // Use Borsh serialization for consistency
+        serializable.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, crate::crypto::hash::HashError> {
+        // Deserialize the serializable version
+        let serializable = ResourceRegisterSerializable::try_from_slice(bytes)
+            .map_err(|e| crate::crypto::hash::HashError::SerializationError(e.to_string()))?;
+        
+        // Create a ResourceRegister with default lifecycle manager
+        Ok(Self {
+            id: serializable.id,
+            resource_logic: serializable.resource_logic,
+            fungibility_domain: serializable.fungibility_domain,
+            quantity: serializable.quantity,
+            metadata: serializable.metadata,
+            state: serializable.state,
+            nullifier_key: serializable.nullifier_key,
+            controller_label: serializable.controller_label,
+            observed_at: serializable.observed_at,
+            storage_strategy: serializable.storage_strategy,
+            contents: serializable.contents,
+            version: serializable.version,
+            controller: serializable.controller,
+            lifecycle_manager: ResourceRegisterLifecycleManager::new(),
+        })
+    }
+}
+
+// Add a serializable version of ResourceRegister without the lifecycle manager
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+struct ResourceRegisterSerializable {
+    id: ContentId,
+    resource_logic: ResourceLogic,
+    fungibility_domain: FungibilityDomain,
+    quantity: Quantity,
+    metadata: Metadata,
+    state: RegisterState,
+    nullifier_key: Option<NullifierKey>,
+    controller_label: Option<ControllerLabel>,
+    observed_at: TimeMapSnapshot,
+    storage_strategy: StorageStrategy,
+    contents: Vec<u8>,
+    version: String,
+    controller: Option<String>,
 } 

@@ -10,7 +10,8 @@ use crate::error::{Error, Result};
 use crate::log::entry::{LogEntry, EntryType, EntryData};
 use crate::log::fact_snapshot::{FactId, FactSnapshot, FactDependency, FactDependencyType};
 use crate::log::storage::LogStorage;
-use crate::types::{ResourceId, DomainId, Timestamp, TraceId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 
 /// Represents a causal relationship between a fact and an effect
 #[derive(Debug, Clone)]
@@ -24,7 +25,7 @@ pub struct FactEffectRelation {
     /// The type of dependency
     pub dependency_type: FactDependencyType,
     /// The resources affected by the relationship
-    pub resources: HashSet<ResourceId>,
+    pub resources: HashSet<ContentId>,
     /// The domains involved in the relationship
     pub domains: HashSet<DomainId>,
     /// The trace ID (if any)
@@ -38,7 +39,7 @@ pub struct FactEffectTracker {
     /// Map of effect IDs to the facts they depend on
     effect_to_facts: RwLock<HashMap<String, HashSet<FactId>>>,
     /// Map of resource IDs to the fact-effect relations that involve them
-    resource_relations: RwLock<HashMap<ResourceId, HashSet<(FactId, String)>>>,
+    resource_relations: RwLock<HashMap<ContentId, HashSet<(FactId, String)>>>,
     /// Map of domain IDs to the fact-effect relations that involve them
     domain_relations: RwLock<HashMap<DomainId, HashSet<(FactId, String)>>>,
     /// Map of trace IDs to the fact-effect relations that involve them
@@ -310,7 +311,7 @@ impl FactEffectTracker {
     }
     
     /// Get all relations for a resource
-    pub fn get_resource_relations(&self, resource_id: &ResourceId) -> Result<Vec<FactEffectRelation>> {
+    pub fn get_resource_relations(&self, resource_id: &ContentId) -> Result<Vec<FactEffectRelation>> {
         let resource_rels = self.resource_relations.read().map_err(|_| {
             Error::LockError("Failed to acquire read lock on resource_relations".to_string())
         })?;
@@ -381,7 +382,7 @@ impl FactEffectTracker {
     /// Create a fact snapshot for a set of resources and domains
     pub fn create_snapshot(
         &self,
-        resources: &[ResourceId],
+        resources: &[ContentId],
         domains: &[DomainId],
         observer: &str
     ) -> Result<FactSnapshot> {

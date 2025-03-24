@@ -4,7 +4,9 @@
 // that span different domains in the system.
 
 use std::collections::HashMap;
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
+use std::time::{SystemTime, UNIX_EPOCH};
+use crate::crypto::content_addressed::{ContentAddressed, ContentId};
 
 pub mod cross_domain;
 pub mod validation;
@@ -49,7 +51,50 @@ pub use query::{
 };
 
 use crate::error::{Error, Result};
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
+
+/// Content data for relationship content addressing
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct RelationshipContentData {
+    /// Source resource identifier
+    pub source: String,
+    
+    /// Target resource identifier
+    pub target: String,
+    
+    /// Relationship type identifier
+    pub relationship_type_id: String,
+    
+    /// Creation timestamp
+    pub timestamp: u64,
+    
+    /// Random nonce for uniqueness
+    pub nonce: [u8; 8],
+}
+
+impl ContentAddressed for RelationshipContentData {
+    fn content_hash(&self) -> Result<ContentId> {
+        let bytes = self.to_bytes()?;
+        Ok(ContentId::from_bytes(&bytes)?)
+    }
+    
+    fn verify(&self, content_id: &ContentId) -> Result<bool> {
+        let calculated_id = self.content_hash()?;
+        Ok(calculated_id == *content_id)
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>> {
+        let bytes = borsh::to_vec(self)
+            .map_err(|e| Error::Serialization(format!("Failed to serialize RelationshipContentData: {}", e)))?;
+        Ok(bytes)
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        borsh::from_slice(bytes)
+            .map_err(|e| Error::Deserialization(format!("Failed to deserialize RelationshipContentData: {}", e)))
+    }
+}
 
 /// Represents a relationship between two resources
 #[derive(Debug, Clone)]
@@ -96,8 +141,37 @@ impl Relationship {
         target: String,
         relationship_type: RelationshipType,
     ) -> Self {
+        // Generate a content-based ID
+        let type_id = match &relationship_type {
+            RelationshipType::Reference => "reference".to_string(),
+            RelationshipType::Ownership => "ownership".to_string(),
+            RelationshipType::Derived => "derived".to_string(),
+            RelationshipType::CrossDomain(cross_type) => format!("cross_domain:{}", cross_type.type_id()),
+            RelationshipType::Custom(name) => format!("custom:{}", name),
+        };
+        
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let mut nonce = [0u8; 8];
+        getrandom::getrandom(&mut nonce).expect("Failed to generate random nonce");
+        
+        let content_data = RelationshipContentData {
+            source: source.clone(),
+            target: target.clone(),
+            relationship_type_id: type_id,
+            timestamp: now,
+            nonce,
+        };
+        
+        let id = content_data.content_hash()
+            .map(|id| id.to_string())
+            .unwrap_or_else(|_| format!("error-generating-id-{}", now));
+        
         Self {
-            id: Uuid::new_v4().to_string(),
+            id,
             source,
             target,
             relationship_type,

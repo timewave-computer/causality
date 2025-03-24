@@ -1,0 +1,28 @@
+Analyzing src/tel/handlers/cosmwasm.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+375:            execution_id: uuid::Uuid::new_v4(),
+
+Detailed context for each occurrence:
+==============================================
+
+Line 375:             execution_id: uuid::Uuid::new_v4(),
+---------------------------------------------
+            "memo": "Transfer via TEL handler"
+        });
+        
+        // Create context
+        let context = EffectContext {
+            execution_id: uuid::Uuid::new_v4(),
+            invoker: Address::new("test-user"),
+            boundary: crate::effect::ExecutionBoundary::OutsideSystem,
+            capabilities: Vec::new(),
+            parameters: HashMap::new(),
+        };
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+26:pub struct CosmWasmTransferEffect {
+192:pub struct CosmWasmTransferHandler {

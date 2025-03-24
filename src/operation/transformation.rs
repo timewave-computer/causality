@@ -11,6 +11,7 @@ use crate::error::{Error};
 use crate::effect::{Effect, EffectOutcome};
 use crate::types::DomainId;
 use crate::verification::UnifiedProof;
+use crate::crypto::ContentId;
 
 use super::{
     Operation, OperationType, ExecutionContext, ExecutionPhase, ExecutionEnvironment,
@@ -149,7 +150,7 @@ fn create_register_operation_from_abstract<C: ExecutionContext>(
 ) -> std::result::Result<RegisterOperation, TransformationError> {
     // Extract register ID from the first output (if available)
     let register_id = operation.outputs.first()
-        .map(|output| output.resource_id.to_string())
+        .map(|output| output.resource_id.clone())
         .ok_or_else(|| TransformationError::ResourceError(
             "No output resource specified for register operation".to_string()
         ))?;
@@ -158,13 +159,25 @@ fn create_register_operation_from_abstract<C: ExecutionContext>(
     let register_op_type = match operation.op_type {
         OperationType::Create => RegisterOperationType::Create,
         OperationType::Update => RegisterOperationType::Update,
-        OperationType::Delete => RegisterOperationType::Archive, // Delete maps to archive in register model
+        OperationType::Delete => RegisterOperationType::Consume, // Delete maps to consume in unified model
         OperationType::Transfer => RegisterOperationType::Transfer,
         OperationType::Merge => RegisterOperationType::Custom("Merge".to_string()),
         OperationType::Split => RegisterOperationType::Custom("Split".to_string()),
         OperationType::Deposit => RegisterOperationType::Create, // Deposit is a special case of create
-        OperationType::Withdrawal => RegisterOperationType::Custom("Withdrawal".to_string()),
-        OperationType::Custom(ref name) => RegisterOperationType::Custom(name.clone()),
+        OperationType::Withdrawal => RegisterOperationType::Consume, // Withdrawal maps to consume
+        OperationType::Custom(ref name) => {
+            // Handle special operation names that map directly to register operations
+            match name.as_str() {
+                "Lock" => RegisterOperationType::Lock,
+                "Unlock" => RegisterOperationType::Unlock,
+                "Freeze" => RegisterOperationType::Freeze,
+                "Unfreeze" => RegisterOperationType::Unfreeze,
+                "Archive" => RegisterOperationType::Archive,
+                "Unarchive" => RegisterOperationType::Unarchive,
+                "MarkPending" => RegisterOperationType::MarkPending,
+                _ => RegisterOperationType::Custom(name.clone())
+            }
+        },
     };
     
     // Gather operation data from metadata and inputs/outputs
@@ -281,13 +294,15 @@ mod tests {
     use super::*;
     use crate::capabilities::Capability;
     use crate::effect::EmptyEffect;
-    use crate::types::ResourceId;
     
     #[test]
     fn test_transform_abstract_to_register() {
         // Create an abstract operation
         let abstract_context = AbstractContext::new(ExecutionPhase::Planning);
-        let effect = Box::new(EmptyEffect::new("test_effect"));
+        let effect = Box::new(EmptyEffect::with_name("test_effect"));
+        
+        // Use ContentId::nil() which doesn't take arguments
+        let content_id = ContentId::nil();
         
         let operation = Operation::new(
             OperationType::Create,
@@ -295,7 +310,7 @@ mod tests {
             abstract_context.clone()
         )
         .with_output(ResourceRef {
-            resource_id: ResourceId::from_str("test_resource").unwrap(),
+            resource_id: content_id,
             domain_id: None,
             ref_type: ResourceRefType::Output,
             before_state: None,

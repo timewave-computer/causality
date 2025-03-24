@@ -8,7 +8,8 @@ use serde::{Serialize, Deserialize};
 use std::fmt;
 
 use crate::error::{Error, Result};
-use crate::types::{DomainId, ResourceId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::resource::lifecycle_manager::ResourceRegisterLifecycleManager;
 use super::cross_domain::{CrossDomainRelationship, CrossDomainRelationshipType, SyncStrategy};
 
@@ -526,7 +527,7 @@ impl CrossDomainRelationshipValidator {
     }
     
     /// Validate that a resource exists in a domain
-    fn validate_resource_exists(&self, resource_id: &ResourceId, domain_id: &DomainId) -> Result<()> {
+    fn validate_resource_exists(&self, resource_id: &ContentId, domain_id: &DomainId) -> Result<()> {
         if let Some(lifecycle_manager) = self.lifecycle_managers.get(domain_id) {
             // Check if the resource exists
             if lifecycle_manager.resource_exists(resource_id) {
@@ -549,7 +550,7 @@ impl CrossDomainRelationshipValidator {
     /// Validate that a resource is in one of the valid states
     fn validate_resource_state(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         domain_id: &DomainId,
         valid_states: &[String],
     ) -> Result<()> {
@@ -583,7 +584,7 @@ mod tests {
     
     // Mock lifecycle manager for testing
     struct MockLifecycleManager {
-        resources: HashMap<ResourceId, String>,
+        resources: HashMap<ContentId, String>,
     }
     
     impl MockLifecycleManager {
@@ -596,11 +597,11 @@ mod tests {
             Self { resources }
         }
         
-        fn resource_exists(&self, resource_id: &ResourceId) -> bool {
+        fn resource_exists(&self, resource_id: &ContentId) -> bool {
             self.resources.contains_key(resource_id)
         }
         
-        fn get_resource_state(&self, resource_id: &ResourceId) -> Result<String> {
+        fn get_resource_state(&self, resource_id: &ContentId) -> Result<String> {
             self.resources.get(resource_id)
                 .cloned()
                 .ok_or_else(|| Error::NotFound(format!("Resource '{}' not found", resource_id)))

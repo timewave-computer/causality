@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime};
 
 use crate::error::{Error, Result};
 use crate::resource::{
-    Register, RegisterId, RegisterState, ArchiveReference,
+    Register, ContentId, RegisterState, ArchiveReference,
     SharedEpochManager, SharedArchiveManager, EpochId,
 };
 
@@ -55,7 +55,7 @@ pub struct GarbageCollectionManager {
     archive_manager: Option<SharedArchiveManager>,
     
     /// Map of register IDs that have been garbage collected to their deletion time
-    deleted_registers: HashMap<RegisterId, SystemTime>,
+    deleted_registers: HashMap<ContentId, SystemTime>,
 }
 
 impl GarbageCollectionManager {
@@ -131,12 +131,12 @@ impl GarbageCollectionManager {
     }
     
     /// Mark a register as garbage collected
-    pub fn mark_as_collected(&mut self, register_id: &RegisterId) {
+    pub fn mark_as_collected(&mut self, register_id: &ContentId) {
         self.deleted_registers.insert(register_id.clone(), SystemTime::now());
     }
     
     /// Check if a register has been garbage collected
-    pub fn is_collected(&self, register_id: &RegisterId) -> bool {
+    pub fn is_collected(&self, register_id: &ContentId) -> bool {
         self.deleted_registers.contains_key(register_id)
     }
     
@@ -156,9 +156,9 @@ impl GarbageCollectionManager {
     
     /// Get all registers eligible for garbage collection by epoch
     pub fn get_eligible_registers_by_epoch(&self, 
-        registers: &HashMap<RegisterId, Register>,
+        registers: &HashMap<ContentId, Register>,
         target_epoch: EpochId
-    ) -> Vec<RegisterId> {
+    ) -> Vec<ContentId> {
         registers.iter()
             .filter(|(_, register)| {
                 register.epoch == Some(target_epoch) && self.is_eligible_for_gc(register)
@@ -203,12 +203,12 @@ impl GarbageCollectionManager {
     }
     
     /// Get a list of all garbage collected register IDs
-    pub fn get_collected_register_ids(&self) -> Vec<RegisterId> {
+    pub fn get_collected_register_ids(&self) -> Vec<ContentId> {
         self.deleted_registers.keys().cloned().collect()
     }
     
     /// Get the time when a register was garbage collected
-    pub fn get_collection_time(&self, register_id: &RegisterId) -> Option<SystemTime> {
+    pub fn get_collection_time(&self, register_id: &ContentId) -> Option<SystemTime> {
         self.deleted_registers.get(register_id).cloned()
     }
     
@@ -218,7 +218,7 @@ impl GarbageCollectionManager {
     }
     
     /// Retain collection history for only specified register IDs
-    pub fn retain_collection_history(&mut self, register_ids: &HashSet<RegisterId>) {
+    pub fn retain_collection_history(&mut self, register_ids: &HashSet<ContentId>) {
         self.deleted_registers.retain(|id, _| register_ids.contains(id));
     }
     
@@ -270,14 +270,14 @@ impl SharedGarbageCollectionManager {
     }
     
     /// Mark a register as garbage collected
-    pub fn mark_as_collected(&self, register_id: &RegisterId) -> Result<()> {
+    pub fn mark_as_collected(&self, register_id: &ContentId) -> Result<()> {
         let mut gc_manager = self.inner.lock().map_err(|_| Error::LockError)?;
         gc_manager.mark_as_collected(register_id);
         Ok(())
     }
     
     /// Check if a register has been garbage collected
-    pub fn is_collected(&self, register_id: &RegisterId) -> Result<bool> {
+    pub fn is_collected(&self, register_id: &ContentId) -> Result<bool> {
         let gc_manager = self.inner.lock().map_err(|_| Error::LockError)?;
         Ok(gc_manager.is_collected(register_id))
     }
@@ -291,9 +291,9 @@ impl SharedGarbageCollectionManager {
     /// Get all registers eligible for garbage collection by epoch
     pub fn get_eligible_registers_by_epoch(
         &self,
-        registers: &HashMap<RegisterId, Register>,
+        registers: &HashMap<ContentId, Register>,
         target_epoch: EpochId
-    ) -> Result<Vec<RegisterId>> {
+    ) -> Result<Vec<ContentId>> {
         let gc_manager = self.inner.lock().map_err(|_| Error::LockError)?;
         Ok(gc_manager.get_eligible_registers_by_epoch(registers, target_epoch))
     }
@@ -318,13 +318,13 @@ impl SharedGarbageCollectionManager {
     }
     
     /// Get a list of all garbage collected register IDs
-    pub fn get_collected_register_ids(&self) -> Result<Vec<RegisterId>> {
+    pub fn get_collected_register_ids(&self) -> Result<Vec<ContentId>> {
         let gc_manager = self.inner.lock().map_err(|_| Error::LockError)?;
         Ok(gc_manager.get_collected_register_ids())
     }
     
     /// Get the time when a register was garbage collected
-    pub fn get_collection_time(&self, register_id: &RegisterId) -> Result<Option<SystemTime>> {
+    pub fn get_collection_time(&self, register_id: &ContentId) -> Result<Option<SystemTime>> {
         let gc_manager = self.inner.lock().map_err(|_| Error::LockError)?;
         Ok(gc_manager.get_collection_time(register_id))
     }
@@ -357,7 +357,7 @@ mod tests {
         
         // Create a register that's active
         let active_register = Register {
-            register_id: RegisterId::new_v4(),
+            register_id: ContentId::new_v4(),
             owner: Address::new("owner"),
             domain: Domain::new("domain"),
             contents: RegisterContents::with_string("test"),
@@ -375,7 +375,7 @@ mod tests {
         // Create a register that's consumed but too new
         let now = SystemTime::now();
         let consumed_register = Register {
-            register_id: RegisterId::new_v4(),
+            register_id: ContentId::new_v4(),
             owner: Address::new("owner"),
             domain: Domain::new("domain"),
             contents: RegisterContents::with_string("test"),
@@ -392,7 +392,7 @@ mod tests {
         
         // Create a register that's archived but in current epoch
         let archived_register = Register {
-            register_id: RegisterId::new_v4(),
+            register_id: ContentId::new_v4(),
             owner: Address::new("owner"),
             domain: Domain::new("domain"),
             contents: RegisterContents::with_string("test"),
@@ -429,8 +429,8 @@ mod tests {
         let mut gc_manager = GarbageCollectionManager::with_default_config(None, None);
         
         // Create some register IDs
-        let register_id1 = RegisterId::new_v4();
-        let register_id2 = RegisterId::new_v4();
+        let register_id1 = ContentId::new_v4();
+        let register_id2 = ContentId::new_v4();
         
         // Initially nothing is collected
         assert!(!gc_manager.is_collected(&register_id1));
@@ -464,7 +464,7 @@ mod tests {
         let shared_gc_manager = SharedGarbageCollectionManager::with_default_config(None, None);
         
         // Create a register ID
-        let register_id = RegisterId::new_v4();
+        let register_id = ContentId::new_v4();
         
         // Initially not collected
         assert!(!shared_gc_manager.is_collected(&register_id).unwrap());
@@ -507,7 +507,7 @@ mod tests {
         eligible_metadata.insert("can_gc".to_string(), "true".to_string());
         
         let eligible_register = Register {
-            register_id: RegisterId::new_v4(),
+            register_id: ContentId::new_v4(),
             owner: Address::new("owner"),
             domain: Domain::new("domain"),
             contents: RegisterContents::with_string("test"),
@@ -524,7 +524,7 @@ mod tests {
         
         // Create a register without the required metadata
         let ineligible_register = Register {
-            register_id: RegisterId::new_v4(),
+            register_id: ContentId::new_v4(),
             owner: Address::new("owner"),
             domain: Domain::new("domain"),
             contents: RegisterContents::with_string("test"),

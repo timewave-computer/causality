@@ -217,7 +217,7 @@ pub struct RegisterArchive {
     pub version: u32,
     
     /// ID of the archival register
-    pub register_id: RegisterId,
+    pub register_id: ContentId,
     
     /// Domain of the register
     pub domain: Domain,
@@ -700,7 +700,7 @@ mod tests {
         metadata.insert("key2".to_string(), "value2".to_string());
         
         Register {
-            register_id: RegisterId::new_unique(),
+            register_id: ContentId::new_unique(),
             domain: Domain::new("test_domain"),
             owner: Address::new("test_owner"),
             contents: RegisterContents::with_string("Test register contents"),

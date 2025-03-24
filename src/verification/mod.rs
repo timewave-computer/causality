@@ -20,7 +20,8 @@ use std::collections::HashMap;
 use chrono::Utc;
 use thiserror::Error;
 
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 
 /// The result of a verification operation
 #[derive(Debug, Clone)]

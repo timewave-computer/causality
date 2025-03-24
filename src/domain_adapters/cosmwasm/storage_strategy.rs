@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::address::Address;
 use crate::domain::DomainId;
-use crate::resource::{ResourceId, ResourceRegister};
+use crate::resource::{ContentId, ResourceRegister};
 use crate::resource::resource_register::{
     StorageStrategy, 
     StateVisibility, 
@@ -52,7 +52,7 @@ pub struct CosmWasmStoreEffect {
     /// Unique identifier
     id: EffectId,
     /// Resource register ID to store
-    register_id: ResourceId,
+    register_id: ContentId,
     /// Fields to include in the store operation
     fields: HashSet<String>,
     /// Domain ID
@@ -70,7 +70,7 @@ pub struct CosmWasmStoreEffect {
 impl CosmWasmStoreEffect {
     /// Create a new CosmWasm store effect
     pub fn new(
-        register_id: ResourceId,
+        register_id: ContentId,
         fields: HashSet<String>,
         domain_id: DomainId,
         invoker: Address,
@@ -89,7 +89,7 @@ impl CosmWasmStoreEffect {
     }
     
     /// Get the register ID
-    pub fn register_id(&self) -> &ResourceId {
+    pub fn register_id(&self) -> &ContentId {
         &self.register_id
     }
     
@@ -224,7 +224,7 @@ pub struct CosmWasmCommitmentEffect {
     /// Unique identifier
     id: EffectId,
     /// Resource register ID
-    register_id: ResourceId,
+    register_id: ContentId,
     /// Commitment to store
     commitment: Commitment,
     /// Domain ID
@@ -242,7 +242,7 @@ pub struct CosmWasmCommitmentEffect {
 impl CosmWasmCommitmentEffect {
     /// Create a new CosmWasm commitment effect
     pub fn new(
-        register_id: ResourceId,
+        register_id: ContentId,
         commitment: Commitment,
         domain_id: DomainId,
         invoker: Address,
@@ -261,7 +261,7 @@ impl CosmWasmCommitmentEffect {
     }
     
     /// Get the register ID
-    pub fn register_id(&self) -> &ResourceId {
+    pub fn register_id(&self) -> &ContentId {
         &self.register_id
     }
     
@@ -409,7 +409,7 @@ impl CosmWasmStorageEffectFactory {
     /// Create a store effect for the given register
     pub fn create_store_effect(
         &self,
-        register_id: ResourceId,
+        register_id: ContentId,
         fields: HashSet<String>,
         invoker: Address,
     ) -> Result<CosmWasmStoreEffect> {
@@ -425,7 +425,7 @@ impl CosmWasmStorageEffectFactory {
     /// Create a commitment effect for the given register
     pub fn create_commitment_effect(
         &self,
-        register_id: ResourceId,
+        register_id: ContentId,
         commitment: Commitment,
         invoker: Address,
     ) -> Result<CosmWasmCommitmentEffect> {
@@ -446,7 +446,7 @@ mod tests {
     #[tokio::test]
     async fn test_cosmwasm_storage_effect() {
         // Create a register ID
-        let register_id = ResourceId::new_unique();
+        let register_id = ContentId::new_unique();
         
         // Create a domain ID
         let domain_id = DomainId::new("cosmwasm".to_string());

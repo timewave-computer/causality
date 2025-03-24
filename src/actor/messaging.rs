@@ -8,12 +8,13 @@ use std::fmt;
 use std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use crate::error::{Error, Result};
 use crate::types::{Timestamp, TraceId};
 use crate::actor::{ActorIdBox, ActorRole};
 use crate::actor::role::ActorCapability;
+use crate::crypto::hash::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 mod mailbox;
 mod patterns;
@@ -44,10 +45,78 @@ impl Default for MessagePriority {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MessageId(String);
 
+/// Message content for ID generation
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+struct MessageIdContent {
+    /// Sender (if any)
+    sender: Option<String>,
+    /// Recipient
+    recipient: String,
+    /// Message timestamp
+    timestamp: i64,
+    /// Random component for uniqueness
+    nonce: [u8; 8],
+}
+
+impl ContentAddressed for MessageIdContent {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 impl MessageId {
-    /// Create a new random message ID
+    /// Create a new content-derived message ID
     pub fn new() -> Self {
-        MessageId(Uuid::new_v4().to_string())
+        // Create default content for ID generation
+        let content = MessageIdContent {
+            sender: None,
+            recipient: "unknown".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            nonce: rand::random::<[u8; 8]>(),
+        };
+        
+        // Generate content-derived ID
+        let content_id = content.content_id();
+        MessageId(format!("msg:{}", content_id))
+    }
+    
+    /// Create a message ID from specific information
+    pub fn from_message_info(
+        sender: Option<&ActorIdBox>,
+        recipient: &ActorIdBox,
+    ) -> Self {
+        // Create content with message information
+        let content = MessageIdContent {
+            sender: sender.map(|s| s.to_string()),
+            recipient: recipient.to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            nonce: rand::random::<[u8; 8]>(),
+        };
+        
+        // Generate content-derived ID
+        let content_id = content.content_id();
+        MessageId(format!("msg:{}", content_id))
     }
     
     /// Create a message ID from a string
@@ -64,6 +133,12 @@ impl MessageId {
 impl fmt::Display for MessageId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl From<ContentId> for MessageId {
+    fn from(content_id: ContentId) -> Self {
+        Self(format!("msg:{}", content_id))
     }
 }
 

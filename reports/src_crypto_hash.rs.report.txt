@@ -1,0 +1,37 @@
+Analyzing src/crypto/hash.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+406:        Self(Uuid::new_v4().to_string())
+
+Detailed context for each occurrence:
+==============================================
+
+Line 406:         Self(Uuid::new_v4().to_string())
+---------------------------------------------
+
+impl DeferredHashId {
+    /// Create a new deferred hash ID
+    pub fn new() -> Self {
+        use uuid::Uuid;
+        Self(Uuid::new_v4().to_string())
+    }
+}
+
+/// Checksum output type for non-cryptographic hash functions
+#[derive(Clone, PartialEq, Eq)]
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+14:pub struct HashOutput {
+94:pub struct ContentId(HashOutput);
+244:pub struct Hasher {
+277:pub struct HashFactory {
+320:pub struct Blake3HashFunction;
+344:pub struct PoseidonHashFunction;
+400:pub struct DeferredHashId(String);
+412:pub struct ChecksumOutput {
+485:pub struct Checksum {
+508:pub struct ChecksumFactory {
+548:pub struct Md5ChecksumFunction;

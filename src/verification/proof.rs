@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 
-use crate::types::{ResourceId, DomainId, Timestamp};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 
 /// ZK proof data
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,7 +61,7 @@ pub struct TemporalAttestation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AncestralProofData {
     /// The resource ID
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     /// The controller label
     pub controller_label: String,
     /// Ancestral path

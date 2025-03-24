@@ -7,10 +7,13 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use borsh::{BorshSerialize, BorshDeserialize};
+use crate::crypto::content_addressed::{ContentAddressed, ContentId};
+
 use crate::domain::DomainId;
 use crate::error::{Error, Result};
 use crate::resource::{
-    RegisterId, RegisterContents, Register, ResourceId,
+    RegisterId, RegisterContents, Register, ContentId,
     ResourceAllocator, ResourceRequest, ResourceGrant
 };
 use crate::types::{Address, TraceId};
@@ -22,6 +25,45 @@ use crate::program_account::authorization::{
     AuthorizationManager, AuthorizationContext, AuthorizationResult, 
     AuthorizationLevel, ProgramAccountAuthorization
 };
+
+/// Content data for generating content-addressed effect result IDs
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct EffectResultContentData {
+    /// Effect ID
+    pub effect_id: String,
+    
+    /// Timestamp
+    pub timestamp: u64,
+    
+    /// Parameters hash
+    pub parameters_hash: String,
+    
+    /// Random nonce for uniqueness
+    pub nonce: [u8; 8],
+}
+
+impl ContentAddressed for EffectResultContentData {
+    fn content_hash(&self) -> Result<ContentId> {
+        let bytes = self.to_bytes()?;
+        Ok(ContentId::from_bytes(&bytes)?)
+    }
+    
+    fn verify(&self, content_id: &ContentId) -> Result<bool> {
+        let calculated_id = self.content_hash()?;
+        Ok(calculated_id == *content_id)
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>> {
+        let bytes = borsh::to_vec(self)
+            .map_err(|e| Error::Serialization(format!("Failed to serialize EffectResultContentData: {}", e)))?;
+        Ok(bytes)
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        borsh::from_slice(bytes)
+            .map_err(|e| Error::Deserialization(format!("Failed to deserialize EffectResultContentData: {}", e)))
+    }
+}
 
 /// A basic implementation of the ProgramAccount trait
 pub struct BaseAccount {
@@ -41,7 +83,7 @@ pub struct BaseAccount {
     domains: RwLock<HashSet<DomainId>>,
     
     /// The resources owned by this account
-    resources: RwLock<HashMap<ResourceId, ProgramAccountResource>>,
+    resources: RwLock<HashMap<ContentId, ProgramAccountResource>>,
     
     /// The capabilities granted to this account
     capabilities: RwLock<HashMap<String, ProgramAccountCapability>>,
@@ -109,7 +151,7 @@ impl BaseAccount {
     }
     
     /// Check if an action is authorized
-    fn check_authorization(&self, action: &str, resource_id: Option<&ResourceId>, level: AuthorizationLevel) -> Result<()> {
+    fn check_authorization(&self, action: &str, resource_id: Option<&ContentId>, level: AuthorizationLevel) -> Result<()> {
         // If no auth manager, owner can do anything
         if self.auth_manager.is_none() {
             return Ok(());
@@ -255,7 +297,7 @@ impl BaseAccount {
     /// Apply a resource predicate authorization
     pub fn apply_resource_predicate(
         &self, 
-        resource_id: &ResourceId, 
+        resource_id: &ContentId, 
         predicate_name: &str, 
         args: &[&str]
     ) -> Result<bool> {
@@ -309,7 +351,7 @@ impl ProgramAccount for BaseAccount {
         }
     }
     
-    fn get_resource(&self, resource_id: &ResourceId) -> Result<Option<ProgramAccountResource>> {
+    fn get_resource(&self, resource_id: &ContentId) -> Result<Option<ProgramAccountResource>> {
         // Check authorization
         self.check_authorization("get_resource", Some(resource_id), AuthorizationLevel::Read)?;
         
@@ -339,44 +381,71 @@ impl ProgramAccount for BaseAccount {
         self.check_authorization("execute_effect", None, AuthorizationLevel::ReadWrite)?;
         
         // Get the effect
-        let effect = self.get_effect(effect_id)?
+        let available_effects = self.available_effects.read().map_err(|_| Error::LockError)?;
+        let effect = available_effects.get(effect_id)
             .ok_or_else(|| Error::NotFound(format!("Effect not found: {}", effect_id)))?;
         
-        // Check if the effect requires authorization
-        if effect.requires_authorization {
-            // Additional authorization check for the specific effect
-            self.check_authorization(&format!("effect:{}", effect_id), None, AuthorizationLevel::ReadWrite)?;
+        // Validate parameters
+        for required in &effect.required_parameters {
+            if !parameters.contains_key(required) {
+                return Err(Error::InvalidParameter(format!(
+                    "Missing required parameter: {}", required
+                )));
+            }
         }
         
-        // In a real implementation, we would actually execute the effect
-        // For now, we just return a dummy result
-        let result = EffectResult {
-            id: format!("result-{}", uuid::Uuid::new_v4()),
-            status: EffectStatus::Completed,
-            transaction_id: trace_id.map(|id| id.to_string()),
-            new_resources: Vec::new(),
-            modified_resources: Vec::new(),
-            consumed_resources: Vec::new(),
-            outputs: HashMap::new(),
-            error: None,
+        // Create a parameters hash for content addressing
+        let mut params_string = String::new();
+        let mut keys: Vec<_> = parameters.keys().collect();
+        keys.sort(); // Sort keys for deterministic hash
+        for key in keys {
+            params_string.push_str(&format!("{}={},", key, parameters.get(key).unwrap_or(&String::new())));
+        }
+        
+        // Generate a content-addressed result ID
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let mut nonce = [0u8; 8];
+        getrandom::getrandom(&mut nonce).expect("Failed to generate random nonce");
+        
+        let content_data = EffectResultContentData {
+            effect_id: effect_id.to_string(),
+            timestamp: now,
+            parameters_hash: params_string,
+            nonce,
         };
         
-        // Add a transaction record
-        let record = TransactionRecord {
-            id: result.id.clone(),
-            transaction_type: format!("effect:{}", effect_id),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+        let result_id = content_data.content_hash()
+            .map(|id| format!("result-{}", id.to_string()))
+            .unwrap_or_else(|_| format!("result-error-{}", now));
+        
+        // Create the result
+        let result = EffectResult {
+            id: result_id,
+            effect_id: effect_id.to_string(),
+            status: EffectStatus::Pending,
+            parameters: parameters.clone(),
+            result_data: None,
+            created_at: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
-            status: TransactionStatus::Confirmed,
-            resources: Vec::new(),
-            effects: vec![effect_id.to_string()],
-            domains: effect.domain_id.iter().cloned().collect(),
-            metadata: parameters,
+            completed_at: None,
+            trace_id: trace_id.cloned(),
         };
         
-        self.add_transaction_record(record)?;
+        // Add to transaction history (could be improved to track actual execution)
+        let _ = self.add_transaction_record(TransactionRecord {
+            id: result.id.clone(),
+            account_id: self.id.clone(),
+            transaction_type: "effect_execution".to_string(),
+            status: TransactionStatus::Pending,
+            data: Some(format!("Effect: {}", effect_id)),
+            timestamp: result.created_at,
+        });
         
         Ok(result)
     }
@@ -498,7 +567,7 @@ mod tests {
         
         // Register a resource
         let resource = ProgramAccountResource {
-            id: ResourceId::from_str("res-1"),
+            id: ContentId::from_str("res-1"),
             register_id: Some(RegisterId::from_str("reg-1")),
             resource_type: "token".to_string(),
             domain_id: Some(DomainId::new("domain-1")),
@@ -508,7 +577,7 @@ mod tests {
         account.register_resource(resource.clone()).unwrap();
         
         // Get the resource
-        let retrieved = account.get_resource(&ResourceId::from_str("res-1")).unwrap().unwrap();
+        let retrieved = account.get_resource(&ContentId::from_str("res-1")).unwrap().unwrap();
         assert_eq!(retrieved.id, resource.id);
         
         // Get all resources

@@ -19,7 +19,7 @@ fn create_test_register(size: usize) -> Register {
     let content = "A".repeat(size);
     
     Register {
-        register_id: RegisterId::new_unique(),
+        register_id: ContentId::new_unique(),
         domain: Domain::new("test_domain"),
         owner: Address::new("test_owner"),
         contents: RegisterContents::with_string(&content),

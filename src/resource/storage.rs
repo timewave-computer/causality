@@ -4,32 +4,80 @@
 //! for storing resources, as well as the storage effects that implement
 //! the underlying storage operations.
 
-use std::collections::HashMap;
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
+use std::collections::{HashMap, HashSet};
+use std::any::Any;
 
-use crate::resource::{ResourceId, RegisterId, ResourceRegister};
+use async_trait::async_trait;
+#[cfg(feature = "tracing")]
+use tracing::{debug, info, warn, error};
+#[cfg(not(feature = "tracing"))]
+use std::{println as info, println as debug, println as warn, println as error};
+
+use crate::effect::{Effect, EffectContext, EffectOutcome, EffectId};
+use crate::effect::boundary::ExecutionBoundary;
+use crate::crypto::hash::ContentId;
 use crate::domain::DomainType;
-use crate::effect::{Effect, EffectContext, EffectOutcome, EffectId, EffectExecution};
 use crate::error::{Error, Result};
+use crate::resource::resource_register::{ResourceRegister, StateVisibility};
+use serde::{Serialize, Deserialize};
 
 /// Storage strategy for resources
 ///
 /// Defines where and how a resource should be stored,
 /// which can vary based on the domain and specific requirements.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StorageStrategy {
-    /// Store the resource directly on-chain
+    /// Store resource fully on chain
     OnChain,
-    
-    /// Store only a commitment to the resource on-chain
+    /// Store only a commitment on chain
     Commitment,
-    
-    /// Store the resource in a nullifier-based system
+    /// Store a nullifier on chain
     Nullifier,
-    
-    /// Store the resource in multiple locations for hybrid access patterns
-    Hybrid,
+    /// Read-only operation from storage
+    ReadOnly,
+}
+
+/// Parameters used for storage operations
+#[derive(Debug, Clone)]
+pub struct StorageParams {
+    /// Strategy for this storage operation
+    pub strategy: StorageStrategy,
+    /// Domain type where the storage operation will occur
+    pub domain: DomainType,
+    /// Additional parameters specific to the operation
+    pub params: HashMap<String, String>,
+}
+
+/// Storage effect for resource storage operations
+///
+/// This effect provides an interface for storing resources
+/// using different storage strategies.
+#[derive(Debug, Clone)]
+pub struct StorageEffect {
+    /// Unique identifier for this effect
+    id: EffectId,
+    /// The resource being operated on
+    resource: Option<ResourceRegister>,
+    /// The resource ID for read operations
+    resource_id: Option<ContentId>,
+    /// Operation parameters
+    params: StorageParams,
+    /// Operation type
+    operation: StorageOperation,
+}
+
+/// Storage operation type
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StorageOperation {
+    /// Store a resource
+    Store,
+    /// Read a resource
+    Read,
+    /// Update a resource
+    Update,
+    /// Delete a resource
+    Delete,
 }
 
 impl StorageStrategy {
@@ -39,7 +87,7 @@ impl StorageStrategy {
             StorageStrategy::OnChain,
             StorageStrategy::Commitment,
             StorageStrategy::Nullifier,
-            StorageStrategy::Hybrid,
+            StorageStrategy::ReadOnly,
         ]
     }
     
@@ -49,7 +97,7 @@ impl StorageStrategy {
             "onchain" => Some(StorageStrategy::OnChain),
             "commitment" => Some(StorageStrategy::Commitment),
             "nullifier" => Some(StorageStrategy::Nullifier),
-            "hybrid" => Some(StorageStrategy::Hybrid),
+            "readonly" => Some(StorageStrategy::ReadOnly),
             _ => None,
         }
     }
@@ -60,229 +108,319 @@ impl StorageStrategy {
             StorageStrategy::OnChain => "onchain",
             StorageStrategy::Commitment => "commitment",
             StorageStrategy::Nullifier => "nullifier",
-            StorageStrategy::Hybrid => "hybrid",
-        }
-    }
-}
-
-/// Storage effect for resource storage operations
-///
-/// This effect provides an interface for storing resources
-/// using different storage strategies.
-#[derive(Debug, Clone)]
-pub struct StorageEffect {
-    /// ID of the effect
-    pub id: EffectId,
-    
-    /// Register to operate on
-    pub register_id: RegisterId,
-    
-    /// Storage strategy to use
-    pub strategy: StorageStrategy,
-    
-    /// Operation to perform
-    pub operation: StorageOperation,
-    
-    /// Domain type for the storage
-    pub domain_type: DomainType,
-    
-    /// Additional parameters for the storage operation
-    pub params: HashMap<String, String>,
-}
-
-/// Storage operation type
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StorageOperation {
-    /// Store a resource
-    Store(ResourceRegister),
-    
-    /// Read a resource
-    Read,
-    
-    /// Update a resource
-    Update(ResourceRegister),
-    
-    /// Delete a resource
-    Delete,
-}
-
-impl Effect for StorageEffect {
-    fn id(&self) -> &EffectId {
-        &self.id
-    }
-    
-    fn domain_type(&self) -> &DomainType {
-        &self.domain_type
-    }
-    
-    fn description(&self) -> String {
-        match &self.operation {
-            StorageOperation::Store(_) => format!(
-                "Store resource {} with strategy {}",
-                self.register_id,
-                self.strategy.to_str(),
-            ),
-            StorageOperation::Read => format!(
-                "Read resource {} with strategy {}",
-                self.register_id,
-                self.strategy.to_str(),
-            ),
-            StorageOperation::Update(_) => format!(
-                "Update resource {} with strategy {}",
-                self.register_id,
-                self.strategy.to_str(),
-            ),
-            StorageOperation::Delete => format!(
-                "Delete resource {} with strategy {}",
-                self.register_id,
-                self.strategy.to_str(),
-            ),
+            StorageStrategy::ReadOnly => "readonly",
         }
     }
     
-    fn execute(&self, context: &EffectContext) -> Result<EffectOutcome> {
-        // In a real implementation, this would be delegated to the domain adapter
-        // For testing, we'll return a mock success outcome
-        let outcome = match &self.operation {
-            StorageOperation::Store(register) => {
-                let mut data = HashMap::new();
-                data.insert("register_id".to_string(), register.id.clone());
-                data.insert("resource_id".to_string(), register.resource_id.clone());
-                data.insert("status".to_string(), "stored".to_string());
-                
-                EffectOutcome {
-                    id: self.id.clone(),
-                    success: true,
-                    data,
-                    error: None,
-                }
-            },
-            StorageOperation::Read => {
-                let mut data = HashMap::new();
-                data.insert("register_id".to_string(), self.register_id.clone());
-                data.insert("status".to_string(), "read".to_string());
-                
-                // In a real implementation, this would contain the actual register data
-                
-                EffectOutcome {
-                    id: self.id.clone(),
-                    success: true,
-                    data,
-                    error: None,
-                }
-            },
-            StorageOperation::Update(register) => {
-                let mut data = HashMap::new();
-                data.insert("register_id".to_string(), register.id.clone());
-                data.insert("resource_id".to_string(), register.resource_id.clone());
-                data.insert("status".to_string(), "updated".to_string());
-                
-                EffectOutcome {
-                    id: self.id.clone(),
-                    success: true,
-                    data,
-                    error: None,
-                }
-            },
-            StorageOperation::Delete => {
-                let mut data = HashMap::new();
-                data.insert("register_id".to_string(), self.register_id.clone());
-                data.insert("status".to_string(), "deleted".to_string());
-                
-                EffectOutcome {
-                    id: self.id.clone(),
-                    success: true,
-                    data,
-                    error: None,
-                }
-            },
-        };
-        
-        Ok(outcome)
-    }
-    
-    fn execute_async(&self, context: &EffectContext) -> EffectExecution {
-        // For simplicity, we'll just execute synchronously here
-        match self.execute(context) {
-            Ok(outcome) => EffectExecution::Complete(outcome),
-            Err(err) => EffectExecution::Error(err),
+    /// Create a fully on-chain storage strategy with public visibility
+    pub fn fully_on_chain() -> crate::resource::resource_register::StorageStrategy {
+        crate::resource::resource_register::StorageStrategy::FullyOnChain {
+            visibility: StateVisibility::Public,
         }
     }
     
-    fn dependencies(&self) -> Vec<EffectId> {
-        // Storage effects typically don't have dependencies
-        vec![]
+    /// Convert to the unified ResourceRegister storage strategy
+    pub fn to_unified_strategy(&self) -> crate::resource::resource_register::StorageStrategy {
+        match self {
+            StorageStrategy::OnChain => {
+                crate::resource::resource_register::StorageStrategy::FullyOnChain {
+                    visibility: StateVisibility::Public,
+                }
+            },
+            StorageStrategy::Commitment => {
+                crate::resource::resource_register::StorageStrategy::CommitmentBased {
+                    commitment: None,
+                    nullifier: None,
+                }
+            },
+            StorageStrategy::Nullifier => {
+                crate::resource::resource_register::StorageStrategy::CommitmentBased {
+                    commitment: None,
+                    nullifier: None,
+                }
+            },
+            StorageStrategy::ReadOnly => {
+                crate::resource::resource_register::StorageStrategy::ReadOnly {
+                    commitment: None,
+                    nullifier: None,
+                }
+            },
+        }
     }
 }
 
 impl StorageEffect {
     /// Create a new storage effect for storing a resource
     pub fn new_store(
-        register: ResourceRegister,
+        resource: ResourceRegister,
         strategy: StorageStrategy,
-        domain_type: DomainType,
+        domain: DomainType,
     ) -> Self {
         Self {
             id: EffectId::new_unique(),
-            register_id: register.id.clone(),
-            strategy,
-            operation: StorageOperation::Store(register),
-            domain_type,
-            params: HashMap::new(),
+            resource: Some(resource),
+            resource_id: None,
+            params: StorageParams {
+                strategy,
+                domain,
+                params: HashMap::new(),
+            },
+            operation: StorageOperation::Store,
         }
     }
-    
+
     /// Create a new storage effect for reading a resource
     pub fn new_read(
-        register_id: RegisterId,
+        resource_id: ContentId,
         strategy: StorageStrategy,
-        domain_type: DomainType,
+        domain: DomainType,
     ) -> Self {
         Self {
             id: EffectId::new_unique(),
-            register_id,
-            strategy,
+            resource: None,
+            resource_id: Some(resource_id),
+            params: StorageParams {
+                strategy,
+                domain,
+                params: HashMap::new(),
+            },
             operation: StorageOperation::Read,
-            domain_type,
-            params: HashMap::new(),
         }
     }
-    
+
     /// Create a new storage effect for updating a resource
     pub fn new_update(
-        register: ResourceRegister,
+        resource: ResourceRegister,
         strategy: StorageStrategy,
-        domain_type: DomainType,
+        domain: DomainType,
     ) -> Self {
         Self {
             id: EffectId::new_unique(),
-            register_id: register.id.clone(),
-            strategy,
-            operation: StorageOperation::Update(register),
-            domain_type,
-            params: HashMap::new(),
+            resource: Some(resource),
+            resource_id: None,
+            params: StorageParams {
+                strategy,
+                domain,
+                params: HashMap::new(),
+            },
+            operation: StorageOperation::Update,
         }
     }
-    
+
     /// Create a new storage effect for deleting a resource
     pub fn new_delete(
-        register_id: RegisterId,
+        resource_id: ContentId,
         strategy: StorageStrategy,
-        domain_type: DomainType,
+        domain: DomainType,
     ) -> Self {
         Self {
             id: EffectId::new_unique(),
-            register_id,
-            strategy,
+            resource: None,
+            resource_id: Some(resource_id),
+            params: StorageParams {
+                strategy,
+                domain,
+                params: HashMap::new(),
+            },
             operation: StorageOperation::Delete,
-            domain_type,
-            params: HashMap::new(),
         }
     }
-    
+
     /// Add a parameter to the storage effect
     pub fn with_param(mut self, key: &str, value: &str) -> Self {
-        self.params.insert(key.to_string(), value.to_string());
+        self.params.params.insert(key.to_string(), value.to_string());
+        self
+    }
+}
+
+#[async_trait]
+impl Effect for StorageEffect {
+    /// Get the unique identifier for this effect
+    fn id(&self) -> EffectId {
+        self.id.clone()
+    }
+
+    /// Get the boundary layer for this effect
+    fn boundary(&self) -> ExecutionBoundary {
+        ExecutionBoundary::OutsideSystem
+    }
+
+    /// Execute the storage effect
+    async fn execute(&self, context: &EffectContext) -> Result<EffectOutcome> {
+        let mut outcome = EffectOutcome::success(self.id());
+
+        // In a real implementation, this would connect to the actual storage backend
+        // based on the domain type and execute the appropriate operation
+
+        match self.operation {
+            StorageOperation::Store => {
+                // Ensure we have a resource to store
+                let resource = self.resource.as_ref().ok_or_else(|| {
+                    Error::ValidationError("No resource provided for store operation".to_string())
+                })?;
+
+                // Log the store operation
+                info!(
+                    "Storing resource {} with strategy {:?} in domain {:?}",
+                    resource.id(),
+                    self.params.strategy,
+                    self.params.domain
+                );
+
+                // In a real implementation, we would store the resource in the relevant backend
+                // For now, just simulate a successful store operation
+                outcome = outcome.with_data("transaction_id", "tx_12345");
+                outcome = outcome.with_data("resource_id", &resource.id().to_string());
+            }
+            StorageOperation::Read => {
+                // Ensure we have a resource ID to read
+                let resource_id = self.resource_id.as_ref().ok_or_else(|| {
+                    Error::ValidationError("No resource ID provided for read operation".to_string())
+                })?;
+
+                // Log the read operation
+                info!(
+                    "Reading resource {} with strategy {:?} from domain {:?}",
+                    resource_id,
+                    self.params.strategy,
+                    self.params.domain
+                );
+
+                // In a real implementation, we would read the resource from the relevant backend
+                // For now, just simulate a successful read operation
+                outcome = outcome.with_data("found", "true");
+                outcome = outcome.with_data("resource_id", &resource_id.to_string());
+            }
+            StorageOperation::Update => {
+                // Ensure we have a resource to update
+                let resource = self.resource.as_ref().ok_or_else(|| {
+                    Error::ValidationError("No resource provided for update operation".to_string())
+                })?;
+
+                // Log the update operation
+                info!(
+                    "Updating resource {} with strategy {:?} in domain {:?}",
+                    resource.id(),
+                    self.params.strategy,
+                    self.params.domain
+                );
+
+                // In a real implementation, we would update the resource in the relevant backend
+                // For now, just simulate a successful update operation
+                outcome = outcome.with_data("transaction_id", "tx_update_67890");
+                outcome = outcome.with_data("resource_id", &resource.id().to_string());
+            }
+            StorageOperation::Delete => {
+                // Ensure we have a resource ID to delete
+                let resource_id = self.resource_id.as_ref().ok_or_else(|| {
+                    Error::ValidationError("No resource ID provided for delete operation".to_string())
+                })?;
+
+                // Log the delete operation
+                info!(
+                    "Deleting resource {} with strategy {:?} from domain {:?}",
+                    resource_id,
+                    self.params.strategy,
+                    self.params.domain
+                );
+
+                // In a real implementation, we would delete the resource from the relevant backend
+                // For now, just simulate a successful delete operation
+                outcome = outcome.with_data("transaction_id", "tx_delete_24680");
+                outcome = outcome.with_data("resource_id", &resource_id.to_string());
+            }
+        }
+
+        Ok(outcome)
+    }
+
+    /// Get a description of this effect
+    fn description(&self) -> String {
+        match self.operation {
+            StorageOperation::Store => {
+                if let Some(resource) = &self.resource {
+                    format!(
+                        "Store resource {} with strategy {:?} in domain {:?}",
+                        resource.id(),
+                        self.params.strategy,
+                        self.params.domain
+                    )
+                } else {
+                    "Store resource (no resource provided)".to_string()
+                }
+            }
+            StorageOperation::Read => {
+                if let Some(resource_id) = &self.resource_id {
+                    format!(
+                        "Read resource {} with strategy {:?} from domain {:?}",
+                        resource_id,
+                        self.params.strategy,
+                        self.params.domain
+                    )
+                } else {
+                    "Read resource (no resource ID provided)".to_string()
+                }
+            }
+            StorageOperation::Update => {
+                if let Some(resource) = &self.resource {
+                    format!(
+                        "Update resource {} with strategy {:?} in domain {:?}",
+                        resource.id(),
+                        self.params.strategy,
+                        self.params.domain
+                    )
+                } else {
+                    "Update resource (no resource provided)".to_string()
+                }
+            }
+            StorageOperation::Delete => {
+                if let Some(resource_id) = &self.resource_id {
+                    format!(
+                        "Delete resource {} with strategy {:?} from domain {:?}",
+                        resource_id,
+                        self.params.strategy,
+                        self.params.domain
+                    )
+                } else {
+                    "Delete resource (no resource ID provided)".to_string()
+                }
+            }
+        }
+    }
+
+    /// Validate this effect before execution
+    async fn validate(&self, _context: &EffectContext) -> Result<()> {
+        // Validate based on operation type
+        match self.operation {
+            StorageOperation::Store | StorageOperation::Update => {
+                // Ensure we have a resource for store/update operations
+                if self.resource.is_none() {
+                    return Err(Error::ValidationError(
+                        "Resource is required for store/update operations".to_string(),
+                    ));
+                }
+            }
+            StorageOperation::Read | StorageOperation::Delete => {
+                // Ensure we have a resource ID for read/delete operations
+                if self.resource_id.is_none() {
+                    return Err(Error::ValidationError(
+                        "Resource ID is required for read/delete operations".to_string(),
+                    ));
+                }
+            }
+        }
+
+        // Validate domain is provided
+        if self.params.domain == DomainType::Unknown {
+            return Err(Error::ValidationError(
+                "Valid domain must be specified for storage operations".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn as_any(&self) -> &dyn Any {
         self
     }
 } 

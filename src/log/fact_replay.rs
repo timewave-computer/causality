@@ -10,7 +10,7 @@ use crate::error::{Error, Result};
 use crate::log::{FactLogger, FactMetadata, FactEntry, LogStorage};
 use crate::log::fact_types::{FactType, RegisterFact, ZKProofFact};
 use crate::log::fact_snapshot::{FactId, FactSnapshot, RegisterObservation};
-use crate::resource::register::RegisterId;
+use crate::resource::register::ContentId;
 
 #[cfg(feature = "md5")]
 use crate::crypto::Md5ChecksumFunction;
@@ -47,7 +47,7 @@ pub struct FactReplayConfig {
     /// Filter by domain IDs (empty means all domains)
     pub domain_filter: HashSet<DomainId>,
     /// Filter by resource IDs (empty means all resources)
-    pub resource_filter: HashSet<RegisterId>,
+    pub resource_filter: HashSet<ContentId>,
 }
 
 impl Default for FactReplayConfig {
@@ -73,7 +73,7 @@ pub struct FactReplayEngine {
     /// Current status of replay
     status: FactReplayStatus,
     /// Map of register IDs to their current state
-    register_states: HashMap<RegisterId, Vec<u8>>,
+    register_states: HashMap<ContentId, Vec<u8>>,
     /// Map of fact IDs to their entries
     fact_cache: HashMap<FactId, FactEntry>,
     /// Callbacks for fact replay events
@@ -408,7 +408,7 @@ impl FactReplayEngine {
     }
     
     /// Get the current state of a register
-    pub fn get_register_state(&self, register_id: &RegisterId) -> Option<&Vec<u8>> {
+    pub fn get_register_state(&self, register_id: &ContentId) -> Option<&Vec<u8>> {
         self.register_states.get(register_id)
     }
     

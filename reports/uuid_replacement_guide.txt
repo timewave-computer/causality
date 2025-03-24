@@ -1,0 +1,61 @@
+UUID Replacement Guide
+======================
+
+This guide suggests approaches for replacing UUID-based identifiers with content-derived identifiers.
+
+General Approach:
+1. Identify the meaningful content that should determine the identity
+2. Serialize that content using Borsh or another canonical format
+3. Use the ContentId type to create a content-derived identifier
+4. Replace the UUID generation with the content-derived identifier
+
+Example Patterns:
+
+Pattern 1: Random IDs for Messages
+```rust
+// Before
+let message_id = Uuid::new_v4().to_string();
+
+// After
+use crate::crypto::hash::{ContentAddressed, ContentId};
+
+impl ContentAddressed for Message {
+    fn content_hash(&self) -> HashOutput {
+        // Get the configured hasher
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        
+        // Create a canonical serialization
+        let data = self.try_to_vec().unwrap();
+        
+        // Compute hash with configured hasher
+        hasher.hash(&data)
+    }
+    
+    // Implement other required methods...
+}
+
+let message_id = message.content_id().to_string();
+```
+
+Pattern 2: ID Generation Before Object Creation
+```rust
+// Before
+let resource_id = ResourceId::from_str(&format!("asset-{}", Uuid::new_v4()));
+
+// After
+let properties = AssetProperties {
+    name: "my_asset".to_string(),
+    value: 100,
+    // other properties
+};
+
+// Create a ContentId from the properties
+let hash_factory = HashFactory::default();
+let hasher = hash_factory.create_hasher().unwrap();
+let data = properties.try_to_vec().unwrap();
+let hash = hasher.hash(&data);
+let content_id = ContentId::from(hash);
+
+let resource_id = ResourceId::from_content_id("asset", &content_id);
+```

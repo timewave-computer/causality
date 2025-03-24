@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 
 use crate::effect::{EffectResult, EffectError, EffectOutcome, EffectContext};
-use crate::resource::{ResourceId, ResourceCapability, Right};
+use crate::resource::{ContentId, ResourceCapability, Right};
 use crate::address::Address;
 use crate::tel::TelScript;
 use crate::domain::DomainId;
@@ -33,7 +33,7 @@ pub trait AlgebraicEffect: Send + Sync {
     fn description(&self) -> &str;
     
     /// Get the resource IDs this effect operates on
-    fn resource_ids(&self) -> Vec<ResourceId>;
+    fn resource_ids(&self) -> Vec<ContentId>;
     
     /// Get the primary domain this effect targets
     fn primary_domain(&self) -> Option<DomainId>;
@@ -42,7 +42,7 @@ pub trait AlgebraicEffect: Send + Sync {
     fn parameters(&self) -> HashMap<String, serde_json::Value>;
     
     /// Get the required capabilities to execute this effect
-    fn required_capabilities(&self) -> Vec<(ResourceId, Right)>;
+    fn required_capabilities(&self) -> Vec<(ContentId, Right)>;
     
     /// Execute the effect
     async fn execute(&self, context: EffectContext) -> EffectResult<EffectOutcome>;
@@ -93,7 +93,7 @@ pub trait TransferEffect: AlgebraicEffect {
     fn destination(&self) -> &Address;
     
     /// Get the resource being transferred
-    fn resource_id(&self) -> &ResourceId;
+    fn resource_id(&self) -> &ContentId;
     
     /// Get the quantity being transferred (for fungible resources)
     fn quantity(&self) -> Option<u128>;
@@ -109,7 +109,7 @@ pub trait DepositEffect: AlgebraicEffect {
     fn destination(&self) -> &Address;
     
     /// Get the resource being deposited
-    fn resource_id(&self) -> &ResourceId;
+    fn resource_id(&self) -> &ContentId;
     
     /// Get the quantity being deposited (for fungible resources)
     fn quantity(&self) -> Option<u128>;
@@ -128,7 +128,7 @@ pub trait WithdrawEffect: AlgebraicEffect {
     fn source(&self) -> &Address;
     
     /// Get the resource being withdrawn
-    fn resource_id(&self) -> &ResourceId;
+    fn resource_id(&self) -> &ContentId;
     
     /// Get the quantity being withdrawn (for fungible resources)
     fn quantity(&self) -> Option<u128>;
@@ -144,7 +144,7 @@ pub trait WithdrawEffect: AlgebraicEffect {
 #[async_trait]
 pub trait StorageEffect: AlgebraicEffect {
     /// Get the resource ID being stored
-    fn resource_id(&self) -> &ResourceId;
+    fn resource_id(&self) -> &ContentId;
     
     /// Get the domain where data is being stored
     fn storage_domain(&self) -> &DomainId;
@@ -163,7 +163,7 @@ pub trait StorageEffect: AlgebraicEffect {
 #[async_trait]
 pub trait QueryEffect: AlgebraicEffect {
     /// Get the resource ID being queried
-    fn resource_id(&self) -> &ResourceId;
+    fn resource_id(&self) -> &ContentId;
     
     /// Get the domain where data is being queried
     fn query_domain(&self) -> &DomainId;

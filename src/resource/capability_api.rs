@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::address::Address;
 use crate::resource::{
-    ResourceId, ResourceState, RegisterId, RegisterState, RegisterContents, RegisterMetadata,
+    ResourceId, ResourceState, ContentId, RegisterState, RegisterContents, RegisterMetadata,
     capability::{
         CapabilityId, Right, Restrictions, CapabilityError, ResourceCapability
     },
@@ -22,7 +22,7 @@ pub enum ResourceApiError {
     LifecycleManager(String),
     
     #[error("Resource not found: {0}")]
-    NotFound(RegisterId),
+    NotFound(ContentId),
     
     #[error("Access denied: {0}")]
     AccessDenied(String),
@@ -55,12 +55,12 @@ pub trait ResourceIntent {
 /// Concrete resource operations
 #[derive(Debug, Clone)]
 pub enum ResourceOperation {
-    Read(RegisterId),
-    Write(RegisterId, RegisterContents),
-    Update(RegisterId, RegisterContents),
-    Delete(RegisterId),
+    Read(ContentId),
+    Write(ContentId, RegisterContents),
+    Update(ContentId, RegisterContents),
+    Delete(ContentId),
     Create(ResourceState),
-    UpdateMetadata(RegisterId, RegisterMetadata),
+    UpdateMetadata(ContentId, RegisterMetadata),
 }
 
 impl ResourceOperation {
@@ -77,7 +77,7 @@ impl ResourceOperation {
     }
     
     /// Returns the register ID involved in this operation, if any
-    pub fn register_id(&self) -> Option<&RegisterId> {
+    pub fn register_id(&self) -> Option<&ContentId> {
         match self {
             Self::Read(id) => Some(id),
             Self::Write(id, _) => Some(id),
@@ -136,7 +136,7 @@ impl ResourceAPI {
         &self,
         capability_id: &CapabilityId,
         holder: &Address,
-        register_id: &RegisterId,
+        register_id: &ContentId,
     ) -> ResourceApiResult<RegisterState> {
         // Verify the capability for this operation
         self.verify_capability(
@@ -157,7 +157,7 @@ impl ResourceAPI {
         &self,
         capability_id: &CapabilityId,
         holder: &Address,
-        register_ids: &[RegisterId],
+        register_ids: &[ContentId],
     ) -> ResourceApiResult<Vec<RegisterState>> {
         let mut results = Vec::with_capacity(register_ids.len());
         
@@ -174,7 +174,7 @@ impl ResourceAPI {
         capability_id: &CapabilityId,
         holder: &Address,
         state: ResourceState,
-    ) -> ResourceApiResult<RegisterId> {
+    ) -> ResourceApiResult<ContentId> {
         // Verify the capability for this operation
         self.verify_capability(
             capability_id,
@@ -193,7 +193,7 @@ impl ResourceAPI {
         &self,
         capability_id: &CapabilityId,
         holder: &Address,
-        register_id: &RegisterId,
+        register_id: &ContentId,
         contents: RegisterContents,
     ) -> ResourceApiResult<()> {
         // Verify the capability for this operation
@@ -224,7 +224,7 @@ impl ResourceAPI {
         &self,
         capability_id: &CapabilityId,
         holder: &Address,
-        register_id: &RegisterId,
+        register_id: &ContentId,
     ) -> ResourceApiResult<()> {
         // Verify the capability for this operation
         self.verify_capability(
@@ -244,7 +244,7 @@ impl ResourceAPI {
         &self,
         capability_id: &CapabilityId,
         holder: &Address,
-        register_id: &RegisterId,
+        register_id: &ContentId,
         metadata: RegisterMetadata,
     ) -> ResourceApiResult<()> {
         // Verify the capability for this operation
@@ -453,7 +453,7 @@ pub struct TransferIntent {
     /// The current holder of the capability
     pub current_holder: Address,
     /// The register to transfer
-    pub register_id: RegisterId,
+    pub register_id: ContentId,
     /// The recipient of the transfer
     pub recipient: Address,
 }
@@ -530,13 +530,13 @@ pub struct SwapIntent {
     /// First party's address
     pub holder_a: Address,
     /// First party's register to swap
-    pub register_a: RegisterId,
+    pub register_a: ContentId,
     /// Second party's capability
     pub capability_b: CapabilityId,
     /// Second party's address
     pub holder_b: Address,
     /// Second party's register to swap
-    pub register_b: RegisterId,
+    pub register_b: ContentId,
 }
 
 impl ResourceIntent for SwapIntent {

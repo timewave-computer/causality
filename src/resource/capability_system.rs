@@ -9,7 +9,7 @@ use std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 
-use crate::resource::{ResourceId, CapabilityId, ResourceRegister, Right, CapabilityType};
+use crate::resource::{ContentId, CapabilityId, ResourceRegister, Right, CapabilityType};
 use crate::resource::lifecycle_manager::ResourceRegisterLifecycleManager;
 use crate::resource::relationship_tracker::RelationshipTracker;
 use crate::address::Address;
@@ -22,7 +22,7 @@ pub struct RigorousCapability {
     pub id: CapabilityId,
     
     /// Resource ID this capability applies to
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     
     /// Rights granted by this capability
     pub rights: HashSet<Right>,
@@ -181,7 +181,7 @@ pub trait CapabilitySystem: Send + Sync {
     async fn revoke_capability(&self, id: &CapabilityId) -> Result<()>;
     
     /// Get all capabilities for a resource
-    async fn get_capabilities_for_resource(&self, resource_id: &ResourceId) -> Result<Vec<RigorousCapability>>;
+    async fn get_capabilities_for_resource(&self, resource_id: &ContentId) -> Result<Vec<RigorousCapability>>;
     
     /// Get all capabilities owned by an address
     async fn get_capabilities_for_owner(&self, owner: &Address) -> Result<Vec<RigorousCapability>>;
@@ -444,7 +444,7 @@ impl CapabilitySystem for UnifiedCapabilitySystem {
         Ok(())
     }
     
-    async fn get_capabilities_for_resource(&self, resource_id: &ResourceId) -> Result<Vec<RigorousCapability>> {
+    async fn get_capabilities_for_resource(&self, resource_id: &ContentId) -> Result<Vec<RigorousCapability>> {
         let capabilities = self.capabilities.read().unwrap();
         let mut result = Vec::new();
         
@@ -528,7 +528,7 @@ impl CapabilityValidator {
     pub async fn validate_operation(
         &self,
         address: &Address,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         operation: &str,
         parameters: &HashMap<String, serde_json::Value>,
         required_rights: &[Right],
@@ -581,7 +581,7 @@ impl AuthorizationService {
     pub async fn check_authorization(
         &self,
         address: &Address,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         required_rights: &[Right],
     ) -> Result<bool> {
         // Find capabilities for this owner and resource
@@ -612,7 +612,7 @@ impl AuthorizationService {
     pub async fn authorize_operation(
         &self,
         address: &Address,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         operation: &str,
         parameters: &HashMap<String, serde_json::Value>,
         required_rights: &[Right],
@@ -664,7 +664,7 @@ impl AuthorizationService {
     /// Check if an operation is allowed based on the resource state and provided capabilities
     pub fn check_operation_allowed(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         operation_type: RegisterOperationType,
         capability_ids: &[CapabilityId],
     ) -> Result<bool> {
@@ -728,7 +728,7 @@ impl AuthorizationService {
     pub fn does_capability_grant_right(
         &self,
         capability: &Capability,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         right: Right,
     ) -> bool {
         // Check if the capability is for this resource
@@ -751,7 +751,7 @@ impl AuthorizationService {
     pub fn validate_capabilities_for_operation(
         &self,
         capabilities: &[Capability],
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         operation_type: RegisterOperationType,
     ) -> Result<bool> {
         // Get the resource state

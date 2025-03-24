@@ -2,11 +2,15 @@
 //
 // This module provides zero-knowledge proof verification
 // capabilities for resource operations.
+// Migrated to use the unified ResourceRegister model.
 
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 
-use crate::tel::types::{ResourceId, Proof, OperationId};
+use crate::crypto::ContentId;
+use crate::resource::resource_register::ResourceRegister;
+use crate::operation::{RegisterOperationType, Operation};
+use crate::tel::types::{Proof, OperationId};
 use crate::tel::error::{TelError, TelResult};
 use crate::tel::resource::operations::{ResourceOperation, ResourceOperationType};
 
@@ -183,7 +187,7 @@ impl ZkVerifier {
             let cache = self.cache.read().map_err(|_| 
                 TelError::InternalError("Failed to acquire cache lock".to_string()))?;
                 
-            if let Some(result) = cache.get(&OperationId::new()) {
+            if let Some(result) = cache.get(&operation.operation_id) {
                 return Ok(result.clone());
             }
         }
@@ -226,7 +230,87 @@ impl ZkVerifier {
             let mut cache = self.cache.write().map_err(|_| 
                 TelError::InternalError("Failed to acquire cache lock".to_string()))?;
                 
-            cache.put(OperationId::new(), result.clone());
+            cache.put(operation.operation_id.clone(), result.clone());
+        }
+        
+        Ok(result)
+    }
+    
+    /// Verify a unified resource register operation's proof
+    pub fn verify_register_operation(&self, register_id: &ContentId, operation: &Operation) -> TelResult<VerificationResult> {
+        // Start verification time tracking
+        let start_time = std::time::Instant::now();
+        
+        // Get operation type
+        let operation_type = match &operation.operation_type {
+            crate::operation::OperationType::Register(op_type) => op_type,
+            _ => return Err(TelError::InvalidOperation("Not a register operation".to_string())),
+        };
+        
+        // Check if verification is enabled
+        let config = self.config.read().map_err(|_| 
+            TelError::InternalError("Failed to acquire config lock".to_string()))?;
+            
+        if !config.enabled {
+            return Ok(VerificationResult::success(0));
+        }
+        
+        // Check for proof in the operation
+        let proof = operation.proof.as_ref()
+            .ok_or_else(|| TelError::VerificationError("No proof provided for operation".to_string()))?;
+        
+        // Get verification key ID from the proof
+        let key_id = proof.metadata.get("verification_key_id")
+            .ok_or_else(|| TelError::VerificationError("No verification key ID in proof".to_string()))?;
+            
+        // Get verification key
+        let verification_key = self.get_verification_key(key_id)?
+            .ok_or_else(|| TelError::VerificationError(format!("Verification key not found: {}", key_id)))?;
+        
+        // Check if result is cached
+        if config.enable_caching {
+            // Generate an operation ID based on register ID and operation hash
+            let operation_hash = operation.hash();
+            let operation_id = OperationId::from(operation_hash.as_bytes().to_vec());
+            
+            let cache = self.cache.read().map_err(|_| 
+                TelError::InternalError("Failed to acquire cache lock".to_string()))?;
+                
+            if let Some(result) = cache.get(&operation_id) {
+                return Ok(result.clone());
+            }
+        }
+        
+        // Verify the proof
+        let is_valid = self.verify_proof(
+            &proof, 
+            &verification_key, 
+            &operation.convert_to_resource_operation()
+        )?;
+        
+        // Calculate time taken
+        let time_taken = start_time.elapsed().as_millis() as u64;
+        
+        // Create verification result
+        let result = if is_valid {
+            VerificationResult::success(time_taken)
+                .with_metadata("operation_type", format!("{:?}", operation_type))
+                .with_metadata("register_id", register_id.to_string())
+        } else {
+            VerificationResult::failure("Proof verification failed".to_string(), time_taken)
+                .with_metadata("operation_type", format!("{:?}", operation_type))
+                .with_metadata("register_id", register_id.to_string())
+        };
+        
+        // Cache the result if caching is enabled
+        if config.enable_caching {
+            let operation_hash = operation.hash();
+            let operation_id = OperationId::from(operation_hash.as_bytes().to_vec());
+            
+            let mut cache = self.cache.write().map_err(|_| 
+                TelError::InternalError("Failed to acquire cache lock".to_string()))?;
+                
+            cache.put(operation_id, result.clone());
         }
         
         Ok(result)
@@ -250,20 +334,22 @@ impl ZkVerifier {
         Ok(verification_keys.get(key_id).cloned())
     }
     
-    /// Configure the verifier
+    /// Update the configuration
     pub fn configure(&self, config: VerifierConfig) -> TelResult<()> {
+        // Update the configuration
         let mut current_config = self.config.write().map_err(|_| 
             TelError::InternalError("Failed to acquire config lock".to_string()))?;
             
-        *current_config = config;
+        *current_config = config.clone();
         
-        // Update cache size if needed
-        let mut cache = self.cache.write().map_err(|_| 
-            TelError::InternalError("Failed to acquire cache lock".to_string()))?;
-            
-        if cache.max_size != current_config.max_cache_size {
-            cache.max_size = current_config.max_cache_size;
-            cache.clear();
+        // If cache size has changed, update the cache
+        if config.max_cache_size != current_config.max_cache_size {
+            let mut cache = self.cache.write().map_err(|_| 
+                TelError::InternalError("Failed to acquire cache lock".to_string()))?;
+                
+            // Create a new cache with the updated size
+            let new_cache = VerificationCache::new(config.max_cache_size);
+            *cache = new_cache;
         }
         
         Ok(())
@@ -279,38 +365,93 @@ impl ZkVerifier {
         Ok(())
     }
     
-    /// Verify a proof
+    /// Verify a proof against a verification key
     fn verify_proof(
         &self, 
         proof: &Proof, 
         verification_key: &[u8],
         operation: &ResourceOperation
     ) -> TelResult<bool> {
-        // In a real implementation, this would use a ZK verification library
-        // to verify the proof against the verification key and public inputs
+        // In a real implementation, this would perform actual ZK verification
+        // based on the proof type, verification key, and operation data
         
-        // For the purposes of this implementation, we'll simulate verification
-        // based on operation type
-        match operation.operation_type {
-            ResourceOperationType::Create => {
-                // Simulate verifying a creation proof
-                Ok(true)
-            },
-            ResourceOperationType::Transfer => {
-                // Simulate verifying a transfer proof
-                Ok(true)
-            },
-            ResourceOperationType::Update => {
-                // Simulate verifying an update proof
-                Ok(true)
-            },
-            // For other operation types, return true as a placeholder
-            _ => Ok(true),
-        }
+        // For simulation purposes, we'll return valid for proofs that have
+        // data that matches the operation ID
+        let valid = proof.0.iter()
+            .zip(operation.operation_id.0.iter())
+            .fold(true, |acc, (a, b)| acc && (a == b));
+            
+        // Include a small delay to simulate verification time
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        
+        Ok(valid)
+    }
+    
+    /// Verify a ResourceRegister directly
+    pub fn verify_resource_register(&self, register: &ResourceRegister, operation_type: RegisterOperationType) -> TelResult<VerificationResult> {
+        // Start verification time tracking
+        let start_time = std::time::Instant::now();
+        
+        // Create an Operation from the ResourceRegister
+        let operation = Operation {
+            id: ContentId::from_bytes(&register.id.to_bytes()),
+            operation_type: crate::operation::OperationType::Register(operation_type),
+            inputs: vec![],
+            outputs: vec![register.id.clone()],
+            parameters: HashMap::new(),
+            timestamp: std::time::SystemTime::now(),
+            proof: None, // We expect the proof to be in the register metadata
+        };
+        
+        // Extract proof from register metadata
+        let proof_data = register.metadata.get("zk_proof")
+            .ok_or_else(|| TelError::VerificationError("No proof found in register metadata".to_string()))?;
+            
+        let proof = serde_json::from_str::<Proof>(proof_data)
+            .map_err(|e| TelError::VerificationError(format!("Failed to parse proof: {}", e)))?;
+        
+        // Get verification key ID from the proof
+        let key_id = proof.metadata.get("verification_key_id")
+            .ok_or_else(|| TelError::VerificationError("No verification key ID in proof".to_string()))?;
+            
+        // Get verification key
+        let verification_key = self.get_verification_key(key_id)?
+            .ok_or_else(|| TelError::VerificationError(format!("Verification key not found: {}", key_id)))?;
+        
+        // Create a resource operation for verification
+        let resource_operation = ResourceOperation {
+            id: ContentId::from_bytes(&register.id.to_bytes()),
+            operation_type: ResourceOperationType::CreateResource,
+            resource_id: register.id.clone(),
+            parameters: HashMap::new(),
+            metadata: register.metadata.clone(),
+            proof: Some(proof),
+        };
+        
+        // Verify the proof
+        let is_valid = self.verify_proof(&resource_operation.proof.as_ref().unwrap(), 
+                                        &verification_key, 
+                                        &resource_operation)?;
+        
+        // Calculate time taken
+        let time_taken = start_time.elapsed().as_millis() as u64;
+        
+        // Create verification result
+        let result = if is_valid {
+            VerificationResult::success(time_taken)
+                .with_metadata("operation_type", format!("{:?}", operation_type))
+                .with_metadata("register_id", register.id.to_string())
+        } else {
+            VerificationResult::failure("Proof verification failed".to_string(), time_taken)
+                .with_metadata("operation_type", format!("{:?}", operation_type))
+                .with_metadata("register_id", register.id.to_string())
+        };
+        
+        Ok(result)
     }
 }
 
-/// A shared ZK verifier with thread-safe access
+/// Shared ZK verifier for use across multiple components
 pub struct SharedZkVerifier {
     /// The ZK verifier
     verifier: Arc<ZkVerifier>,
@@ -331,7 +472,7 @@ impl SharedZkVerifier {
         }
     }
     
-    /// Get a reference to the ZK verifier
+    /// Get the underlying verifier
     pub fn verifier(&self) -> &Arc<ZkVerifier> {
         &self.verifier
     }
@@ -341,12 +482,22 @@ impl SharedZkVerifier {
         self.verifier.verify_operation(operation)
     }
     
+    /// Verify a unified resource register operation's proof
+    pub fn verify_register_operation(&self, register_id: &ContentId, operation: &Operation) -> TelResult<VerificationResult> {
+        self.verifier.verify_register_operation(register_id, operation)
+    }
+    
+    /// Verify a ResourceRegister directly
+    pub fn verify_resource_register(&self, register: &ResourceRegister, operation_type: RegisterOperationType) -> TelResult<VerificationResult> {
+        self.verifier.verify_resource_register(register, operation_type)
+    }
+    
     /// Register a verification key
     pub fn register_verification_key(&self, key_id: &str, key: Vec<u8>) -> TelResult<()> {
         self.verifier.register_verification_key(key_id, key)
     }
     
-    /// Configure the verifier
+    /// Update the configuration
     pub fn configure(&self, config: VerifierConfig) -> TelResult<()> {
         self.verifier.configure(config)
     }

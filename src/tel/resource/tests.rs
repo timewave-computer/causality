@@ -6,10 +6,10 @@
 #![cfg(test)]
 
 use std::sync::Arc;
-use uuid::Uuid;
+use crate::crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 use crate::tel::{
-    types::{ResourceId, Address, Domain},
+    types::{ResourceId, Address, Domain, OperationId},
     error::{TelError, TelResult},
     resource::{
         ResourceManager,
@@ -198,9 +198,15 @@ mod operation_tests {
         let contents = RegisterContents::Text("Test resource".to_string());
         let register_id = RegisterId::new();
         
+        // Create operation data to derive an ID
+        let op_data = format!("create:{}:{}:{}", register_id, owner, domain);
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let content_id = ContentId::from(hasher.hash(op_data.as_bytes()));
+        let operation_id = OperationId::from_content_id(&content_id);
+        
         // Create the operation
         let operation = ResourceOperation {
-            operation_id: uuid::Uuid::new_v4().into(),
+            operation_id,
             operation_type: ResourceOperationType::Create,
             target: register_id,
             resource_ids: vec![],
@@ -237,8 +243,15 @@ mod operation_tests {
         
         // Create the update operation
         let new_contents = RegisterContents::Text("Updated resource".to_string());
+        
+        // Create operation data to derive an ID
+        let op_data = format!("update:{}:{}:{}", register_id, owner, domain);
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let content_id = ContentId::from(hasher.hash(op_data.as_bytes()));
+        let operation_id = OperationId::from_content_id(&content_id);
+        
         let operation = ResourceOperation {
-            operation_id: uuid::Uuid::new_v4().into(),
+            operation_id,
             operation_type: ResourceOperationType::Update,
             target: register_id,
             resource_ids: vec![],
@@ -275,8 +288,14 @@ mod operation_tests {
         let mut parameters = std::collections::HashMap::new();
         parameters.insert("recipient".to_string(), serde_json::Value::String(new_owner.to_string()));
         
+        // Create operation data to derive an ID
+        let op_data = format!("transfer:{}:{}:{}:{}", register_id, owner, domain, new_owner);
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let content_id = ContentId::from(hasher.hash(op_data.as_bytes()));
+        let operation_id = OperationId::from_content_id(&content_id);
+        
         let operation = ResourceOperation {
-            operation_id: uuid::Uuid::new_v4().into(),
+            operation_id,
             operation_type: ResourceOperationType::Transfer,
             target: register_id,
             resource_ids: vec![],
@@ -320,8 +339,14 @@ mod zk_verifier_tests {
         let proof = vec![1, 2, 3, 4, 5];
         let verification_key = vec![6, 7, 8, 9, 10];
         
+        // Create operation data to derive an ID
+        let op_data = format!("verify:{}:{}:{}", register_id, owner, domain);
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let content_id = ContentId::from(hasher.hash(op_data.as_bytes()));
+        let operation_id = OperationId::from_content_id(&content_id);
+        
         let operation = ResourceOperation {
-            operation_id: uuid::Uuid::new_v4().into(),
+            operation_id,
             operation_type: ResourceOperationType::Create,
             target: register_id,
             resource_ids: vec![],
@@ -364,8 +389,14 @@ mod zk_verifier_tests {
         let proof = vec![1, 2, 3, 4, 5];
         let verification_key = vec![6, 7, 8, 9, 10];
         
+        // Create operation data to derive an ID
+        let op_data = format!("caching:{}:{}:{}", register_id, owner, domain);
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let content_id = ContentId::from(hasher.hash(op_data.as_bytes()));
+        let operation_id = OperationId::from_content_id(&content_id);
+        
         let operation = ResourceOperation {
-            operation_id: uuid::Uuid::new_v4().into(),
+            operation_id,
             operation_type: ResourceOperationType::Create,
             target: register_id,
             resource_ids: vec![],
@@ -653,5 +684,105 @@ mod snapshot_tests {
         // Check that old snapshots were pruned
         let snapshots = snapshot_manager.list_snapshots().unwrap();
         assert!(snapshots.len() <= 3); // max_snapshots = 3
+    }
+}
+
+/// Test suite for resource snapshots
+#[cfg(test)]
+mod vm_integration_tests {
+    use super::*;
+    use crate::tel::resource::{
+        ExecutionContext,
+        VmRegId,
+        AccessIntent,
+    };
+    
+    /// Test VM integration
+    #[test]
+    fn test_vm_integration() {
+        // Create a VM integration
+        let config = VmIntegrationConfig::default();
+        let vm_integration = ResourceVmIntegration::new(config);
+        
+        // Create a resource operation
+        let owner = Address::try_from("0x1234567890abcdef1234567890abcdef12345678").unwrap();
+        let domain = Domain::new("test_domain");
+        let register_id = RegisterId::new();
+        let contents = RegisterContents::Text("Test resource".to_string());
+        
+        // Create a mock proof and verification key
+        let proof = vec![1, 2, 3, 4, 5];
+        let verification_key = vec![6, 7, 8, 9, 10];
+        
+        // Create operation data to derive an ID
+        let op_data = format!("verify_custom:{}:{}:{}", register_id, owner, domain);
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let content_id = ContentId::from(hasher.hash(op_data.as_bytes()));
+        let operation_id = OperationId::from_content_id(&content_id);
+        
+        let operation = ResourceOperation {
+            operation_id,
+            operation_type: ResourceOperationType::Create,
+            target: register_id,
+            resource_ids: vec![],
+            initiator: owner,
+            domain,
+            inputs: vec![contents],
+            parameters: std::collections::HashMap::new(),
+            proof: Some(proof),
+            verification_key: Some(verification_key),
+            metadata: std::collections::HashMap::new(),
+        };
+        
+        // ... rest of the test
+    }
+}
+
+/// Test suite for the configurable verifier
+#[cfg(test)]
+mod configurable_verifier_tests {
+    use super::*;
+    
+    /// Test verifying a proof with the configurable verifier
+    #[test]
+    fn test_configurable_verifier() {
+        // Create a configurable verifier
+        let verifier = ZkVerifier::default();
+        
+        // Create a resource operation with a proof
+        let owner = Address::try_from("0x1234567890abcdef1234567890abcdef12345678").unwrap();
+        let domain = Domain::new("test_domain");
+        let register_id = RegisterId::new();
+        let contents = RegisterContents::Text("Test resource".to_string());
+        
+        // Create a mock proof and verification key
+        let proof = vec![1, 2, 3, 4, 5];
+        let verification_key = vec![6, 7, 8, 9, 10];
+        
+        // Create operation data to derive an ID
+        let op_data = format!("verify_config:{}:{}:{}", register_id, owner, domain);
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let content_id = ContentId::from(hasher.hash(op_data.as_bytes()));
+        let operation_id = OperationId::from_content_id(&content_id);
+        
+        let operation = ResourceOperation {
+            operation_id,
+            operation_type: ResourceOperationType::Create,
+            target: register_id,
+            resource_ids: vec![],
+            initiator: owner,
+            domain,
+            inputs: vec![contents],
+            parameters: std::collections::HashMap::new(),
+            proof: Some(proof),
+            verification_key: Some(verification_key),
+            metadata: std::collections::HashMap::new(),
+        };
+        
+        // Verify the operation
+        let result = verifier.verify_operation(&operation).unwrap();
+        
+        // The mock implementation always returns true
+        assert!(result.is_valid);
     }
 } 

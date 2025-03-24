@@ -11,7 +11,7 @@ use serde::{Serialize, Deserialize};
 use crate::domain::{DomainId, DomainType, DomainAdapter};
 use crate::error::{Error, Result};
 use crate::resource::{
-    CapabilityId, ResourceId, Right,
+    CapabilityId, ContentId, Right,
     capability_system::{
         RigorousCapability, CapabilityConstraint, CapabilitySystem,
         CapabilityStatus, AuthenticationFactor
@@ -256,7 +256,7 @@ impl DomainCapabilityManager {
     pub async fn create_domain_capability(
         &self,
         domain_id: &DomainId,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         owner: &Address,
         issuer: &Address,
         capabilities: &[DomainCapability],
@@ -303,7 +303,7 @@ impl DomainCapabilityManager {
         address: &Address,
         domain_id: &DomainId,
         operation: &str,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
     ) -> Result<bool> {
         // Get all capabilities owned by the address
         let capabilities = self.capability_system.get_capabilities_for_owner(address).await?;
@@ -517,7 +517,7 @@ mod tests {
             Ok(())
         }
         
-        async fn get_capabilities_for_resource(&self, resource_id: &ResourceId) -> Result<Vec<RigorousCapability>> {
+        async fn get_capabilities_for_resource(&self, resource_id: &ContentId) -> Result<Vec<RigorousCapability>> {
             Ok(self.capabilities
                 .values()
                 .filter(|cap| &cap.resource_id == resource_id)

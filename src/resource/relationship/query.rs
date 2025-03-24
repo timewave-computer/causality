@@ -10,7 +10,8 @@ use std::fmt;
 use serde::{Serialize, Deserialize};
 
 use crate::error::{Error, Result};
-use crate::types::{ResourceId, DomainId, Timestamp, Metadata};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::resource::relationship_tracker::{RelationshipTracker, ResourceRelationship, RelationshipType, RelationshipDirection};
 
 /// Maximum depth for relationship traversal
@@ -23,10 +24,10 @@ const DEFAULT_CACHE_EXPIRATION_SEC: u64 = 300; // 5 minutes
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RelationshipPath {
     /// Source resource ID
-    pub source_id: ResourceId,
+    pub source_id: ContentId,
     
     /// Target resource ID
-    pub target_id: ResourceId,
+    pub target_id: ContentId,
     
     /// Ordered list of relationships in the path
     pub relationships: Vec<ResourceRelationship>,
@@ -43,7 +44,7 @@ pub struct RelationshipPath {
 
 impl RelationshipPath {
     /// Create a new path
-    pub fn new(source_id: ResourceId, target_id: ResourceId) -> Self {
+    pub fn new(source_id: ContentId, target_id: ContentId) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -116,10 +117,10 @@ impl RelationshipPath {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RelationshipQuery {
     /// Source resource ID
-    pub source_id: Option<ResourceId>,
+    pub source_id: Option<ContentId>,
     
     /// Target resource ID
-    pub target_id: Option<ResourceId>,
+    pub target_id: Option<ContentId>,
     
     /// Relationship types to consider
     pub relationship_types: Option<Vec<RelationshipType>>,
@@ -139,7 +140,7 @@ pub struct RelationshipQuery {
 
 impl RelationshipQuery {
     /// Create a new query from source to target
-    pub fn new(source_id: ResourceId, target_id: ResourceId) -> Self {
+    pub fn new(source_id: ContentId, target_id: ContentId) -> Self {
         Self {
             source_id: Some(source_id),
             target_id: Some(target_id),
@@ -152,7 +153,7 @@ impl RelationshipQuery {
     }
     
     /// Create a query to find all related resources from a source
-    pub fn from_source(source_id: ResourceId) -> Self {
+    pub fn from_source(source_id: ContentId) -> Self {
         Self {
             source_id: Some(source_id),
             target_id: None,
@@ -218,7 +219,7 @@ pub struct RelationshipQueryExecutor {
     cache_expiration: Duration,
     
     /// Domain index for quick domain lookup
-    domain_index: RwLock<HashMap<DomainId, HashSet<ResourceId>>>,
+    domain_index: RwLock<HashMap<DomainId, HashSet<ContentId>>>,
 }
 
 impl RelationshipQueryExecutor {
@@ -272,7 +273,7 @@ impl RelationshipQueryExecutor {
     }
     
     /// Find paths between source and target resources
-    fn find_paths(&self, source: &ResourceId, target: &ResourceId, query: &RelationshipQuery) -> Result<Vec<RelationshipPath>> {
+    fn find_paths(&self, source: &ContentId, target: &ContentId, query: &RelationshipQuery) -> Result<Vec<RelationshipPath>> {
         if source == target {
             // Source and target are the same, return empty path
             let mut path = RelationshipPath::new(source.clone(), target.clone());
@@ -367,7 +368,7 @@ impl RelationshipQueryExecutor {
     }
     
     /// Find all resources reachable from the source
-    fn find_reachable_resources(&self, source: &ResourceId, query: &RelationshipQuery) -> Result<Vec<RelationshipPath>> {
+    fn find_reachable_resources(&self, source: &ContentId, query: &RelationshipQuery) -> Result<Vec<RelationshipPath>> {
         // Use breadth-first search
         let mut queue = VecDeque::new();
         let mut visited = HashSet::new();
@@ -452,7 +453,7 @@ impl RelationshipQueryExecutor {
     }
     
     /// Find all resources that can reach the target
-    fn find_resources_reaching(&self, target: &ResourceId, query: &RelationshipQuery) -> Result<Vec<RelationshipPath>> {
+    fn find_resources_reaching(&self, target: &ContentId, query: &RelationshipQuery) -> Result<Vec<RelationshipPath>> {
         // Similar to find_reachable_resources but in reverse direction
         // Use breadth-first search
         let mut queue = VecDeque::new();
@@ -569,7 +570,7 @@ impl RelationshipQueryExecutor {
     }
     
     /// Index a resource by domain
-    pub fn index_resource(&self, resource_id: ResourceId, domain_id: DomainId) -> Result<()> {
+    pub fn index_resource(&self, resource_id: ContentId, domain_id: DomainId) -> Result<()> {
         let mut index = self.domain_index.write().unwrap();
         
         let entry = index.entry(domain_id).or_insert_with(HashSet::new);
@@ -579,7 +580,7 @@ impl RelationshipQueryExecutor {
     }
     
     /// Get all resources in a domain
-    pub fn get_resources_in_domain(&self, domain_id: &DomainId) -> Result<HashSet<ResourceId>> {
+    pub fn get_resources_in_domain(&self, domain_id: &DomainId) -> Result<HashSet<ContentId>> {
         let index = self.domain_index.read().unwrap();
         
         match index.get(domain_id) {
@@ -591,8 +592,8 @@ impl RelationshipQueryExecutor {
     /// Find cross-domain paths between resources
     pub fn find_cross_domain_path(
         &self,
-        source_id: &ResourceId,
-        target_id: &ResourceId,
+        source_id: &ContentId,
+        target_id: &ContentId,
         source_domain: &DomainId,
         target_domain: &DomainId,
     ) -> Result<Vec<RelationshipPath>> {
@@ -658,22 +659,22 @@ pub mod query_language {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum QueryOperation {
         /// Find path from source to target
-        FindPath(ResourceId, ResourceId),
+        FindPath(ContentId, ContentId),
         
         /// Find all resources reachable from source
-        FindReachable(ResourceId),
+        FindReachable(ContentId),
         
         /// Find all resources that can reach target
-        FindSources(ResourceId),
+        FindSources(ContentId),
         
         /// Find cross-domain path
-        FindCrossDomainPath(ResourceId, ResourceId, DomainId, DomainId),
+        FindCrossDomainPath(ContentId, ContentId, DomainId, DomainId),
         
         /// Check if path exists
-        PathExists(ResourceId, ResourceId),
+        PathExists(ContentId, ContentId),
         
         /// Get path length
-        PathLength(ResourceId, ResourceId),
+        PathLength(ContentId, ContentId),
     }
     
     /// Query filter

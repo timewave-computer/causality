@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::effect::{Effect, EffectOutcome, EmptyEffect};
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::capabilities::Capability;
 use crate::verification::UnifiedProof;
 
@@ -31,7 +32,7 @@ pub fn create_test_abstract_operation() -> Operation<AbstractContext> {
         context
     )
     .with_output(ResourceRef {
-        resource_id: ResourceId::from_str("test:resource:123").unwrap(),
+        resource_id: ContentId::from_str("test:resource:123").unwrap(),
         domain_id: None,
         ref_type: ResourceRefType::Output,
         before_state: None,
@@ -51,7 +52,7 @@ pub fn create_test_register_operation() -> Operation<RegisterContext> {
         context
     )
     .with_output(ResourceRef {
-        resource_id: ResourceId::from_str("test:resource:123").unwrap(),
+        resource_id: ContentId::from_str("test:resource:123").unwrap(),
         domain_id: None,
         ref_type: ResourceRefType::Output,
         before_state: None,
@@ -81,7 +82,7 @@ pub fn create_test_physical_operation() -> Operation<PhysicalContext> {
         context
     )
     .with_output(ResourceRef {
-        resource_id: ResourceId::from_str("test:resource:123").unwrap(),
+        resource_id: ContentId::from_str("test:resource:123").unwrap(),
         domain_id: Some(domain_id.clone()),
         ref_type: ResourceRefType::Output,
         before_state: None,
@@ -120,7 +121,7 @@ pub fn create_test_zk_operation() -> Operation<ZkContext> {
         context
     )
     .with_output(ResourceRef {
-        resource_id: ResourceId::from_str("test:resource:123").unwrap(),
+        resource_id: ContentId::from_str("test:resource:123").unwrap(),
         domain_id: None,
         ref_type: ResourceRefType::Output,
         before_state: None,

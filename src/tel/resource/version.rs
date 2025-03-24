@@ -7,7 +7,11 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
+use crypto::{
+    hash::{ContentId, HashError, HashFactory, HashOutput},
+    ContentAddressed,
+};
 
 use crate::tel::{
     types::{ResourceId, Address, Domain, Timestamp},
@@ -21,13 +25,40 @@ use crate::tel::{
 };
 
 /// Version identifier for a resource
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
 pub struct VersionId(pub Uuid);
 
 impl VersionId {
     /// Create a new version ID
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        // Generate a unique string based on the current time to hash
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+            
+        let version_data = format!("version-{}", now);
+        
+        // Generate a content ID
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let hash = hasher.hash(version_data.as_bytes());
+        let content_id = ContentId::from(hash);
+        
+        // Create version ID from the content_id
+        Self::from_content_id(&content_id)
+    }
+    
+    /// Create from a ContentId
+    pub fn from_content_id(content_id: &ContentId) -> Self {
+        // Create a UUID from the first 16 bytes of the content hash
+        let hash_bytes = content_id.hash().as_bytes();
+        let mut uuid_bytes = [0u8; 16];
+        
+        // Copy the first 16 bytes (or fewer if hash is shorter)
+        let copy_len = std::cmp::min(hash_bytes.len(), 16);
+        uuid_bytes[..copy_len].copy_from_slice(&hash_bytes[..copy_len]);
+        
+        Self(Uuid::from_bytes(uuid_bytes))
     }
     
     /// Convert from a string
@@ -36,6 +67,33 @@ impl VersionId {
             Ok(uuid) => Ok(Self(uuid)),
             Err(_) => Err(TelError::InvalidId(format!("Invalid version ID: {}", s)))
         }
+    }
+}
+
+impl ContentAddressed for VersionId {
+    fn content_hash(&self) -> HashOutput {
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let bytes = self.0.as_bytes();
+        hasher.hash(bytes)
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.0.as_bytes().to_vec()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        if bytes.len() < 16 {
+            return Err(HashError::InvalidLength);
+        }
+        
+        let mut uuid_bytes = [0u8; 16];
+        uuid_bytes.copy_from_slice(&bytes[..16]);
+        
+        Ok(Self(Uuid::from_bytes(uuid_bytes)))
     }
 }
 
@@ -77,7 +135,7 @@ pub struct ResourceChange {
     pub id: VersionId,
     
     /// ID of the resource that was changed
-    pub register_id: RegisterId,
+    pub register_id: ContentId,
     
     /// Type of change that was applied
     pub change_type: ChangeType,
@@ -104,7 +162,7 @@ pub struct ResourceChange {
 impl ResourceChange {
     /// Create a new resource change
     pub fn new(
-        register_id: RegisterId,
+        register_id: ContentId,
         change_type: ChangeType,
         operation_id: Option<Uuid>,
         previous_contents: Option<RegisterContents>,
@@ -838,7 +896,7 @@ impl VersionManager {
 #[derive(Debug, Clone)]
 pub struct VersionDiff {
     /// ID of the resource
-    pub register_id: RegisterId,
+    pub register_id: ContentId,
     
     /// First version ID
     pub version1: VersionId,
@@ -888,7 +946,7 @@ pub struct VersionTreeNode {
 #[derive(Debug, Clone)]
 pub struct VersionTree {
     /// ID of the resource
-    pub register_id: RegisterId,
+    pub register_id: ContentId,
     
     /// Root node (first version)
     pub root: Option<VersionTreeNode>,

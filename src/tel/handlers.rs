@@ -211,7 +211,7 @@ pub struct TransferParams {
     pub amount: Quantity,
     
     /// Token/resource ID
-    pub token: ResourceId,
+    pub token: ContentId,
     
     /// Domain ID
     pub domain_id: DomainId,
@@ -225,7 +225,7 @@ pub struct TransferParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageParams {
     /// Register ID
-    pub register_id: ResourceId,
+    pub register_id: ContentId,
     
     /// Fields to store
     pub fields: Vec<String>,

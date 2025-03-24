@@ -265,7 +265,7 @@ impl CircuitSelector for DefaultCircuitSelector {
 mod tests {
     use super::*;
     use crate::effect::EmptyEffect;
-    use crate::types::ResourceId;
+    use crate::crypto::hash::ContentId;
     use crate::zk::{Circuit, ProofRequest, ProofSystem};
     use async_trait::async_trait;
     
@@ -281,7 +281,7 @@ mod tests {
             context
         )
         .with_output(ResourceRef {
-            resource_id: ResourceId::from_str("test:resource:123").unwrap(),
+            resource_id: ContentId::from_str("test:resource:123").unwrap(),
             domain_id: None,
             ref_type: ResourceRefType::Output,
             before_state: None,
@@ -312,7 +312,7 @@ mod tests {
             context
         )
         .with_output(ResourceRef {
-            resource_id: ResourceId::from_str("test:resource:123").unwrap(),
+            resource_id: ContentId::from_str("test:resource:123").unwrap(),
             domain_id: None,
             ref_type: ResourceRefType::Output,
             before_state: None,

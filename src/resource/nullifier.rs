@@ -9,14 +9,14 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use crate::error::{Error, Result};
-use crate::resource::register::{RegisterId, RegisterState, BlockHeight};
+use crate::resource::register::{ContentId, RegisterState, BlockHeight};
 use crate::util::hash::{hash_to_hex, Hash256};
 
 /// Represents a nullifier for a consumed register
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RegisterNullifier {
     /// Register ID that this nullifier is for
-    pub register_id: RegisterId,
+    pub register_id: ContentId,
     
     /// The nullifier value
     pub nullifier: Hash256,
@@ -34,7 +34,7 @@ pub struct RegisterNullifier {
 impl RegisterNullifier {
     /// Create a new register nullifier
     pub fn new(
-        register_id: RegisterId,
+        register_id: ContentId,
         transaction_id: String,
         block_height: BlockHeight,
     ) -> Self {
@@ -100,7 +100,7 @@ pub struct NullifierRegistry {
     nullifiers: HashMap<Hash256, RegisterNullifier>,
     
     /// Nullifiers by register ID
-    register_nullifiers: HashMap<RegisterId, Hash256>,
+    register_nullifiers: HashMap<ContentId, Hash256>,
     
     /// Nullifier status by hash value
     nullifier_status: HashMap<Hash256, NullifierStatus>,
@@ -146,7 +146,7 @@ impl NullifierRegistry {
     /// Register a new nullifier
     pub fn register_nullifier(
         &mut self,
-        register_id: RegisterId,
+        register_id: ContentId,
         transaction_id: String,
     ) -> Result<RegisterNullifier> {
         // Check if there's already a nullifier for this register ID
@@ -213,13 +213,13 @@ impl NullifierRegistry {
     }
     
     /// Get the nullifier for a register
-    pub fn get_nullifier_for_register(&self, register_id: &RegisterId) -> Option<&RegisterNullifier> {
+    pub fn get_nullifier_for_register(&self, register_id: &ContentId) -> Option<&RegisterNullifier> {
         self.register_nullifiers.get(register_id)
             .and_then(|hash| self.nullifiers.get(hash))
     }
     
     /// Check if a register has a nullifier
-    pub fn has_nullifier(&self, register_id: &RegisterId) -> bool {
+    pub fn has_nullifier(&self, register_id: &ContentId) -> bool {
         self.register_nullifiers.contains_key(register_id)
     }
     
@@ -261,7 +261,7 @@ impl SharedNullifierRegistry {
     /// Register a new nullifier
     pub fn register_nullifier(
         &self,
-        register_id: RegisterId,
+        register_id: ContentId,
         transaction_id: String,
     ) -> Result<RegisterNullifier> {
         let mut registry = self.inner.lock().map_err(|_| Error::LockError)?;
@@ -287,13 +287,13 @@ impl SharedNullifierRegistry {
     }
     
     /// Get the nullifier for a register
-    pub fn get_nullifier_for_register(&self, register_id: &RegisterId) -> Result<Option<RegisterNullifier>> {
+    pub fn get_nullifier_for_register(&self, register_id: &ContentId) -> Result<Option<RegisterNullifier>> {
         let registry = self.inner.lock().map_err(|_| Error::LockError)?;
         Ok(registry.get_nullifier_for_register(register_id).cloned())
     }
     
     /// Check if a register has a nullifier
-    pub fn has_nullifier(&self, register_id: &RegisterId) -> Result<bool> {
+    pub fn has_nullifier(&self, register_id: &ContentId) -> Result<bool> {
         let registry = self.inner.lock().map_err(|_| Error::LockError)?;
         Ok(registry.has_nullifier(register_id))
     }
@@ -311,7 +311,7 @@ mod tests {
     
     #[test]
     fn test_register_nullifier() {
-        let register_id = RegisterId::new_unique();
+        let register_id = ContentId::new_unique();
         let transaction_id = "test-tx-id".to_string();
         let nullifier = RegisterNullifier::new(
             register_id.clone(),
@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn test_nullifier_registry() {
         let mut registry = NullifierRegistry::new(100, 10);
-        let register_id = RegisterId::new_unique();
+        let register_id = ContentId::new_unique();
         let transaction_id = "test-tx-id".to_string();
         
         // Register a nullifier
@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn test_nullifier_expiration() {
         let mut registry = NullifierRegistry::new(100, 10);
-        let register_id = RegisterId::new_unique();
+        let register_id = ContentId::new_unique();
         let transaction_id = "test-tx-id".to_string();
         
         // Register a nullifier

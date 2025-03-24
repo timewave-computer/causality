@@ -6,10 +6,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use borsh::{BorshSerialize, BorshDeserialize};
 use chrono::Utc;
-use uuid::Uuid;
-
-use crate::types::{ResourceId, DomainId, Timestamp};
+use crate::crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::verification::{
     Verifiable,
     VerificationContext,
@@ -26,13 +27,13 @@ use crate::verification::{
 };
 
 /// A simple resource operation that can be verified
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct ResourceOperation {
     /// Operation ID
     pub id: String,
     
     /// Resource ID
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     
     /// Domain ID
     pub domain_id: DomainId,
@@ -56,18 +57,41 @@ pub struct ResourceOperation {
     pub new_state: String,
 }
 
+// Implement ContentAddressed for ResourceOperation
+impl ContentAddressed for ResourceOperation {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 impl ResourceOperation {
     /// Create a new resource operation
     pub fn new(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         domain_id: DomainId,
         operation_type: &str,
         controller: &str,
         previous_state: Option<&str>,
         new_state: &str,
     ) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
+        let op = Self {
+            id: String::new(), // Temporary value
             resource_id,
             domain_id,
             operation_type: operation_type.to_string(),
@@ -76,7 +100,12 @@ impl ResourceOperation {
             controller: controller.to_string(),
             previous_state: previous_state.map(String::from),
             new_state: new_state.to_string(),
-        }
+        };
+        
+        // Set the content-derived ID
+        let mut result = op;
+        result.id = format!("op:{}", result.content_id());
+        result
     }
     
     /// Add a parameter to the operation
@@ -216,7 +245,7 @@ impl Verifiable for ResourceOperation {
 }
 
 /// A simple fact assertion that can be verified
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct FactAssertion {
     /// Assertion ID
     pub id: String,
@@ -234,10 +263,33 @@ pub struct FactAssertion {
     pub timestamp: Timestamp,
     
     /// Related resources
-    pub resources: Vec<ResourceId>,
+    pub resources: Vec<ContentId>,
     
     /// Evidence hash
     pub evidence_hash: String,
+}
+
+// Implement ContentAddressed for FactAssertion
+impl ContentAddressed for FactAssertion {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        true
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
 }
 
 impl FactAssertion {
@@ -248,19 +300,24 @@ impl FactAssertion {
         controller: &str,
         evidence_hash: &str,
     ) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
+        let assertion = Self {
+            id: String::new(), // Temporary value
             domain_id,
             statement: statement.to_string(),
             controller: controller.to_string(),
             timestamp: Timestamp::now(),
             resources: Vec::new(),
             evidence_hash: evidence_hash.to_string(),
-        }
+        };
+        
+        // Set the content-derived ID
+        let mut result = assertion;
+        result.id = format!("fact:{}", result.content_id());
+        result
     }
     
     /// Add a related resource
-    pub fn with_resource(mut self, resource_id: ResourceId) -> Self {
+    pub fn with_resource(mut self, resource_id: ContentId) -> Self {
         self.resources.push(resource_id);
         self
     }
@@ -339,7 +396,7 @@ mod tests {
     #[tokio::test]
     async fn test_resource_operation_verification() {
         // Create a resource operation
-        let resource_id = ResourceId::from("test-resource-123");
+        let resource_id = ContentId::from("test-resource-123");
         let domain_id = DomainId::new("test-domain");
         
         let operation = ResourceOperation::new(

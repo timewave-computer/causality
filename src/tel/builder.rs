@@ -1,20 +1,36 @@
 // Builder implementations for creating TEL effects
-use crate::tel::types::{
-    Effect, 
-    Authorization, 
-    AuthorizedEffect, 
-    ConditionalEffect, 
-    TimedEffect, 
-    Condition, 
-    DomainId, 
-    AssetId, 
-    Amount, 
-    Address, 
-    ResourceId, 
-    Timestamp,
-    ResourceContents,
-    VerificationKey,
-    Proof,
+//
+// Migration note: Updated to use the unified ResourceRegister model
+
+use std::sync::Arc;
+use crypto::hash::ContentId;
+
+use crate::tel::{
+    types::{
+        Effect, 
+        Authorization, 
+        AuthorizedEffect, 
+        ConditionalEffect, 
+        TimedEffect, 
+        Condition, 
+        DomainId, 
+        AssetId, 
+        Amount, 
+        Address, 
+        Timestamp,
+        ResourceContents,
+        VerificationKey,
+        Proof,
+    },
+    resource::{
+        ResourceManager,
+        snapshot::SnapshotStorage,
+        snapshot::SnapshotManager,
+    },
+    effect::ResourceEffectAdapter,
+    verification::{ZkVerifier, VerifierConfig},
+    version::VersionManager,
+    error::TelResult,
 };
 
 /// Builder methods for constructing effects
@@ -83,12 +99,12 @@ impl Effect {
     }
     
     // Convenience constructor for resource update
-    pub fn update_resource(resource_id: ResourceId, contents: ResourceContents) -> Self {
+    pub fn update_resource(resource_id: ContentId, contents: ResourceContents) -> Self {
         Effect::ResourceUpdate { resource_id, contents }
     }
     
     // Convenience constructor for resource transfer
-    pub fn transfer_resource(resource_id: ResourceId, target_domain: &str) -> Self {
+    pub fn transfer_resource(resource_id: ContentId, target_domain: &str) -> Self {
         Effect::ResourceTransfer { 
             resource_id, 
             target_domain: target_domain.to_string(),
@@ -96,14 +112,14 @@ impl Effect {
     }
     
     // Convenience constructor for resource merge
-    pub fn merge_resources(source_ids: Vec<ResourceId>, target_id: ResourceId) -> Self {
+    pub fn merge_resources(source_ids: Vec<ContentId>, target_id: ContentId) -> Self {
         Effect::ResourceMerge { source_ids, target_id }
     }
     
     // Convenience constructor for resource split
     pub fn split_resource(
-        source_id: ResourceId, 
-        target_ids: Vec<ResourceId>, 
+        source_id: ContentId, 
+        target_ids: Vec<ContentId>, 
         distribution: Vec<Amount>,
     ) -> Self {
         Effect::ResourceSplit {
@@ -178,27 +194,10 @@ impl TimedEffect {
 // This module provides a builder pattern for constructing
 // TEL components with proper configuration and dependencies.
 
-use std::sync::Arc;
-use uuid::Uuid;
-
-use crate::tel::{
-    error::TelResult,
-    resource::{
-        ResourceManager,
-        ZkVerifier,
-        SnapshotManager,
-        VersionManager,
-        SnapshotStorage,
-        FileSnapshotStorage,
-        verify::VerifierConfig,
-    },
-    effect::ResourceEffectAdapter,
-};
-
 /// Builder for TEL components
 pub struct TelBuilder {
     /// Unique ID for this TEL instance
-    instance_id: Uuid,
+    instance_id: ContentId,
     /// Config for resource verification
     verifier_config: Option<VerifierConfig>,
     /// Storage for snapshots
@@ -208,15 +207,28 @@ pub struct TelBuilder {
 impl TelBuilder {
     /// Create a new TEL builder
     pub fn new() -> Self {
+        // Generate a unique string based on the current time to hash
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+            
+        let builder_data = format!("tel-builder-{}", now);
+        
+        // Generate a content ID
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let hash = hasher.hash(builder_data.as_bytes());
+        let content_id = ContentId::from_hash(&hash);
+        
         Self {
-            instance_id: Uuid::new_v4(),
+            instance_id: content_id,
             verifier_config: None,
             snapshot_storage: None,
         }
     }
     
     /// Set a custom instance ID
-    pub fn with_instance_id(mut self, id: Uuid) -> Self {
+    pub fn with_instance_id(mut self, id: ContentId) -> Self {
         self.instance_id = id;
         self
     }
@@ -233,40 +245,37 @@ impl TelBuilder {
         self
     }
     
-    /// Build a complete TEL system
+    /// Build the TEL system
     pub fn build(self) -> TelResult<TelSystem> {
-        // Create verifier
-        let verifier = Arc::new(ZkVerifier::new(
-            self.verifier_config.unwrap_or_default()
-        ));
-        
-        // Create resource manager
+        // Create a resource manager
         let resource_manager = Arc::new(ResourceManager::new());
         
-        // Create version manager
-        let version_manager = Arc::new(VersionManager::default());
+        // Create a verifier with the specified config or default
+        let verifier_config = self.verifier_config.unwrap_or_default();
+        let verifier = Arc::new(ZkVerifier::new(verifier_config));
         
-        // Create snapshot storage
-        let snapshot_storage: Box<dyn SnapshotStorage> = match self.snapshot_storage {
+        // Create a snapshot manager with the specified storage or default
+        let snapshot_storage = match self.snapshot_storage {
             Some(storage) => storage,
-            None => Box::new(FileSnapshotStorage::new(format!(
-                "tel_snapshots_{}", self.instance_id
-            ))?),
+            None => {
+                // Use a temporary directory for file-based storage by default
+                let temp_dir = std::env::temp_dir().join("tel-snapshots");
+                Box::new(crate::tel::resource::snapshot::FileSnapshotStorage::new(temp_dir))
+            }
         };
         
-        // Create snapshot manager with default schedule config
         let snapshot_manager = Arc::new(SnapshotManager::new(
             resource_manager.clone(),
             snapshot_storage,
-            Default::default()
+            crate::tel::resource::snapshot::SnapshotScheduleConfig::default(),
         ));
         
-        // Create effect adapter
-        let effect_adapter = Arc::new(ResourceEffectAdapter::new(
-            resource_manager.clone()
-        ));
+        // Create a version manager
+        let version_manager = Arc::new(VersionManager::new());
         
-        // Return the complete system
+        // Create an effect adapter
+        let effect_adapter = Arc::new(ResourceEffectAdapter::new(resource_manager.clone()));
+        
         Ok(TelSystem {
             instance_id: self.instance_id,
             resource_manager,
@@ -284,18 +293,18 @@ impl Default for TelBuilder {
     }
 }
 
-/// A complete TEL system with all components
+/// TEL system with all components initialized
 pub struct TelSystem {
     /// Unique ID for this TEL instance
-    pub instance_id: Uuid,
-    /// Resource manager
+    pub instance_id: ContentId,
+    /// Resource manager for ResourceRegister management
     pub resource_manager: Arc<ResourceManager>,
-    /// ZK verifier for operations
+    /// ZK verifier for validating operations on resources
     pub verifier: Arc<ZkVerifier>,
-    /// Snapshot manager
+    /// Snapshot manager for ResourceRegister state persistence
     pub snapshot_manager: Arc<SnapshotManager>,
-    /// Version manager
+    /// Version manager for tracking resource versions
     pub version_manager: Arc<VersionManager>,
-    /// Effect adapter
+    /// Effect adapter for applying operations to ResourceRegisters
     pub effect_adapter: Arc<ResourceEffectAdapter>,
 } 

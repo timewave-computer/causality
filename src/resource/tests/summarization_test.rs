@@ -51,7 +51,7 @@ fn create_test_registers() -> Vec<Register> {
         metadata.insert("content_type".to_string(), content_type.to_string());
         
         let register = Register {
-            register_id: RegisterId::new_unique(),
+            register_id: ContentId::new_unique(),
             owner: owner.clone(),
             domain: domain.clone(),
             contents: RegisterContents::with_string(&format!("Test content {}", i)),

@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use crate::address::Address;
-use crate::resource::{ResourceId, ResourceCapability, CapabilityRef};
+use crate::resource::api::CapabilityRef;
+use crate::crypto::hash::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 /// Defines the execution environment of an effect
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -32,10 +33,10 @@ pub enum ChainBoundary {
 }
 
 /// Represents the context in which an effect is executed
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct EffectContext {
     /// Unique identifier for this effect execution
-    pub execution_id: Uuid,
+    pub execution_id: ContentId,
     
     /// The execution boundary (inside or outside system)
     pub boundary: ExecutionBoundary,
@@ -53,41 +54,94 @@ pub struct EffectContext {
     pub parameters: HashMap<String, String>,
 }
 
+impl ContentAddressed for EffectContext {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        
+        // Create a canonical serialization of context data
+        let data = self.try_to_vec().unwrap();
+        
+        // Compute hash with configured hasher
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 impl EffectContext {
+    /// Create a content-derived execution ID based on context parameters
+    fn derive_execution_id(&self) -> ContentId {
+        // Create a version of self without the execution_id for hashing
+        let mut hashable_context = self.clone();
+        hashable_context.execution_id = ContentId::nil(); // Use nil ContentId for hashing
+        
+        // Get content ID directly from context
+        hashable_context.content_id()
+    }
+
     /// Create a new effect context with the given boundary
     pub fn new(boundary: ExecutionBoundary) -> Self {
-        Self {
-            execution_id: Uuid::new_v4(),
+        let mut context = Self {
+            execution_id: ContentId::nil(), // Temporary placeholder
             boundary,
             chain: None,
             invoker: Address::default(),
             capabilities: Vec::new(),
             parameters: HashMap::new(),
-        }
+        };
+        
+        // Replace with content-derived ID
+        context.execution_id = context.derive_execution_id();
+        context
     }
     
     /// Create a new effect context for inside-system execution
     pub fn new_inside(invoker: Address) -> Self {
-        Self {
-            execution_id: Uuid::new_v4(),
+        let mut context = Self {
+            execution_id: ContentId::nil(), // Temporary placeholder
             boundary: ExecutionBoundary::InsideSystem,
             chain: None,
             invoker,
             capabilities: Vec::new(),
             parameters: HashMap::new(),
-        }
+        };
+        
+        // Replace with content-derived ID
+        context.execution_id = context.derive_execution_id();
+        context
     }
     
     /// Create a new effect context for outside-system execution
     pub fn new_outside(invoker: Address) -> Self {
-        Self {
-            execution_id: Uuid::new_v4(),
+        let mut context = Self {
+            execution_id: ContentId::nil(), // Temporary placeholder
             boundary: ExecutionBoundary::OutsideSystem,
             chain: None,
             invoker,
             capabilities: Vec::new(),
             parameters: HashMap::new(),
-        }
+        };
+        
+        // Replace with content-derived ID
+        context.execution_id = context.derive_execution_id();
+        context
     }
     
     /// Set the chain boundary
@@ -243,14 +297,14 @@ pub enum BoundaryError {
 /// A registry for tracking boundary crossings for auditing purposes
 #[derive(Default)]
 pub struct BoundaryCrossingRegistry {
-    crossings: HashMap<Uuid, BoundaryCrossingRecord>,
+    crossings: HashMap<ContentId, BoundaryCrossingRecord>,
 }
 
 /// A record of a boundary crossing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoundaryCrossingRecord {
     /// The unique ID of the crossing
-    pub id: Uuid,
+    pub id: ContentId,
     
     /// The direction of the crossing
     pub direction: CrossingDirection,
@@ -301,7 +355,7 @@ impl BoundaryCrossingRegistry {
         T: std::any::Any,
     {
         let record = BoundaryCrossingRecord {
-            id: crossing.context.execution_id,
+            id: crossing.context.execution_id.clone(),
             direction,
             boundary: crossing.context.boundary,
             chain: crossing.context.chain.clone(),
@@ -312,11 +366,11 @@ impl BoundaryCrossingRegistry {
             payload_type: std::any::type_name::<T>().to_string(),
         };
         
-        self.crossings.insert(record.id, record);
+        self.crossings.insert(record.id.clone(), record);
     }
     
     /// Get a boundary crossing record by ID
-    pub fn get(&self, id: &Uuid) -> Option<&BoundaryCrossingRecord> {
+    pub fn get(&self, id: &ContentId) -> Option<&BoundaryCrossingRecord> {
         self.crossings.get(id)
     }
     

@@ -15,15 +15,13 @@ use crate::resource::resource_register::StateVisibility;
 use crate::resource::lifecycle::TransitionReason;
 use crate::tel::types::Metadata;
 use crate::time::TimeMapSnapshot;
-use crate::types::ResourceId;
+use crate::crypto::hash::{ContentId, ContentAddressed};
 use crate::error::Result;
-use crate::types::{DomainId};
+use crate::types::DomainId;
 
 // Helper function to create a test resource register
 fn create_test_register(name: &str, amount: u128) -> ResourceRegister {
-    let id = ResourceId(format!("resource-{}", name));
     ResourceRegister::new(
-        id,
         ResourceLogic::Fungible,
         FungibilityDomain(format!("domain-{}", name)),
         Quantity(amount),
@@ -36,7 +34,8 @@ fn create_test_register(name: &str, amount: u128) -> ResourceRegister {
 mod resource_register_integration_tests {
     use std::collections::HashMap;
     use crate::error::Result;
-    use crate::types::{ResourceId, DomainId, RegisterState};
+    use crate::types::{RegisterState, DomainId};
+    use crate::crypto::hash::{ContentId, ContentAddressed};
     use crate::resource::{
         ResourceRegister, 
         ResourceRegisterLifecycleManager, 
@@ -47,13 +46,10 @@ mod resource_register_integration_tests {
 
     // Helper function to create a test register
     fn create_test_register(id: &str) -> ResourceRegister {
-        ResourceRegister {
-            id: ResourceId(id.to_string()),
-            state: RegisterState::Initial,
-            domain_id: DomainId("test-domain".to_string()),
-            // Minimal fields needed for testing
-            metadata: HashMap::new(),
-        }
+        let mut register = ResourceRegister::new_minimal();
+        register.domain_id = DomainId("test-domain".to_string());
+        register.metadata = HashMap::new();
+        register
     }
 
     #[test]
@@ -63,14 +59,19 @@ mod resource_register_integration_tests {
         let relationship_tracker = RelationshipTracker::new();
 
         // Create test resources
-        let token_a = ResourceId("token-a".to_string());
-        let token_b = ResourceId("token-b".to_string());
-        let token_c = ResourceId("token-c".to_string());
+        let register_a = create_test_register("token-a");
+        let register_b = create_test_register("token-b");
+        let register_c = create_test_register("token-c");
+        
+        // Get content IDs
+        let token_a = register_a.content_id();
+        let token_b = register_b.content_id();
+        let token_c = register_c.content_id();
 
         // Register resources
-        lifecycle_manager.register_resource(&token_a)?;
-        lifecycle_manager.register_resource(&token_b)?;
-        lifecycle_manager.register_resource(&token_c)?;
+        lifecycle_manager.register_resource(&token_a, register_a)?;
+        lifecycle_manager.register_resource(&token_b, register_b)?;
+        lifecycle_manager.register_resource(&token_c, register_c)?;
 
         // Activate resources
         lifecycle_manager.activate(&token_a)?;
@@ -78,15 +79,15 @@ mod resource_register_integration_tests {
         lifecycle_manager.activate(&token_c)?;
 
         // Record parent-child relationships
-        relationship_tracker.add_parent_child(token_a.clone(), token_b.clone())?;
-        relationship_tracker.add_parent_child(token_a.clone(), token_c.clone())?;
+        relationship_tracker.record_parent_child_relationship(token_a.clone(), token_b.clone(), None)?;
+        relationship_tracker.record_parent_child_relationship(token_a.clone(), token_c.clone(), None)?;
 
         // Record dependency relationship
-        relationship_tracker.add_dependency(token_b.clone(), token_c.clone())?;
+        relationship_tracker.record_dependency_relationship(token_b.clone(), token_c.clone(), None)?;
 
         // Lock child resources
-        lifecycle_manager.lock(&token_b, Some(&token_a))?;
-        lifecycle_manager.lock(&token_c, Some(&token_a))?;
+        lifecycle_manager.lock(&token_b, Some(&token_a.to_string()))?;
+        lifecycle_manager.lock(&token_c, Some(&token_a.to_string()))?;
 
         // Check state
         assert_eq!(lifecycle_manager.get_state(&token_a)?, RegisterState::Active);
@@ -100,24 +101,28 @@ mod resource_register_integration_tests {
         assert!(locked_resources.contains(&token_c));
 
         // Get child resources
-        let children = relationship_tracker.get_child_resources(&token_a)?;
+        let children = relationship_tracker.get_related_resources(
+            &token_a,
+            &RelationshipType::ParentChild,
+            None
+        )?;
         assert_eq!(children.len(), 2);
         assert!(children.contains(&token_b));
         assert!(children.contains(&token_c));
 
         // Check parent-child relationship
-        let has_relationship = relationship_tracker.has_relationship_of_type(
-            &token_a, &token_b, &RelationshipType::ParentChild)?;
+        let has_relationship = relationship_tracker.are_resources_related(
+            &token_a, &token_b, Some(RelationshipType::ParentChild))?;
         assert!(has_relationship);
 
         // Check dependency relationship
-        let has_dependency = relationship_tracker.has_relationship_of_type(
-            &token_b, &token_c, &RelationshipType::Dependency)?;
+        let has_dependency = relationship_tracker.are_resources_related(
+            &token_b, &token_c, Some(RelationshipType::Dependency))?;
         assert!(has_dependency);
 
         // Unlock and consume resources
-        lifecycle_manager.unlock(&token_b, Some(&token_a))?;
-        lifecycle_manager.unlock(&token_c, Some(&token_a))?;
+        lifecycle_manager.unlock(&token_b, Some(&token_a.to_string()))?;
+        lifecycle_manager.unlock(&token_c, Some(&token_a.to_string()))?;
         lifecycle_manager.consume(&token_b)?;
         lifecycle_manager.consume(&token_c)?;
 
@@ -147,13 +152,13 @@ mod resource_register_integration_tests {
         //         |-- token_b1
         //         `-- token_b2
 
-        let token_root = ResourceId("root".to_string());
-        let token_a = ResourceId("a".to_string());
-        let token_b = ResourceId("b".to_string());
-        let token_a1 = ResourceId("a1".to_string());
-        let token_a2 = ResourceId("a2".to_string());
-        let token_b1 = ResourceId("b1".to_string());
-        let token_b2 = ResourceId("b2".to_string());
+        let token_root = ContentId::new("root".to_string());
+        let token_a = ContentId::new("a".to_string());
+        let token_b = ContentId::new("b".to_string());
+        let token_a1 = ContentId::new("a1".to_string());
+        let token_a2 = ContentId::new("a2".to_string());
+        let token_b1 = ContentId::new("b1".to_string());
+        let token_b2 = ContentId::new("b2".to_string());
 
         // Register and activate all tokens
         for token in [&token_root, &token_a, &token_b, &token_a1, &token_a2, &token_b1, &token_b2] {
@@ -223,10 +228,10 @@ mod resource_register_integration_tests {
         let relationship_tracker = RelationshipTracker::new();
 
         // Create test resources
-        let token_main = ResourceId("main".to_string());
-        let token_dep1 = ResourceId("dep1".to_string());
-        let token_dep2 = ResourceId("dep2".to_string());
-        let token_dep3 = ResourceId("dep3".to_string());
+        let token_main = ContentId::new("main".to_string());
+        let token_dep1 = ContentId::new("dep1".to_string());
+        let token_dep2 = ContentId::new("dep2".to_string());
+        let token_dep3 = ContentId::new("dep3".to_string());
 
         // Register all tokens
         for token in [&token_main, &token_dep1, &token_dep2, &token_dep3] {
@@ -267,8 +272,8 @@ mod resource_register_integration_tests {
     fn test_relationship_metadata() -> Result<()> {
         let relationship_tracker = RelationshipTracker::new();
 
-        let token_a = ResourceId("token-a".to_string());
-        let token_b = ResourceId("token-b".to_string());
+        let token_a = ContentId::new("token-a".to_string());
+        let token_b = ContentId::new("token-b".to_string());
 
         // Create a relationship with custom metadata
         let mut rel = crate::resource::ResourceRelationship::new(
@@ -316,9 +321,9 @@ mod resource_register_integration_tests {
     fn test_custom_relationship_types() -> Result<()> {
         let relationship_tracker = RelationshipTracker::new();
         
-        let token_a = ResourceId("a".to_string());
-        let token_b = ResourceId("b".to_string());
-        let token_c = ResourceId("c".to_string());
+        let token_a = ContentId::new("a".to_string());
+        let token_b = ContentId::new("b".to_string());
+        let token_c = ContentId::new("c".to_string());
         
         // Add various custom relationships
         relationship_tracker.add_custom_relationship(

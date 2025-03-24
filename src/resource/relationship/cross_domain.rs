@@ -6,9 +6,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use uuid::Uuid;
-
+use borsh::{BorshSerialize, BorshDeserialize};
+use crate::crypto::content_addressed::{ContentAddressed, ContentId};
 use crate::error::{Error, Result};
+use std::time::SystemTime;
 
 /// Type of cross-domain relationship
 #[derive(Debug, Clone, PartialEq)]
@@ -64,6 +65,54 @@ pub enum SyncStrategy {
     Manual,
 }
 
+/// Content data for cross-domain relationship content addressing
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct RelationshipContentData {
+    /// Source resource identifier
+    pub source_resource: String,
+    
+    /// Domain containing the source resource
+    pub source_domain: String,
+    
+    /// Target resource identifier
+    pub target_resource: String,
+    
+    /// Target domain
+    pub target_domain: String,
+    
+    /// Relationship type identifier
+    pub relationship_type_id: String,
+    
+    /// Creation timestamp
+    pub timestamp: u64,
+    
+    /// Random nonce for uniqueness
+    pub nonce: [u8; 8],
+}
+
+impl ContentAddressed for RelationshipContentData {
+    fn content_hash(&self) -> Result<ContentId> {
+        let bytes = self.to_bytes()?;
+        Ok(ContentId::from_bytes(&bytes)?)
+    }
+    
+    fn verify(&self, content_id: &ContentId) -> Result<bool> {
+        let calculated_id = self.content_hash()?;
+        Ok(calculated_id == *content_id)
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>> {
+        let bytes = borsh::to_vec(self)
+            .map_err(|e| Error::Serialization(format!("Failed to serialize RelationshipContentData: {}", e)))?;
+        Ok(bytes)
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        borsh::from_slice(bytes)
+            .map_err(|e| Error::Deserialization(format!("Failed to deserialize RelationshipContentData: {}", e)))
+    }
+}
+
 /// Represents a relationship between resources across different domains
 #[derive(Debug, Clone)]
 pub struct CrossDomainRelationship {
@@ -103,8 +152,37 @@ impl CrossDomainRelationship {
         metadata: CrossDomainMetadata,
         bidirectional: bool,
     ) -> Self {
-        // Generate a unique ID
-        let id = Uuid::new_v4().to_string();
+        // Generate a content-based ID
+        let type_id = match &relationship_type {
+            CrossDomainRelationshipType::Mirror => "mirror".to_string(),
+            CrossDomainRelationshipType::Reference => "reference".to_string(),
+            CrossDomainRelationshipType::Ownership => "ownership".to_string(),
+            CrossDomainRelationshipType::Derived => "derived".to_string(),
+            CrossDomainRelationshipType::Bridge => "bridge".to_string(),
+            CrossDomainRelationshipType::Custom(name) => format!("custom:{}", name),
+        };
+        
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let mut nonce = [0u8; 8];
+        getrandom::getrandom(&mut nonce).expect("Failed to generate random nonce");
+        
+        let content_data = RelationshipContentData {
+            source_resource: source_resource.clone(),
+            source_domain: source_domain.clone(),
+            target_resource: target_resource.clone(),
+            target_domain: target_domain.clone(),
+            relationship_type_id: type_id,
+            timestamp: now,
+            nonce,
+        };
+        
+        let id = content_data.content_hash()
+            .map(|id| id.to_string())
+            .unwrap_or_else(|_| format!("error-generating-id-{}", now));
         
         Self {
             id,

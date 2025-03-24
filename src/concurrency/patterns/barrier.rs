@@ -13,7 +13,7 @@ use tokio::select;
 use tokio::time::sleep;
 
 use crate::error::{Error, Result};
-use crate::types::ResourceId;
+use crate::crypto::hash::ContentId;
 use crate::concurrency::primitives::{ResourceManager, SharedResourceManager};
 
 /// A barrier that waits for a condition to be true
@@ -27,7 +27,7 @@ where
     /// The condition to check
     condition: F,
     /// The resources required for the barrier to pass
-    resources: Vec<ResourceId>,
+    resources: Vec<ContentId>,
     /// The resource manager to use for acquiring resources
     resource_manager: Option<SharedResourceManager>,
     /// The timeout for the barrier
@@ -52,13 +52,13 @@ where
     }
     
     /// Add a required resource to the barrier
-    pub fn require_resource(mut self, resource: ResourceId) -> Self {
+    pub fn require_resource(mut self, resource: ContentId) -> Self {
         self.resources.push(resource);
         self
     }
     
     /// Add multiple required resources to the barrier
-    pub fn require_resources(mut self, resources: Vec<ResourceId>) -> Self {
+    pub fn require_resources(mut self, resources: Vec<ContentId>) -> Self {
         self.resources.extend(resources);
         self
     }
@@ -141,7 +141,7 @@ pub fn barrier<F: Fn() -> bool>(condition: F) -> Barrier<F> {
 
 /// Create a new barrier with the given resources and condition
 pub fn resource_barrier<F: Fn() -> bool>(
-    resources: Vec<ResourceId>,
+    resources: Vec<ContentId>,
     condition: F,
     resource_manager: SharedResourceManager,
 ) -> Barrier<F> {
@@ -163,7 +163,7 @@ pub fn timeout_barrier<F: Fn() -> bool>(
 /// This is a convenience function that creates a barrier that waits
 /// for a set of resources to be available.
 pub async fn wait_for_resources(
-    resources: Vec<ResourceId>,
+    resources: Vec<ContentId>,
     resource_manager: SharedResourceManager,
     timeout: Option<Duration>,
 ) -> Result<bool> {
@@ -234,7 +234,7 @@ mod tests {
         let resource_manager = Arc::new(ResourceManager::new());
         
         // Register a resource
-        let resource_id = ResourceId::new("test");
+        let resource_id = ContentId::new("test");
         resource_manager.register_resource(resource_id.clone(), "initial value")?;
         
         // Acquire the resource
@@ -271,8 +271,8 @@ mod tests {
         let resource_manager = Arc::new(ResourceManager::new());
         
         // Register resources
-        let resource1 = ResourceId::new("resource1");
-        let resource2 = ResourceId::new("resource2");
+        let resource1 = ContentId::new("resource1");
+        let resource2 = ContentId::new("resource2");
         resource_manager.register_resource(resource1.clone(), "value1")?;
         resource_manager.register_resource(resource2.clone(), "value2")?;
         

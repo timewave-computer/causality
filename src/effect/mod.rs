@@ -33,12 +33,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use uuid;
 use thiserror::Error;
 
 use crate::error::{Error, Result};
 use crate::resource::CapabilityId;
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
+use crate::crypto::hash::ContentId;
 
 // Module declarations
 pub mod boundary;
@@ -55,6 +56,7 @@ pub mod types;
 pub mod random;
 pub mod effect_id;
 pub mod empty_effect;
+pub mod content_addressed_effect;
 
 // Test module
 #[cfg(test)]
@@ -69,6 +71,7 @@ pub use self::effect_id::EffectId;
 pub use self::empty_effect::EmptyEffect;
 pub use self::repository::{CodeRepository, CodeEntry, CodeMetadata};
 pub use self::types::{ResourceChangeType, ResourceChange};
+pub use self::content_addressed_effect::{Effect as ContentAddressedEffect, EffectType, EffectOutcome as ContentAddressedEffectOutcome, EffectRegistry as ContentAddressedEffectRegistry};
 
 /// The result of applying an effect
 #[derive(Debug, Clone)]
@@ -86,7 +89,7 @@ pub struct EffectOutcome {
     pub error: Option<String>,
     
     /// The execution context ID
-    pub execution_id: Option<uuid::Uuid>,
+    pub execution_id: Option<ContentId>,
     
     /// Resource changes resulting from the effect
     pub resource_changes: Vec<ResourceChange>,
@@ -120,6 +123,12 @@ impl EffectOutcome {
             resource_changes: Vec::new(),
             metadata: HashMap::new(),
         }
+    }
+    
+    /// Set the execution ID
+    pub fn with_execution_id(mut self, execution_id: ContentId) -> Self {
+        self.execution_id = Some(execution_id);
+        self
     }
     
     /// Add data to the outcome

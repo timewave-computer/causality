@@ -8,7 +8,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
-use crate::types::ResourceId;
+use crate::crypto::hash::ContentId;
 
 // Forward declarations for ResourceManager
 use super::ResourceManager;
@@ -21,7 +21,7 @@ use super::ResourceManager;
 #[derive(Debug)]
 pub struct ResourceGuard<T> {
     /// The ID of the resource
-    id: ResourceId,
+    id: ContentId,
     /// The resource manager
     manager: Arc<ResourceManager>,
     /// The owner of the resource
@@ -35,7 +35,7 @@ impl<T> ResourceGuard<T> {
     ///
     /// This is typically called by the ResourceManager when acquiring a resource.
     pub(crate) fn new(
-        id: ResourceId,
+        id: ContentId,
         manager: Arc<ResourceManager>,
         owner: String,
         resource: T,
@@ -49,7 +49,7 @@ impl<T> ResourceGuard<T> {
     }
     
     /// Get the ID of the resource
-    pub fn id(&self) -> ResourceId {
+    pub fn id(&self) -> ContentId {
         self.id.clone()
     }
     
@@ -141,7 +141,7 @@ impl<T> Drop for ResourceGuard<T> {
 #[derive(Debug, Clone)]
 pub struct WeakResourceRef {
     /// The ID of the resource
-    id: ResourceId,
+    id: ContentId,
     /// The owner of the resource
     owner: String,
 }
@@ -156,7 +156,7 @@ impl WeakResourceRef {
     }
     
     /// Get the ID of the resource
-    pub fn id(&self) -> ResourceId {
+    pub fn id(&self) -> ContentId {
         self.id.clone()
     }
     
@@ -182,7 +182,7 @@ mod tests {
         
         // Create a resource guard
         let guard = ResourceGuard::new(
-            ResourceId::new("test"),
+            ContentId::new("test"),
             manager,
             "owner".to_string(),
             resource,
@@ -205,7 +205,7 @@ mod tests {
         
         // Create a resource guard
         let mut guard = ResourceGuard::new(
-            ResourceId::new("test"),
+            ContentId::new("test"),
             manager,
             "owner".to_string(),
             resource,
@@ -228,7 +228,7 @@ mod tests {
         
         // Create a resource guard
         let guard = ResourceGuard::new(
-            ResourceId::new("test"),
+            ContentId::new("test"),
             manager.clone(),
             "owner".to_string(),
             resource,
@@ -239,7 +239,7 @@ mod tests {
         
         // Test the mapped guard
         assert_eq!(*int_guard, 42);
-        assert_eq!(int_guard.id(), ResourceId::new("test"));
+        assert_eq!(int_guard.id(), ContentId::new("test"));
         assert_eq!(int_guard.owner(), "owner");
     }
     
@@ -253,7 +253,7 @@ mod tests {
         
         // Create a resource guard
         let guard = ResourceGuard::new(
-            ResourceId::new("test"),
+            ContentId::new("test"),
             manager,
             "owner".to_string(),
             resource,
@@ -263,7 +263,7 @@ mod tests {
         let weak_ref = WeakResourceRef::new(&guard);
         
         // Test the weak reference
-        assert_eq!(weak_ref.id(), ResourceId::new("test"));
+        assert_eq!(weak_ref.id(), ContentId::new("test"));
         assert_eq!(weak_ref.owner(), "owner");
     }
 } 

@@ -2,21 +2,23 @@
 //
 // This module provides the ResourceManager which centralizes
 // management of resources through the register-based model.
+// Migration note: This file is being migrated to use the unified ResourceRegister model.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
+use crypto;
 
 use crate::tel::types::{ResourceId, Address, Domain, Timestamp, OperationId};
 use crate::tel::error::{TelError, TelResult};
 use crate::tel::resource::operations::{ResourceOperation, ResourceOperationType};
 use crate::tel::resource::model::{
-    Register, RegisterId, RegisterContents, RegisterState, 
+    Register, ContentId, RegisterContents, RegisterState, 
     Resource, ResourceTimeData, ControllerLabel,
 };
+use crate::resource::{ResourceRegister, StateVisibility};
 
 /// Statistics from garbage collection
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,7 +61,7 @@ impl Default for GarbageCollectionConfig {
 #[derive(Debug)]
 pub struct ResourceManager {
     /// All registers tracked by the manager
-    registers: RwLock<HashMap<RegisterId, Register>>,
+    registers: RwLock<HashMap<ContentId, Register>>,
     /// Operations log
     operations: RwLock<Vec<(OperationId, ResourceOperation)>>,
     /// Garbage collection configuration
@@ -67,7 +69,7 @@ pub struct ResourceManager {
     /// Current epoch
     current_epoch: RwLock<u64>,
     /// Registers grouped by epoch
-    registers_by_epoch: RwLock<HashMap<u64, HashSet<RegisterId>>>,
+    registers_by_epoch: RwLock<HashMap<u64, HashSet<ContentId>>>,
 }
 
 impl ResourceManager {
@@ -88,18 +90,23 @@ impl ResourceManager {
         owner: Address,
         domain: Domain,
         contents: RegisterContents,
-    ) -> TelResult<RegisterId> {
-        let register_id = RegisterId::new();
+    ) -> TelResult<ContentId> {
+        let register_id = ContentId::new();
         let current_epoch = *self.current_epoch.read().map_err(|_| 
             TelError::InternalError("Failed to acquire epoch lock".to_string()))?;
         
+        // Create metadata with owner and domain information
+        let mut metadata = HashMap::new();
+        metadata.insert("tel_owner".to_string(), serde_json::Value::String(owner.clone()));
+        metadata.insert("tel_domain".to_string(), serde_json::Value::String(domain.clone()));
+        metadata.insert("tel_epoch".to_string(), serde_json::Value::Number(serde_json::Number::from(current_epoch)));
+        
+        // Create a new Register instance
         let register = Register::new(
-            register_id,
-            owner,
-            domain,
+            register_id.into(), // Convert ContentId to RegisterId
             contents,
-            current_epoch,
-            None,
+            Some(metadata),
+            RegisterState::Active,
         );
         
         // Store the register
@@ -121,7 +128,7 @@ impl ResourceManager {
     }
     
     /// Get a register by ID
-    pub fn get_register(&self, register_id: &RegisterId) -> TelResult<Register> {
+    pub fn get_register(&self, register_id: &ContentId) -> TelResult<Register> {
         let registers = self.registers.read().map_err(|_| 
             TelError::InternalError("Failed to acquire registers lock".to_string()))?;
         
@@ -135,7 +142,7 @@ impl ResourceManager {
     /// Update a register's contents
     pub fn update_register(
         &self,
-        register_id: &RegisterId,
+        register_id: &ContentId,
         contents: RegisterContents,
     ) -> TelResult<()> {
         let mut registers = self.registers.write().map_err(|_| 
@@ -148,21 +155,18 @@ impl ResourceManager {
         
         if !register.is_active() {
             return Err(TelError::ResourceError(format!(
-                "Cannot update register {:?} in state {:?}", register_id, register.state
+                "Cannot update register {:?} in state {:?}", register_id, register.state()
             )));
         }
         
-        register.contents = contents;
-        register.updated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        // Update the register contents
+        register.update_contents(contents)?;
         
         Ok(())
     }
     
     /// Delete a register
-    pub fn delete_register(&self, register_id: &RegisterId) -> TelResult<()> {
+    pub fn delete_register(&self, register_id: &ContentId) -> TelResult<()> {
         let mut registers = self.registers.write().map_err(|_| 
             TelError::InternalError("Failed to acquire registers lock".to_string()))?;
         
@@ -173,16 +177,12 @@ impl ResourceManager {
         
         if !register.is_active() && !register.is_locked() && !register.is_frozen() {
             return Err(TelError::ResourceError(format!(
-                "Cannot delete register {:?} in state {:?}", register_id, register.state
+                "Cannot delete register {:?} in state {:?}", register_id, register.state()
             )));
         }
         
-        // Mark for deletion
-        register.state = RegisterState::PendingDeletion;
-        register.updated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        // Mark for consuming (equivalent to deletion in unified model)
+        register.consume()?;
         
         Ok(())
     }
@@ -190,7 +190,7 @@ impl ResourceManager {
     /// Transfer a register to a new owner
     pub fn transfer_register(
         &self,
-        register_id: &RegisterId,
+        register_id: &ContentId,
         from: &Address,
         to: Address,
     ) -> TelResult<()> {
@@ -202,8 +202,14 @@ impl ResourceManager {
                 "Register {:?} not found", register_id
             )))?;
         
+        // Get metadata to check ownership
+        let metadata = register.metadata();
+        let owner = metadata.get("tel_owner")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        
         // Check ownership
-        if &register.owner != from {
+        if owner != from {
             return Err(TelError::AuthorizationError(format!(
                 "Register {:?} is not owned by {:?}", register_id, from
             )));
@@ -211,22 +217,20 @@ impl ResourceManager {
         
         if !register.is_active() {
             return Err(TelError::ResourceError(format!(
-                "Cannot transfer register {:?} in state {:?}", register_id, register.state
+                "Cannot transfer register {:?} in state {:?}", register_id, register.state()
             )));
         }
         
-        // Transfer ownership
-        register.owner = to;
-        register.updated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        // Update owner in metadata
+        let mut updated_metadata = metadata.clone();
+        updated_metadata.insert("tel_owner".to_string(), serde_json::Value::String(to));
+        register.update_metadata(updated_metadata)?;
         
         Ok(())
     }
     
     /// Lock a register
-    pub fn lock_register(&self, register_id: &RegisterId) -> TelResult<()> {
+    pub fn lock_register(&self, register_id: &ContentId) -> TelResult<()> {
         let mut registers = self.registers.write().map_err(|_| 
             TelError::InternalError("Failed to acquire registers lock".to_string()))?;
         
@@ -237,21 +241,18 @@ impl ResourceManager {
         
         if !register.is_active() {
             return Err(TelError::ResourceError(format!(
-                "Cannot lock register {:?} in state {:?}", register_id, register.state
+                "Cannot lock register {:?} in state {:?}", register_id, register.state()
             )));
         }
         
-        register.state = RegisterState::Locked;
-        register.updated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        // Lock the register
+        register.lock()?;
         
         Ok(())
     }
     
     /// Unlock a register
-    pub fn unlock_register(&self, register_id: &RegisterId) -> TelResult<()> {
+    pub fn unlock_register(&self, register_id: &ContentId) -> TelResult<()> {
         let mut registers = self.registers.write().map_err(|_| 
             TelError::InternalError("Failed to acquire registers lock".to_string()))?;
         
@@ -262,22 +263,40 @@ impl ResourceManager {
         
         if !register.is_locked() {
             return Err(TelError::ResourceError(format!(
-                "Cannot unlock register {:?} in state {:?}", register_id, register.state
+                "Cannot unlock register {:?} in state {:?}", register_id, register.state()
             )));
         }
         
-        register.state = RegisterState::Active;
-        register.updated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        // Unlock the register
+        register.unlock()?;
         
         Ok(())
     }
     
     /// Apply a resource operation
     pub fn apply_operation(&self, operation: ResourceOperation) -> TelResult<OperationId> {
-        let operation_id = OperationId(Uuid::new_v4());
+        // Generate a unique operation ID based on operation content and time
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+            
+        // Combine operation details and timestamp for unique hash input
+        let operation_data = format!(
+            "operation-{}-{}-{}-{}",
+            operation.operation_type,
+            operation.target,
+            operation.resource_id.map_or("none".to_string(), |id| id.to_string()),
+            now
+        );
+        
+        // Generate a content ID
+        let hasher = crypto::hash::HashFactory::default().create_hasher().unwrap();
+        let hash = hasher.hash(operation_data.as_bytes());
+        let content_id = crypto::hash::ContentId::from(hash);
+        
+        // Create an OperationId from the content_id
+        let operation_id = OperationId::from_content_id(&content_id);
         
         // Process the operation based on type
         match operation.operation_type {
@@ -304,13 +323,19 @@ impl ResourceManager {
                     ))?
                     .clone();
                 
+                // Create metadata with owner and domain information
+                let mut metadata = HashMap::new();
+                metadata.insert("tel_owner".to_string(), serde_json::Value::String(operation.initiator.clone()));
+                metadata.insert("tel_domain".to_string(), serde_json::Value::String(operation.domain.clone()));
+                metadata.insert("tel_epoch".to_string(), serde_json::Value::Number(serde_json::Number::from(current_epoch)));
+                metadata.insert("tel_operation_id".to_string(), serde_json::Value::String(operation_id.to_string()));
+                
+                // Create a new Register instance
                 let register = Register::new(
-                    operation.target,
-                    operation.initiator,
-                    operation.domain,
+                    operation.target.into(), // Convert ContentId to RegisterId
                     contents,
-                    current_epoch,
-                    None,
+                    Some(metadata),
+                    RegisterState::Active,
                 );
                 
                 // Store the register
@@ -338,8 +363,14 @@ impl ResourceManager {
                         "Register {:?} not found", operation.target
                     )))?;
                 
+                // Get metadata to check ownership
+                let metadata = register.metadata();
+                let owner = metadata.get("tel_owner")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                
                 // Verify ownership
-                if register.owner != operation.initiator {
+                if owner != operation.initiator {
                     return Err(TelError::AuthorizationError(format!(
                         "Operation initiator {:?} is not the owner of register {:?}",
                         operation.initiator, operation.target
@@ -350,7 +381,7 @@ impl ResourceManager {
                 if !register.is_active() {
                     return Err(TelError::ResourceError(format!(
                         "Cannot update register {:?} in state {:?}",
-                        operation.target, register.state
+                        operation.target, register.state()
                     )));
                 }
                 
@@ -361,15 +392,13 @@ impl ResourceManager {
                     ))?
                     .clone();
                 
-                // Update register
-                register.contents = contents;
-                register.updated_at = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64;
+                // Update register contents
+                register.update_contents(contents)?;
                 
-                // Add operation to history
-                register.history.push(operation_id);
+                // Update operation history
+                let mut updated_metadata = metadata.clone();
+                updated_metadata.insert("tel_operation_id".to_string(), serde_json::Value::String(operation_id.to_string()));
+                register.update_metadata(updated_metadata)?;
             },
             ResourceOperationType::Delete => {
                 // Check if register exists and initiator is owner
@@ -381,8 +410,14 @@ impl ResourceManager {
                         "Register {:?} not found", operation.target
                     )))?;
                 
+                // Get metadata to check ownership
+                let metadata = register.metadata();
+                let owner = metadata.get("tel_owner")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                
                 // Verify ownership
-                if register.owner != operation.initiator {
+                if owner != operation.initiator {
                     return Err(TelError::AuthorizationError(format!(
                         "Operation initiator {:?} is not the owner of register {:?}",
                         operation.initiator, operation.target
@@ -393,19 +428,17 @@ impl ResourceManager {
                 if !register.is_active() && !register.is_locked() && !register.is_frozen() {
                     return Err(TelError::ResourceError(format!(
                         "Cannot delete register {:?} in state {:?}",
-                        operation.target, register.state
+                        operation.target, register.state()
                     )));
                 }
                 
-                // Mark for deletion
-                register.state = RegisterState::PendingDeletion;
-                register.updated_at = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64;
+                // Mark for consuming (equivalent to deletion in unified model)
+                register.consume()?;
                 
-                // Add operation to history
-                register.history.push(operation_id);
+                // Update operation history
+                let mut updated_metadata = metadata.clone();
+                updated_metadata.insert("tel_operation_id".to_string(), serde_json::Value::String(operation_id.to_string()));
+                register.update_metadata(updated_metadata)?;
             },
             ResourceOperationType::Transfer => {
                 // Check if register exists and initiator is owner
@@ -417,8 +450,14 @@ impl ResourceManager {
                         "Register {:?} not found", operation.target
                     )))?;
                 
+                // Get metadata to check ownership
+                let metadata = register.metadata();
+                let owner = metadata.get("tel_owner")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                
                 // Verify ownership
-                if register.owner != operation.initiator {
+                if owner != operation.initiator {
                     return Err(TelError::AuthorizationError(format!(
                         "Operation initiator {:?} is not the owner of register {:?}",
                         operation.initiator, operation.target
@@ -429,30 +468,29 @@ impl ResourceManager {
                 if !register.is_active() {
                     return Err(TelError::ResourceError(format!(
                         "Cannot transfer register {:?} in state {:?}",
-                        operation.target, register.state
+                        operation.target, register.state()
                     )));
                 }
                 
-                // Get recipient from inputs
-                let recipient = operation.parameters.get("recipient")
-                    .and_then(|v| v.as_str())
+                // Get new owner from inputs
+                let new_owner = operation.outputs.get(0)
                     .ok_or_else(|| TelError::ResourceError(
-                        "Transfer operation must specify recipient in parameters".to_string()
+                        "Transfer operation must have new owner as output".to_string()
                     ))?;
                 
-                // Parse recipient address
-                let to_address = recipient.parse().map_err(|_| 
-                    TelError::ParseError(format!("Invalid recipient address: {}", recipient)))?;
+                // Get new owner address
+                let new_owner_address = match new_owner {
+                    RegisterContents::String(addr) => addr.clone(),
+                    _ => return Err(TelError::ResourceError(
+                        "New owner must be a string address".to_string()
+                    )),
+                };
                 
-                // Transfer ownership
-                register.owner = to_address;
-                register.updated_at = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64;
-                
-                // Add operation to history
-                register.history.push(operation_id);
+                // Update owner in metadata
+                let mut updated_metadata = metadata.clone();
+                updated_metadata.insert("tel_owner".to_string(), serde_json::Value::String(new_owner_address));
+                updated_metadata.insert("tel_operation_id".to_string(), serde_json::Value::String(operation_id.to_string()));
+                register.update_metadata(updated_metadata)?;
             },
             ResourceOperationType::Lock => {
                 // Check if register exists and initiator is owner
@@ -465,7 +503,12 @@ impl ResourceManager {
                     )))?;
                 
                 // Verify ownership
-                if register.owner != operation.initiator {
+                let metadata = register.metadata();
+                let owner = metadata.get("tel_owner")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                
+                if owner != operation.initiator {
                     return Err(TelError::AuthorizationError(format!(
                         "Operation initiator {:?} is not the owner of register {:?}",
                         operation.initiator, operation.target
@@ -476,19 +519,17 @@ impl ResourceManager {
                 if !register.is_active() {
                     return Err(TelError::ResourceError(format!(
                         "Cannot lock register {:?} in state {:?}",
-                        operation.target, register.state
+                        operation.target, register.state()
                     )));
                 }
                 
-                // Lock register
-                register.state = RegisterState::Locked;
-                register.updated_at = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64;
+                // Lock the register
+                register.lock()?;
                 
-                // Add operation to history
-                register.history.push(operation_id);
+                // Update operation history
+                let mut updated_metadata = metadata.clone();
+                updated_metadata.insert("tel_operation_id".to_string(), serde_json::Value::String(operation_id.to_string()));
+                register.update_metadata(updated_metadata)?;
             },
             ResourceOperationType::Unlock => {
                 // Check if register exists and initiator is owner
@@ -501,7 +542,12 @@ impl ResourceManager {
                     )))?;
                 
                 // Verify ownership
-                if register.owner != operation.initiator {
+                let metadata = register.metadata();
+                let owner = metadata.get("tel_owner")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                
+                if owner != operation.initiator {
                     return Err(TelError::AuthorizationError(format!(
                         "Operation initiator {:?} is not the owner of register {:?}",
                         operation.initiator, operation.target
@@ -512,19 +558,17 @@ impl ResourceManager {
                 if !register.is_locked() {
                     return Err(TelError::ResourceError(format!(
                         "Cannot unlock register {:?} in state {:?}",
-                        operation.target, register.state
+                        operation.target, register.state()
                     )));
                 }
                 
-                // Unlock register
-                register.state = RegisterState::Active;
-                register.updated_at = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64;
+                // Unlock the register
+                register.unlock()?;
                 
-                // Add operation to history
-                register.history.push(operation_id);
+                // Update operation history
+                let mut updated_metadata = metadata.clone();
+                updated_metadata.insert("tel_operation_id".to_string(), serde_json::Value::String(operation_id.to_string()));
+                register.update_metadata(updated_metadata)?;
             },
             _ => {
                 return Err(TelError::ResourceError(format!(
@@ -657,7 +701,7 @@ impl ResourceManager {
     }
     
     /// Query registers by owner
-    pub fn query_registers_by_owner(&self, owner: &Address) -> TelResult<Vec<RegisterId>> {
+    pub fn query_registers_by_owner(&self, owner: &Address) -> TelResult<Vec<ContentId>> {
         let registers = self.registers.read().map_err(|_| 
             TelError::InternalError("Failed to acquire registers lock".to_string()))?;
         
@@ -672,7 +716,7 @@ impl ResourceManager {
     }
     
     /// Query registers by domain
-    pub fn query_registers_by_domain(&self, domain: &Domain) -> TelResult<Vec<RegisterId>> {
+    pub fn query_registers_by_domain(&self, domain: &Domain) -> TelResult<Vec<ContentId>> {
         let registers = self.registers.read().map_err(|_| 
             TelError::InternalError("Failed to acquire registers lock".to_string()))?;
         
@@ -687,8 +731,116 @@ impl ResourceManager {
     }
     
     /// Generate a unique register ID
-    fn generate_register_id(&self) -> RegisterId {
-        RegisterId::new()
+    fn generate_register_id(&self) -> ContentId {
+        ContentId::new()
+    }
+    
+    /// Get a resource register by ID
+    pub fn get_resource_register(&self, resource_id: &ContentId) -> TelResult<ResourceRegister> {
+        // Get the register
+        let registers = self.registers.read().map_err(|_| 
+            TelError::InternalError("Failed to acquire registers lock".to_string()))?;
+        
+        let register = registers.get(resource_id)
+            .ok_or_else(|| TelError::ResourceError(format!(
+                "Resource register {:?} not found", resource_id
+            )))?;
+        
+        // Convert Register to ResourceRegister
+        Ok(register.resource_register().clone())
+    }
+    
+    /// Update a resource register
+    pub fn update_resource_register(&self, resource_id: &ContentId, resource_register: ResourceRegister) -> TelResult<()> {
+        let mut registers = self.registers.write().map_err(|_| 
+            TelError::InternalError("Failed to acquire registers lock".to_string()))?;
+        
+        // Check if register exists
+        if !registers.contains_key(resource_id) {
+            return Err(TelError::ResourceError(format!(
+                "Resource register {:?} not found", resource_id
+            )));
+        }
+        
+        // Update the register with the new resource register
+        let register = Register::from_resource_register(resource_register);
+        registers.insert(*resource_id, register);
+        
+        Ok(())
+    }
+    
+    /// Get all resource registers
+    pub fn get_all_resource_registers(&self) -> TelResult<Vec<ResourceRegister>> {
+        let registers = self.registers.read().map_err(|_| 
+            TelError::InternalError("Failed to acquire registers lock".to_string()))?;
+        
+        let mut result = Vec::new();
+        for register in registers.values() {
+            result.push(register.resource_register().clone());
+        }
+        
+        Ok(result)
+    }
+    
+    /// Get resource registers by domain
+    pub fn get_resource_registers_by_domain(&self, domain: &Domain) -> TelResult<Vec<ResourceRegister>> {
+        let registers = self.registers.read().map_err(|_| 
+            TelError::InternalError("Failed to acquire registers lock".to_string()))?;
+        
+        let mut result = Vec::new();
+        for register in registers.values() {
+            // Check if register belongs to the specified domain
+            // We need to extract the domain from the metadata
+            if let Some(reg_domain) = register.resource_register().metadata.get("domain") {
+                if reg_domain == &domain.to_string() {
+                    result.push(register.resource_register().clone());
+                }
+            }
+        }
+        
+        Ok(result)
+    }
+    
+    /// Clear all resource registers (for testing or snapshot restoration)
+    pub fn clear_all_resource_registers(&self) -> TelResult<()> {
+        let mut registers = self.registers.write().map_err(|_| 
+            TelError::InternalError("Failed to acquire registers write lock".to_string()))?;
+        
+        registers.clear();
+        
+        // Also clear epoch data
+        let mut registers_by_epoch = self.registers_by_epoch.write().map_err(|_| 
+            TelError::InternalError("Failed to acquire epoch data write lock".to_string()))?;
+        
+        registers_by_epoch.clear();
+        
+        Ok(())
+    }
+    
+    /// Restore a resource register from a snapshot
+    pub fn restore_resource_register(&self, resource_register: &ResourceRegister) -> TelResult<()> {
+        let mut registers = self.registers.write().map_err(|_| 
+            TelError::InternalError("Failed to acquire registers write lock".to_string()))?;
+        
+        // Create a Register from the ResourceRegister
+        let register = Register::from_resource_register(resource_register.clone());
+        
+        // Add to the collection
+        registers.insert(resource_register.id, register);
+        
+        // Add to epoch tracking
+        let mut registers_by_epoch = self.registers_by_epoch.write().map_err(|_| 
+            TelError::InternalError("Failed to acquire epoch data write lock".to_string()))?;
+        
+        let current_epoch = *self.current_epoch.read().map_err(|_| 
+            TelError::InternalError("Failed to acquire current epoch lock".to_string()))?;
+        
+        registers_by_epoch
+            .entry(current_epoch)
+            .or_insert_with(HashSet::new)
+            .insert(resource_register.id);
+        
+        Ok(())
     }
 }
 

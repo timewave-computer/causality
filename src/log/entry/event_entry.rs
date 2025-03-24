@@ -5,7 +5,8 @@
 use std::fmt;
 use serde::{Serialize, Deserialize};
 
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 
 /// The severity level of an event
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,7 +47,7 @@ pub struct EventEntry {
     /// The event details
     pub details: serde_json::Value,
     /// Related resources, if any
-    pub resources: Option<Vec<ResourceId>>,
+    pub resources: Option<Vec<ContentId>>,
     /// Related domains, if any
     pub domains: Option<Vec<DomainId>>,
 }
@@ -58,7 +59,7 @@ impl EventEntry {
         severity: EventSeverity,
         component: String,
         details: serde_json::Value,
-        resources: Option<Vec<ResourceId>>,
+        resources: Option<Vec<ContentId>>,
         domains: Option<Vec<DomainId>>,
     ) -> Self {
         Self {
@@ -92,7 +93,7 @@ impl EventEntry {
     }
     
     /// Get the related resources, if any
-    pub fn resources(&self) -> Option<&[ResourceId]> {
+    pub fn resources(&self) -> Option<&[ContentId]> {
         self.resources.as_deref()
     }
     
@@ -182,7 +183,7 @@ impl EventEntry {
     }
     
     /// Add resources to this event
-    pub fn with_resources(mut self, resources: Vec<ResourceId>) -> Self {
+    pub fn with_resources(mut self, resources: Vec<ContentId>) -> Self {
         self.resources = Some(resources);
         self
     }
@@ -204,7 +205,7 @@ mod tests {
         let severity = EventSeverity::Info;
         let component = "test".to_string();
         let details = serde_json::json!({"message": "test message"});
-        let resources = Some(vec![ResourceId::new(1)]);
+        let resources = Some(vec![ContentId::new(1)]);
         let domains = Some(vec![DomainId::new(1)]);
         
         let entry = EventEntry::new(
@@ -225,11 +226,11 @@ mod tests {
         
         // Test convenience methods
         let debug = EventEntry::debug("test", "debug_event", serde_json::json!({}))
-            .with_resources(vec![ResourceId::new(1)]);
+            .with_resources(vec![ContentId::new(1)]);
         assert_eq!(debug.severity, EventSeverity::Debug);
         assert_eq!(debug.component, "test");
         assert_eq!(debug.event_name, "debug_event");
-        assert_eq!(debug.resources.unwrap()[0], ResourceId::new(1));
+        assert_eq!(debug.resources.unwrap()[0], ContentId::new(1));
         
         let info = EventEntry::info("test", "info_event", serde_json::json!({}))
             .with_domains(vec![DomainId::new(1)]);

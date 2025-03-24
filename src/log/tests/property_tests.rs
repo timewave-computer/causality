@@ -15,7 +15,8 @@ use proptest::option;
 use crate::error::Result;
 use crate::log::entry::{EntryType, EntryData, LogEntry, EventEntry, EventSeverity, EffectEntry, FactEntry};
 use crate::log::storage::{LogStorage, MemoryLogStorage};
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::effect::types::EffectType;
 
 /// Strategies for generating test data
@@ -38,8 +39,8 @@ fn severity_strategy() -> impl Strategy<Value = EventSeverity> {
 }
 
 /// Strategy for generating resource IDs
-fn resource_id_strategy() -> impl Strategy<Value = ResourceId> {
-    (0..100u64).prop_map(|id| ResourceId::new(id.to_string()))
+fn resource_id_strategy() -> impl Strategy<Value = ContentId> {
+    (0..100u64).prop_map(|id| ContentId::new(id.to_string()))
 }
 
 /// Strategy for generating domain IDs

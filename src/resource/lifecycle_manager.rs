@@ -9,11 +9,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{Error, Result};
-use crate::types::{ResourceId, DomainId, Timestamp, Metadata, RegisterState};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::resource::capability_system::AuthorizationService;
 use crate::resource::relationship_tracker::RelationshipTracker;
 use crate::relationship::cross_domain_query::{ResourceStateTransitionHelper, RelationshipQueryExecutor};
@@ -50,11 +50,11 @@ pub enum RegisterOperationType {
 /// Record of a state transition for a resource
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateTransitionRecord {
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     pub from_state: RegisterState,
     pub to_state: RegisterState,
     pub timestamp: Timestamp,
-    pub caused_by: Option<ResourceId>,
+    pub caused_by: Option<ContentId>,
     pub metadata: Metadata,
 }
 
@@ -62,11 +62,11 @@ pub struct StateTransitionRecord {
 /// of resources and enforces valid state transitions.
 pub struct ResourceRegisterLifecycleManager {
     /// Map of resource ID to current state
-    states: HashMap<ResourceId, RegisterState>,
+    states: HashMap<ContentId, RegisterState>,
     /// Map of resource ID to resources it has locked
-    locked_resources: HashMap<ResourceId, HashSet<ResourceId>>,
+    locked_resources: HashMap<ContentId, HashSet<ContentId>>,
     /// History of state transitions for each resource
-    transition_history: HashMap<ResourceId, Vec<StateTransitionRecord>>,
+    transition_history: HashMap<ContentId, Vec<StateTransitionRecord>>,
     /// Valid state transitions
     valid_transitions: HashMap<RegisterState, HashSet<RegisterState>>,
     /// Relationship tracker for validating relationship constraints during transitions
@@ -147,7 +147,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Register a new resource in the initial state
-    pub fn register_resource(&mut self, resource_id: ResourceId) -> Result<()> {
+    pub fn register_resource(&mut self, resource_id: ContentId) -> Result<()> {
         if self.states.contains_key(&resource_id) {
             return Err(Error::InvalidOperation(format!(
                 "Resource {} already registered",
@@ -161,7 +161,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Get the current state of a resource
-    pub fn get_state(&self, resource_id: &ResourceId) -> Result<RegisterState> {
+    pub fn get_state(&self, resource_id: &ContentId) -> Result<RegisterState> {
         self.states
             .get(resource_id)
             .cloned()
@@ -171,10 +171,10 @@ impl ResourceRegisterLifecycleManager {
     /// Record a state transition for a resource
     fn record_transition(
         &mut self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         from_state: RegisterState,
         to_state: RegisterState,
-        caused_by: Option<&ResourceId>,
+        caused_by: Option<&ContentId>,
         metadata: Option<Metadata>,
     ) -> Result<()> {
         let timestamp = SystemTime::now()
@@ -203,7 +203,7 @@ impl ResourceRegisterLifecycleManager {
     /// Validate a state transition considering relationships
     async fn validate_state_transition_with_relationships(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         from_state: &RegisterState,
         to_state: &RegisterState,
     ) -> Result<bool> {
@@ -238,9 +238,9 @@ impl ResourceRegisterLifecycleManager {
     /// Transition state with relationship validation
     pub async fn transition_state_async(
         &mut self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         to_state: RegisterState,
-        caused_by: Option<&ResourceId>,
+        caused_by: Option<&ContentId>,
         metadata: Option<Metadata>,
     ) -> Result<()> {
         // Get current state
@@ -297,7 +297,7 @@ impl ResourceRegisterLifecycleManager {
     /// Check if an operation is valid for a given resource state
     pub fn is_operation_valid(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         operation: &RegisterOperationType,
     ) -> Result<bool> {
         let state = self.get_state(resource_id)?;
@@ -340,7 +340,7 @@ impl ResourceRegisterLifecycleManager {
     /// Validate an operation against provided capabilities
     pub fn validate_operation(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         operation_type: RegisterOperationType,
         capability_ids: &[CapabilityId],
     ) -> Result<bool> {
@@ -355,11 +355,11 @@ impl ResourceRegisterLifecycleManager {
     /// Execute an operation only if it's allowed by the provided capabilities
     pub fn execute_with_capabilities(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         operation_type: RegisterOperationType,
         capability_ids: &[CapabilityId],
         // Using a function pointer for the operation to execute
-        operation: fn(&Self, &ResourceId) -> Result<()>,
+        operation: fn(&Self, &ContentId) -> Result<()>,
     ) -> Result<()> {
         // Validate the operation first
         if !self.validate_operation(resource_id, operation_type, capability_ids)? {
@@ -376,7 +376,7 @@ impl ResourceRegisterLifecycleManager {
     /// Activate a resource if allowed by capabilities
     pub fn activate_with_capabilities(
         &self, 
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         capability_ids: &[CapabilityId],
     ) -> Result<()> {
         self.execute_with_capabilities(
@@ -390,7 +390,7 @@ impl ResourceRegisterLifecycleManager {
     /// Lock a resource if allowed by capabilities
     pub fn lock_with_capabilities(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         capability_ids: &[CapabilityId],
     ) -> Result<()> {
         self.execute_with_capabilities(
@@ -404,7 +404,7 @@ impl ResourceRegisterLifecycleManager {
     /// Unlock a resource if allowed by capabilities
     pub fn unlock_with_capabilities(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         capability_ids: &[CapabilityId],
     ) -> Result<()> {
         self.execute_with_capabilities(
@@ -418,7 +418,7 @@ impl ResourceRegisterLifecycleManager {
     /// Freeze a resource if allowed by capabilities
     pub fn freeze_with_capabilities(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         capability_ids: &[CapabilityId],
     ) -> Result<()> {
         self.execute_with_capabilities(
@@ -432,7 +432,7 @@ impl ResourceRegisterLifecycleManager {
     /// Unfreeze a resource if allowed by capabilities
     pub fn unfreeze_with_capabilities(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         capability_ids: &[CapabilityId],
     ) -> Result<()> {
         self.execute_with_capabilities(
@@ -446,7 +446,7 @@ impl ResourceRegisterLifecycleManager {
     /// Consume a resource if allowed by capabilities
     pub fn consume_with_capabilities(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         capability_ids: &[CapabilityId],
     ) -> Result<()> {
         self.execute_with_capabilities(
@@ -458,7 +458,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Activate a resource (transition from Initial to Active)
-    pub fn activate(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn activate(&mut self, resource_id: &ContentId) -> Result<()> {
         self.transition_state(
             resource_id,
             RegisterState::Active,
@@ -468,7 +468,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Lock a resource
-    pub fn lock(&mut self, resource_id: &ResourceId, locker_id: Option<&ResourceId>) -> Result<()> {
+    pub fn lock(&mut self, resource_id: &ContentId, locker_id: Option<&ContentId>) -> Result<()> {
         // Check if resource is in a state that can be locked
         if !self.is_operation_valid(resource_id, &RegisterOperationType::Lock)? {
             return Err(Error::InvalidOperation(format!(
@@ -497,7 +497,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Unlock a resource
-    pub fn unlock(&mut self, resource_id: &ResourceId, unlocker_id: Option<&ResourceId>) -> Result<()> {
+    pub fn unlock(&mut self, resource_id: &ContentId, unlocker_id: Option<&ContentId>) -> Result<()> {
         // Check if resource is in a state that can be unlocked
         if !self.is_operation_valid(resource_id, &RegisterOperationType::Unlock)? {
             return Err(Error::InvalidOperation(format!(
@@ -541,7 +541,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Freeze a resource
-    pub fn freeze(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn freeze(&mut self, resource_id: &ContentId) -> Result<()> {
         if !self.is_operation_valid(resource_id, &RegisterOperationType::Freeze)? {
             return Err(Error::InvalidOperation(format!(
                 "Resource {} cannot be frozen in its current state",
@@ -558,7 +558,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Unfreeze a resource
-    pub fn unfreeze(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn unfreeze(&mut self, resource_id: &ContentId) -> Result<()> {
         if !self.is_operation_valid(resource_id, &RegisterOperationType::Unfreeze)? {
             return Err(Error::InvalidOperation(format!(
                 "Resource {} cannot be unfrozen in its current state",
@@ -575,7 +575,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Mark a resource as pending consumption
-    pub fn mark_pending(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn mark_pending(&mut self, resource_id: &ContentId) -> Result<()> {
         self.transition_state(
             resource_id,
             RegisterState::Pending,
@@ -585,7 +585,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Consume a resource (terminal state)
-    pub fn consume(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn consume(&mut self, resource_id: &ContentId) -> Result<()> {
         if !self.is_operation_valid(resource_id, &RegisterOperationType::Consume)? {
             return Err(Error::InvalidOperation(format!(
                 "Resource {} cannot be consumed in its current state",
@@ -602,7 +602,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Archive a resource
-    pub fn archive(&mut self, resource_id: &ResourceId) -> Result<()> {
+    pub fn archive(&mut self, resource_id: &ContentId) -> Result<()> {
         if !self.is_operation_valid(resource_id, &RegisterOperationType::Archive)? {
             return Err(Error::InvalidOperation(format!(
                 "Resource {} cannot be archived in its current state",
@@ -619,7 +619,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Get the transition history for a resource
-    pub fn get_transition_history(&self, resource_id: &ResourceId) -> Result<Vec<StateTransitionRecord>> {
+    pub fn get_transition_history(&self, resource_id: &ContentId) -> Result<Vec<StateTransitionRecord>> {
         self.transition_history
             .get(resource_id)
             .cloned()
@@ -627,7 +627,7 @@ impl ResourceRegisterLifecycleManager {
     }
 
     /// Get all resources locked by a specific resource
-    pub fn get_locked_resources(&self, locker_id: &ResourceId) -> Result<HashSet<ResourceId>> {
+    pub fn get_locked_resources(&self, locker_id: &ContentId) -> Result<HashSet<ContentId>> {
         Ok(self.locked_resources
             .get(locker_id)
             .cloned()
@@ -649,7 +649,7 @@ mod tests {
     fn test_lifecycle_basic_transitions() -> Result<()> {
         let mut manager = ResourceRegisterLifecycleManager::new();
         
-        let resource_id = ResourceId("test1".to_string());
+        let resource_id = ContentId::new("test1".to_string());
         
         // Register and check initial state
         manager.register_resource(resource_id.clone())?;
@@ -690,9 +690,9 @@ mod tests {
     fn test_lock_relationships() -> Result<()> {
         let mut manager = ResourceRegisterLifecycleManager::new();
         
-        let parent = ResourceId("parent".to_string());
-        let child1 = ResourceId("child1".to_string());
-        let child2 = ResourceId("child2".to_string());
+        let parent = ContentId::new("parent".to_string());
+        let child1 = ContentId::new("child1".to_string());
+        let child2 = ContentId::new("child2".to_string());
         
         // Register and activate all resources
         for resource in [parent.clone(), child1.clone(), child2.clone()] {
@@ -716,7 +716,7 @@ mod tests {
         assert!(locked.contains(&child2));
         
         // Try to unlock with wrong unlocker
-        let wrong_unlocker = ResourceId("wrong".to_string());
+        let wrong_unlocker = ContentId::new("wrong".to_string());
         manager.register_resource(wrong_unlocker.clone())?;
         manager.activate(&wrong_unlocker)?;
         
@@ -742,7 +742,7 @@ mod tests {
     fn test_transition_history() -> Result<()> {
         let mut manager = ResourceRegisterLifecycleManager::new();
         
-        let resource_id = ResourceId("test-history".to_string());
+        let resource_id = ContentId::new("test-history".to_string());
         
         // Register and perform several transitions
         manager.register_resource(resource_id.clone())?;

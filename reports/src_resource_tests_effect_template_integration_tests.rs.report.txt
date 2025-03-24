@@ -1,0 +1,107 @@
+Analyzing src/resource/tests/effect_template_integration_tests.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+97:        execution_id: Some(uuid::Uuid::new_v4()),
+147:        execution_id: Some(uuid::Uuid::new_v4()),
+212:        execution_id: Some(uuid::Uuid::new_v4()),
+259:        execution_id: Some(uuid::Uuid::new_v4()),
+318:        execution_id: Some(uuid::Uuid::new_v4()),
+374:        execution_id: Some(uuid::Uuid::new_v4()),
+
+Detailed context for each occurrence:
+==============================================
+
+Line 97:         execution_id: Some(uuid::Uuid::new_v4()),
+---------------------------------------------
+    let state_before = resource_manager.get_resource_state(&resource.id)?;
+    assert_eq!(state_before, RegisterState::Initial);
+    
+    // Create a mock context
+    let context = EffectContext {
+        execution_id: Some(uuid::Uuid::new_v4()),
+        invoker: Some(invoker.clone()),
+        domains: vec![domain_id.clone()],
+        capabilities: vec![],
+        resource_manager: Some(Arc::new(resource_manager)),
+        ..Default::default()
+---------------------------------------------
+
+Line 147:         execution_id: Some(uuid::Uuid::new_v4()),
+---------------------------------------------
+    // Create the lock effect
+    let lock_effect = lock_resource_effect(&mut active_resource.clone(), domain_id.clone(), invoker.clone())?;
+    
+    // Create a mock context
+    let context = EffectContext {
+        execution_id: Some(uuid::Uuid::new_v4()),
+        invoker: Some(invoker.clone()),
+        domains: vec![domain_id.clone()],
+        capabilities: vec![],
+        resource_manager: Some(Arc::new(resource_manager.clone())),
+        ..Default::default()
+---------------------------------------------
+
+Line 212:         execution_id: Some(uuid::Uuid::new_v4()),
+---------------------------------------------
+        &mut relationship_tracker,
+    )?;
+    
+    // Create a mock context
+    let context = EffectContext {
+        execution_id: Some(uuid::Uuid::new_v4()),
+        invoker: Some(invoker.clone()),
+        domains: vec![domain_id.clone()],
+        capabilities: vec![],
+        resource_manager: Some(Arc::new(resource_manager)),
+        ..Default::default()
+---------------------------------------------
+
+Line 259:         execution_id: Some(uuid::Uuid::new_v4()),
+---------------------------------------------
+    // Add the resource to the manager
+    resource_manager.add_resource(resource.clone())?;
+    
+    // Create a mock context
+    let context = EffectContext {
+        execution_id: Some(uuid::Uuid::new_v4()),
+        invoker: Some(invoker.clone()),
+        domains: vec![domain_id.clone()],
+        capabilities: vec![],
+        resource_manager: Some(Arc::new(resource_manager)),
+        boundary_manager: Some(Arc::new(MockBoundaryManager::new(true))),
+---------------------------------------------
+
+Line 318:         execution_id: Some(uuid::Uuid::new_v4()),
+---------------------------------------------
+        capability_ids.clone(),
+    )?;
+    
+    // Create a mock context with authorization service
+    let context = EffectContext {
+        execution_id: Some(uuid::Uuid::new_v4()),
+        invoker: Some(invoker.clone()),
+        domains: vec![domain_id.clone()],
+        capabilities: capability_ids.clone(),
+        resource_manager: Some(Arc::new(resource_manager)),
+        authorization_service: Some(Arc::new(MockAuthorizationService::new(true))),
+---------------------------------------------
+
+Line 374:         execution_id: Some(uuid::Uuid::new_v4()),
+---------------------------------------------
+        time_snapshot.clone(),
+    )?;
+    
+    // Create a mock context with time service
+    let context = EffectContext {
+        execution_id: Some(uuid::Uuid::new_v4()),
+        invoker: Some(invoker.clone()),
+        domains: vec![domain_id.clone()],
+        capabilities: vec![],
+        resource_manager: Some(Arc::new(resource_manager)),
+        time_service: Some(Arc::new(MockTimeService::new(true))),
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+No public structs found

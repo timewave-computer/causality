@@ -9,7 +9,8 @@ use async_trait::async_trait;
 use chrono::Utc;
 use thiserror::Error;
 
-use crate::types::{DomainId, ResourceId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::verification::{
     UnifiedProof,
     VerificationContext,

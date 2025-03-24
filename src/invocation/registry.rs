@@ -10,7 +10,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::error::{Error, Result};
 use crate::domain::DomainId;
-use crate::types::ResourceId;
+use crate::crypto::hash::ContentId;
 use crate::invocation::InvocationContext;
 
 /// Resource access level for effect handlers
@@ -26,7 +26,7 @@ pub enum AccessLevel {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceRequirement {
     /// Resource ID
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     /// Required access level
     pub access_level: AccessLevel,
 }
@@ -70,7 +70,7 @@ impl HandlerRegistration {
     }
     
     /// Add a resource requirement to this handler
-    pub fn with_resource(mut self, resource_id: ResourceId, access_level: AccessLevel) -> Self {
+    pub fn with_resource(mut self, resource_id: ContentId, access_level: AccessLevel) -> Self {
         self.resources.push(ResourceRequirement {
             resource_id,
             access_level,
@@ -371,8 +371,8 @@ mod tests {
     #[tokio::test]
     async fn test_handler_registration_builder() {
         let domain = DomainId::new();
-        let resource1 = ResourceId::new();
-        let resource2 = ResourceId::new();
+        let resource1 = ContentId::new();
+        let resource2 = ContentId::new();
         
         let registration = HandlerRegistration::new(
             "test-handler",

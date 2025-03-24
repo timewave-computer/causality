@@ -14,7 +14,7 @@ use crate::domain::{
     Transaction, TransactionId, TransactionStatus, TransactionReceipt
 };
 use crate::effect::{Effect, EffectContext, EffectResult, EffectError, EffectOutcome};
-use crate::resource::ResourceId;
+use crate::resource::ContentId;
 use crate::fact::{Fact, FactId, FactResult};
 
 /// Fact query parameters for observing domain facts
@@ -255,7 +255,7 @@ pub trait EffectHandlerAdapter: DomainAdapter {
     async fn execute_effect(&self, effect: &dyn Effect, context: &EffectContext) -> EffectResult<EffectOutcome>;
     
     /// Create an effect in this domain
-    fn create_effect(&self, effect_type: &str, resource_id: ResourceId, params: HashMap<String, String>) -> Result<Box<dyn Effect>>;
+    fn create_effect(&self, effect_type: &str, resource_id: ContentId, params: HashMap<String, String>) -> Result<Box<dyn Effect>>;
 }
 
 /// Composite domain adapter that delegates to multiple domain adapters
@@ -476,7 +476,7 @@ impl EffectHandlerAdapter for CompositeEffectHandlerAdapter {
         }
     }
     
-    fn create_effect(&self, effect_type: &str, resource_id: ResourceId, params: HashMap<String, String>) -> Result<Box<dyn Effect>> {
+    fn create_effect(&self, effect_type: &str, resource_id: ContentId, params: HashMap<String, String>) -> Result<Box<dyn Effect>> {
         if let Some(handler) = self.find_effect_handler(effect_type) {
             handler.create_effect(effect_type, resource_id, params)
         } else {

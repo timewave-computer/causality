@@ -1,0 +1,30 @@
+Analyzing src/domain/fact_observer.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+483:            id: uuid::Uuid::new_v4(),
+
+Detailed context for each occurrence:
+==============================================
+
+Line 483:             id: uuid::Uuid::new_v4(),
+---------------------------------------------
+
+impl ObserveDomainFactEffect {
+    /// Create a new observe domain fact effect
+    pub fn new(query: FactQuery) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4(),
+            query,
+            cache_result: true,
+        }
+    }
+    
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+18:pub struct DomainFact {
+116:pub struct AdapterFactObserver {
+198:pub struct DomainFactObserverRegistry {
+468:pub struct ObserveDomainFactEffect {

@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::fmt::Debug;
 use async_trait::async_trait;
 use serde_json::Value;
-use uuid::Uuid;
 
 use crate::address::Address;
 use crate::resource::{ResourceId, ResourceAPI, CapabilityRef, Right};

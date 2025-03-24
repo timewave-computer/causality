@@ -1,0 +1,32 @@
+Analyzing src/tel/effect/mod.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+50:            id: Uuid::new_v4(),
+
+Detailed context for each occurrence:
+==============================================
+
+Line 50:             id: Uuid::new_v4(),
+---------------------------------------------
+
+impl ResourceEffect {
+    /// Create a new resource effect
+    pub fn new(operation: ResourceOperation) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            operation,
+            proof: None,
+            requires_verification: false,
+        }
+    }
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+35:pub struct ResourceEffect {
+73:pub struct EffectResult {
+87:pub struct ResourceEffectAdapter {
+278:pub struct RepeatConfig {
+305:pub struct RepeatingEffect {
+474:pub struct EffectComposer {

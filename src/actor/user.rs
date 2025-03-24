@@ -6,16 +6,116 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use tokio::sync::mpsc;
+use borsh::{BorshSerialize, BorshDeserialize};
+use getrandom;
 
 use crate::error::{Error, Result};
-use crate::types::{Timestamp};
-use super::{
-    Actor, ActorId, ActorType, ActorState, ActorInfo, BaseActor,
-    Message, MessageCategory, MessagePayload,
-};
+use crate::types::Timestamp;
+use crate::crypto::{HashFactory, HashOutput};
+use crate::crypto::hash::{ContentAddressed, ContentId};
+use crate::actor::types::{ActorIdBox as ActorId, GenericActorId};
+use crate::actor::messaging::{Message, MessageCategory, MessagePayload};
+
+// We'll define these traits/structs here for now - they should be properly placed in their own modules
+use async_trait::async_trait;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActorType {
+    User,
+    System,
+    Service,
+    Device,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActorState {
+    New,
+    Pending,
+    Active,
+    Inactive,
+    Terminated,
+}
+
+#[derive(Debug, Clone)]
+pub struct ActorInfo {
+    pub name: String,
+    pub description: Option<String>,
+    pub version: Option<String>,
+}
+
+#[async_trait]
+pub trait Actor {
+    fn id(&self) -> &ActorId;
+    fn actor_type(&self) -> ActorType;
+    fn state(&self) -> ActorState;
+    fn info(&self) -> ActorInfo;
+    async fn initialize(&self) -> Result<()>;
+    async fn start(&self) -> Result<()>;
+    async fn stop(&self) -> Result<()>;
+    async fn handle_message(&self, message: Message) -> Result<Option<Message>>;
+    async fn has_permission(&self, permission: &str) -> Result<bool>;
+}
+
+/// Basic actor implementation
+pub struct BaseActor {
+    id: ActorId,
+    actor_type: ActorType,
+    state: Arc<RwLock<ActorState>>,
+    info: ActorInfo,
+}
+
+impl BaseActor {
+    /// Create a new base actor
+    pub fn new(id: ActorId, actor_type: ActorType, name: &str) -> Self {
+        BaseActor {
+            id,
+            actor_type,
+            state: Arc::new(RwLock::new(ActorState::New)),
+            info: ActorInfo {
+                name: name.to_string(),
+                description: None,
+                version: None,
+            },
+        }
+    }
+    
+    /// Get the actor's ID
+    pub fn id(&self) -> &ActorId {
+        &self.id
+    }
+    
+    /// Get the actor type
+    pub fn actor_type(&self) -> ActorType {
+        self.actor_type
+    }
+    
+    /// Get the actor's current state
+    pub fn state(&self) -> ActorState {
+        *self.state.read().unwrap()
+    }
+    
+    /// Get the actor's info
+    pub fn info(&self) -> ActorInfo {
+        self.info.clone()
+    }
+    
+    /// Update the actor's state
+    pub fn update_state(&self, new_state: ActorState) -> Result<()> {
+        let mut state = self.state.write().map_err(|_| 
+            Error::InternalError("Failed to acquire lock".to_string()))?;
+        *state = new_state;
+        Ok(())
+    }
+    
+    /// Update the actor's info
+    pub fn update_info(&mut self, info: ActorInfo) {
+        self.info = info;
+    }
+}
 
 /// User authentication method
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -127,6 +227,10 @@ impl UserProfile {
     pub fn new(display_name: &str) -> Self {
         UserProfile {
             display_name: display_name.to_string(),
+            email: None,
+            profile_picture: None,
+            language: None,
+            timezone: None,
             metadata: HashMap::new(),
         }
     }
@@ -135,6 +239,69 @@ impl UserProfile {
     pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
         self.metadata.insert(key.to_string(), value.to_string());
         self
+    }
+
+    /// Set the email address
+    pub fn with_email(mut self, email: &str) -> Self {
+        self.email = Some(email.to_string());
+        self
+    }
+
+    /// Set the profile picture
+    pub fn with_profile_picture(mut self, url: &str) -> Self {
+        self.profile_picture = Some(url.to_string());
+        self
+    }
+
+    /// Set the language
+    pub fn with_language(mut self, language: &str) -> Self {
+        self.language = Some(language.to_string());
+        self
+    }
+
+    /// Set the timezone
+    pub fn with_timezone(mut self, timezone: &str) -> Self {
+        self.timezone = Some(timezone.to_string());
+        self
+    }
+}
+
+/// Content data for access token generation
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct TokenContentData {
+    /// User ID
+    pub user_id: String,
+    
+    /// Token creation timestamp
+    pub created_at: u64,
+    
+    /// Token expiration timestamp
+    pub expires_at: u64,
+    
+    /// Random nonce for uniqueness
+    pub nonce: [u8; 16],
+}
+
+impl ContentAddressed for TokenContentData {
+    fn content_hash(&self) -> Result<ContentId> {
+        let bytes = self.to_bytes()?;
+        Ok(ContentId::from_bytes(&bytes)?)
+    }
+    
+    fn verify(&self, content_id: &ContentId) -> Result<bool> {
+        let calculated_id = self.content_hash()?;
+        Ok(calculated_id == *content_id)
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>> {
+        let bytes = borsh::to_vec(self)
+            .map_err(|e| Error::Serialization(format!("Failed to serialize TokenContentData: {}", e)))?;
+        Ok(bytes)
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        borsh::from_slice(bytes)
+            .map_err(|e| Error::Deserialization(format!("Failed to deserialize TokenContentData: {}", e)))
     }
 }
 
@@ -251,15 +418,40 @@ impl User {
     
     /// Create an access token for the user
     pub fn create_access_token(&self, ttl_seconds: u64) -> Result<String> {
-        use uuid::Uuid;
+        // Get current time
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let expires_at = now + ttl_seconds;
         
-        let token = Uuid::new_v4().to_string();
-        let expires_at = Timestamp::now() + ttl_seconds;
+        // Create a unique token using timestamp, user ID, and random nonce
+        let mut nonce = [0u8; 16];
+        getrandom::getrandom(&mut nonce).expect("Failed to generate random nonce");
         
-        let mut tokens = self.access_tokens.write().map_err(|_| 
-            Error::InternalError("Failed to acquire lock".to_string()))?;
+        // Combine data for a content-based ID
+        let token_source = format!(
+            "token:{}:{}:{}",
+            self.base.id().to_string(),
+            now,
+            expires_at,
+        );
         
-        tokens.insert(token.clone(), expires_at);
+        // Use our crypto module's hash function
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher()
+            .map_err(|e| Error::InternalError(format!("Failed to create hasher: {}", e)))?;
+        
+        // Generate token using our crypto module
+        let hash = hasher.hash(token_source.as_bytes());
+        let token = format!("tk-{}", hash.to_hex());
+        
+        // Store token with expiration time
+        let mut tokens = self.access_tokens.write()
+            .map_err(|_| Error::InternalError("Failed to acquire lock".to_string()))?;
+        
+        tokens.insert(token.clone(), Timestamp::from_seconds(expires_at));
         
         Ok(token)
     }
@@ -564,7 +756,7 @@ mod tests {
     #[tokio::test]
     async fn test_user_permissions() {
         let user = User::new(
-            ActorId::new("test-user"),
+            ActorId::new(),
             "Test User",
         );
         
@@ -581,7 +773,7 @@ mod tests {
         
         // Check permissions through the User actor
         let query_message = Message::new(
-            Some(ActorId::new("test-sender")),
+            Some(ActorId::new()),
             user.id().clone(),
             MessageCategory::Query,
             MessagePayload::Query {
@@ -603,7 +795,7 @@ mod tests {
     #[tokio::test]
     async fn test_user_tokens() {
         let user = User::new(
-            ActorId::new("test-user"),
+            ActorId::new(),
             "Test User",
         );
         
@@ -623,7 +815,7 @@ mod tests {
     #[tokio::test]
     async fn test_user_profile() {
         let user = User::new(
-            ActorId::new("test-user"),
+            ActorId::new(),
             "Test User",
         );
         
@@ -644,13 +836,13 @@ mod tests {
     #[tokio::test]
     async fn test_user_message_handling() {
         let user = User::new(
-            ActorId::new("test-user"),
+            ActorId::new(),
             "Test User",
         );
         
         // Test system message
         let system_message = Message::new(
-            Some(ActorId::new("test-sender")),
+            Some(ActorId::new()),
             user.id().clone(),
             MessageCategory::System,
             MessagePayload::System {

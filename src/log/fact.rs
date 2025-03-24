@@ -6,7 +6,8 @@ use serde::{Serialize, Deserialize};
 use crate::error::{Error, Result};
 use crate::log::{LogEntry, LogStorage};
 use crate::log::{FactEntry, EntryData};
-use crate::types::{ResourceId, DomainId, TraceId, BlockHeight, BlockHash, Timestamp};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 
 /// Manages fact observation logging
 pub struct FactLogger {
@@ -109,7 +110,7 @@ impl FactLogger {
         &self,
         trace_id: TraceId,
         fact_type: &str,
-        resource_id: Option<ResourceId>,
+        resource_id: Option<ContentId>,
         data: &T,
         metadata: Option<FactMetadata>,
     ) -> Result<()> {
@@ -155,7 +156,7 @@ impl FactLogger {
     pub fn log_state_fact<T: Serialize>(
         &self,
         trace_id: TraceId,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         state: &T,
         metadata: Option<FactMetadata>,
     ) -> Result<()> {
@@ -172,9 +173,9 @@ impl FactLogger {
     pub fn log_relationship_fact(
         &self,
         trace_id: TraceId,
-        from_resource: ResourceId,
+        from_resource: ContentId,
         relationship_type: &str,
-        to_resource: ResourceId,
+        to_resource: ContentId,
         metadata: Option<FactMetadata>,
     ) -> Result<()> {
         let relationship = RelationshipData {
@@ -196,7 +197,7 @@ impl FactLogger {
     pub fn log_property_fact<T: Serialize>(
         &self,
         trace_id: TraceId,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         property_name: &str,
         property_value: &T,
         metadata: Option<FactMetadata>,
@@ -220,7 +221,7 @@ impl FactLogger {
     pub fn log_constraint_fact(
         &self,
         trace_id: TraceId,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         constraint_type: &str,
         constraint_params: &[u8],
         metadata: Option<FactMetadata>,
@@ -261,11 +262,11 @@ impl FactLogger {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RelationshipData {
     /// The source resource
-    pub from_resource: ResourceId,
+    pub from_resource: ContentId,
     /// The type of relationship
     pub relationship_type: String,
     /// The target resource
-    pub to_resource: ResourceId,
+    pub to_resource: ContentId,
 }
 
 /// Data for a property fact
@@ -293,7 +294,7 @@ pub struct FactQuery<'a> {
     /// The fact type to query
     fact_type: Option<String>,
     /// The resource ID to query
-    resource_id: Option<ResourceId>,
+    resource_id: Option<ContentId>,
     /// The minimum confidence level
     min_confidence: Option<f64>,
     /// Whether to include expired facts
@@ -322,7 +323,7 @@ impl<'a> FactQuery<'a> {
     }
     
     /// Set the resource ID to query
-    pub fn for_resource(mut self, resource_id: ResourceId) -> Self {
+    pub fn for_resource(mut self, resource_id: ContentId) -> Self {
         self.resource_id = Some(resource_id);
         self
     }
@@ -420,7 +421,7 @@ mod tests {
         let result = logger.log_fact(
             trace_id.clone(),
             "test_fact",
-            Some(ResourceId::new("123")),
+            Some(ContentId::new("123")),
             &data,
             None,
         );
@@ -442,7 +443,7 @@ mod tests {
         let result = logger.log_fact(
             trace_id.clone(),
             "test_fact",
-            Some(ResourceId::new("123")),
+            Some(ContentId::new("123")),
             &data,
             Some(metadata.clone()),
         );
@@ -459,7 +460,7 @@ mod tests {
         let state_data = "resource state";
         let result = logger.log_state_fact(
             trace_id.clone(),
-            ResourceId::new("123"),
+            ContentId::new("123"),
             &state_data,
             None,
         );
@@ -468,9 +469,9 @@ mod tests {
         // Relationship fact
         let result = logger.log_relationship_fact(
             trace_id.clone(),
-            ResourceId::new("123"),
+            ContentId::new("123"),
             "depends_on",
-            ResourceId::new("456"),
+            ContentId::new("456"),
             None,
         );
         assert!(result.is_ok());
@@ -479,7 +480,7 @@ mod tests {
         let property_value = "property value";
         let result = logger.log_property_fact(
             trace_id.clone(),
-            ResourceId::new("123"),
+            ContentId::new("123"),
             "color",
             &property_value,
             None,
@@ -506,7 +507,7 @@ mod tests {
         logger.log_fact(
             trace_id.clone(),
             "type_a",
-            Some(ResourceId::new("123")),
+            Some(ContentId::new("123")),
             &"data1",
             Some(FactMetadata::new("observer").with_confidence(0.9)),
         ).unwrap();
@@ -514,7 +515,7 @@ mod tests {
         logger.log_fact(
             trace_id.clone(),
             "type_b",
-            Some(ResourceId::new("123")),
+            Some(ContentId::new("123")),
             &"data2",
             Some(FactMetadata::new("observer").with_confidence(0.5)),
         ).unwrap();
@@ -522,7 +523,7 @@ mod tests {
         logger.log_fact(
             trace_id.clone(),
             "type_a",
-            Some(ResourceId::new("456")),
+            Some(ContentId::new("456")),
             &"data3",
             Some(FactMetadata::new("observer").with_confidence(0.7)),
         ).unwrap();
@@ -531,7 +532,7 @@ mod tests {
         logger.log_fact(
             trace_id.clone(),
             "type_b",
-            Some(ResourceId::new("456")),
+            Some(ContentId::new("456")),
             &"data4",
             Some(FactMetadata::new("observer")
                 .with_expiration(Utc::now() - Duration::hours(1))),
@@ -548,7 +549,7 @@ mod tests {
         
         // Query by resource
         let resource_123_facts = FactQuery::new(&logger)
-            .for_resource(ResourceId::new("123"))
+            .for_resource(ContentId::new("123"))
             .execute();
             
         assert!(resource_123_facts.is_ok());
@@ -576,7 +577,7 @@ mod tests {
         // Combined query
         let combined = FactQuery::new(&logger)
             .of_type("type_a")
-            .for_resource(ResourceId::new("123"))
+            .for_resource(ContentId::new("123"))
             .execute();
             
         assert!(combined.is_ok());

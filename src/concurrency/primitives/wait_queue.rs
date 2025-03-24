@@ -13,7 +13,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use crate::error::{Error, Result};
-use crate::types::ResourceId;
+use crate::crypto::hash::ContentId;
 use super::TaskId;
 
 /// A shared wait queue that can be cloned and shared between components
@@ -31,12 +31,12 @@ pub fn shared() -> SharedWaitQueue {
 #[derive(Debug)]
 pub struct WaitQueue {
     // Map of resources to queues of requestors
-    queues: Mutex<HashMap<ResourceId, VecDeque<String>>>,
+    queues: Mutex<HashMap<ContentId, VecDeque<String>>>,
     // Map of requestors to the resources they own
     // This is used for deadlock detection
-    owned_resources: Mutex<HashMap<String, HashSet<ResourceId>>>,
+    owned_resources: Mutex<HashMap<String, HashSet<ContentId>>>,
     // Map of requestors to the resources they are waiting for
-    waiting_for: Mutex<HashMap<String, ResourceId>>,
+    waiting_for: Mutex<HashMap<String, ContentId>>,
     /// The queue of wakers for tasks waiting
     wakers: Mutex<VecDeque<(TaskId, Waker)>>,
 }
@@ -58,9 +58,9 @@ impl WaitQueue {
     /// currently owns. This is used for deadlock detection.
     pub fn add_requestor(
         &self,
-        resource: ResourceId,
+        resource: ContentId,
         requestor: String,
-        owned_resources: HashSet<ResourceId>,
+        owned_resources: HashSet<ContentId>,
     ) -> Result<()> {
         // Update queues
         let mut queues = self.queues.lock().map_err(|_| 
@@ -94,7 +94,7 @@ impl WaitQueue {
     }
     
     /// Remove a requestor from the wait queue for a resource
-    pub fn remove_requestor(&self, resource: ResourceId, requestor: &str) -> Result<()> {
+    pub fn remove_requestor(&self, resource: ContentId, requestor: &str) -> Result<()> {
         // Update queues
         let mut queues = self.queues.lock().map_err(|_| 
             Error::InternalError("Failed to lock wait queues".to_string()))?;
@@ -130,7 +130,7 @@ impl WaitQueue {
     /// Get the next requestor for a resource
     ///
     /// Returns None if there are no requestors for the resource.
-    pub fn get_next_requestor(&self, resource: ResourceId) -> Result<Option<String>> {
+    pub fn get_next_requestor(&self, resource: ContentId) -> Result<Option<String>> {
         let queues = self.queues.lock().map_err(|_| 
             Error::InternalError("Failed to lock wait queues".to_string()))?;
             
@@ -145,7 +145,7 @@ impl WaitQueue {
     pub fn update_owned_resources(
         &self,
         requestor: &str,
-        resources: HashSet<ResourceId>,
+        resources: HashSet<ContentId>,
     ) -> Result<()> {
         let mut owned = self.owned_resources.lock().map_err(|_| 
             Error::InternalError("Failed to lock owned resources".to_string()))?;
@@ -262,7 +262,7 @@ impl WaitQueue {
     }
     
     /// Get the number of requestors waiting for a resource
-    pub fn queue_length(&self, resource: ResourceId) -> Result<usize> {
+    pub fn queue_length(&self, resource: ContentId) -> Result<usize> {
         let queues = self.queues.lock().map_err(|_| 
             Error::InternalError("Failed to lock wait queues".to_string()))?;
             
@@ -274,7 +274,7 @@ impl WaitQueue {
     }
     
     /// Get all resources that have waiters
-    pub fn resources_with_waiters(&self) -> Result<HashSet<ResourceId>> {
+    pub fn resources_with_waiters(&self) -> Result<HashSet<ContentId>> {
         let queues = self.queues.lock().map_err(|_| 
             Error::InternalError("Failed to lock wait queues".to_string()))?;
             
@@ -282,7 +282,7 @@ impl WaitQueue {
     }
     
     /// Get the resources that a requestor is waiting for
-    pub fn requestor_waiting_for(&self, requestor: &str) -> Result<Option<ResourceId>> {
+    pub fn requestor_waiting_for(&self, requestor: &str) -> Result<Option<ContentId>> {
         let waiting = self.waiting_for.lock().map_err(|_| 
             Error::InternalError("Failed to lock waiting for resources".to_string()))?;
             
@@ -290,7 +290,7 @@ impl WaitQueue {
     }
     
     /// Get all the resources owned by a requestor
-    pub fn get_owned_resources(&self, requestor: &str) -> Result<Option<HashSet<ResourceId>>> {
+    pub fn get_owned_resources(&self, requestor: &str) -> Result<Option<HashSet<ContentId>>> {
         let owned = self.owned_resources.lock().map_err(|_| 
             Error::InternalError("Failed to lock owned resources".to_string()))?;
             
@@ -298,7 +298,7 @@ impl WaitQueue {
     }
     
     /// Check if a requestor is at the front of a resource's wait queue
-    pub fn is_next_requestor(&self, resource: ResourceId, requestor: &str) -> Result<bool> {
+    pub fn is_next_requestor(&self, resource: ContentId, requestor: &str) -> Result<bool> {
         match self.get_next_requestor(resource)? {
             Some(next) => Ok(next == requestor),
             None => Ok(false),
@@ -405,23 +405,23 @@ mod tests {
         
         // Add a requestor
         queue.add_requestor(
-            ResourceId::new("test"),
+            ContentId::new("test"),
             "requestor1".to_string(),
             HashSet::new(),
         )?;
         
         // Check queue length
-        assert_eq!(queue.queue_length(ResourceId::new("test"))?, 1);
+        assert_eq!(queue.queue_length(ContentId::new("test"))?, 1);
         
         // Get next requestor
-        let next = queue.get_next_requestor(ResourceId::new("test"))?;
+        let next = queue.get_next_requestor(ContentId::new("test"))?;
         assert_eq!(next, Some("requestor1".to_string()));
         
         // Remove the requestor
-        queue.remove_requestor(ResourceId::new("test"), "requestor1")?;
+        queue.remove_requestor(ContentId::new("test"), "requestor1")?;
         
         // Check queue is empty
-        assert_eq!(queue.queue_length(ResourceId::new("test"))?, 0);
+        assert_eq!(queue.queue_length(ContentId::new("test"))?, 0);
         
         Ok(())
     }
@@ -438,22 +438,22 @@ mod tests {
         
         // First, add requestor1 owning resource A
         let mut owned1 = HashSet::new();
-        owned1.insert(ResourceId::new("A"));
+        owned1.insert(ContentId::new("A"));
         
         // First, add requestor2 owning resource B
         let mut owned2 = HashSet::new();
-        owned2.insert(ResourceId::new("B"));
+        owned2.insert(ContentId::new("B"));
         
         // Add requestor1 waiting for resource B
         queue.add_requestor(
-            ResourceId::new("B"),
+            ContentId::new("B"),
             "requestor1".to_string(),
             owned1,
         )?;
         
         // Add requestor2 waiting for resource A - this should cause a deadlock error
         let result = queue.add_requestor(
-            ResourceId::new("A"),
+            ContentId::new("A"),
             "requestor2".to_string(),
             owned2,
         );

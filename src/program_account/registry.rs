@@ -341,7 +341,7 @@ impl<'a> ProgramAccount for AccountWrapper<'a> {
         self.account.resources()
     }
     
-    fn get_resource(&self, resource_id: &crate::resource::ResourceId) -> Result<Option<crate::program_account::ProgramAccountResource>> {
+    fn get_resource(&self, resource_id: &crate::resource::ContentId) -> Result<Option<crate::program_account::ProgramAccountResource>> {
         self.account.get_resource(resource_id)
     }
     

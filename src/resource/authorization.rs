@@ -7,11 +7,12 @@
 use std::sync::Arc;
 use std::collections::HashMap;
 
-use crate::resource::{ResourceId, CapabilityId};
+use crate::resource::{ContentId, CapabilityId};
 use crate::resource::capability::{Capability, CapabilityType, Right};
 use crate::resource::lifecycle_manager::{ResourceRegisterLifecycleManager, RegisterOperationType};
 use crate::error::{Error, Result};
 use crate::resource::capability_system::AuthorizationService;
+use crate::crypto::hash::{HashFactory, ContentId};
 
 /// Service for authorizing resource operations
 pub struct ResourceAuthorizationService {
@@ -54,7 +55,7 @@ impl ResourceAuthorizationService {
     pub fn has_permission(
         &self,
         entity_id: &str,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         operation_type: RegisterOperationType,
     ) -> Result<bool> {
         // Get all capabilities held by this entity for this resource
@@ -85,7 +86,7 @@ impl ResourceAuthorizationService {
     pub fn authorize_and_execute<F>(
         &self,
         entity_id: &str,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         operation_type: RegisterOperationType,
         operation: F,
     ) -> Result<()>
@@ -107,13 +108,29 @@ impl ResourceAuthorizationService {
     /// Create a capability for an entity to perform operations on a resource
     pub fn create_capability(
         &mut self,
-        resource_id: ResourceId,
+        resource_id: ContentId,
         capability_type: CapabilityType,
         holder: String,
         delegated_from: Option<CapabilityId>,
     ) -> Result<Capability> {
-        // Generate a unique ID for the capability
-        let capability_id = format!("cap-{}-{}", resource_id, uuid::Uuid::new_v4());
+        // Generate a content-derived ID for the capability
+        let content_data = format!(
+            "capability-{}-{}-{}-{}",
+            resource_id,
+            capability_type,
+            holder,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        
+        // Create a content ID
+        let hasher = HashFactory::default().create_hasher().unwrap();
+        let content_id = ContentId::from(hasher.hash(content_data.as_bytes()));
+        
+        // Format the capability ID
+        let capability_id = format!("cap-{}-{}", resource_id, content_id);
         
         // Create the capability
         let capability = Capability {
@@ -158,7 +175,7 @@ impl ResourceAuthorizationService {
     }
     
     /// Get all capabilities for a resource
-    pub fn get_capabilities_for_resource(&self, resource_id: &ResourceId) -> Vec<&Capability> {
+    pub fn get_capabilities_for_resource(&self, resource_id: &ContentId) -> Vec<&Capability> {
         self.capability_cache
             .values()
             .filter(|cap| cap.resource_id == *resource_id)

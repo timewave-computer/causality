@@ -17,7 +17,8 @@ use crate::log::entry::{
 use crate::log::storage::{LogStorage, MemoryLogStorage, StorageConfig, FileLogStorage};
 use crate::log::replay::{ReplayEngine, ReplayOptions, ReplayStatus, StatsCallback};
 use crate::log::segment_manager::{LogSegmentManager, RotationCriteria, SegmentManagerOptions};
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::effect::types::EffectType;
 
 /// Generate a random string of the given length

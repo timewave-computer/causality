@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::error::{Error, Result};
-use crate::resource::register::{Register, RegisterId, BlockHeight};
+use crate::resource::register::{Register, ContentId, BlockHeight};
 use crate::types::{Address, Domain};
 
 /// Epoch identifier type
@@ -93,7 +93,7 @@ pub struct EpochManager {
     epoch_boundaries: RwLock<HashMap<EpochId, BlockHeight>>,
     
     /// Registers grouped by epoch
-    registers_per_epoch: RwLock<HashMap<EpochId, HashSet<RegisterId>>>,
+    registers_per_epoch: RwLock<HashMap<EpochId, HashSet<ContentId>>>,
     
     /// Archival policy configuration
     archival_policy: RwLock<ArchivalPolicy>,
@@ -206,7 +206,7 @@ impl EpochManager {
     }
     
     /// Register a new register in the current epoch
-    pub fn register_in_current_epoch(&self, register_id: RegisterId) -> Result<()> {
+    pub fn register_in_current_epoch(&self, register_id: ContentId) -> Result<()> {
         let current = self.current_epoch.read().map_err(|_| 
             Error::LockError("Failed to acquire epoch lock".to_string())
         )?;
@@ -215,7 +215,7 @@ impl EpochManager {
     }
     
     /// Register a register in a specific epoch
-    pub fn register_in_epoch(&self, register_id: RegisterId, epoch: EpochId) -> Result<()> {
+    pub fn register_in_epoch(&self, register_id: ContentId, epoch: EpochId) -> Result<()> {
         let mut registers = self.registers_per_epoch.write().map_err(|_| 
             Error::LockError("Failed to acquire registers lock for writing".to_string())
         )?;
@@ -229,7 +229,7 @@ impl EpochManager {
     }
     
     /// Get all registers in a specific epoch
-    pub fn get_registers_in_epoch(&self, epoch: EpochId) -> Result<HashSet<RegisterId>> {
+    pub fn get_registers_in_epoch(&self, epoch: EpochId) -> Result<HashSet<ContentId>> {
         let registers = self.registers_per_epoch.read().map_err(|_| 
             Error::LockError("Failed to acquire registers lock".to_string())
         )?;
@@ -274,7 +274,7 @@ impl EpochManager {
     }
     
     /// Remove a register from epoch tracking (used during garbage collection)
-    pub fn remove_register(&self, register_id: &RegisterId, epoch: EpochId) -> Result<bool> {
+    pub fn remove_register(&self, register_id: &ContentId, epoch: EpochId) -> Result<bool> {
         let mut registers = self.registers_per_epoch.write().map_err(|_| 
             Error::LockError("Failed to acquire registers lock for writing".to_string())
         )?;
@@ -353,17 +353,17 @@ impl SharedEpochManager {
     }
     
     /// Register a new register in the current epoch
-    pub fn register_in_current_epoch(&self, register_id: RegisterId) -> Result<()> {
+    pub fn register_in_current_epoch(&self, register_id: ContentId) -> Result<()> {
         self.inner.register_in_current_epoch(register_id)
     }
     
     /// Register a register in a specific epoch
-    pub fn register_in_epoch(&self, register_id: RegisterId, epoch: EpochId) -> Result<()> {
+    pub fn register_in_epoch(&self, register_id: ContentId, epoch: EpochId) -> Result<()> {
         self.inner.register_in_epoch(register_id, epoch)
     }
     
     /// Get all registers in a specific epoch
-    pub fn get_registers_in_epoch(&self, epoch: EpochId) -> Result<HashSet<RegisterId>> {
+    pub fn get_registers_in_epoch(&self, epoch: EpochId) -> Result<HashSet<ContentId>> {
         self.inner.get_registers_in_epoch(epoch)
     }
     
@@ -378,7 +378,7 @@ impl SharedEpochManager {
     }
     
     /// Remove a register from epoch tracking (used during garbage collection)
-    pub fn remove_register(&self, register_id: &RegisterId, epoch: EpochId) -> Result<bool> {
+    pub fn remove_register(&self, register_id: &ContentId, epoch: EpochId) -> Result<bool> {
         self.inner.remove_register(register_id, epoch)
     }
 }
@@ -409,8 +409,8 @@ mod tests {
         let manager = EpochManager::new();
         
         // Register in current epoch (1)
-        let reg_id1 = RegisterId::new_unique();
-        let reg_id2 = RegisterId::new_unique();
+        let reg_id1 = ContentId::new_unique();
+        let reg_id2 = ContentId::new_unique();
         
         manager.register_in_current_epoch(reg_id1.clone()).unwrap();
         manager.register_in_current_epoch(reg_id2.clone()).unwrap();
@@ -425,7 +425,7 @@ mod tests {
         manager.advance_epoch(100).unwrap();
         
         // Register in epoch 2
-        let reg_id3 = RegisterId::new_unique();
+        let reg_id3 = ContentId::new_unique();
         manager.register_in_current_epoch(reg_id3.clone()).unwrap();
         
         // Verify registers in each epoch
@@ -511,7 +511,7 @@ mod tests {
         assert_eq!(shared_manager.current_epoch().unwrap(), 2);
         
         // Test register tracking
-        let reg_id = RegisterId::new_unique();
+        let reg_id = ContentId::new_unique();
         shared_manager.register_in_current_epoch(reg_id.clone()).unwrap();
         
         let registers = shared_manager.get_registers_in_epoch(2).unwrap();

@@ -8,7 +8,8 @@ use std::sync::{Arc, RwLock};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 
-use crate::types::{ResourceId, DomainId, TraceId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::domain::map::map::TimeMap;
 use crate::error::Result;
 use crate::log::fact_types::FactType;
@@ -27,7 +28,7 @@ pub enum InvocationState {
     /// Invocation has been canceled
     Canceled,
     /// Invocation is waiting for a resource
-    Waiting(ResourceId),
+    Waiting(ContentId),
     /// Invocation is waiting for an external fact
     WaitingForFact(String),
 }
@@ -36,7 +37,7 @@ pub enum InvocationState {
 #[derive(Debug, Clone)]
 pub struct ResourceAcquisition {
     /// The resource ID
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     /// When the resource was acquired
     pub acquired_at: DateTime<Utc>,
     /// Whether this is a read-only acquisition
@@ -163,7 +164,7 @@ impl InvocationContext {
     }
     
     /// Mark the invocation as waiting for a resource
-    pub fn wait_for_resource(&mut self, resource_id: ResourceId) -> Result<()> {
+    pub fn wait_for_resource(&mut self, resource_id: ContentId) -> Result<()> {
         if self.state != InvocationState::Running {
             return Err(crate::error::Error::InvocationStateError(
                 format!("Cannot wait for resource in state: {:?}", self.state)
@@ -203,7 +204,7 @@ impl InvocationContext {
     
     /// Track a resource acquisition
     pub fn acquire_resource(&mut self, 
-        resource_id: ResourceId, 
+        resource_id: ContentId, 
         read_only: bool,
         reason: &str
     ) -> Result<()> {
@@ -317,7 +318,7 @@ mod tests {
         assert!(context.completed_at.is_none());
         
         // Track resource acquisition
-        let resource_id = ResourceId::new("test_resource");
+        let resource_id = ContentId::new("test_resource");
         context.acquire_resource(resource_id, true, "Testing")?;
         assert_eq!(context.acquired_resources.len(), 1);
         
@@ -368,7 +369,7 @@ mod tests {
         context.start()?;
         
         // Wait for a resource
-        let resource_id = ResourceId::new("test_resource");
+        let resource_id = ContentId::new("test_resource");
         context.wait_for_resource(resource_id)?;
         
         match &context.state {

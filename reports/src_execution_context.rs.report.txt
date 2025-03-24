@@ -1,0 +1,29 @@
+Analyzing src/execution/context.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+26:        ContextId(Uuid::new_v4().to_string())
+
+Detailed context for each occurrence:
+==============================================
+
+Line 26:         ContextId(Uuid::new_v4().to_string())
+---------------------------------------------
+pub struct ContextId(String);
+
+impl ContextId {
+    /// Create a new random context ID
+    pub fn new() -> Self {
+        ContextId(Uuid::new_v4().to_string())
+    }
+    
+    /// Create a context ID from a string
+    pub fn from_string(id: String) -> Self {
+        ContextId(id)
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+21:pub struct ContextId(String);
+126:pub struct CallFrame {
+255:pub struct ExecutionContext {

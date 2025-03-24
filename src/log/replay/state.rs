@@ -6,14 +6,15 @@ use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 
-use crate::types::{ResourceId, DomainId, BlockHeight, BlockHash, Timestamp};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::log::entry::{EffectEntry, FactEntry};
 
 /// The state reconstructed during replay
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplayState {
     /// The resources in the system
-    pub resources: HashMap<ResourceId, ResourceState>,
+    pub resources: HashMap<ContentId, ResourceState>,
     /// The domains in the system
     pub domains: HashMap<DomainId, DomainState>,
     /// The facts that have been observed
@@ -34,7 +35,7 @@ impl ReplayState {
     }
     
     /// Get the state of a specific resource
-    pub fn get_resource(&self, id: &ResourceId) -> Option<&ResourceState> {
+    pub fn get_resource(&self, id: &ContentId) -> Option<&ResourceState> {
         self.resources.get(id)
     }
     
@@ -51,7 +52,7 @@ impl ReplayState {
     }
     
     /// Get facts for a specific resource
-    pub fn get_facts_for_resource(&self, resource_id: &ResourceId) -> Vec<&FactEntry> {
+    pub fn get_facts_for_resource(&self, resource_id: &ContentId) -> Vec<&FactEntry> {
         self.facts.iter()
             .filter(|fact| fact.resources.contains(resource_id))
             .collect()
@@ -65,14 +66,14 @@ impl ReplayState {
     }
     
     /// Get effects for a specific resource
-    pub fn get_effects_for_resource(&self, resource_id: &ResourceId) -> Vec<&EffectEntry> {
+    pub fn get_effects_for_resource(&self, resource_id: &ContentId) -> Vec<&EffectEntry> {
         self.effects.iter()
             .filter(|effect| effect.resources.contains(resource_id))
             .collect()
     }
     
     /// Check if a specific resource is locked
-    pub fn is_resource_locked(&self, resource_id: &ResourceId) -> bool {
+    pub fn is_resource_locked(&self, resource_id: &ContentId) -> bool {
         self.resources.get(resource_id)
             .map_or(false, |state| state.locked)
     }
@@ -88,7 +89,7 @@ impl Default for ReplayState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceState {
     /// The resource ID
-    pub id: ResourceId,
+    pub id: ContentId,
     /// The current owner of the resource
     pub owner: Option<String>,
     /// Whether the resource is locked
@@ -103,7 +104,7 @@ pub struct ResourceState {
 
 impl ResourceState {
     /// Create a new resource state
-    pub fn new(id: ResourceId, entry_id: String) -> Self {
+    pub fn new(id: ContentId, entry_id: String) -> Self {
         Self {
             id,
             owner: None,
@@ -191,7 +192,7 @@ mod tests {
     
     #[test]
     fn test_resource_state() {
-        let resource_id = ResourceId::new(1);
+        let resource_id = ContentId::new(1);
         let entry_id = "entry_1".to_string();
         
         let mut state = ResourceState::new(resource_id, entry_id.clone());

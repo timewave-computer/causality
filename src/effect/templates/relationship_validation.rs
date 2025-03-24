@@ -17,7 +17,7 @@ use crate::types::DomainId;
 /// A validation effect that ensures resource operations don't violate relationship constraints
 pub struct RelationshipStateValidationEffect {
     id: EffectId,
-    resource_id: ResourceId,
+    resource_id: ContentId,
     operation_type: RegisterOperationType,
     domain_id: DomainId,
     inner_effect: Arc<dyn Effect>,
@@ -27,7 +27,7 @@ pub struct RelationshipStateValidationEffect {
 impl RelationshipStateValidationEffect {
     /// Create a new validation effect
     pub fn new(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         operation_type: RegisterOperationType,
         domain_id: DomainId,
         inner_effect: Arc<dyn Effect>,
@@ -48,7 +48,7 @@ impl RelationshipStateValidationEffect {
     
     /// Wrap an existing effect with relationship validation
     pub fn wrap(
-        resource_id: ResourceId,
+        resource_id: ContentId,
         operation_type: RegisterOperationType,
         domain_id: DomainId,
         inner_effect: Arc<dyn Effect>,

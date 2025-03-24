@@ -12,7 +12,8 @@ use serde::{Serialize, Deserialize};
 use log::{debug, error, info, warn};
 
 use crate::error::{Error, Result};
-use crate::types::{DomainId, ResourceId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::resource::lifecycle_manager::ResourceRegisterLifecycleManager;
 use crate::operation::api::OperationManager;
 use super::cross_domain::{CrossDomainRelationship, CrossDomainRelationshipType, CrossDomainMetadata};
@@ -487,7 +488,7 @@ impl CrossDomainSyncManager {
     }
     
     /// Get resource state from a domain
-    fn get_resource_state(&self, resource_id: &ResourceId, domain_id: &DomainId) -> Result<HashMap<String, String>> {
+    fn get_resource_state(&self, resource_id: &ContentId, domain_id: &DomainId) -> Result<HashMap<String, String>> {
         if let Some(lifecycle_manager) = self.lifecycle_managers.get(domain_id) {
             // In a real implementation, this would get the actual resource state
             // For now, we'll return a simplified state map
@@ -501,7 +502,7 @@ impl CrossDomainSyncManager {
     }
     
     /// Check if a resource exists in a domain
-    fn resource_exists(&self, resource_id: &ResourceId, domain_id: &DomainId) -> Result<bool> {
+    fn resource_exists(&self, resource_id: &ContentId, domain_id: &DomainId) -> Result<bool> {
         if let Some(lifecycle_manager) = self.lifecycle_managers.get(domain_id) {
             Ok(lifecycle_manager.resource_exists(resource_id))
         } else {

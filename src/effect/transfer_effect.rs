@@ -3,7 +3,6 @@ use std::fmt;
 use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
 
 use crate::types::DomainId;
 use crate::resource::{ResourceId, Right};
@@ -24,10 +23,10 @@ use crate::log::FactEntry;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransferParams {
     /// The source resource to transfer from
-    pub source_resource_id: ResourceId,
+    pub source_resource_id: ContentId,
     
     /// The destination resource to transfer to
-    pub destination_resource_id: ResourceId,
+    pub destination_resource_id: ContentId,
     
     /// The amount to transfer (for fungible resources)
     pub amount: Option<u64>,

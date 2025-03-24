@@ -592,7 +592,7 @@ mod tests {
     use std::time::Duration;
     use crate::invocation::{AccessLevel, HandlerRegistration};
     use crate::domain::DomainId;
-    use crate::types::ResourceId;
+    use crate::crypto::hash::ContentId;
     
     struct TestHandler {
         registration: HandlerRegistration,

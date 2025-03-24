@@ -1,0 +1,28 @@
+Analyzing src/resource/relationship/mod.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+100:            id: Uuid::new_v4().to_string(),
+
+Detailed context for each occurrence:
+==============================================
+
+Line 100:             id: Uuid::new_v4().to_string(),
+---------------------------------------------
+        source: String,
+        target: String,
+        relationship_type: RelationshipType,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            source,
+            target,
+            relationship_type,
+            metadata: HashMap::new(),
+        }
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+56:pub struct Relationship {
+137:pub struct RelationshipManager {

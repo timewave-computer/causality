@@ -17,9 +17,12 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use blake3::Hasher;
+use crate::crypto::hash::{ContentAddressed, ContentId, HashOutput, HashFactory};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use crate::types::content::ContentHash;
-use crate::types::{DomainId, ResourceId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::error::{Error, Result};
 
 /// The type of log entry
@@ -74,6 +77,117 @@ pub enum EntryData {
     Fact(FactEntry),
     /// An event entry
     Event(EventEntry),
+}
+
+/// Event ID content for deterministic IDs
+#[derive(BorshSerialize, BorshDeserialize)]
+struct EventIdContent {
+    resource_id: ContentId,
+    domain_id: DomainId,
+    event_name: String,
+    component: String,
+    timestamp: i64,
+}
+
+impl ContentAddressed for EventIdContent {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> std::result::Result<Self, crate::crypto::hash::HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| crate::crypto::hash::HashError::SerializationError(e.to_string()))
+    }
+}
+
+/// Fact ID content for deterministic IDs
+#[derive(BorshSerialize, BorshDeserialize)]
+struct FactIdContent {
+    resource_id: ContentId,
+    domain_id: DomainId,
+    fact_type: String,
+    description: String,
+    timestamp: i64,
+}
+
+impl ContentAddressed for FactIdContent {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> std::result::Result<Self, crate::crypto::hash::HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| crate::crypto::hash::HashError::SerializationError(e.to_string()))
+    }
+}
+
+/// Effect ID content for deterministic IDs
+#[derive(BorshSerialize, BorshDeserialize)]
+struct EffectIdContent {
+    resource_id: ContentId,
+    domain_id: DomainId,
+    effect_type: String,
+    description: String,
+    timestamp: i64,
+}
+
+impl ContentAddressed for EffectIdContent {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> std::result::Result<Self, crate::crypto::hash::HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| crate::crypto::hash::HashError::SerializationError(e.to_string()))
+    }
 }
 
 impl LogEntry {
@@ -217,8 +331,21 @@ impl LogEntry {
         component: &str,
         details: Option<serde_json::Value>,
     ) -> Self {
+        // Create content for ID generation
+        let id_content = EventIdContent {
+            resource_id: resource_id.clone(),
+            domain_id: domain_id.clone(),
+            event_name: event_name.to_string(),
+            component: component.to_string(),
+            timestamp: Utc::now().timestamp(),
+        };
+        
+        // Generate content-derived ID
+        let content_id = id_content.content_id();
+        let id = format!("event-{}", content_id);
+        
         Self::new_with_hash(
-            format!("event-{}", uuid::Uuid::new_v4()),
+            id,
             Utc::now(),
             EntryType::Event,
             EntryData::Event(EventEntry {
@@ -242,8 +369,21 @@ impl LogEntry {
         description: &str,
         data: Option<serde_json::Value>,
     ) -> Self {
+        // Create content for ID generation
+        let id_content = FactIdContent {
+            resource_id: resource_id.clone(),
+            domain_id: domain_id.clone(),
+            fact_type: fact_type.to_string(),
+            description: description.to_string(),
+            timestamp: Utc::now().timestamp(),
+        };
+        
+        // Generate content-derived ID
+        let content_id = id_content.content_id();
+        let id = format!("fact-{}", content_id);
+        
         Self::new_with_hash(
-            format!("fact-{}", uuid::Uuid::new_v4()),
+            id,
             Utc::now(),
             EntryType::Fact,
             EntryData::Fact(FactEntry {
@@ -274,8 +414,21 @@ impl LogEntry {
         let mut parameters = params.unwrap_or_default();
         parameters.insert("description".to_string(), serde_json::json!(description));
         
+        // Create content for ID generation
+        let id_content = EffectIdContent {
+            resource_id: resource_id.clone(),
+            domain_id: domain_id.clone(),
+            effect_type: effect_type_str.to_string(),
+            description: description.to_string(),
+            timestamp: Utc::now().timestamp(),
+        };
+        
+        // Generate content-derived ID
+        let content_id = id_content.content_id();
+        let id = format!("effect-{}", content_id);
+        
         Self::new_with_hash(
-            format!("effect-{}", uuid::Uuid::new_v4()),
+            id,
             Utc::now(),
             EntryType::Effect,
             EntryData::Effect(EffectEntry {
@@ -302,7 +455,8 @@ impl LogEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ResourceId, DomainId};
+    use crate::types::{*};
+use crate::crypto::hash::ContentId;;
     use serde_json::json;
     
     #[test]

@@ -5,13 +5,13 @@
 
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
 
 use crate::tel::types::{
     ResourceId, Address, Domain, Metadata, 
     OperationId, Proof, Parameters, Timestamp,
 };
 use crate::tel::resource::model::RegisterContents;
+use crate::crypto::ContentId;
 
 /// Type of resource operation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,7 +48,7 @@ pub struct ResourceOperation {
     /// Type of operation
     pub operation_type: ResourceOperationType,
     /// ID of the register being operated on
-    pub target: ResourceId,
+    pub target: ContentId,
     /// Input register contents
     pub inputs: Vec<RegisterContents>,
     /// Output register contents (for operations that produce new registers)
@@ -73,7 +73,7 @@ impl ResourceOperation {
     /// Create a new resource operation
     pub fn new(
         operation_type: ResourceOperationType,
-        target: ResourceId,
+        target: ContentId,
         domain: Domain,
         initiator: Address,
     ) -> Self {
@@ -151,7 +151,7 @@ pub struct ResourceOperationBuilder {
     /// Type of operation
     operation_type: ResourceOperationType,
     /// ID of the register being operated on
-    target: ResourceId,
+    target: ContentId,
     /// Input register contents
     inputs: Vec<RegisterContents>,
     /// Output register contents
@@ -174,7 +174,7 @@ impl ResourceOperationBuilder {
     /// Create a new operation builder
     pub fn new(
         operation_type: ResourceOperationType,
-        target: ResourceId,
+        target: ContentId,
         domain: Domain,
         initiator: Address,
     ) -> Self {

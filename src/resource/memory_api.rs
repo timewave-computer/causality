@@ -1,17 +1,56 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
+use crate::crypto::content_addressed::{ContentAddressed, ContentId};
 
 use crate::address::Address;
 use crate::resource::{
-    ResourceId, ResourceCapability, CapabilityId, CapabilityRef, CapabilityRepository,
+    ContentId, ResourceCapability, CapabilityId, CapabilityRef, CapabilityRepository,
     Right, Restrictions, CapabilityError, CapabilityResult,
     ResourceAPI, ResourceReader, ResourceWriter, ResourceMetadata, ResourceState,
     ResourceQuery, ResourceUpdateOptions, ResourceApiError, ResourceApiResult,
     MemoryResourceWriter,
 };
+use crate::error::Result;
+
+/// Content data for resource ID generation
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct ContentIdContentData {
+    /// Type of resource
+    pub resource_type: String,
+    
+    /// Creation timestamp
+    pub timestamp: u64,
+    
+    /// Random nonce for uniqueness
+    pub nonce: [u8; 8],
+}
+
+impl ContentAddressed for ContentIdContentData {
+    fn content_hash(&self) -> Result<ContentId> {
+        let bytes = self.to_bytes()?;
+        Ok(ContentId::from_bytes(&bytes)?)
+    }
+    
+    fn verify(&self, content_id: &ContentId) -> Result<bool> {
+        let calculated_id = self.content_hash()?;
+        Ok(calculated_id == *content_id)
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>> {
+        let bytes = borsh::to_vec(self)
+            .map_err(|e| crate::error::Error::Serialization(format!("Failed to serialize ContentIdContentData: {}", e)))?;
+        Ok(bytes)
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        borsh::from_slice(bytes)
+            .map_err(|e| crate::error::Error::Deserialization(format!("Failed to deserialize ContentIdContentData: {}", e)))
+    }
+}
 
 /// A memory-backed implementation of ResourceAPI for testing
 pub struct MemoryResourceAPI {
@@ -19,7 +58,7 @@ pub struct MemoryResourceAPI {
     capability_repo: Arc<Mutex<CapabilityRepository>>,
     
     /// Map of resource IDs to resources
-    resources: Arc<RwLock<HashMap<ResourceId, MemoryResourceWriter>>>,
+    resources: Arc<RwLock<HashMap<ContentId, MemoryResourceWriter>>>,
     
     /// Root capability ID with admin rights to all resources
     root_capability_id: CapabilityId,
@@ -62,17 +101,34 @@ impl MemoryResourceAPI {
     }
     
     /// Create a resource ID
-    fn create_resource_id(&self, resource_type: &str) -> ResourceId {
-        // In a real implementation, this would create a deterministic ID based on more factors
-        let uuid = Uuid::new_v4();
-        ResourceId::from(format!("{}:{}", resource_type, uuid))
+    fn create_resource_id(&self, resource_type: &str) -> ContentId {
+        // Create a content-addressed ID based on resource type and timestamp
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let mut nonce = [0u8; 8];
+        getrandom::getrandom(&mut nonce).expect("Failed to generate random nonce");
+        
+        let content_data = ContentIdContentData {
+            resource_type: resource_type.to_string(),
+            timestamp: now,
+            nonce,
+        };
+        
+        let id = content_data.content_hash()
+            .map(|id| id.to_string())
+            .unwrap_or_else(|_| format!("{}:error-{}", resource_type, now));
+            
+        ContentId::from(id)
     }
     
     /// Check if a capability can access a resource
     async fn check_resource_access(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         required_right: &Right,
     ) -> ResourceApiResult<()> {
         // Validate the capability
@@ -110,7 +166,7 @@ impl ResourceAPI for MemoryResourceAPI {
         owner: &Address,
         data: Vec<u8>,
         metadata: Option<HashMap<String, String>>,
-    ) -> ResourceApiResult<(ResourceId, CapabilityRef)> {
+    ) -> ResourceApiResult<(ContentId, CapabilityRef)> {
         // Check if the capability allows resource creation
         let cap = capability.capability();
         if !cap.has_right(&Right::Write) && !cap.has_right(&Right::Custom("CreateResource".into())) {
@@ -178,7 +234,7 @@ impl ResourceAPI for MemoryResourceAPI {
     async fn get_resource(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
     ) -> ResourceApiResult<Box<dyn ResourceReader + Send + Sync>> {
         // Check access
         self.check_resource_access(capability, resource_id, &Right::Read).await?;
@@ -196,7 +252,7 @@ impl ResourceAPI for MemoryResourceAPI {
     async fn get_resource_mut(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
     ) -> ResourceApiResult<Box<dyn ResourceWriter + Send + Sync>> {
         // Check access
         self.check_resource_access(capability, resource_id, &Right::Write).await?;
@@ -327,7 +383,7 @@ impl ResourceAPI for MemoryResourceAPI {
     async fn update_resource(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         data: Option<Vec<u8>>,
         options: Option<ResourceUpdateOptions>,
     ) -> ResourceApiResult<()> {
@@ -381,7 +437,7 @@ impl ResourceAPI for MemoryResourceAPI {
     async fn delete_resource(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
     ) -> ResourceApiResult<()> {
         // Check access
         self.check_resource_access(capability, resource_id, &Right::Delete).await?;
@@ -401,7 +457,7 @@ impl ResourceAPI for MemoryResourceAPI {
     async fn resource_exists(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
     ) -> ResourceApiResult<bool> {
         // Validate the capability
         let repo = self.capability_repo.lock().unwrap();
@@ -415,7 +471,7 @@ impl ResourceAPI for MemoryResourceAPI {
     async fn create_capability(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         rights: Vec<Right>,
         holder: &Address,
     ) -> ResourceApiResult<CapabilityRef> {
@@ -466,7 +522,7 @@ impl ResourceAPI for MemoryResourceAPI {
     async fn get_capabilities(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
     ) -> ResourceApiResult<Vec<CapabilityRef>> {
         // Validate the capability
         let repo = self.capability_repo.lock().unwrap();
@@ -520,7 +576,7 @@ impl ResourceAPI for MemoryResourceAPI {
     async fn delegate_capability(
         &self,
         capability: &CapabilityRef,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         rights: Vec<Right>,
         new_holder: &Address,
     ) -> ResourceApiResult<CapabilityRef> {

@@ -6,17 +6,18 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use crate::domain::DomainId;
 use crate::error::{Error, Result};
-use crate::resource::{RegisterId, RegisterContents, Register, ResourceId};
+use crate::resource::{RegisterId, RegisterContents, Register, ContentId};
 use crate::types::{Address, TraceId};
 use crate::program_account::{
     ProgramAccount, UtilityProgramAccount, ProgramAccountCapability, ProgramAccountResource,
     AvailableEffect, EffectResult, EffectStatus, TransactionRecord, TransactionStatus
 };
 use crate::program_account::base_account::BaseAccount;
+use crate::crypto::hash::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 /// A specialized implementation of the ProgramAccount trait for utility operations
 pub struct UtilityAccount {
@@ -28,13 +29,13 @@ pub struct UtilityAccount {
 }
 
 /// Represents data stored in a utility account
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct StoredData {
     /// The key for this data
     pub key: String,
     
     /// The resource ID for this data
-    pub resource_id: ResourceId,
+    pub resource_id: ContentId,
     
     /// The actual data bytes
     pub data: Vec<u8>,
@@ -50,6 +51,33 @@ pub struct StoredData {
     
     /// When this data was last updated
     pub updated_at: u64,
+}
+
+impl ContentAddressed for StoredData {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap_or_default();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap_or_default()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
 }
 
 impl UtilityAccount {
@@ -147,7 +175,7 @@ impl ProgramAccount for UtilityAccount {
         self.base.resources()
     }
     
-    fn get_resource(&self, resource_id: &ResourceId) -> Result<Option<ProgramAccountResource>> {
+    fn get_resource(&self, resource_id: &ContentId) -> Result<Option<ProgramAccountResource>> {
         self.base.get_resource(resource_id)
     }
     
@@ -204,34 +232,31 @@ impl UtilityProgramAccount for UtilityAccount {
         data: &[u8],
         metadata: Option<HashMap<String, String>>,
         trace_id: Option<&TraceId>,
-    ) -> Result<ResourceId> {
-        // Create a new resource ID
-        let resource_id = ResourceId::from_str(&format!("data-{}", Uuid::new_v4()));
-        
+    ) -> Result<ContentId> {
         // Get current timestamp
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         
-        // In a real implementation, this would:
-        // 1. Create a register for the data
-        // 2. Set up the appropriate metadata
-        // 3. Update any necessary indices
-        
         // Create metadata if not provided
         let meta = metadata.unwrap_or_else(HashMap::new);
         
         // Create the stored data
-        let stored_data = StoredData {
+        let mut stored_data = StoredData {
             key: key.to_string(),
-            resource_id: resource_id.clone(),
+            resource_id: ContentId::default(), // Temporary placeholder
             data: data.to_vec(),
             metadata: meta.clone(),
             domain_id: None, // In a real implementation, this would be set based on context
             created_at: timestamp,
             updated_at: timestamp,
         };
+        
+        // Derive a content-based resource ID
+        let content_id = stored_data.content_id();
+        let resource_id = ContentId::from_str(&format!("data-{}", content_id));
+        stored_data.resource_id = resource_id.clone();
         
         // Store the data
         {
@@ -257,9 +282,17 @@ impl UtilityProgramAccount for UtilityAccount {
         // Register the resource with the base account
         self.base.register_resource(resource)?;
         
+        // Create transaction data for content derivation
+        let transaction_data = format!("store-data-{}-{}-{}", key, timestamp, resource_id);
+        
+        // Hash the transaction data to derive a content ID
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let transaction_content_id = ContentId::from(hasher.hash(transaction_data.as_bytes()));
+        
         // Add a transaction record
         let record = TransactionRecord {
-            id: format!("store-data-{}", Uuid::new_v4()),
+            id: format!("store-data-{}", transaction_content_id),
             transaction_type: "data_storage".to_string(),
             timestamp,
             status: TransactionStatus::Confirmed,
@@ -297,6 +330,12 @@ impl UtilityProgramAccount for UtilityAccount {
             stored_data.resource_id.clone()
         };
         
+        // Get current timestamp
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
         // Remove the data
         {
             let mut data_map = self.data.write().map_err(|_| Error::LockError)?;
@@ -312,14 +351,19 @@ impl UtilityProgramAccount for UtilityAccount {
         // 1. Remove the register for the data
         // 2. Clean up any references or indices
         
+        // Create transaction data for content derivation
+        let transaction_data = format!("delete-data-{}-{}-{}", key, timestamp, resource_id);
+        
+        // Hash the transaction data to derive a content ID
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let transaction_content_id = ContentId::from(hasher.hash(transaction_data.as_bytes()));
+        
         // Add a transaction record
         let record = TransactionRecord {
-            id: format!("delete-data-{}", Uuid::new_v4()),
+            id: format!("delete-data-{}", transaction_content_id),
             transaction_type: "data_deletion".to_string(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
+            timestamp,
             status: TransactionStatus::Confirmed,
             resources: vec![resource_id],
             effects: Vec::new(),

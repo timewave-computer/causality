@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{Error, Result};
 use crate::resource::register::{
-    Register, RegisterId, RegisterContents, RegisterState, BlockHeight
+    Register, ContentId, RegisterContents, RegisterState, BlockHeight
 };
 use crate::resource::epoch::{EpochId, SummaryGroup};
 use crate::types::{Address, Domain, Hash256};
@@ -22,10 +22,10 @@ use crate::types::{Address, Domain, Hash256};
 #[derive(Debug, Clone)]
 pub struct SummaryRecord {
     /// The ID of the summary register
-    pub summary_id: RegisterId,
+    pub summary_id: ContentId,
     
     /// The IDs of registers that were summarized
-    pub summarized_register_ids: Vec<RegisterId>,
+    pub summarized_register_ids: Vec<ContentId>,
     
     /// The epoch this summary was created for
     pub epoch: EpochId,
@@ -46,8 +46,8 @@ pub struct SummaryRecord {
 impl SummaryRecord {
     /// Create a new summary record
     pub fn new(
-        summary_id: RegisterId,
-        summarized_register_ids: Vec<RegisterId>,
+        summary_id: ContentId,
+        summarized_register_ids: Vec<ContentId>,
         epoch: EpochId,
         block_height: BlockHeight,
         domain: Domain,
@@ -81,7 +81,7 @@ impl SummaryRecord {
     }
     
     /// Verify that this summary correctly includes the specified register IDs
-    pub fn verify_includes(&self, register_ids: &[RegisterId]) -> bool {
+    pub fn verify_includes(&self, register_ids: &[ContentId]) -> bool {
         for id in register_ids {
             if !self.summarized_register_ids.contains(id) {
                 return false;
@@ -114,7 +114,7 @@ impl SummaryRecord {
     
     /// Try to create a summary record from register metadata
     pub fn from_metadata(
-        summary_id: RegisterId,
+        summary_id: ContentId,
         metadata: &HashMap<String, String>,
         domain: Domain,
     ) -> Result<Self> {
@@ -179,7 +179,7 @@ impl SummaryRecord {
             
         let summarized_register_ids = summarized_registers_str
             .split(',')
-            .map(|id_str| RegisterId::from_string(id_str.trim()))
+            .map(|id_str| ContentId::from_string(id_str.trim()))
             .collect::<Result<Vec<_>>>()?;
             
         Ok(Self {
@@ -468,7 +468,7 @@ pub struct SummaryManager {
     strategies: RwLock<HashMap<String, Arc<dyn SummaryStrategy>>>,
     
     /// Summary records for verification
-    summary_records: RwLock<HashMap<RegisterId, SummaryRecord>>,
+    summary_records: RwLock<HashMap<ContentId, SummaryRecord>>,
 }
 
 impl SummaryManager {
@@ -553,11 +553,11 @@ impl SummaryManager {
             let contents = strategy.generate_summary_contents(&group_key, &group_registers)?;
             
             // Create the summary register
-            let summary_id = RegisterId::new_unique();
+            let summary_id = ContentId::new_unique();
             let mut metadata = HashMap::new();
             
             // Get IDs of summarized registers
-            let summarized_ids: Vec<RegisterId> = group_registers
+            let summarized_ids: Vec<ContentId> = group_registers
                 .iter()
                 .map(|r| r.register_id.clone())
                 .collect();
@@ -631,7 +631,7 @@ impl SummaryManager {
         )?;
         
         // Get the summarized register IDs
-        let summarized_ids: Vec<RegisterId> = summarized_registers
+        let summarized_ids: Vec<ContentId> = summarized_registers
             .iter()
             .map(|r| r.register_id.clone())
             .collect();
@@ -670,7 +670,7 @@ impl SummaryManager {
     }
     
     /// Get the summary record for a register ID
-    pub fn get_summary_record(&self, summary_id: &RegisterId) -> Result<Option<SummaryRecord>> {
+    pub fn get_summary_record(&self, summary_id: &ContentId) -> Result<Option<SummaryRecord>> {
         let records = self.summary_records.read().map_err(|_| 
             Error::LockError("Failed to acquire summary records lock".to_string())
         )?;
@@ -742,7 +742,7 @@ impl SharedSummaryManager {
     }
     
     /// Get the summary record for a register ID
-    pub fn get_summary_record(&self, summary_id: &RegisterId) -> Result<Option<SummaryRecord>> {
+    pub fn get_summary_record(&self, summary_id: &ContentId) -> Result<Option<SummaryRecord>> {
         self.inner.get_summary_record(summary_id)
     }
     
@@ -782,7 +782,7 @@ mod tests {
             }
             
             let register = Register {
-                register_id: RegisterId::new_unique(),
+                register_id: ContentId::new_unique(),
                 owner,
                 domain,
                 contents: RegisterContents::with_string(&format!("Content {}", i)),
@@ -974,12 +974,12 @@ mod tests {
     #[test]
     fn test_summary_record() {
         let register_ids = vec![
-            RegisterId::new_unique(),
-            RegisterId::new_unique(),
-            RegisterId::new_unique(),
+            ContentId::new_unique(),
+            ContentId::new_unique(),
+            ContentId::new_unique(),
         ];
         
-        let summary_id = RegisterId::new_unique();
+        let summary_id = ContentId::new_unique();
         let domain = Domain::new("test_domain");
         
         // Create a summary record
@@ -1010,7 +1010,7 @@ mod tests {
         // Verify includes detection
         assert!(record.verify_includes(&register_ids));
         assert!(record.verify_includes(&register_ids[0..2]));
-        assert!(!record.verify_includes(&[RegisterId::new_unique()]));
+        assert!(!record.verify_includes(&[ContentId::new_unique()]));
     }
     
     #[test]

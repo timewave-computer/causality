@@ -4,7 +4,8 @@
 // for testing resource lifecycle state transitions.
 
 use crate::error::Result;
-use crate::types::{ResourceId, RegisterState, DomainId, ResourceLogic, Quantity, Metadata};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::resource::resource_register::{ResourceRegister, FungibilityDomain, StorageStrategy, StateVisibility};
 use crate::resource::tests::ResourceStateTransitionHelper;
 

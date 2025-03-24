@@ -6,7 +6,8 @@ use std::collections::HashSet;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 
-use crate::types::{ResourceId, DomainId};
+use crate::types::{*};
+use crate::crypto::hash::ContentId;;
 use crate::log::entry::{LogEntry, EntryType};
 
 /// A filter for log replay
@@ -19,7 +20,7 @@ pub struct ReplayFilter {
     /// The trace ID to filter by
     pub trace_id: Option<String>,
     /// The resources to include
-    pub resources: Option<HashSet<ResourceId>>,
+    pub resources: Option<HashSet<ContentId>>,
     /// The domains to include
     pub domains: Option<HashSet<DomainId>>,
     /// The entry types to include
@@ -61,7 +62,7 @@ impl ReplayFilter {
     }
     
     /// Add a resource to filter by
-    pub fn with_resource(mut self, resource_id: ResourceId) -> Self {
+    pub fn with_resource(mut self, resource_id: ContentId) -> Self {
         let resources = self.resources.get_or_insert_with(HashSet::new);
         resources.insert(resource_id);
         self
@@ -174,7 +175,7 @@ impl Default for ReplayFilter {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use crate::types::ResourceId;
+    use crate::crypto::hash::ContentId;
     use crate::log::entry::{EntryData, EventEntry, EventSeverity};
     
     #[test]
@@ -189,7 +190,7 @@ mod tests {
         assert!(filter.max_entries.is_none());
         
         let now = Utc::now();
-        let resource_id = ResourceId::new(1);
+        let resource_id = ContentId::new(1);
         let domain_id = DomainId::new(1);
         
         let filter = filter
@@ -222,7 +223,7 @@ mod tests {
                 severity: EventSeverity::Info,
                 component: "test".to_string(),
                 details: serde_json::json!({}),
-                resources: Some(vec![ResourceId::new(1)]),
+                resources: Some(vec![ContentId::new(1)]),
                 domains: Some(vec![DomainId::new(1)]),
             }),
             trace_id: Some("test_trace".to_string()),
@@ -263,11 +264,11 @@ mod tests {
         
         // Test resource filter
         let resource_filter = ReplayFilter::new()
-            .with_resource(ResourceId::new(1));
+            .with_resource(ContentId::new(1));
         assert!(resource_filter.matches(&entry));
         
         let resource_filter = ReplayFilter::new()
-            .with_resource(ResourceId::new(2));
+            .with_resource(ContentId::new(2));
         assert!(!resource_filter.matches(&entry));
         
         // Test domain filter

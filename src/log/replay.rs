@@ -68,7 +68,7 @@ pub struct ReplayOptions {
     /// The trace ID to filter by
     pub trace_id: Option<String>,
     /// The resources to include
-    pub resources: Option<std::collections::HashSet<crate::types::ResourceId>>,
+    pub resources: Option<std::collections::HashSet<crate::types::ContentId>>,
     /// The domains to include
     pub domains: Option<std::collections::HashSet<crate::types::DomainId>>,
     /// The entry types to include
@@ -116,7 +116,7 @@ impl ReplayOptions {
     }
     
     /// Set the resources to include
-    pub fn with_resources(mut self, resources: std::collections::HashSet<crate::types::ResourceId>) -> Self {
+    pub fn with_resources(mut self, resources: std::collections::HashSet<crate::types::ContentId>) -> Self {
         self.resources = Some(resources);
         self
     }

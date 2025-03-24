@@ -12,7 +12,7 @@ use ethers::types::{Address, H256, U256};
 
 use crate::address::Address as CausalityAddress;
 use crate::domain::DomainId;
-use crate::resource::{ResourceId, ResourceRegister};
+use crate::resource::{ContentId, ResourceRegister};
 use crate::resource::resource_register::{
     StorageStrategy, 
     StateVisibility, 
@@ -101,7 +101,7 @@ impl<M: Middleware> EthRegisterStore<M> {
     }
     
     /// Store a register on-chain
-    pub async fn store_register(&self, id: &ResourceId, data: Vec<u8>, visibility: u8) -> Result<H256> {
+    pub async fn store_register(&self, id: &ContentId, data: Vec<u8>, visibility: u8) -> Result<H256> {
         let id_bytes = to_register_id_bytes(id)?;
         
         let call = self.contract.method::<_, bool>(
@@ -120,7 +120,7 @@ impl<M: Middleware> EthRegisterStore<M> {
     }
     
     /// Get a register from on-chain
-    pub async fn get_register(&self, id: &ResourceId) -> Result<Vec<u8>> {
+    pub async fn get_register(&self, id: &ContentId) -> Result<Vec<u8>> {
         let id_bytes = to_register_id_bytes(id)?;
         
         let result: Vec<u8> = self.contract.method::<_, Vec<u8>>(
@@ -135,7 +135,7 @@ impl<M: Middleware> EthRegisterStore<M> {
     }
     
     /// Store a commitment on-chain
-    pub async fn store_commitment(&self, id: &ResourceId, commitment: &[u8; 32]) -> Result<H256> {
+    pub async fn store_commitment(&self, id: &ContentId, commitment: &[u8; 32]) -> Result<H256> {
         let id_bytes = to_register_id_bytes(id)?;
         
         let call = self.contract.method::<_, bool>(
@@ -154,7 +154,7 @@ impl<M: Middleware> EthRegisterStore<M> {
     }
     
     /// Store a nullifier on-chain
-    pub async fn store_nullifier(&self, id: &ResourceId, nullifier: &[u8; 32]) -> Result<H256> {
+    pub async fn store_nullifier(&self, id: &ContentId, nullifier: &[u8; 32]) -> Result<H256> {
         let id_bytes = to_register_id_bytes(id)?;
         
         let call = self.contract.method::<_, bool>(
@@ -174,7 +174,7 @@ impl<M: Middleware> EthRegisterStore<M> {
 }
 
 /// Convert a resource ID to bytes32 for Ethereum contracts
-fn to_register_id_bytes(id: &ResourceId) -> Result<[u8; 32]> {
+fn to_register_id_bytes(id: &ContentId) -> Result<[u8; 32]> {
     let mut bytes = [0u8; 32];
     let id_bytes = id.as_bytes();
     
@@ -212,7 +212,7 @@ impl EthereumStoreEffect {
     
     /// Factory function to create a new Ethereum store effect
     pub fn create(
-        register_id: ResourceId,
+        register_id: ContentId,
         fields: HashSet<String>,
         domain_id: DomainId,
         invoker: CausalityAddress,
@@ -252,7 +252,7 @@ impl Effect for EthereumStoreEffect {
         "Stores register data on Ethereum chain"
     }
     
-    fn required_capabilities(&self) -> Vec<(ResourceId, crate::resource::api::Right)> {
+    fn required_capabilities(&self) -> Vec<(ContentId, crate::resource::api::Right)> {
         self.inner.required_capabilities()
     }
     
@@ -332,7 +332,7 @@ impl EthereumCommitmentEffect {
     
     /// Factory function to create a new Ethereum commitment effect
     pub fn create(
-        register_id: ResourceId,
+        register_id: ContentId,
         commitment: Commitment,
         domain_id: DomainId,
         invoker: CausalityAddress,
@@ -372,7 +372,7 @@ impl Effect for EthereumCommitmentEffect {
         "Stores register commitment on Ethereum chain"
     }
     
-    fn required_capabilities(&self) -> Vec<(ResourceId, crate::resource::api::Right)> {
+    fn required_capabilities(&self) -> Vec<(ContentId, crate::resource::api::Right)> {
         self.inner.required_capabilities()
     }
     
@@ -436,7 +436,7 @@ impl EthereumStorageEffectFactory {
     /// Create a store on-chain effect
     pub fn create_store_effect(
         &self,
-        register_id: ResourceId,
+        register_id: ContentId,
         fields: HashSet<String>,
         invoker: CausalityAddress,
     ) -> Result<Arc<dyn Effect>> {
@@ -453,7 +453,7 @@ impl EthereumStorageEffectFactory {
     /// Create a store commitment effect
     pub fn create_commitment_effect(
         &self,
-        register_id: ResourceId,
+        register_id: ContentId,
         commitment: Commitment,
         invoker: CausalityAddress,
     ) -> Result<Arc<dyn Effect>> {

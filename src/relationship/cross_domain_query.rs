@@ -8,7 +8,7 @@ use crate::relationship::{
     RelationshipTracker, RelationshipPath, ResourceRelationship,
     RelationshipType, RelationshipFilter, RelationshipPathCacheKey
 };
-use crate::resource::ResourceId;
+use crate::resource::ContentId;
 use crate::time::timestamp::Timestamp;
 
 /// Cache for relationship query results
@@ -67,7 +67,7 @@ impl RelationshipQueryCache {
     }
 
     /// Invalidates cache entries related to a resource
-    pub async fn invalidate_for_resource(&self, resource_id: &ResourceId) {
+    pub async fn invalidate_for_resource(&self, resource_id: &ContentId) {
         let mut cache = self.paths.write().await;
         cache.retain(|k, _| k.source_id != *resource_id && k.target_id != *resource_id);
     }
@@ -77,10 +77,10 @@ impl RelationshipQueryCache {
 #[derive(Clone, Debug)]
 pub struct RelationshipQuery {
     /// Source resource ID
-    pub source_id: ResourceId,
+    pub source_id: ContentId,
     
     /// Target resource ID (optional for broader queries)
-    pub target_id: Option<ResourceId>,
+    pub target_id: Option<ContentId>,
     
     /// Maximum search depth
     pub max_depth: usize,
@@ -103,7 +103,7 @@ pub struct RelationshipQuery {
 
 impl RelationshipQuery {
     /// Creates a new relationship query
-    pub fn new(source_id: ResourceId, target_id: ResourceId) -> Self {
+    pub fn new(source_id: ContentId, target_id: ContentId) -> Self {
         Self {
             source_id,
             target_id: Some(target_id),
@@ -191,12 +191,12 @@ pub trait DomainRelationshipProvider: Send + Sync {
     
     /// Finds relationships from a given resource
     async fn find_relationships_from(&self, 
-        resource_id: &ResourceId, 
+        resource_id: &ContentId, 
         filter: &RelationshipFilter
     ) -> Result<Vec<ResourceRelationship>>;
     
     /// Checks if a resource exists in this domain
-    async fn resource_exists(&self, resource_id: &ResourceId) -> Result<bool>;
+    async fn resource_exists(&self, resource_id: &ContentId) -> Result<bool>;
 }
 
 /// Executor for relationship queries
@@ -264,8 +264,8 @@ impl RelationshipQueryExecutor {
     /// Finds paths between specific source and target
     async fn find_specific_paths(
         &self,
-        source_id: &ResourceId,
-        target_id: &ResourceId,
+        source_id: &ContentId,
+        target_id: &ContentId,
         query: &RelationshipQuery,
     ) -> Result<Vec<RelationshipPath>> {
         let mut result_paths = Vec::new();
@@ -354,7 +354,7 @@ impl RelationshipQueryExecutor {
     /// Explores all paths from a source up to max depth
     async fn explore_paths(
         &self,
-        source_id: &ResourceId,
+        source_id: &ContentId,
         query: &RelationshipQuery,
     ) -> Result<Vec<RelationshipPath>> {
         let mut result_paths = Vec::new();
@@ -438,7 +438,7 @@ impl RelationshipQueryExecutor {
     /// Gets outgoing relationships from a resource
     async fn get_outgoing_relationships(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         query: &RelationshipQuery,
     ) -> Result<Vec<ResourceRelationship>> {
         // Create a filter based on query parameters
@@ -483,8 +483,8 @@ impl RelationshipQueryExecutor {
     /// Finds a path between resources in different domains
     pub async fn find_cross_domain_path(
         &self,
-        source_id: &ResourceId,
-        target_id: &ResourceId,
+        source_id: &ContentId,
+        target_id: &ContentId,
         source_domain: &DomainId,
         target_domain: &DomainId,
     ) -> Result<Option<RelationshipPath>> {
@@ -522,7 +522,7 @@ impl RelationshipQueryExecutor {
     
     /// Gets domain-aware total relationship counts
     pub async fn get_relationship_counts(&self, 
-        resource_id: &ResourceId, 
+        resource_id: &ContentId, 
         relationship_types: Option<Vec<RelationshipType>>
     ) -> Result<HashMap<RelationshipType, usize>> {
         let mut result = HashMap::new();
@@ -563,7 +563,7 @@ impl RelationshipQueryExecutor {
     }
     
     /// Invalidates cached paths involving a resource
-    pub async fn invalidate_cache_for_resource(&self, resource_id: &ResourceId) {
+    pub async fn invalidate_cache_for_resource(&self, resource_id: &ContentId) {
         self.cache.invalidate_for_resource(resource_id).await;
     }
 }
@@ -586,7 +586,7 @@ impl ResourceStateTransitionHelper {
     /// Validates relationships for a state transition
     pub async fn validate_relationships_for_transition(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         from_state: &str,
         to_state: &str
     ) -> Result<bool> {
@@ -639,7 +639,7 @@ impl ResourceStateTransitionHelper {
     /// Updates relationships after a state transition
     pub async fn update_relationships_after_transition(
         &self,
-        resource_id: &ResourceId,
+        resource_id: &ContentId,
         from_state: &str,
         to_state: &str
     ) -> Result<()> {

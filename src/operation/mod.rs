@@ -21,22 +21,93 @@ pub use api::*;
 
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
+use borsh::{BorshSerialize, BorshDeserialize};
 
-use crate::types::{ResourceId, DomainId};
+use crate::types::{DomainId};
 use crate::effect::{Effect, EffectOutcome};
 use crate::resource::ResourceRegisterTrait;
 use crate::verification::UnifiedProof;
 use crate::zk::Proof;
+use crate::crypto::hash::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+use crate::tel::resource::operations::{ResourceOperation, ResourceOperationType};
+use crate::tel::types::OperationId as TelOperationId;
+use std::time::SystemTime;
 
 /// Unique identifier for operations
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct OperationId(pub String);
 
+/// Content data for operation ID generation
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+struct OperationIdContent {
+    /// Operation type
+    op_type: String,
+    /// Timestamp
+    timestamp: u64,
+    /// Random nonce for uniqueness
+    nonce: [u8; 8],
+}
+
+impl ContentAddressed for OperationIdContent {
+    fn content_hash(&self) -> HashOutput {
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        let data = self.try_to_vec().unwrap();
+        hasher.hash(&data)
+    }
+    
+    fn verify(&self) -> bool {
+        let hash = self.content_hash();
+        let serialized = self.to_bytes();
+        
+        let hash_factory = HashFactory::default();
+        let hasher = hash_factory.create_hasher().unwrap();
+        hasher.hash(&serialized) == hash
+    }
+    
+    fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_vec().unwrap()
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+}
+
 impl OperationId {
     /// Create a new operation ID
     pub fn new() -> Self {
-        OperationId(Uuid::new_v4().to_string())
+        // Create content for ID generation
+        let content = OperationIdContent {
+            op_type: "generic".to_string(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            nonce: rand::random::<[u8; 8]>(),
+        };
+        
+        // Generate content-derived ID
+        let content_id = content.content_id();
+        OperationId(format!("op:{}", content_id))
+    }
+    
+    /// Create a new operation ID for a specific operation type
+    pub fn for_operation_type(op_type: &str) -> Self {
+        // Create content for ID generation
+        let content = OperationIdContent {
+            op_type: op_type.to_string(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            nonce: rand::random::<[u8; 8]>(),
+        };
+        
+        // Generate content-derived ID
+        let content_id = content.content_id();
+        OperationId(format!("op:{}:{}", op_type, content_id))
     }
     
     /// Get the string representation
@@ -48,6 +119,12 @@ impl OperationId {
 impl std::fmt::Display for OperationId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl From<ContentId> for OperationId {
+    fn from(content_id: ContentId) -> Self {
+        Self(format!("op:{}", content_id))
     }
 }
 
@@ -85,8 +162,8 @@ pub enum OperationType {
 /// Reference to a resource involved in an operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceRef {
-    /// Resource ID
-    pub resource_id: ResourceId,
+    /// Resource ID (using content-based identification)
+    pub resource_id: ContentId,
     
     /// Domain ID (if cross-domain)
     pub domain_id: Option<DomainId>,
@@ -230,8 +307,8 @@ pub struct Operation<C: ExecutionContext> {
 /// Register-level operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterOperation {
-    /// Register identifier
-    pub register_id: String,
+    /// Register identifier (content-based)
+    pub register_id: ContentId,
     
     /// Register operation type
     pub operation: RegisterOperationType,
@@ -240,7 +317,7 @@ pub struct RegisterOperation {
     pub data: HashMap<String, String>,
 }
 
-/// Types of register operations
+/// Type of register operation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RegisterOperationType {
     /// Create a new register
@@ -261,8 +338,20 @@ pub enum RegisterOperationType {
     /// Freeze a register
     Freeze,
     
+    /// Unfreeze a register
+    Unfreeze,
+    
+    /// Mark register as pending
+    MarkPending,
+    
+    /// Consume a register (mark as used up)
+    Consume,
+    
     /// Archive a register
     Archive,
+    
+    /// Unarchive a register
+    Unarchive,
     
     /// Custom register operation
     Custom(String),
@@ -365,6 +454,106 @@ impl<C: ExecutionContext> Operation<C> {
     pub fn with_physical_execution(mut self, execution: PhysicalOperation) -> Self {
         self.physical_execution = Some(execution);
         self
+    }
+    
+    /// Convert the operation to a ResourceOperation for use with TEL verification
+    pub fn convert_to_resource_operation(&self) -> ResourceOperation {
+        // Create a ResourceOperation from this operation
+        let operation_type = match &self.op_type {
+            OperationType::Register(op_type) => match op_type {
+                RegisterOperationType::Create => ResourceOperationType::Create,
+                RegisterOperationType::Update => ResourceOperationType::Update,
+                RegisterOperationType::Transfer => ResourceOperationType::Transfer,
+                RegisterOperationType::Lock => ResourceOperationType::Lock,
+                RegisterOperationType::Unlock => ResourceOperationType::Unlock,
+                RegisterOperationType::Freeze => ResourceOperationType::Custom(1), // Using 1 for Freeze
+                RegisterOperationType::Unfreeze => ResourceOperationType::Custom(2), // Using 2 for Unfreeze
+                RegisterOperationType::Consume => ResourceOperationType::Delete,
+                RegisterOperationType::Archive => ResourceOperationType::Custom(3), // Using 3 for Archive 
+                RegisterOperationType::Unarchive => ResourceOperationType::Custom(4), // Using 4 for Unarchive
+                _ => ResourceOperationType::Custom(0), // Default for other types
+            },
+            _ => ResourceOperationType::Custom(0), // Default for non-register operations
+        };
+        
+        // Get target content ID from the first output resource (if available)
+        let target = if let Some(resource_ref) = self.outputs.first() {
+            resource_ref.resource_id.clone()
+        } else {
+            // Use operation ID hash as fallback
+            ContentId::from_bytes(&self.id.0.as_bytes()[0..32].to_vec())
+        };
+        
+        // Convert Proof format if available
+        let proof = self.proof.as_ref().map(|p| {
+            crate::tel::types::Proof {
+                proof_type: "operation_proof".to_string(),
+                data: p.data.clone(),
+                verification_key: Some(p.verification_key.clone()),
+            }
+        });
+        
+        // Generate TEL operation ID from this operation's ID
+        let operation_id = TelOperationId::from_content_id(&ContentId::from_bytes(&self.id.0.as_bytes()));
+        
+        // Extract a timestamp from metadata if available
+        let timestamp = self.metadata.get("timestamp")
+            .and_then(|ts| ts.parse::<u64>().ok())
+            .unwrap_or_else(|| {
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64
+            });
+        
+        // Construct the resource operation
+        ResourceOperation {
+            operation_id,
+            operation_type,
+            target,
+            inputs: Vec::new(), // Could populate from self.inputs if needed
+            outputs: Vec::new(), // Could populate from self.outputs if needed
+            proof,
+            verification_key: self.proof.as_ref().map(|p| p.verification_key.clone()),
+            domain: self.metadata.get("domain").cloned().unwrap_or_else(|| "unknown".to_string()),
+            initiator: self.metadata.get("initiator").cloned().unwrap_or_else(|| "system".to_string()),
+            parameters: HashMap::new(), // Map metadata to parameters if needed
+            metadata: self.metadata.clone(),
+            timestamp,
+        }
+    }
+}
+
+// Backward compatibility method
+impl ResourceRef {
+    /// Create resource reference from legacy ContentId
+    #[deprecated(since = "0.2.0", note = "Use ContentId directly instead")]
+    pub fn from_legacy_id(resource_id: crate::types::ContentId, domain_id: Option<DomainId>, ref_type: ResourceRefType) -> Self {
+        let id_string = resource_id.to_string();
+        let content_id = ContentId::new(&id_string);
+        
+        ResourceRef {
+            resource_id: content_id,
+            domain_id,
+            ref_type,
+            before_state: None,
+            after_state: None,
+        }
+    }
+}
+
+// Backward compatibility for RegisterOperation
+impl RegisterOperation {
+    /// Create from legacy string ID
+    #[deprecated(since = "0.2.0", note = "Use ContentId directly instead")]
+    pub fn from_legacy_id(register_id: String, operation: RegisterOperationType, data: HashMap<String, String>) -> Self {
+        let content_id = ContentId::new(&register_id);
+        
+        RegisterOperation {
+            register_id: content_id,
+            operation,
+            data,
+        }
     }
 }
 

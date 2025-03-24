@@ -1,0 +1,32 @@
+Analyzing src/log/content_addressed_fact.rs...
+==============================================
+
+Uuid::new_v4 occurrences:
+114:        Self(format!("fact:{}", Uuid::new_v4()))
+
+Detailed context for each occurrence:
+==============================================
+
+Line 114:         Self(format!("fact:{}", Uuid::new_v4()))
+---------------------------------------------
+    }
+    
+    /// Generate a random fact ID
+    pub fn generate() -> Self {
+        use uuid::Uuid;
+        Self(format!("fact:{}", Uuid::new_v4()))
+    }
+    
+    /// Get the underlying ID string
+    pub fn as_str(&self) -> &str {
+        &self.0
+---------------------------------------------
+
+Potential structs to implement ContentAddressed:
+==============================================
+103:pub struct FactId(pub String);
+125:pub struct ContentAddressedFact {
+253:pub struct FactTypeKey(String);
+279:pub struct FactFilter {
+294:pub struct ContentAddressedFactRegistry {
+543:pub struct FactRegistryFactory;
