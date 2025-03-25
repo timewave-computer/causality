@@ -1,0 +1,18 @@
+[package]
+name = "causality-db-rocks"
+version = "0.1.0"
+edition = "2021"
+description = "Causality - RocksDB database implementation"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# External dependencies
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+rocksdb = { workspace = true }
+
+# Internal dependencies
+causality-types = { workspace = true }
+causality-storage = { workspace = true }

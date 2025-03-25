@@ -1,44 +1,62 @@
-# Generated files
+# Rust specific
 /target/
-
-# Cargo lock file (uncomment if it's a library)
-# Cargo.lock
-
-# Backup files
+**/target/
+Cargo.lock
 **/*.rs.bk
-
-# IDE specific files
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# macOS
-.DS_Store
-
-# Direnv
-.direnv/
-.envrc.local
-
-# Generated adapter code
-generated/
-output/
-adapters-output/
+rust-project.json
 
 # Build artifacts
 dist/
 build/
+*.o
+*.so
+*.dylib
+*.a
+*.la
+*.lo
+*.wasm
+*.wat
 
-# Nix artifacts
+# Generated files
+generated/
+output/
+adapters-output/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.cursor/
+
+# OS specific
+.DS_Store
+
+# Nix specific
 result
 result-*
+.direnv/
+.envrc.local
+.nix-gcroots/
+/shells/
 .pre-commit-config.yaml.backup
 
-# Template test outputs
-.template-test/
+# Documentation
+/docs/api/
+/docs/generated/
+/docs/book/
+/book/
 
-# Node modules (for TypeScript adapters)
-node_modules/ 
+# Migration files
+file_mapping.tsv
+test_mapping.tsv
+docs_mapping.tsv
+migration_docs/
+docs/migrations/
+
+# Node.js (for TypeScript adapters)
+/node_modules/
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
@@ -47,13 +65,18 @@ pnpm-lock.yaml
 *.log
 logs/
 npm-debug.log*
+*.tsv
 
-# Coverage reports
+# Testing and coverage
 coverage/
 *.lcov
 .nyc_output/
+.template-test/
+*.profraw
+*.gcda
+*.gcno
 
-# Profiling files
+# Profiling
 chrome-profiler-events*.json
 speed-measure-plugin*.json
 
@@ -63,6 +86,8 @@ speed-measure-plugin*.json
 .env.development.local
 .env.test.local
 .env.production.local
+.env.*
+!.env.example
 
 # Temporary files
 *.tmp
@@ -70,28 +95,23 @@ speed-measure-plugin*.json
 tmp/
 temp/
 
-# Rust analyzer
-rust-project.json
+# Backup files
+*.bak
+*.old
+*.orig
+*.rej
 
-# Nix-specific
-.nix-gcroots/
-/shells/
-
-# WASM output
-*.wasm
-*.wat
-
-# Documentation generation
-/docs/api/
-/docs/generated/
-
-# Working files
+# Working directories
 work/
-valence/
-.cursor/rules/
-scripts/
-migration_docs/
-docs/migrations/
+valence_solidity/
+valence_docs/
 adapter-generator/
+
+reports/
+
+# Scripts directory - uncomment if needed
+scripts/
+
+# Benchmarks and examples - uncomment if needed
 benches/
 examples/

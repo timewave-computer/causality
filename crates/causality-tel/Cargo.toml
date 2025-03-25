@@ -1,0 +1,20 @@
+[package]
+name = "causality-tel"
+version = "0.1.0"
+edition = "2021"
+description = "Causality - Transaction Execution Layer"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# External dependencies
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+
+# Internal dependencies
+causality-types = { workspace = true }
+causality-core = { workspace = true }
+causality-resource = { workspace = true }
+causality-effects = { workspace = true }
+causality-engine = { workspace = true }

@@ -1,0 +1,13 @@
+[package]
+name = "causality-types"
+version = "0.1.0"
+edition = "2021"
+description = "Causality - Core type definitions"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# External dependencies
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }

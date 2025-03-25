@@ -1,0 +1,20 @@
+[package]
+name = "causality-tools"
+version = "0.1.0"
+edition = "2021"
+description = "Causality - CLI tools and utilities"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# External dependencies
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+
+# Internal dependencies
+causality-types = { workspace = true }
+causality-core = { workspace = true }
+causality-resource = { workspace = true }
+causality-engine = { workspace = true }
+causality-domain = { workspace = true }

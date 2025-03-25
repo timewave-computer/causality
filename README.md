@@ -39,6 +39,8 @@ The effect adapter system connects abstract effects to concrete implementations.
 
 The resource model provides deterministic concurrency control through explicit resource-scoped locks for acquisition and release of named resources. The unified resource system features a consistent lifecycle manager with well-defined state transitions, a capability-based authorization system, and integrated time map verification for temporal consistency.
 
+The new unified `ResourceRegister` model consolidates the previous `Resource` and `Register` classes into a single abstraction with integrated lifecycle management, relationship tracking, and proof generation support.
+
 ### Cross-Domain Relationships
 
 The cross-domain relationship system enables type-safe relationships between resources residing in different domains. It supports various relationship types such as Mirror (identical resources across domains), Reference (resource references), Ownership (hierarchical ownership), Derived (derived data), Bridge (domain-spanning connections), and Custom relationships. The system includes an efficient query engine with path-finding capabilities, relationship caching, and a domain-aware indexing system.
@@ -53,7 +55,7 @@ The system enables verifiable computation by translating high-level effects to R
 
 ### Content-Addressed Code
 
-Content-addressed code ensures immutable, verifiable program representation through cryptographic hashing of code for unique identification. The system supports deterministic builds for reproducible artifacts, cryptographic verification of code integrity, dependency resolution through hash-based linking, and tamper-proof deployment of program logic.
+Content-addressed code ensures immutable, verifiable program representation through cryptographic hashing of code for unique identification. The system supports deterministic builds for reproducible artifacts, cryptographic verification of code integrity, dependency resolution through hash-based linking, and tamper-proof deployment of program logic. A standardized `ContentId` type is used throughout the codebase, with helper scripts available to maintain consistent usage patterns.
 
 ### Fact System
 
@@ -88,6 +90,40 @@ cargo test
 ./scripts/test_cross_domain.sh
 ```
 
+### Utility Scripts
+
+The project includes utility scripts to maintain code quality and standards:
+
+```bash
+# Fix double semicolons in ContentId imports
+./scripts/fix_double_semicolons.sh
+
+# Fix ContentId imports to use canonical source
+./scripts/fix_contentid_imports.sh
+
+# Check for any remaining legacy Resource/Register usage patterns
+./scripts/check_legacy_resource_usage.sh
+```
+
+### ResourceRegister REPL
+
+The project includes a REPL for interactively working with the new unified `ResourceRegister` system:
+
+```bash
+# Build and run the REPL
+cargo run --bin repl
+
+# Commands available in the REPL
+help                                # Show available commands
+create <name> <type> [data]         # Create a new Resource
+register <id> <logic_type> [qty]    # Create a new ResourceRegister
+list                                # List all registers
+get <id>                            # Get a register by ID
+update <id> <state>                 # Update a register's state
+remove <id>                         # Remove a register
+consume <id>                        # Consume a register
+```
+
 ## Documentation
 
 ### Core Concepts & Guides
@@ -100,6 +136,7 @@ cargo test
 ### Technical Specifications
 - [Time Module](docs/time_module.md) 
 - [Content Addressing](docs/adr_007_content_addressing.md)
+- [ContentId Standard](docs/src/content_id_standard.md)
 - [Fact Management](docs/adr_008_fact_management.md)
 - [TEL Integration](docs/tel_integration.md)
 - [ZK VM Integration](docs/zk_vm_integration.md)
@@ -108,6 +145,8 @@ cargo test
 - [Building and Running](docs/BUILD.md)
 - [Nix Environment](docs/nix-environment.md)
 - [Resource Capability Guide](docs/resource_capability_guide.md)
+- [ResourceRegister Unification](docs/src/resource_register_unification_summary.md)
+- [ResourceRegister Migration Issues](docs/src/resource_register_migration_issues.md)
 - [TEL API Reference](docs/tel_api_reference.md)
 - [Glossary](docs/glossary.md)
 

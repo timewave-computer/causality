@@ -1,4 +1,4 @@
-use timewave::effect::content::{
+use causality::effect::content::{
     ContentHash, 
     HashAlgorithm, 
     ContentHasher, 

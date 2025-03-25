@@ -1,108 +1,56 @@
-[package]
-name = "adapter-generator"
-version = "0.1.0"
-edition = "2021"
-description = "A utility for generating effect adapters from schema definitions"
+[workspace]
+resolver = "2"
+members = [
+    "crates/causality-types",
+    "crates/causality-crypto",
+    "crates/causality-core",
+    "crates/causality-resource",
+    "crates/causality-effects",
+    "crates/causality-storage",
+    "crates/causality-db-memory",
+    "crates/causality-db-rocks",
+    "crates/causality-engine",
+    "crates/causality-tel",
+    "crates/causality-boundary",
+    "crates/causality-domain",
+    "crates/causality-patterns",
+    "crates/causality-tools",
+    "domains/causality-domain-evm",
+    "domains/causality-domain-cosmwasm",
+    "domains/causality-domain-succinct",
+    "domains/causality-domain-sdk",
+    "examples/token-transfer",
+    "examples/token-bridge",
+]
 
-[dependencies]
-tokio = { version = "1.28.0", features = ["full"] }
-serde = { version = "1.0.160", features = ["derive"] }
+[workspace.dependencies]
+# Common dependencies
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-toml = "0.8"
-structopt = "0.3"
-thiserror = "1.0.40"
-colored = "2.0"
-fs_extra = "1.2"
-heck = "0.3"
-handlebars = "4.3"
+thiserror = "1.0"
 anyhow = "1.0"
-chrono = { version = "0.4.24", features = ["serde"] }
-blake3 = "1.5"
-bincode = "1.3"
-borsh = { version = "1.0", features = ["derive"] }
-uuid = { version = "1.3.3", features = ["v4", "serde"] }
-rand = "0.8"
-getrandom = "0.2"
-base64 = { version = "0.21", optional = true }
-hex = "0.4.3"
-tempfile = "3.3"
-actix-web = "4.4"
-lazy_static = "1.4"
-async-trait = "0.1.68"
-md5 = { version = "0.7.0", optional = true }
-cosmwasm-std = { version = "1.2.0", optional = true }
-reqwest = { version = "0.11", features = ["json"] }
-rocksdb = { version = "0.21.0", optional = true }
-sparse-merkle-tree = "0.6.1"
-zstd = "0.12"
+tracing = "0.1"
+async-trait = "0.1"
+tokio = { version = "1.25", features = ["full"] }
+rocksdb = "0.20"
+sha2 = "0.10"
 
-[lib]
-proc-macro = false
-
-[features]
-default = ["std", "base64", "md5"]
-std = []
-examples = []
-cosmwasm_zk = ["zk-proving", "cosmwasm-std", "md5", "base64"]
-code-repo = []
-domain = []
-content-addressing = []
-full-effect = []
-boundary = []
-on_chain = ["boundary"]
-off_chain = ["boundary"]
-zk-vm = []
-zk-proving = []
-rocksdb = ["dep:rocksdb"]
-# Signature schemes
-ed25519 = []
-ecdsa = []
-bls = []
-# ZK proof systems
-groth16 = []
-plonk = []
-# Hash functions
-poseidon = []
-
-[[bin]]
-name = "adapter-gen"
-path = "src/main.rs"
-
-[[bin]]
-name = "zk_demo"
-path = "scripts/zk_demo.rs"
-
-[[bin]]
-name = "succinct_demo"
-path = "scripts/succinct_demo.rs"
-
-# Examples for demonstrating program account UI models
-[[example]]
-name = "program_account_serialization"
-path = "examples/program_account_serialization.rs"
-
-[[example]]
-name = "program_account_api"
-path = "examples/program_account_api.rs"
-
-[[example]]
-name = "resource_capability"
-path = "examples/resource_capability.rs"
-
-[[example]]
-name = "program_account_effect"
-path = "examples/program_account_effect.rs"
-
-[[example]]
-name = "boundary_crossing"
-path = "examples/boundary_crossing.rs"
-
-[[example]]
-name = "cosmwasm_zk_adapter"
-path = "examples/cosmwasm_zk_adapter.rs"
-required-features = ["cosmwasm_zk"]
-
-[[example]]
-name = "cross_domain_relationships"
-path = "src/examples/cross_domain_relationships.rs"
-required-features = ["examples"] 
+# Internal dependencies
+causality-types = { path = "crates/causality-types" }
+causality-crypto = { path = "crates/causality-crypto" }
+causality-core = { path = "crates/causality-core" }
+causality-resource = { path = "crates/causality-resource" }
+causality-effects = { path = "crates/causality-effects" }
+causality-storage = { path = "crates/causality-storage" }
+causality-db-memory = { path = "crates/causality-db-memory" }
+causality-db-rocks = { path = "crates/causality-db-rocks" }
+causality-engine = { path = "crates/causality-engine" }
+causality-tel = { path = "crates/causality-tel" }
+causality-boundary = { path = "crates/causality-boundary" }
+causality-domain = { path = "crates/causality-domain" }
+causality-patterns = { path = "crates/causality-patterns" }
+causality-tools = { path = "crates/causality-tools" }
+causality-domain-evm = { path = "domains/causality-domain-evm" }
+causality-domain-cosmwasm = { path = "domains/causality-domain-cosmwasm" }
+causality-domain-succinct = { path = "domains/causality-domain-succinct" }
+causality-domain-sdk = { path = "domains/causality-domain-sdk" }

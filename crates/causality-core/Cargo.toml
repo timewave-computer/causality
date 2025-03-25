@@ -1,0 +1,17 @@
+[package]
+name = "causality-core"
+version = "0.1.0"
+edition = "2021"
+description = "Causality - Core abstractions and utilities"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# External dependencies
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+
+# Internal dependencies
+causality-types = { workspace = true }
+causality-crypto = { workspace = true }
