@@ -1,0 +1,15 @@
+crates/causality-domain/src/fact_observer.rs:use causality_effects::ExecutionBoundary;
+crates/causality-engine/src/execution/trace.rs:use causality_effects::ContentHash;
+crates/causality-engine/src/execution/executor.rs:use causality_effects::ContentHash;
+crates/causality-engine/src/execution/executor.rs:use causality_effects::CodeRepository;
+crates/causality-engine/src/execution/executor.rs:use causality_effects::{CodeEntry, CodeMetadata};
+crates/causality-engine/src/execution/executor.rs:use causality_effects::{ContextId, Value, ExecutionEvent, ExecutionContext, SecuritySandbox};
+crates/causality-engine/src/execution/context.rs:use causality_effects::ContentHash;
+crates/causality-engine/src/execution/context.rs:use causality_effects;
+crates/causality-engine/src/execution/replay.rs:use causality_effects::ContentHash;
+crates/causality-engine/src/log/replay/callback.rs:use causality_effects::EffectType;
+crates/causality-resource/src/adapter.rs:use causality_effects::effect::{EffectId, EffectRegistry};
+crates/causality-resource/src/storage.rs:use causality_effects::ExecutionBoundary;
+crates/causality-resource/src/account/effect_adapter.rs:use causality_effects::{EffectContext, ExecutionBoundary, ChainBoundary};
+crates/causality-resource/src/storage_adapter.rs:use causality_effects::EffectRuntime;
+crates/causality-storage/src/snapshot/manager.rs:use causality_effects::ContentHash;

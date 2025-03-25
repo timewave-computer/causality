@@ -1,0 +1,75 @@
+crates/causality-effects/src/resource/lifecycle.rs:    fn record_event(&self, event: LifecycleEvent) {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn activate_resource(
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn activate_resource(resource_id: ContentId) -> ResourceLifecycleEffect {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn archive_resource(resource_id: ContentId) -> ResourceLifecycleEffect {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn can_perform_operation(
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn clear_pending_events(&self) {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn consume_resource(
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn consume_resource(resource_id: ContentId) -> ResourceLifecycleEffect {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn domain_id(&self) -> Option<&DomainId> {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn get_pending_events(&self) -> Vec<LifecycleEvent> {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn get_resource_state(&self, resource_id: &ContentId) -> Option<RegisterState> {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn lock_resource(
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn lock_resource(resource_id: ContentId, locker_id: Option<ContentId>) -> ResourceLifecycleEffect {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn new(
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn new(
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn new(lifecycle: Arc<ResourceLifecycle>) -> Self {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn operation(&self) -> ResourceOperation {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn register_event_handler<F>(&self, handler: F)
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn register_resource(
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn resource_id(&self) -> &ContentId {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn resource_lifecycle(&self) -> Arc<ResourceLifecycle> {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn unlock_resource(
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn unlock_resource(resource_id: ContentId, unlocker_id: Option<ContentId>) -> ResourceLifecycleEffect {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn update_resource_state(
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn with_controller(mut self, controller_id: ContentId) -> Self {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn with_domain(
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn with_domain(mut self, domain_id: DomainId) -> Self {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+crates/causality-effects/src/resource/lifecycle.rs:    pub fn with_reason(mut self, reason: TransitionReason) -> Self {
+crates/causality-resource/src/lifecycle.rs:    fn default() -> Self {
+crates/causality-resource/src/lifecycle.rs:    pub fn get_resource_state(&self, resource_id: &ContentId) -> LifecycleResult<ResourceState> {
+crates/causality-resource/src/lifecycle.rs:    pub fn get_resources_in_state(&self, state: ResourceState) -> Vec<ContentId> {
+crates/causality-resource/src/lifecycle.rs:    pub fn is_consumed(&self, resource_id: &ContentId) -> bool {
+crates/causality-resource/src/lifecycle.rs:    pub fn new() -> Self {
+crates/causality-resource/src/lifecycle.rs:    pub fn register_resource(&self, resource_id: ContentId, initial_state: ResourceState) -> LifecycleResult<()> {
+crates/causality-resource/src/lifecycle.rs:    pub fn resource_exists(&self, resource_id: &ContentId) -> bool {
+crates/causality-resource/src/lifecycle.rs:    pub fn update_resource_state(&self, resource_id: &ContentId, new_state: ResourceState) -> LifecycleResult<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    async fn validate_state_transition_with_relationships(
+crates/causality-resource/src/lifecycle/manager.rs:    fn default() -> Self {
+crates/causality-resource/src/lifecycle/manager.rs:    fn initialize_valid_transitions(&mut self) {
+crates/causality-resource/src/lifecycle/manager.rs:    fn is_valid_transition(&self, from_state: &RegisterState, to_state: &RegisterState) -> bool {
+crates/causality-resource/src/lifecycle/manager.rs:    fn record_transition(
+crates/causality-resource/src/lifecycle/manager.rs:    fn test_lifecycle_basic_transitions() -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    fn test_lock_relationships() -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    fn test_transition_history() -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub async fn transition_state_async(
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn activate(&mut self, resource_id: &ContentId) -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn activate_with_capabilities(
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn archive(&mut self, resource_id: &ContentId) -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn consume(&mut self, resource_id: &ContentId) -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn consume_with_capabilities(
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn execute_with_capabilities(
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn freeze(&mut self, resource_id: &ContentId) -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn freeze_with_capabilities(
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn get_locked_resources(&self, locker_id: &ContentId) -> Result<HashSet<ContentId>> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn get_state(&self, resource_id: &ContentId) -> Result<RegisterState> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn get_transition_history(&self, resource_id: &ContentId) -> Result<Vec<StateTransitionRecord>> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn is_operation_valid(
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn lock(&mut self, resource_id: &ContentId, locker_id: Option<&ContentId>) -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn lock_with_capabilities(
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn mark_pending(&mut self, resource_id: &ContentId) -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn new() -> Self {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn register_resource(&mut self, resource_id: ContentId) -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn unfreeze(&mut self, resource_id: &ContentId) -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn unfreeze_with_capabilities(
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn unlock(&mut self, resource_id: &ContentId, unlocker_id: Option<&ContentId>) -> Result<()> {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn unlock_with_capabilities(
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn validate_operation(
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn with_relationship_tracker(relationship_tracker: Arc<RelationshipTracker>) -> Self {
+crates/causality-resource/src/lifecycle/manager.rs:    pub fn with_state_transition_helper(
+crates/causality-resource/tests/lifecycle/helper_tests.rs:fn test_async_simulation() -> Result<()> {
+crates/causality-resource/tests/lifecycle/helper_tests.rs:fn test_helper_common_sequence() -> Result<()> {
+crates/causality-resource/tests/lifecycle/helper_tests.rs:fn test_helper_freezing_sequence() -> Result<()> {
+crates/causality-resource/tests/lifecycle/helper_tests.rs:fn test_invalid_transition() -> Result<()> {
+crates/causality-resource/tests/lifecycle/helper_tests.rs:fn test_validate_transition_sequence() -> Result<()> {

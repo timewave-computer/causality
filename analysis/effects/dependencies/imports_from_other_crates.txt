@@ -1,0 +1,93 @@
+   3 crates/causality-effects/src/domain_effect/test.rs:        use causality_domain::{
+   2 crates/causality-effects/src/domain_effect/examples.rs:    use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/types.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/transfer.rs:use causality_types::DomainId;
+   1 crates/causality-effects/src/transfer.rs:use causality_resource::{ResourceAPI, ResourceApiError, ResourceApiResult};
+   1 crates/causality-effects/src/transfer.rs:use causality_engine_snapshot::{FactDependency, FactDependencyType, FactId, FactSnapshot};
+   1 crates/causality-effects/src/three_layer.rs:use causality_types::Address;
+   1 crates/causality-effects/src/templates/state_transition.rs:use causality_types::{Error, Result};
+   1 crates/causality-effects/src/templates/state_transition.rs:use causality_resource_manager::ResourceRegisterLifecycleManager;
+   1 crates/causality-effects/src/templates/state_transition.rs:use causality_resource::{RelationshipTracker, RelationshipType};
+   1 crates/causality-effects/src/templates/state_transition.rs:use causality_resource::RegisterState;
+   1 crates/causality-effects/src/templates/state_transition.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:use causality_types::{*};
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:use causality_types::Result;
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:use causality_types::Address;
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:use causality_crypto::ContentId;;
+   1 crates/causality-effects/src/templates/relationship_validation.rs:use causality_types::{Error, Result};
+   1 crates/causality-effects/src/templates/relationship_validation.rs:use causality_types::DomainId;
+   1 crates/causality-effects/src/templates/relationship_validation.rs:use causality_types::Address;
+   1 crates/causality-effects/src/templates/relationship_validation.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/storage.rs:use causality_types::{*};
+   1 crates/causality-effects/src/storage.rs:use causality_resource::{
+   1 crates/causality-effects/src/storage.rs:use causality_resource::Right;
+   1 crates/causality-effects/src/storage.rs:use causality_domain_evm::storage_strategy::EthereumStorageEffectFactory;
+   1 crates/causality-effects/src/storage.rs:use causality_domain_cosmwasm::storage_strategy::CosmWasmStorageEffectFactory;
+   1 crates/causality-effects/src/storage.rs:use causality_domain_cosmwasm::CosmWasmAdapterConfig;
+   1 crates/causality-effects/src/storage.rs:use causality_crypto::{ContentId, ContentAddressed};
+   1 crates/causality-effects/src/storage.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/storage.rs:use causality_crypto::Commitment;
+   1 crates/causality-effects/src/resource/tests/resource_integration_test.rs:use causality_resource::interface::{
+   1 crates/causality-effects/src/resource/tests/resource_integration_test.rs:use causality_common::identity::ContentId;
+   1 crates/causality-effects/src/resource/tests.rs:    use causality_types::ContentId;
+   1 crates/causality-effects/src/resource/tests.rs:    use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/resource/locking.rs:use causality_types::{Error, Result, ContentId};
+   1 crates/causality-effects/src/resource/locking.rs:use causality_domain::domain::{DomainId, DomainAdapter};
+   1 crates/causality-effects/src/resource/lifecycle.rs:use causality_types::{Error, Result, ContentId};
+   1 crates/causality-effects/src/resource/lifecycle.rs:use causality_resource::{ResourceRegister, RegisterState};
+   1 crates/causality-effects/src/resource/lifecycle.rs:use causality_resource::lifecycle::{ResourceLifecycle, ResourceOperation, TransitionReason};
+   1 crates/causality-effects/src/resource/lifecycle.rs:use causality_domain::domain::{DomainId, DomainAdapter};
+   1 crates/causality-effects/src/resource/implementation.rs:use causality_resource::interface::{
+   1 crates/causality-effects/src/resource/implementation.rs:use causality_common::identity::ContentId;
+   1 crates/causality-effects/src/resource/examples.rs:use causality_types::{Result, ContentId};
+   1 crates/causality-effects/src/resource/examples.rs:use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/resource/effects.rs:use causality_types::{Error, Result, ContentId};
+   1 crates/causality-effects/src/resource/effects.rs:use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/resource/dependency.rs:use causality_types::{ContentId, Result};
+   1 crates/causality-effects/src/resource/dependency.rs:use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/resource/capability.rs:use causality_types::{Error, Result, ContentId};
+   1 crates/causality-effects/src/resource/capability.rs:use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/resource/access.rs:use causality_types::{Error, Result, ContentId};
+   1 crates/causality-effects/src/resource/access.rs:use causality_domain::domain::{DomainId, DomainAdapter};
+   1 crates/causality-effects/src/repository.rs:use causality_types::{Error, Result};
+   1 crates/causality-effects/src/random.rs:use causality_types::Result;
+   1 crates/causality-effects/src/random.rs:use causality_engine_snapshot::{FactDependency, FactSnapshot};
+   1 crates/causality-effects/src/random.rs:use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+   1 crates/causality-effects/src/lib.rs:use causality_types::{Error, Result};
+   1 crates/causality-effects/src/lib.rs:use causality_types::CapabilityId;
+   1 crates/causality-effects/src/lib.rs:use causality_types::*;
+   1 crates/causality-effects/src/lib.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/handler.rs:use causality_types::Result;
+   1 crates/causality-effects/src/executor.rs:use causality_types::{Error, Result};
+   1 crates/causality-effects/src/executor.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/empty_effect.rs:use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+   1 crates/causality-effects/src/effect_id.rs:use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+   1 crates/causality-effects/src/domain_effect/zk_effects.rs:use causality_domain::types::Result as DomainResult;
+   1 crates/causality-effects/src/domain_effect/zk_effects.rs:use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/domain_effect/test.rs:    use causality_domain::{
+   1 crates/causality-effects/src/domain_effect/handler.rs:use causality_domain::adapter::DomainAdapterRegistry;
+   1 crates/causality-effects/src/domain_effect/examples.rs:    use causality_domain::fact::FactQuery;
+   1 crates/causality-effects/src/domain_effect/examples.rs:    use causality_domain::domain::{DomainId, Transaction};
+   1 crates/causality-effects/src/domain_effect/evm_effects.rs:use causality_domain::{
+   1 crates/causality-effects/src/domain_effect/domain_selection.rs:use causality_domain::{
+   1 crates/causality-effects/src/domain_effect/domain_registry.rs:use causality_domain::{
+   1 crates/causality-effects/src/domain_effect/cosmwasm_effects.rs:use causality_domain::{
+   1 crates/causality-effects/src/domain_effect.rs:use causality_domain::{
+   1 crates/causality-effects/src/domain_effect.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/constraints/validation.rs:use causality_types::Address;
+   1 crates/causality-effects/src/constraints/validation.rs:use causality_resource::ResourceAPI;
+   1 crates/causality-effects/src/constraints/validation.rs:use causality_resource::CapabilityRepository;
+   1 crates/causality-effects/src/capability/verification.rs:use causality_types::Result;
+   1 crates/causality-effects/src/capability/verification.rs:use causality_domain::domain::{DomainId, DomainAdapter};
+   1 crates/causality-effects/src/capability/verification.rs:use causality_domain::capability::DomainCapability;
+   1 crates/causality-effects/src/capability/unified.rs:use causality_types::Result;
+   1 crates/causality-effects/src/capability/unified.rs:use causality_domain::domain::{DomainId, DomainType};
+   1 crates/causality-effects/src/capability/unified.rs:use causality_domain::capability::{DomainCapability, DomainCapabilityManager};
+   1 crates/causality-effects/src/capability/conversion.rs:use causality_types::Result;
+   1 crates/causality-effects/src/capability/conversion.rs:use causality_domain::domain::{DomainId, DomainType, DomainAdapter};
+   1 crates/causality-effects/src/capability/conversion.rs:use causality_domain::capability::{DomainCapability, DomainCapabilityManager};
+   1 crates/causality-effects/src/boundary.rs:use causality_types::Address;
+   1 crates/causality-effects/src/boundary.rs:use causality_resource::CapabilityRef;
+   1 crates/causality-effects/src/boundary.rs:use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+   1 crates/causality-effects/benches/resource_benchmarks.rs:use causality_resource::interface::{
+   1 crates/causality-effects/benches/resource_benchmarks.rs:use causality_common::identity::ContentId;

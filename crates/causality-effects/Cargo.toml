@@ -5,6 +5,17 @@ edition = "2021"
 description = "Causality - Effects system for side effects"
 license = "MIT OR Apache-2.0"
 
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["resource"]
+# Resource management features
+resource = ["causality-resource/interface", "causality-resource/adapter"]
+# Cross-domain resource management features
+resource-cross-domain = ["resource", "causality-domain/resource"]
+# Full resource management features
+resource-full = ["resource", "resource-cross-domain"]
+
 [dependencies]
 # External dependencies
 serde = { workspace = true, features = ["derive"] }

@@ -1,0 +1,41 @@
+crates/causality-effects/src/resource/locking.rs:    fn add_lock(&self, lock: ResourceLock) -> Result<()> {
+crates/causality-effects/src/resource/locking.rs:    pub async fn acquire_lock_with_timeout(
+crates/causality-effects/src/resource/locking.rs:    pub fn can_acquire_lock(
+crates/causality-effects/src/resource/locking.rs:    pub fn domain_id(&self) -> Option<&DomainId> {
+crates/causality-effects/src/resource/locking.rs:    pub fn domain_id(&self) -> Option<&DomainId> {
+crates/causality-effects/src/resource/locking.rs:    pub fn get_locks(&self, resource_id: &ContentId) -> Vec<ResourceLock> {
+crates/causality-effects/src/resource/locking.rs:    pub fn get_locks_by_domain(&self, domain_id: &DomainId) -> Vec<ResourceLock> {
+crates/causality-effects/src/resource/locking.rs:    pub fn get_locks_by_effect(&self, effect_id: &EffectId) -> Vec<ResourceLock> {
+crates/causality-effects/src/resource/locking.rs:    pub fn get_locks_by_transaction(&self, transaction_id: &str) -> Vec<ResourceLock> {
+crates/causality-effects/src/resource/locking.rs:    pub fn handle_expired_locks(&self) -> Result<usize> {
+crates/causality-effects/src/resource/locking.rs:    pub fn is_expired(&self) -> bool {
+crates/causality-effects/src/resource/locking.rs:    pub fn is_lock_held(
+crates/causality-effects/src/resource/locking.rs:    pub fn lock_type(&self) -> CrossDomainLockType {
+crates/causality-effects/src/resource/locking.rs:    pub fn new(
+crates/causality-effects/src/resource/locking.rs:    pub fn new(
+crates/causality-effects/src/resource/locking.rs:    pub fn new(access_tracker: Arc<ResourceAccessTracker>) -> Self {
+crates/causality-effects/src/resource/locking.rs:    pub fn new(resource_id: ContentId) -> Self {
+crates/causality-effects/src/resource/locking.rs:    pub fn register_timeout_handler<F>(
+crates/causality-effects/src/resource/locking.rs:    pub fn release_lock(
+crates/causality-effects/src/resource/locking.rs:    pub fn resource_id(&self) -> &ContentId {
+crates/causality-effects/src/resource/locking.rs:    pub fn resource_id(&self) -> &ContentId {
+crates/causality-effects/src/resource/locking.rs:    pub fn try_acquire_lock(
+crates/causality-effects/src/resource/locking.rs:    pub fn with_domain(
+crates/causality-effects/src/resource/locking.rs:    pub fn with_domain(mut self, domain_id: DomainId) -> Self {
+crates/causality-effects/src/resource/locking.rs:    pub fn with_domain(mut self, domain_id: DomainId) -> Self {
+crates/causality-effects/src/resource/locking.rs:    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+crates/causality-effects/src/resource/locking.rs:    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+crates/causality-effects/src/resource/locking.rs:    pub fn with_transaction(mut self, transaction_id: String) -> Self {
+crates/causality-effects/src/resource/locking.rs:    pub fn with_transaction(mut self, transaction_id: String) -> Self {
+crates/causality-resource/src/locking.rs:    fn acquire_exclusive_lock(
+crates/causality-resource/src/locking.rs:    fn acquire_intent_lock(
+crates/causality-resource/src/locking.rs:    fn acquire_shared_lock(
+crates/causality-resource/src/locking.rs:    fn default() -> Self {
+crates/causality-resource/src/locking.rs:    pub fn acquire_lock(
+crates/causality-resource/src/locking.rs:    pub fn get_lock_info(&self, resource_id: &ContentId) -> Option<LockInfo> {
+crates/causality-resource/src/locking.rs:    pub fn get_locked_resources_by(&self, holder_id: &ContentId) -> Vec<ContentId> {
+crates/causality-resource/src/locking.rs:    pub fn is_locked(&self, resource_id: &ContentId) -> bool {
+crates/causality-resource/src/locking.rs:    pub fn is_locked_by(&self, resource_id: &ContentId, holder_id: &ContentId) -> bool {
+crates/causality-resource/src/locking.rs:    pub fn new() -> Self {
+crates/causality-resource/src/locking.rs:    pub fn release_lock(
+crates/causality-resource/src/locking.rs:    pub fn with_timeout(timeout: Duration) -> Self {

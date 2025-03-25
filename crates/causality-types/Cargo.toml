@@ -8,6 +8,13 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 # External dependencies
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+borsh = { workspace = true }
+rand = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+
+# No internal dependencies - this is now a base crate

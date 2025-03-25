@@ -12,7 +12,12 @@ use thiserror::Error;
 use borsh::{BorshSerialize, BorshDeserialize};
 use std::str::FromStr;
 use rand;
-use chrono;
+
+// Import types from causality-types crate
+use causality_types::{
+    HashOutput, HashAlgorithm, HashError, ContentId, 
+    ContentAddressed, ContentHash
+};
 
 /// Output of a hash function with algorithm awareness
 #[derive(Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]

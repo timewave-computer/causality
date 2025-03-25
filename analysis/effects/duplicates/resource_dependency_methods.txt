@@ -1,0 +1,17 @@
+crates/causality-effects/src/resource/dependency.rs:    pub fn add_dependency(&self, dependency: ResourceDependency) -> Result<()> {
+crates/causality-effects/src/resource/dependency.rs:    pub fn get_dependencies_for_source(&self, source: &ContentId) -> HashSet<ResourceDependency> {
+crates/causality-effects/src/resource/dependency.rs:    pub fn get_dependencies_for_target(&self, target: &ContentId) -> HashSet<ResourceDependency> {
+crates/causality-effects/src/resource/dependency.rs:    pub fn has_dependencies(&self, resource_id: &ContentId) -> bool {
+crates/causality-effects/src/resource/dependency.rs:    pub fn new() -> Self {
+crates/causality-effects/src/resource/dependency.rs:    pub fn remove_dependencies(&self, resource_id: &ContentId) -> Result<()> {
+crates/causality-resource/src/dependency.rs:    fn default() -> Self {
+crates/causality-resource/src/dependency.rs:    fn would_create_cycle(&self, source_id: &ContentId, target_id: &ContentId) -> bool {
+crates/causality-resource/src/dependency.rs:    pub fn add_dependency(&self, dependency: ResourceDependency) -> DependencyResult<()> {
+crates/causality-resource/src/dependency.rs:    pub fn get_dependencies_for_source(&self, source_id: &ContentId) -> Vec<ResourceDependency> {
+crates/causality-resource/src/dependency.rs:    pub fn get_dependencies_for_target(&self, target_id: &ContentId) -> Vec<ResourceDependency> {
+crates/causality-resource/src/dependency.rs:    pub fn get_dependent_resources(&self, target_id: &ContentId) -> Vec<ContentId> {
+crates/causality-resource/src/dependency.rs:    pub fn has_dependencies(&self, source_id: &ContentId) -> bool {
+crates/causality-resource/src/dependency.rs:    pub fn has_dependency(&self, source_id: &ContentId, target_id: &ContentId) -> bool {
+crates/causality-resource/src/dependency.rs:    pub fn has_dependents(&self, target_id: &ContentId) -> bool {
+crates/causality-resource/src/dependency.rs:    pub fn new() -> Self {
+crates/causality-resource/src/dependency.rs:    pub fn remove_dependency(

@@ -1,6 +1,4 @@
-You raise an excellent point about the committee-domain relationship. My definition was indeed imprecise. Let me refine these definitions to capture the nuanced relationship:
-
-# Refined Definitions for Causality Architecture
+# Committee/Domain Definitions for Causality Architecture
 
 ## Committee
 A Committee is a set of actors (validators) who collectively participate in a consensus mechanism. This same committee may be materializing multiple domains if there are forks.

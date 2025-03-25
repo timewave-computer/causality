@@ -1,13 +1,13 @@
 <!-- Operation model for registers -->
 <!-- Original file: docs/src/register_operation_model.md -->
 
-# Register Operation Model
+# Resource Register Operation Model
 
-This document outlines the register operation model within the unified resource architecture, detailing how concrete resource register operations integrate with the unified operation model.
+This document outlines the resource register operation model within the unified resource architecture, detailing how concrete resource register operations integrate with the unified operation model.
 
 ## Core Concepts
 
-### Register Operations
+### Resource Register Operations
 
 Register operations are concrete, low-level operations that directly manipulate the state of resources in the ResourceRegister. They represent the transition from abstract operations to physical state changes, serving as the concrete implementation for higher-level abstract operations.
 

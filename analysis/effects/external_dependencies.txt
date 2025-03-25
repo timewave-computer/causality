@@ -1,0 +1,234 @@
+   3 crates/causality-effects/src/random.rs:        // Derive content ID and use it for the ID
+   3 crates/causality-effects/src/domain_effect/test.rs:        use mockall::predicate::*;
+   3 crates/causality-effects/src/domain_effect/test.rs:        use mockall::*;
+   3 crates/causality-effects/src/domain_effect/test.rs:        use causality_domain::{
+   3 crates/causality-effects/src/domain_effect/test.rs:        use async_trait::async_trait;
+   2 crates/causality-effects/src/storage.rs:            // For other domain types, use the generic effect with ContentId
+   2 crates/causality-effects/src/resource/access.rs:        let mut in_use = self.in_use_resources.lock().unwrap();
+   2 crates/causality-effects/src/resource/access.rs:        let in_use = self.in_use_resources.lock().unwrap();
+   2 crates/causality-effects/src/domain_effect/examples.rs:    use causality_domain::domain::DomainId;
+   2 crates/causality-effects/src/constraints/validation.rs:        use futures::future::join_all;
+   1 crates/causality-effects/tests/basic/mod.rs:use serde_json::json;
+   1 crates/causality-effects/tests/basic/mod.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/types.rs:use serde::{Serialize, Deserialize};
+   1 crates/causality-effects/src/types.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/transfer.rs:use serde::{Serialize, Deserialize};
+   1 crates/causality-effects/src/transfer.rs:use causality_types::DomainId;
+   1 crates/causality-effects/src/transfer.rs:use causality_resource::{ResourceAPI, ResourceApiError, ResourceApiResult};
+   1 crates/causality-effects/src/transfer.rs:use causality_engine_snapshot::{FactDependency, FactDependencyType, FactId, FactSnapshot};
+   1 crates/causality-effects/src/transfer.rs:use causality_effects::{EffectContext, ExecutionBoundary};
+   1 crates/causality-effects/src/transfer.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/three_layer.rs:use serde::{Serialize, Deserialize};
+   1 crates/causality-effects/src/three_layer.rs:use causality_types::Address;
+   1 crates/causality-effects/src/three_layer.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/templates/state_transition.rs:use causality_types::{Error, Result};
+   1 crates/causality-effects/src/templates/state_transition.rs:use causality_resource_manager::ResourceRegisterLifecycleManager;
+   1 crates/causality-effects/src/templates/state_transition.rs:use causality_resource::{RelationshipTracker, RelationshipType};
+   1 crates/causality-effects/src/templates/state_transition.rs:use causality_resource::RegisterState;
+   1 crates/causality-effects/src/templates/state_transition.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/templates/state_transition.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/templates/state_transition.rs:        // Try to consume dependency - should fail because it has an active dependent
+   1 crates/causality-effects/src/templates/state_transition.rs:        // Try to archive parent - should fail because child is active
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:use causality_types::{*};
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:use causality_types::Result;
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:use causality_types::Address;
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:use causality_effects::{ResourceStateTransitionHelper, RelationshipFilter};
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:use causality_effects::{RelationshipStateValidationEffect};
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:use causality_crypto::ContentId;;
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:// Example of how to use the relationship validation effect with a template function
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:    // This should fail because the dependent resource depends on it
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:    // This should fail because it has a child resource
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:    // Test 2: Try to consume a dependency (should fail because it's required by child2)
+   1 crates/causality-effects/src/templates/relationship_validation_tests.rs:    // In a real implementation, this would use one of the standard effect templates
+   1 crates/causality-effects/src/templates/relationship_validation.rs:use causality_types::{Error, Result};
+   1 crates/causality-effects/src/templates/relationship_validation.rs:use causality_types::DomainId;
+   1 crates/causality-effects/src/templates/relationship_validation.rs:use causality_types::Address;
+   1 crates/causality-effects/src/templates/relationship_validation.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/templates/relationship_validation.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/templates.rs:pub use state_transition::ResourceStateTransitionHelper; 
+   1 crates/causality-effects/src/templates.rs:pub use relationship_validation::RelationshipStateValidationEffect;
+   1 crates/causality-effects/src/storage.rs:use serde::{Serialize, Deserialize};
+   1 crates/causality-effects/src/storage.rs:use ethers::types::Address as EthAddress;
+   1 crates/causality-effects/src/storage.rs:use causality_types::{*};
+   1 crates/causality-effects/src/storage.rs:use causality_resource::{
+   1 crates/causality-effects/src/storage.rs:use causality_resource::Right;
+   1 crates/causality-effects/src/storage.rs:use causality_domain_evm::storage_strategy::EthereumStorageEffectFactory;
+   1 crates/causality-effects/src/storage.rs:use causality_domain_cosmwasm::storage_strategy::CosmWasmStorageEffectFactory;
+   1 crates/causality-effects/src/storage.rs:use causality_domain_cosmwasm::CosmWasmAdapterConfig;
+   1 crates/causality-effects/src/storage.rs:use causality_crypto::{ContentId, ContentAddressed};
+   1 crates/causality-effects/src/storage.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/storage.rs:use causality_crypto::Commitment;
+   1 crates/causality-effects/src/storage.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/resource/tests/resource_integration_test.rs:use causality_resource::interface::{
+   1 crates/causality-effects/src/resource/tests/resource_integration_test.rs:use causality_common::identity::ContentId;
+   1 crates/causality-effects/src/resource/tests/resource_integration_test.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/resource/tests/resource_integration_test.rs:use anyhow::Result;
+   1 crates/causality-effects/src/resource/tests/mod.rs:pub use resource_integration_test::*; 
+   1 crates/causality-effects/src/resource/tests.rs:    use causality_types::ContentId;
+   1 crates/causality-effects/src/resource/tests.rs:    use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/resource/tests.rs:            // For now, we'll just use a type assertion to make the compiler happy
+   1 crates/causality-effects/src/resource/mod.rs:pub use locking::{
+   1 crates/causality-effects/src/resource/mod.rs:pub use lifecycle::{
+   1 crates/causality-effects/src/resource/mod.rs:pub use implementation::*; 
+   1 crates/causality-effects/src/resource/mod.rs:pub use examples::{
+   1 crates/causality-effects/src/resource/mod.rs:pub use effects::{
+   1 crates/causality-effects/src/resource/mod.rs:pub use dependency::{
+   1 crates/causality-effects/src/resource/mod.rs:pub use capability::{
+   1 crates/causality-effects/src/resource/mod.rs:pub use access::{
+   1 crates/causality-effects/src/resource/locking.rs:use causality_types::{Error, Result, ContentId};
+   1 crates/causality-effects/src/resource/locking.rs:use causality_domain::domain::{DomainId, DomainAdapter};
+   1 crates/causality-effects/src/resource/lifecycle.rs:use causality_types::{Error, Result, ContentId};
+   1 crates/causality-effects/src/resource/lifecycle.rs:use causality_resource::{ResourceRegister, RegisterState};
+   1 crates/causality-effects/src/resource/lifecycle.rs:use causality_resource::lifecycle::{ResourceLifecycle, ResourceOperation, TransitionReason};
+   1 crates/causality-effects/src/resource/lifecycle.rs:use causality_domain::domain::{DomainId, DomainAdapter};
+   1 crates/causality-effects/src/resource/lifecycle.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/resource/implementation.rs:use causality_resource::interface::{
+   1 crates/causality-effects/src/resource/implementation.rs:use causality_common::identity::ContentId;
+   1 crates/causality-effects/src/resource/implementation.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/resource/implementation.rs:use anyhow::Result;
+   1 crates/causality-effects/src/resource/examples.rs:use causality_types::{Result, ContentId};
+   1 crates/causality-effects/src/resource/examples.rs:use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/resource/examples.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/resource/examples.rs:// This file contains examples demonstrating how to use the resource management
+   1 crates/causality-effects/src/resource/effects.rs:use causality_types::{Error, Result, ContentId};
+   1 crates/causality-effects/src/resource/effects.rs:use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/resource/effects.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/resource/dependency.rs:use causality_types::{ContentId, Result};
+   1 crates/causality-effects/src/resource/dependency.rs:use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/resource/capability.rs:use serde::{Serialize, Deserialize};
+   1 crates/causality-effects/src/resource/capability.rs:use causality_types::{Error, Result, ContentId};
+   1 crates/causality-effects/src/resource/capability.rs:use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/resource/capability.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/resource/access.rs:use causality_types::{Error, Result, ContentId};
+   1 crates/causality-effects/src/resource/access.rs:use causality_domain::domain::{DomainId, DomainAdapter};
+   1 crates/causality-effects/src/resource/access.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/resource/access.rs:        // Remove from in-use resources
+   1 crates/causality-effects/src/resource/access.rs:        // Mark the resource as in use by this effect
+   1 crates/causality-effects/src/repository.rs:use serde::{Serialize, Deserialize};
+   1 crates/causality-effects/src/repository.rs:use causality_types::{Error, Result};
+   1 crates/causality-effects/src/repository.rs:use causality_effects::{ContentHash, CodeDefinition, CodeContent};
+   1 crates/causality-effects/src/repository.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/random.rs:use rand::Rng;
+   1 crates/causality-effects/src/random.rs:use causality_types::Result;
+   1 crates/causality-effects/src/random.rs:use causality_engine_snapshot::{FactDependency, FactSnapshot};
+   1 crates/causality-effects/src/random.rs:use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+   1 crates/causality-effects/src/random.rs:use borsh::{BorshSerialize, BorshDeserialize};
+   1 crates/causality-effects/src/random.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/random.rs:    use tokio::test;
+   1 crates/causality-effects/src/random.rs:        // For production code, we would use a more sophisticated algorithm
+   1 crates/causality-effects/src/lib.rs:use thiserror::Error;
+   1 crates/causality-effects/src/lib.rs:use serde::{Serialize, Deserialize};
+   1 crates/causality-effects/src/lib.rs:use chrono::{DateTime, Utc};
+   1 crates/causality-effects/src/lib.rs:use causality_types::{Error, Result};
+   1 crates/causality-effects/src/lib.rs:use causality_types::CapabilityId;
+   1 crates/causality-effects/src/lib.rs:use causality_types::*;
+   1 crates/causality-effects/src/lib.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/lib.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/lib.rs:pub use self::types::{ResourceChangeType, ResourceChange};
+   1 crates/causality-effects/src/lib.rs:pub use self::resource::{
+   1 crates/causality-effects/src/lib.rs:pub use self::repository::{CodeRepository, CodeEntry, CodeMetadata};
+   1 crates/causality-effects/src/lib.rs:pub use self::handler::{EffectHandler, HandlerResult};
+   1 crates/causality-effects/src/lib.rs:pub use self::executor::{ContentAddressableExecutor, ExecutionContext, SecuritySandbox, Value, ContextId, ExecutionEvent, CallFrame};
+   1 crates/causality-effects/src/lib.rs:pub use self::empty_effect::EmptyEffect;
+   1 crates/causality-effects/src/lib.rs:pub use self::effect_id::EffectId;
+   1 crates/causality-effects/src/lib.rs:pub use self::domain_effect::{
+   1 crates/causality-effects/src/lib.rs:pub use self::content_addressed_effect::{Effect as ContentAddressedEffect, EffectType, EffectOutcome as ContentAddressedEffectOutcome, EffectRegistry as ContentAddressedEffectRegistry};
+   1 crates/causality-effects/src/lib.rs:pub use self::content::{ContentHash, CodeContent, CodeDefinition};
+   1 crates/causality-effects/src/lib.rs:pub use self::capability::{
+   1 crates/causality-effects/src/lib.rs:pub use self::boundary::ExecutionBoundary;
+   1 crates/causality-effects/src/lib.rs:        // For synchronous execution, use the regular Effect trait
+   1 crates/causality-effects/src/handler.rs:use causality_types::Result;
+   1 crates/causality-effects/src/handler.rs:use causality_effects::ExecutionBoundary;
+   1 crates/causality-effects/src/handler.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/executor.rs:use serde::{Serialize, Deserialize};
+   1 crates/causality-effects/src/executor.rs:use chrono::Utc;
+   1 crates/causality-effects/src/executor.rs:use causality_types::{Error, Result};
+   1 crates/causality-effects/src/executor.rs:use causality_effects::{CodeRepository, CodeEntry};
+   1 crates/causality-effects/src/executor.rs:use causality_effects::ContentHash;
+   1 crates/causality-effects/src/executor.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/executor.rs:use borsh::{BorshSerialize, BorshDeserialize};
+   1 crates/causality-effects/src/executor.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/empty_effect.rs:use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+   1 crates/causality-effects/src/empty_effect.rs:use borsh::{BorshSerialize, BorshDeserialize};
+   1 crates/causality-effects/src/empty_effect.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/effect_id.rs:use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+   1 crates/causality-effects/src/effect_id.rs:use borsh::{BorshSerialize, BorshDeserialize};
+   1 crates/causality-effects/src/effect.rs:use borsh::{BorshSerialize, BorshDeserialize};
+   1 crates/causality-effects/src/domain_effect/zk_effects.rs:use causality_domain::types::Result as DomainResult;
+   1 crates/causality-effects/src/domain_effect/zk_effects.rs:use causality_domain::domain::DomainId;
+   1 crates/causality-effects/src/domain_effect/zk_effects.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/domain_effect/test.rs:    use mockall::predicate::*;
+   1 crates/causality-effects/src/domain_effect/test.rs:    use mockall::*;
+   1 crates/causality-effects/src/domain_effect/test.rs:    use causality_domain::{
+   1 crates/causality-effects/src/domain_effect/test.rs:    use async_trait::async_trait;
+   1 crates/causality-effects/src/domain_effect/mod.rs:pub use self::zk_effects::{
+   1 crates/causality-effects/src/domain_effect/mod.rs:pub use self::handler::{
+   1 crates/causality-effects/src/domain_effect/mod.rs:pub use self::examples::{
+   1 crates/causality-effects/src/domain_effect/mod.rs:pub use self::evm_effects::{
+   1 crates/causality-effects/src/domain_effect/mod.rs:pub use self::domain_selection::{
+   1 crates/causality-effects/src/domain_effect/mod.rs:pub use self::domain_registry::{
+   1 crates/causality-effects/src/domain_effect/mod.rs:pub use self::cosmwasm_effects::{
+   1 crates/causality-effects/src/domain_effect/handler.rs:use causality_domain::adapter::DomainAdapterRegistry;
+   1 crates/causality-effects/src/domain_effect/handler.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/domain_effect/handler.rs:            // For view calls, we would typically use observe_fact
+   1 crates/causality-effects/src/domain_effect/handler.rs:            // For transaction calls, we would use submit_transaction
+   1 crates/causality-effects/src/domain_effect/examples.rs:/// Example showing how to use domain selection effects
+   1 crates/causality-effects/src/domain_effect/examples.rs:/// Example showing how to use ZK-specific effects
+   1 crates/causality-effects/src/domain_effect/examples.rs:/// Example showing how to use EVM-specific effects
+   1 crates/causality-effects/src/domain_effect/examples.rs:/// Example showing how to use CosmWasm-specific effects
+   1 crates/causality-effects/src/domain_effect/examples.rs://! This module contains examples of how to use domain effects.
+   1 crates/causality-effects/src/domain_effect/examples.rs:    use causality_domain::fact::FactQuery;
+   1 crates/causality-effects/src/domain_effect/examples.rs:    use causality_domain::domain::{DomainId, Transaction};
+   1 crates/causality-effects/src/domain_effect/evm_effects.rs:use causality_domain::{
+   1 crates/causality-effects/src/domain_effect/evm_effects.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/domain_effect/domain_selection.rs:use causality_domain::{
+   1 crates/causality-effects/src/domain_effect/domain_selection.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/domain_effect/domain_selection.rs:                    // In a real implementation, this would use a more sophisticated
+   1 crates/causality-effects/src/domain_effect/domain_registry.rs:use tokio::sync::Mutex;
+   1 crates/causality-effects/src/domain_effect/domain_registry.rs:use causality_domain::{
+   1 crates/causality-effects/src/domain_effect/domain_registry.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/domain_effect/cosmwasm_effects.rs:use causality_domain::{
+   1 crates/causality-effects/src/domain_effect/cosmwasm_effects.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/domain_effect.rs:use serde::{Serialize, Deserialize};
+   1 crates/causality-effects/src/domain_effect.rs:use causality_domain::{
+   1 crates/causality-effects/src/domain_effect.rs:use causality_crypto::ContentId;
+   1 crates/causality-effects/src/domain_effect.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/content.rs:use serde::{Serialize, Deserialize, Serializer, Deserializer};
+   1 crates/causality-effects/src/content.rs:use hex;
+   1 crates/causality-effects/src/content.rs:use blake3::Hasher as Blake3Hasher;
+   1 crates/causality-effects/src/constraints/validation.rs:use causality_types::Address;
+   1 crates/causality-effects/src/constraints/validation.rs:use causality_resource::ResourceAPI;
+   1 crates/causality-effects/src/constraints/validation.rs:use causality_resource::CapabilityRepository;
+   1 crates/causality-effects/src/constraints/validation.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/constraints/validation.rs:// Make EffectOrchestrator cloneable for use in parallel execution
+   1 crates/causality-effects/src/constraints/validation.rs:        // clone or use Arc for the validator
+   1 crates/causality-effects/src/constraints.rs:pub use validation::{EffectValidator, EffectOrchestrator}; 
+   1 crates/causality-effects/src/constraints.rs:pub use validation::{
+   1 crates/causality-effects/src/capability/verification.rs:use causality_types::Result;
+   1 crates/causality-effects/src/capability/verification.rs:use causality_domain::domain::{DomainId, DomainAdapter};
+   1 crates/causality-effects/src/capability/verification.rs:use causality_domain::capability::DomainCapability;
+   1 crates/causality-effects/src/capability/verification.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/capability/unified.rs:use serde::{Serialize, Deserialize};
+   1 crates/causality-effects/src/capability/unified.rs:use causality_types::Result;
+   1 crates/causality-effects/src/capability/unified.rs:use causality_domain::domain::{DomainId, DomainType};
+   1 crates/causality-effects/src/capability/unified.rs:use causality_domain::capability::{DomainCapability, DomainCapabilityManager};
+   1 crates/causality-effects/src/capability/unified.rs:use async_trait::async_trait;
+   1 crates/causality-effects/src/capability/unified.rs:                        // Extract domain ID from context parameters or use a default
+   1 crates/causality-effects/src/capability/mod.rs:pub use verification::{
+   1 crates/causality-effects/src/capability/mod.rs:pub use unified::{
+   1 crates/causality-effects/src/capability/mod.rs:pub use conversion::{
+   1 crates/causality-effects/src/capability/conversion.rs:use causality_types::Result;
+   1 crates/causality-effects/src/capability/conversion.rs:use causality_domain::domain::{DomainId, DomainType, DomainAdapter};
+   1 crates/causality-effects/src/capability/conversion.rs:use causality_domain::capability::{DomainCapability, DomainCapabilityManager};
+   1 crates/causality-effects/src/boundary.rs:use serde::{Serialize, Deserialize};
+   1 crates/causality-effects/src/boundary.rs:use causality_types::Address;
+   1 crates/causality-effects/src/boundary.rs:use causality_resource::CapabilityRef;
+   1 crates/causality-effects/src/boundary.rs:use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+   1 crates/causality-effects/src/boundary.rs:use borsh::{BorshSerialize, BorshDeserialize};
+   1 crates/causality-effects/src/boundary.rs:    /// No authentication (for internal or testing use only)
+   1 crates/causality-effects/examples/resource_examples.rs:use causality_effects::resource::{
+   1 crates/causality-effects/benches/resource_benchmarks.rs:use test::Bencher;
+   1 crates/causality-effects/benches/resource_benchmarks.rs:use causality_resource::interface::{
+   1 crates/causality-effects/benches/resource_benchmarks.rs:use causality_effects::resource::{
+   1 crates/causality-effects/benches/resource_benchmarks.rs:use causality_effects::effect::{EffectId, EffectRegistry};
+   1 crates/causality-effects/benches/resource_benchmarks.rs:use causality_common::identity::ContentId;

@@ -1,0 +1,26 @@
+crates/causality-effects/src/three_layer.rs:pub trait AlgebraicEffect: Send + Sync {
+crates/causality-effects/src/three_layer.rs:pub trait TransferEffect: AlgebraicEffect {
+crates/causality-effects/src/three_layer.rs:pub trait DepositEffect: AlgebraicEffect {
+crates/causality-effects/src/three_layer.rs:pub trait WithdrawEffect: AlgebraicEffect {
+crates/causality-effects/src/three_layer.rs:pub trait StorageEffect: AlgebraicEffect {
+crates/causality-effects/src/three_layer.rs:pub trait QueryEffect: AlgebraicEffect {
+crates/causality-effects/src/three_layer.rs:pub trait DomainAdapter: Send + Sync {
+crates/causality-effects/src/three_layer.rs:pub trait FallbackHandler: Send + Sync {
+crates/causality-effects/src/three_layer.rs:pub trait TelCompiler: Send + Sync {
+crates/causality-effects/src/random.rs:pub trait RandomEffect: Send + Sync + std::fmt::Debug {
+crates/causality-effects/src/handler.rs:pub trait EffectHandler: Send + Sync {
+crates/causality-effects/src/lib.rs:pub trait Effect: Send + Sync + std::fmt::Debug {
+crates/causality-effects/src/lib.rs:pub trait AsyncEffect: Effect {
+crates/causality-effects/src/lib.rs:pub trait ProgramAccountEffect: Effect {
+crates/causality-effects/src/capability/verification.rs:pub trait CapabilityVerifier: Send + Sync {
+crates/causality-effects/src/capability/verification.rs:pub trait DomainIdGetter {
+crates/causality-effects/src/capability/verification.rs:pub trait CapabilityRequirements {
+crates/causality-effects/src/capability/unified.rs:pub trait DomainCapabilityAware {
+crates/causality-effects/src/capability/unified.rs:pub trait EffectContextCapabilityExt {
+crates/causality-effects/src/boundary.rs:pub trait BoundaryCrossingHandler<T, R> {
+crates/causality-effects/src/executor.rs:pub trait SecuritySandbox: Send + Sync {
+crates/causality-effects/src/domain_effect.rs:pub trait DomainAdapterEffect: Effect {
+crates/causality-effects/src/repository.rs:pub trait CodeRepository: Send + Sync {
+crates/causality-effects/src/domain_effect/domain_registry.rs:pub trait DomainEffectHandler {
+crates/causality-effects/src/domain_effect/domain_selection.rs:pub trait DomainSelectionHandler {
+crates/causality-effects/src/resource/access.rs:pub trait ResourceAccessTracking: Effect {

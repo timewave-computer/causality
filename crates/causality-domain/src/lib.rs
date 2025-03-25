@@ -14,6 +14,7 @@ pub mod capability;
 pub mod fact_observer;
 pub mod content_addressed_interface;
 pub mod content_addressed_transaction;
+pub mod resource_impl;
 
 pub use adapter::{DomainAdapter, DomainAdapterFactory};
 pub use registry::DomainRegistry;
@@ -47,6 +48,7 @@ pub use content_addressed_transaction::{
     ContentAddressedTransactionVerifierImpl, TransactionVerificationResult,
     TransactionVerificationError
 };
+pub use resource_impl::*;
 
 use serde::{Serialize, Deserialize};
 use std::fmt;

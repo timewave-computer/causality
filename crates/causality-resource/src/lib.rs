@@ -8,45 +8,188 @@
 
 use serde::{Serialize, Deserialize};
 
-// Module declarations
+// Core resource management interfaces - always included
+pub mod interface;
+pub use interface::*;
+
+// Resource adapters - included with the adapter feature
+#[cfg(feature = "adapter")]
+pub mod adapter;
+#[cfg(feature = "adapter")]
+pub use adapter::*;
+
+// Module declarations - most are only included with legacy feature
 pub mod api;
-pub mod resource_register;
+
+#[cfg(feature = "legacy")]
+pub mod register;
+
+#[cfg(feature = "legacy")]
 pub mod capability;
+
+#[cfg(feature = "legacy")]
 pub mod authorization;
-pub mod static_alloc;
+
+#[cfg(feature = "legacy")]
+pub mod static_allocator;
+
+#[cfg(feature = "legacy")]
 pub mod epoch;
+
+#[cfg(feature = "legacy")]
 pub mod archival;
+
+#[cfg(feature = "legacy")]
 pub mod memory_api;
+
+#[cfg(feature = "legacy")]
 pub mod storage_adapter;
+
+#[cfg(feature = "legacy")]
 pub mod summarization;
-pub mod tel;
+
+#[cfg(feature = "legacy")]
+pub mod tel_adapter;
+
+#[cfg(feature = "legacy")]
 pub mod lifecycle;
+
+#[cfg(feature = "legacy")]
 pub mod versioning;
+
+#[cfg(feature = "legacy")]
 pub mod storage;
-pub mod capability_system;
+
+#[cfg(feature = "legacy")]
 pub mod nullifier;
-pub mod capability_api;
+
+#[cfg(feature = "legacy")]
 pub mod allocator;
+
+#[cfg(feature = "legacy")]
 pub mod zk_integration;
+
+#[cfg(feature = "legacy")]
 pub mod usage;
-pub mod resource_temporal_consistency;
+
+#[cfg(feature = "legacy")]
+pub mod temporal_consistency;
+
+// These modules are deprecated - use interfaces and implementations
+// in causality-effects and causality-domain instead
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use ResourceInterface implementations in causality-effects or causality-domain instead"
+)]
 pub mod manager;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
 pub mod fact_observer;
-pub mod garbage_collection;
-pub mod boundary_manager;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub mod gc;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub mod boundary;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
 pub mod facade;
-pub mod relationship_tracker;
-pub mod capability_chain;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub mod relationship;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
 pub mod request;
-pub mod lifecycle_manager;
-pub mod content_addressed_register;
-pub mod content_addressed_resource;
-pub mod migrate_helpers;
-pub mod unified_registry;
-pub mod migrate_adapter;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub mod migration_utils;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub mod migration;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub mod registry;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub mod resource;
+
+// Directory-based modules
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub mod account;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub mod relationship;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub mod capability;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub mod lifecycle;
 
 // Re-export content-addressed modules
-pub use resource_register::{
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub use register::{
     ResourceRegister,
     ResourceLogic,
     FungibilityDomain,
@@ -55,20 +198,37 @@ pub use resource_register::{
     StorageStrategy,
     StateVisibility
 };
-pub use content_addressed_register::{
-    ContentAddressedRegister,
-    ContentAddressedRegisterOperation,
-    RegisterOperationType as ContentAddressedRegisterOperationType,
-    ContentAddressedRegisterRegistry,
-};
-pub use content_addressed_resource::{Resource, ResourceRegistry};
-pub use unified_registry::UnifiedRegistry;
-pub use migrate_adapter::{ResourceToRegisterAdapter, RegisterSystemAdapter, MigrationAdapter};
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub use resource::{Resource, ResourceRegistry};
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub use registry::UnifiedRegistry;
+
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use implementations in causality-effects or causality-domain instead"
+)]
+pub use migration::{ResourceToRegisterAdapter, RegisterSystemAdapter, MigrationAdapter};
 
 // Re-export crypto modules
 pub use causality_crypto::ContentId;
 
 /// Adapter trait for resource registry operations
+#[cfg(feature = "legacy")]
+#[deprecated(
+    since = "0.2.0", 
+    note = "Use ResourceInterface implementations in causality-effects or causality-domain instead"
+)]
 pub trait ResourceRegistryAdapter {
     /// Get a register by ID
     fn get_register(&self, id: &ContentId) -> causality_types::Result<ResourceRegister>;
@@ -77,7 +237,7 @@ pub trait ResourceRegistryAdapter {
     fn create_register(&self, register: ResourceRegister) -> causality_types::Result<ContentId>;
     
     /// Update register state
-    fn update_state(&self, id: &ContentId, new_state: resource_register::RegisterState) -> causality_types::Result<()>;
+    fn update_state(&self, id: &ContentId, new_state: register::RegisterState) -> causality_types::Result<()>;
     
     /// Delete a register (mark as consumed)
     fn delete_register(&self, id: &ContentId) -> causality_types::Result<()>;
