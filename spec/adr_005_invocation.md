@@ -68,34 +68,36 @@ The Causality system requires a **formal invocation model** to describe:
 - How external facts (like cross-domain deposits) enter the system.
 - How responses flow back to users after a program completes an action.
 
+> **Terminology Note**: In this ADR and throughout the Causality system, the term "actor" does not refer to the Actor Model of concurrent computation. Instead, it specifically identifies one of three roles within the system: user, operator, or committee. These roles interact with the system through the Resource System, not through an Actor Model implementation.
+
 This invocation model must:
 - Maintain **strong causal traceability**.
 - Be fully **auditable and replayable**.
 - Be **domain-agnostic** (work across heterogeneous domains).
-- Enforce **separation between actors and programs** — programs should never directly trust or communicate with off-domain actors.
-- Integrate with the **account program** model, where each actor owns a **single gateway program** that intermediates all asset and message flows.
+- Enforce **separation between roles and programs** — programs should never directly trust or communicate with off-domain roles.
+- Integrate with the **account program** model, where each role owns a **single gateway program** that intermediates all asset and message flows.
 
 
 ## Decision
 
 ### Core Principle: Account Programs as Invocation Gateways
 
-- **Users do not directly communicate with programs.**
-- Each user owns exactly **one account program**, which:
-    - Holds all assets for that user across domains.
-    - Mediates all **actor-initiated messages**.
-    - Receives all **program responses** intended for the user.
+- **Roles (users, operators, committees) do not directly communicate with programs.**
+- Each role owns exactly **one account program**, which:
+    - Holds all assets for that role across domains.
+    - Mediates all **role-initiated messages**.
+    - Receives all **program responses** intended for the role.
     - Records all inbound and outbound messages in a **per-resource effect log**.
-- Programs only trust messages from **other programs** (never directly from actors), and rely on **account programs** for actor-to-program and program-to-actor communication.
+- Programs only trust messages from **other programs** (never directly from roles), and rely on **account programs** for role-to-program and program-to-role communication.
 
 
 ## Invocation Flow Overview
 
-### 1. Actor Initiates Action
+### 1. Role Initiates Action
 
-- User signs a message proposing an action (deposit, withdrawal, invocation, observation).
+- A role (user, operator, or committee) signs a message proposing an action (deposit, withdrawal, invocation, observation).
 - The message is submitted to the Causality network.
-- The message is applied as an **effect** to the actor's **account program**.
+- The message is applied as an **effect** to the role's **account program**.
 - The account program records the message in its **outbox**, causally linking it to prior effects.
 
 
@@ -174,12 +176,12 @@ This invocation model guarantees:
 - All communication produces permanent, auditable log entries.
 
 
-## Actor-Program Separation Invariant
+## Role-Program Separation Invariant
 
 | Communication Type | Mediated By |
 |---|---|
-| Actor to Program | Account Program Outbox |
-| Program to Actor | Account Program Inbox |
+| Role to Program | Account Program Outbox |
+| Program to Role | Account Program Inbox |
 | Program to Program | Direct (via invocation effects) |
 
 
