@@ -151,7 +151,7 @@ Causality is built around these core components:
 ├─────────────────────────────────────────────────────────────────┤
 │                      Resource System                            │
 │   ┌─────────────┐   ┌─────────────┐   ┌─────────────────────┐   │
-│   │ Resources   │   │ ResourceLogic│  │  Resource Effects   │   │
+│   │ Resources   │   │ResourceLogic│   │  Resource Effects   │   │
 │   └─────────────┘   └─────────────┘   └─────────────────────┘   │
 ├─────────────────────────────────────────────────────────────────┤
 │                       Time System                               │
@@ -3183,7 +3183,7 @@ The Capability System serves as the central authorization layer:
 
 ### 5.8 Capability-based Security Model
 
-The capability-based security model in Causality follows these principles:
+The capability-based security model enables secure, fine-grained access control:
 
 1. **No Ambient Authority**: All authority is explicitly represented by capabilities
 2. **Least Privilege**: Effects only receive the capabilities they need to perform their function
@@ -3195,9 +3195,9 @@ The capability-based security model in Causality follows these principles:
 async fn capability_based_authorization(
     effect: &dyn Effect,
     context: &EffectContext,
-    capability_manager: &CapabilityManager,
+    capability_registry: &CapabilityRegistry,
 ) -> Result<bool, CapabilityError> {
-    // Get the actor identity
+    // Get the agent identity
     let identity = context.identity();
     
     // Check each resource the effect needs to access
@@ -3213,7 +3213,7 @@ async fn capability_based_authorization(
         };
         
         // Verify the capability
-        let has_capability = capability_manager.verify_capability(
+        let has_capability = capability_registry.verify_capability(
             &identity,
             &resource,
             capability_type,
@@ -3232,15 +3232,17 @@ async fn capability_based_authorization(
 
 ## 6. Agent System [ADR-005, ADR-032, ADR-033]
 
-The agent system is responsible for holding capabilities and performing operations:
+The Agent System represents the evolution of the previous Actor System into a fully integrated, resource-based model. As described in ADR-032 and ADR-003, agents are content-addressed specialized resource types that hold capabilities and perform operations:
 
 ### 6.1 Agent Definition [ADR-033]
 
-An agent is an entity that holds capabilities and performs operations:
+An agent is a specialized resource that holds capabilities and performs operations:
 
 ```rust
-/// Agent definition
+/// Agent definition - implemented as a specialized resource type
 pub struct Agent {
+    /// Base resource implementation with content addressing
+    resource: Resource,
     /// Identity
     identity: Identity,
     /// Capabilities
@@ -3251,6 +3253,17 @@ pub struct Agent {
     message_queue: Arc<MessageQueue>,
 }
 
+impl ContentAddressed for Agent {
+    fn content_id(&self) -> ContentId {
+        // Derive content ID from fields
+        self.resource.content_id()
+    }
+}
+
+impl ResourceAccessor for Agent {
+    // Implementation connecting agent to the resource system
+}
+
 impl Agent {
     /// Create a new agent
     pub fn new(
@@ -3259,7 +3272,11 @@ impl Agent {
         obligation_manager: Arc<ObligationManager>,
         message_queue: Arc<MessageQueue>,
     ) -> Self {
+        // Create the underlying resource
+        let resource = Resource::new_with_type("Agent");
+        
         Self {
+            resource,
             identity,
             capabilities,
             obligation_manager,
@@ -3291,17 +3308,30 @@ impl Agent {
 
 ### 6.2 Agent Profiles [ADR-033]
 
-Agent profiles are defined as the rules and behaviors associated with agents:
+Agent profiles are specialized resources that define rules and behaviors associated with agents:
 
 ```rust
-/// Agent profile
+/// Agent profile as a specialized resource
 pub struct AgentProfile {
+    /// Base resource implementation with content addressing
+    resource: Resource,
     /// Capabilities
     capabilities: Vec<Capability>,
     /// Obligation manager
     obligation_manager: Arc<ObligationManager>,
     /// Message queue
     message_queue: Arc<MessageQueue>,
+}
+
+impl ContentAddressed for AgentProfile {
+    fn content_id(&self) -> ContentId {
+        // Derive content ID from fields
+        self.resource.content_id()
+    }
+}
+
+impl ResourceAccessor for AgentProfile {
+    // Implementation connecting agent profile to the resource system
 }
 
 impl AgentProfile {
@@ -3311,7 +3341,11 @@ impl AgentProfile {
         obligation_manager: Arc<ObligationManager>,
         message_queue: Arc<MessageQueue>,
     ) -> Self {
+        // Create the underlying resource
+        let resource = Resource::new_with_type("AgentProfile");
+        
         Self {
+            resource,
             capabilities,
             obligation_manager,
             message_queue,
@@ -3337,17 +3371,30 @@ impl AgentProfile {
 
 ### 6.3 Service Status [ADR-033]
 
-Service status is defined as the rules and behaviors associated with agents offering services:
+Service status is a specialized resource that defines the rules and behaviors associated with agents offering services:
 
 ```rust
-/// Service status
+/// Service status as a specialized resource
 pub struct ServiceStatus {
+    /// Base resource implementation with content addressing
+    resource: Resource,
     /// Capabilities
     capabilities: Vec<Capability>,
     /// Obligation manager
     obligation_manager: Arc<ObligationManager>,
     /// Message queue
     message_queue: Arc<MessageQueue>,
+}
+
+impl ContentAddressed for ServiceStatus {
+    fn content_id(&self) -> ContentId {
+        // Derive content ID from fields
+        self.resource.content_id()
+    }
+}
+
+impl ResourceAccessor for ServiceStatus {
+    // Implementation connecting service status to the resource system
 }
 
 impl ServiceStatus {
@@ -3357,7 +3404,11 @@ impl ServiceStatus {
         obligation_manager: Arc<ObligationManager>,
         message_queue: Arc<MessageQueue>,
     ) -> Self {
+        // Create the underlying resource
+        let resource = Resource::new_with_type("ServiceStatus");
+        
         Self {
+            resource,
             capabilities,
             obligation_manager,
             message_queue,
@@ -3383,7 +3434,7 @@ impl ServiceStatus {
 
 ### 6.4 Obligation Manager [ADR-033]
 
-The obligation manager is responsible for managing usage-based expectations on capabilities:
+The obligation manager is a component responsible for managing usage-based expectations on capabilities:
 
 ```rust
 /// Obligation manager
@@ -3432,7 +3483,7 @@ impl ObligationManager {
         // Check if the resource has an expectation
         if let Some(expectation) = expectations.get(resource) {
             // Check if the usage history meets the expectation
-            let usage_history = history.get(resource).unwrap_or_else(|| &[]);
+            let usage_history = history.get(resource).unwrap_or(&[]);
             let usage_count = usage_history.len() as u64;
             if usage_count >= *expectation {
                 return Ok(true);
@@ -3446,13 +3497,38 @@ impl ObligationManager {
 
 ### 6.5 Messaging [ADR-033]
 
-Messaging is defined as the rules and behaviors associated with asynchronous communication between agents:
+Messaging is defined as a resource-based system for asynchronous communication between agents:
 
 ```rust
+/// Message as a specialized resource
+pub struct Message {
+    /// Base resource implementation with content addressing
+    resource: Resource,
+    /// Message content
+    content: Vec<u8>,
+    /// Sender
+    sender: ResourceId,
+    /// Recipient
+    recipient: ResourceId,
+    /// Message type
+    message_type: String,
+}
+
+impl ContentAddressed for Message {
+    fn content_id(&self) -> ContentId {
+        // Derive content ID from fields
+        self.resource.content_id()
+    }
+}
+
+impl ResourceAccessor for Message {
+    // Implementation connecting message to the resource system
+}
+
 /// Message queue
 pub struct MessageQueue {
     /// Messages
-    messages: RwLock<Vec<Message>>,
+    messages: RwLock<Vec<ResourceId>>, // Now stores ResourceIds of Message resources
 }
 
 impl MessageQueue {
@@ -3465,14 +3541,15 @@ impl MessageQueue {
     
     /// Send a message
     pub fn send(&self, message: Message) -> Result<(), MessageError> {
+        let message_id = message.content_id();
         let mut messages = self.messages.write().map_err(|_| MessageError::LockError)?;
-        messages.push(message);
+        messages.push(message_id);
         Ok(())
     }
     
     /// Receive a message
-    pub fn receive(&self) -> Result<Option<Message>, MessageError> {
-        let messages = self.messages.read().map_err(|_| MessageError::LockError)?;
+    pub fn receive(&self) -> Result<Option<ResourceId>, MessageError> {
+        let mut messages = self.messages.write().map_err(|_| MessageError::LockError)?;
         Ok(messages.pop())
     }
 }
@@ -3480,88 +3557,29 @@ impl MessageQueue {
 
 ### 6.6 Agent System Diagram
 
+The Agent System integrates fully with the Resource System:
+
 ```
-┌───────────────────────────────────────────────────────────────────────┐
+┌────────────────────────────────────────────────────────────────────────┐
 │                       Agent System                                     │
-└───────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌───────────────────────────────────────────────────────────────────────┐
-│                        Resource System                                │
-│                                                                       │
-│   ┌───────────────────┐       ┌───────────────────┐                   │
-│   │    User Resource  │       │  Operator Resource│                   │
-│   └─────────┬─────────┘       └────────┬──────────┘                   │
-│             │                          │                              │
-│   ┌─────────▼─────────┐       ┌────────▼──────────┐                   │
-│   │  User Accessor    │       │ Operator Accessor │                   │
-│   └─────────┬─────────┘       └────────┬──────────┘                   │
-│             │                          │                              │
-└─────────────┼──────────────────────────┼──────────────────────────────┘
-              │                          │
-              ▼                          ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Effect System                               │
-│                                                                     │
-│   ┌─────────────────┐   ┌───────────────────┐   ┌────────────────┐  │
-│   │ Role-Based      │   │ Messaging Effects │   │ Authentication │  │
-│   │ Effects         │   │                   │   │ Effects        │  │
-│   └─────────────────┘   └───────────────────┘   └────────────────┘  │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-              │                          │
-              ▼                          ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Capability System                              │
-│                                                                     │
-│   ┌─────────────────┐   ┌───────────────────┐   ┌────────────────┐  │
-│   │ Role-Specific   │   │ Delegated         │   │ Capability     │  │
-│   │ Capabilities    │   │ Capabilities      │   │ Verification   │  │
-│   └─────────────────┘   └───────────────────┘   └────────────────┘  │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+│                                                                        │
+│   ┌────────────┐        ┌────────────┐        ┌────────────────────┐   │
+│   │ Agent      │◄──────►│ Messaging  │◄──────►│  Service Status    │   │
+│   │ (Resource) │        │ (Resource) │        │  (Resource)        │   │
+│   └────┬───────┘        └────────────┘        └────────────────────┘   │
+│        │                                                               │
+│        │                    ┌───────────────┐    ┌────────────────┐    │
+│        └───────────────────►│ Capabilities  │◄───┤ ObligationMgr  │    │
+│                             │               │    │                │    │
+│                             └───────┬───────┘    └────────────────┘    │
+│                                     │                                  │
+│                                     ▼                                  │
+│                             ┌───────────────┐                          │
+│                             │   Resource    │                          │
+│                             │    System     │                          │
+│                             └───────────────┘                          │
+└────────────────────────────────────────────────────────────────────────┘
 ```
-
-Key interactions illustrated in the diagram:
-
-1. **Resource Definition**: User, Operator, and Domain are implemented as specialized resources within the Resource System.
-
-2. **Resource Access**: Each role type has custom accessors that implement role-specific behaviors while adhering to the Resource System patterns.
-
-3. **Effect Integration**: Role-based resources interact with the system through specialized effects for authentication, messaging, and role-specific operations.
-
-4. **Capability Management**: The Capability System provides fine-grained access control for role-based resources, with capabilities that can be delegated and verified.
-
-5. **Message Routing**: Messages between roles are routed through the resource system, using content-addressed identifiers and capability-based security for authorization.
-
-**Domain-Validator Relationship:**
-
-```
-┌────────────────────────┐
-│                        │
-│   Domain Resource      │
-│                        │
-└────────────┬───────────┘
-             │
-             ▼
-┌────────────────────────┐
-│                        │
-│  Validator Committee   │
-│                        │
-└────────────┬───────────┘
-             │
-             ▼
-┌─────────────────────────────────────────────────────┐
-│                                                     │
-│  ┌───────────┐    ┌───────────┐    ┌───────────┐    │
-│  │ Validator │    │ Validator │    │ Validator │    │
-│  │  Node 1   │    │  Node 2   │    │  Node 3   │    │
-│  └───────────┘    └───────────┘    └───────────┘    │
-│                                                     │
-└─────────────────────────────────────────────────────┘
-```
-
-This architecture maintains consistency with the core design principles of Causality while providing specialized behaviors for different system roles.
 
 ## 7. Operation System [ADR-033]
 
@@ -3648,43 +3666,67 @@ impl Operation for CrossDomainTransferOperation {
 
 ### 7.2 Authorization
 
-Authorization is defined as the rules and behaviors associated with granting explicit capabilities to actors:
+Authorization is defined as the rules and behaviors associated with granting explicit capabilities to agents:
 
 ```rust
-/// Authorization method
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AuthorizationMethod {
-    /// Capability-based authorization
-    Capability(Capability),
-    /// Role-based authorization
-    Role(RoleType),
-    /// Custom authorization
-    Custom(CustomAuthorization),
+/// Authorization for operations
+pub struct Authorization {
+    /// Capabilities
+    capabilities: Vec<Capability>,
+    /// Required roles
+    required_roles: Vec<Role>,
+    /// Verification context
+    verification_context: VerificationContext,
 }
 
-impl AuthorizationMethod {
-    /// Validate the authorization method
-    pub fn validate(&self, context: &EffectContext) -> Result<(), AuthorizationError> {
-        match self {
-            AuthorizationMethod::Capability(capability) => {
-                // Verify the capability
-                if !context.has_capability(capability) {
-                    return Err(AuthorizationError::MissingCapability);
-                }
-            },
-            AuthorizationMethod::Role(role_type) => {
-                // Check if the actor has the required role
-                if !context.has_role(role_type) {
-                    return Err(AuthorizationError::MissingRole);
-                }
-            },
-            AuthorizationMethod::Custom(custom) => {
-                // Custom authorization logic
-                custom.validate(context)?;
-            },
+impl Authorization {
+    /// Create a new authorization
+    pub fn new(
+        capabilities: Vec<Capability>,
+        required_roles: Vec<Role>,
+        verification_context: VerificationContext,
+    ) -> Self {
+        Self {
+            capabilities,
+            required_roles,
+            verification_context,
+        }
+    }
+    
+    /// Verify authorization
+    pub fn verify(&self, operation: &Operation) -> Result<bool, AuthorizationError> {
+        // Verify capabilities
+        for capability in &self.capabilities {
+            if !self.verify_capability(capability, operation)? {
+                return Ok(false);
+            }
         }
         
-        Ok(())
+        // Verify roles
+        for role in &self.required_roles {
+            if !self.verify_role(role, operation)? {
+                return Ok(false);
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    /// Verify a capability
+    fn verify_capability(&self, capability: &Capability, operation: &Operation) -> Result<bool, AuthorizationError> {
+        // Check if the capability applies to the operation
+        if !capability.matches_operation(operation)? {
+            return Ok(false);
+        }
+        
+        // Verify the capability
+        self.verification_context.verify_capability(capability)
+    }
+    
+    /// Verify a role
+    fn verify_role(&self, role: &Role, operation: &Operation) -> Result<bool, AuthorizationError> {
+        // Check if the agent has the required role
+        self.verification_context.verify_role(role)
     }
 }
 ```
