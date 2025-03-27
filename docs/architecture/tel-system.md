@@ -2,7 +2,9 @@
 
 *This document is derived from [ADR-013](../../spec/adr_013_tel.md) and [ADR-014](../../spec/adr_014_compiler.md), which define the Temporal Effect Language and its compiler architecture.*
 
-*Last updated: 2023-09-05*
+*Last updated: 2023-03-27*
+
+*This is subject to change substantially*
 
 ## Overview
 
