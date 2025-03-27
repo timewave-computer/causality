@@ -415,6 +415,39 @@ sequenceDiagram
     Agent-->>Client: operation_result
 ```
 
+### Capability Verification
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant CapabilityVerifier
+    participant CapabilityRegistry
+    participant CapabilityConstraint
+    
+    Agent->>CapabilityVerifier: verify_capabilities(operation)
+    CapabilityVerifier->>CapabilityRegistry: validate_capabilities(capabilities, resource_id)
+    CapabilityRegistry->>CapabilityConstraint: check_constraints(capabilities)
+    CapabilityConstraint-->>CapabilityRegistry: constraints_valid
+    CapabilityRegistry-->>CapabilityVerifier: capabilities_valid
+    CapabilityVerifier->>CapabilityVerifier: create_authorization()
+    CapabilityVerifier-->>Agent: authorization
+```
+
+### Service Status Registration
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant ServiceRegistry
+    participant ResourceStorage
+    
+    Agent->>ServiceRegistry: register_service(service_status)
+    ServiceRegistry->>ServiceRegistry: validate_service(service_status)
+    ServiceRegistry->>ResourceStorage: store(service_status)
+    ResourceStorage-->>ServiceRegistry: status_id
+    ServiceRegistry-->>Agent: registration_result
+```
+
 ## Implementation Status
 
 As per ADR-032, the Agent Resource System is currently being implemented with the following components:
@@ -472,7 +505,7 @@ let read_capability = Capability::new("resource123", "read", None);
 agent.add_capability(read_capability).await?;
 
 // Check if the agent has a capability
-if agent.has_capability("resource123") {
+if agent.has_capability("resource123", "read") {
     // Perform operation
 }
 ```
@@ -491,10 +524,110 @@ let relationship = AgentRelationship::new(
 agent.add_relationship(relationship).await?;
 ```
 
+### Service Status Management
+
+```rust
+// Advertise a service
+let service = ServiceStatus::new(
+    agent.id(),
+    "document_processor",
+    ServiceState::Available,
+);
+
+agent.advertise_service(service).await?;
+
+// Find agents offering a service
+let providers = ServiceRegistry::find_providers("document_processor").await?;
+```
+
+### Messaging
+
+```rust
+// Send a message to another agent
+let message = Message::new(
+    agent.id(),
+    recipient_id,
+    "Request for capability delegation",
+    request_data,
+);
+
+agent.send_message(message).await?;
+
+// Receive and handle messages
+let messages = agent.receive_messages().await?;
+for message in messages {
+    match message.content_type() {
+        "capability_request" => handle_capability_request(message),
+        "service_announcement" => handle_service_announcement(message),
+        _ => handle_unknown_message(message),
+    }
+}
+```
+
+### Obligations
+
+```rust
+// Create an obligation for capability usage
+let obligation = Obligation::new(
+    capability_id,
+    agent.id(),
+    ObligationType::UseWithinTime(Duration::from_days(30)),
+);
+
+obligation_manager.add_obligation(obligation).await?;
+
+// Check obligations
+obligation_manager.check_obligations().await?;
+```
+
+## Integration with Effect System
+
+The Agent Resource System integrates closely with the Effect System:
+
+```rust
+// Create an effect using an agent's capabilities
+let read_effect = ReadEffect::new(resource_id, read_fields);
+
+// Build an operation with the effect
+let operation = agent.create_operation()
+    .target_resource(resource_id)
+    .operation_type(OperationType::Read)
+    .add_effect(read_effect)
+    .build()?;
+
+// Execute the operation
+let result = agent.execute_operation(operation, context).await?;
+```
+
+## Resource-Specific Authorization
+
+Agents can perform resource-specific authorizations:
+
+```rust
+// Check if an agent is authorized for a specific resource operation
+if resource.authorize_operation(agent.id(), operation_type)? {
+    // Perform operation
+}
+
+// Grant agent-specific permissions on a resource
+resource.grant_permission(agent.id(), permission_type)?;
+```
+
 ## Future Directions
 
 1. **Cross-Domain Agent Protocol**: Enable secure agent interaction across domains
 2. **Agent Federation**: Support federated identity and capability delegation
 3. **Pluggable Authentication**: Add support for different authentication methods
 4. **Role-Based Capability Management**: Enhance capability bundles with role definitions
-5. **Agent Lifecycle Management**: Add support for agent upgrades and migrations 
+5. **Agent Lifecycle Management**: Add support for agent upgrades and migrations
+6. **Reputation System**: Implement a trust and reputation system for agents
+7. **Capability Marketplaces**: Enable discovery and exchange of capabilities
+8. **Specialized Committee Protocols**: Implement domain-specific committee validation
+9. **Dynamic Capability Constraints**: Support runtime-evaluated capability constraints
+10. **Multi-Agent Coordination**: Implement protocols for coordinated multi-agent operations
+
+## Conclusion
+
+The Agent Resource System provides a unified approach to modeling agents (users, committees, and operators) as specialized resources. By integrating with the resource, capability, and effect systems, it creates a cohesive architecture with clear separation of concerns.
+
+The implementation roadmap outlines a clear path forward, with progress already made on core components. As the system matures, it will provide a powerful foundation for secure, verifiable, and composable operations within Causality. 
