@@ -1,9 +1,8 @@
 // Resource management system
 //
 // This module provides the core resource management system,
-// including resource interfaces, actor system, and SMT integration.
+// including resource interfaces and SMT integration.
 
-pub mod actor;
 pub mod agent;
 pub mod protocol;
 pub mod storage;
@@ -93,10 +92,6 @@ pub use agent::{
 /// Resource error
 #[derive(Debug, thiserror::Error)]
 pub enum ResourceError {
-    /// Actor error
-    #[error("Actor error: {0}")]
-    ActorError(#[from] actor::ActorError),
-    
     /// Interface error
     #[error("Interface error: {0}")]
     InterfaceError(#[from] interface::ResourceError),
@@ -116,9 +111,6 @@ pub type ResourceResult<T> = Result<T, ResourceError>;
 /// Resource configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceConfig {
-    /// Actor configuration
-    pub actor_config: actor::ActorConfig,
-    
     /// Interface configuration
     pub interface_config: interface::ResourceConfig,
     
@@ -132,7 +124,6 @@ pub struct ResourceConfig {
 impl Default for ResourceConfig {
     fn default() -> Self {
         Self {
-            actor_config: actor::ActorConfig::default(),
             interface_config: interface::ResourceConfig::default(),
             validation_config: Some(validation::ResourceValidatorConfig::default()),
             metadata: HashMap::new(),
@@ -145,9 +136,6 @@ impl Default for ResourceConfig {
 pub trait ResourceManager: Send + Sync + Debug {
     /// Get resource configuration
     fn get_config(&self) -> &ResourceConfig;
-    
-    /// Get actor factory
-    async fn get_actor_factory(&self) -> ResourceResult<Arc<dyn actor::ResourceActorFactory>>;
     
     /// Get resource interface
     async fn get_resource_interface(&self) -> ResourceResult<Arc<dyn ResourceInterface>>;
