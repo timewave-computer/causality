@@ -1,16 +1,12 @@
-//! Content addressing centralized module
-//! This module re-exports all content addressing related types and functions
-//! providing a single point of import for all content addressing functionality
+// Content addressing system for the Causality project
+//
+// This module provides utilities for content addressing, hashing, and canonical serialization.
 
-// Re-export from crypto_primitives
-pub use crate::crypto_primitives::{
-    HashOutput,
-    HashAlgorithm,
-    HashError,
-    ContentId,
-    ContentHash,
-    ContentAddressed,
-};
+use std::collections::{HashMap, BTreeMap, HashSet};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use serde::{Serialize, Deserialize};
+use crate::crypto_primitives::{HashError, HashOutput, HashAlgorithm, ContentId, ContentAddressed};
 
 // Extended set of types and functions for content addressing
 
@@ -59,7 +55,8 @@ pub fn bytes_to_hex(bytes: &[u8]) -> String {
 /// Create a content hash from raw bytes using the standard algorithm
 pub fn content_hash_from_bytes(bytes: &[u8]) -> HashOutput {
     let mut data = [0u8; 32];
-    let hash_bytes = blake3::hash(bytes).as_bytes();
+    let hash_result = blake3::hash(bytes);
+    let hash_bytes = hash_result.as_bytes();
     data.copy_from_slice(hash_bytes);
     HashOutput::new(data, STANDARD_HASH_ALGORITHM)
 }
@@ -629,20 +626,14 @@ pub mod storage {
     
     /// Standard content-addressed storage interface
     pub trait ContentAddressedStorage: Send + Sync {
-        /// Store an object in the content-addressed storage
-        fn store<T: ContentAddressed>(&self, object: &T) -> Result<ContentId, StorageError>;
+        /// Store binary data and return content ID
+        fn store_bytes(&self, bytes: &[u8]) -> Result<ContentId, StorageError>;
         
         /// Check if an object exists in storage
         fn contains(&self, id: &ContentId) -> bool;
         
         /// Retrieve binary data for an object
         fn get_bytes(&self, id: &ContentId) -> Result<Vec<u8>, StorageError>;
-        
-        /// Retrieve an object from storage by its content ID
-        fn get<T: ContentAddressed>(&self, id: &ContentId) -> Result<T, StorageError> {
-            let bytes = self.get_bytes(id)?;
-            T::from_bytes(&bytes).map_err(|e| StorageError::HashError(e))
-        }
         
         /// Remove an object from storage
         fn remove(&self, id: &ContentId) -> Result<(), StorageError>;
@@ -656,6 +647,23 @@ pub mod storage {
         /// Check if storage is empty
         fn is_empty(&self) -> bool {
             self.len() == 0
+        }
+    }
+    
+    /// Extension methods for ContentAddressedStorage
+    pub trait ContentAddressedStorageExt: ContentAddressedStorage {
+        /// Store an object in the content-addressed storage
+        fn store<T: ContentAddressed>(&self, object: &T) -> Result<ContentId, StorageError> {
+            // Serialize the object
+            let bytes = object.to_bytes()?;
+            // Store the bytes
+            self.store_bytes(&bytes)
+        }
+        
+        /// Retrieve an object from storage by its content ID
+        fn get<T: ContentAddressed>(&self, id: &ContentId) -> Result<T, StorageError> {
+            let bytes = self.get_bytes(id)?;
+            T::from_bytes(&bytes).map_err(|e| StorageError::HashError(e))
         }
     }
     
@@ -674,15 +682,9 @@ pub mod storage {
     }
     
     impl ContentAddressedStorage for InMemoryStorage {
-        fn store<T: ContentAddressed>(&self, object: &T) -> Result<ContentId, StorageError> {
-            // Get the content hash
-            let content_hash = object.content_hash()?;
-            
-            // Serialize the object
-            let bytes = object.to_bytes()?;
-            
-            // Create a content ID
-            let content_id = ContentId::from(content_hash);
+        fn store_bytes(&self, bytes: &[u8]) -> Result<ContentId, StorageError> {
+            // Create a content ID from the bytes
+            let content_id = content_id_from_bytes(bytes);
             
             // Store the bytes with the content ID as the key
             let mut objects = self.objects.write().unwrap();
@@ -692,8 +694,8 @@ pub mod storage {
                 return Ok(content_id);
             }
             
-            // Store the object
-            objects.insert(content_id.clone(), bytes);
+            // Store the bytes
+            objects.insert(content_id.clone(), bytes.to_vec());
             
             Ok(content_id)
         }
@@ -774,12 +776,14 @@ pub mod storage {
     }
     
     impl ContentAddressedStorage for CachingStorage {
-        fn store<T: ContentAddressed>(&self, object: &T) -> Result<ContentId, StorageError> {
-            // Store in backing storage first
-            let content_id = self.backing_store.store(object)?;
+        fn store_bytes(&self, bytes: &[u8]) -> Result<ContentId, StorageError> {
+            // Create a content ID
+            let content_id = content_id_from_bytes(bytes);
             
-            // Cache the serialized bytes
-            let bytes = object.to_bytes()?;
+            // Store in backing storage first
+            let content_id = self.backing_store.store_bytes(bytes)?;
+            
+            // Cache the bytes
             let mut cache = self.cache.write().unwrap();
             
             // Manage cache size
@@ -790,7 +794,7 @@ pub mod storage {
             }
             
             // Add to cache
-            cache.insert(content_id.clone(), bytes);
+            cache.insert(content_id.clone(), bytes.to_vec());
             
             Ok(content_id)
         }
@@ -823,12 +827,15 @@ pub mod storage {
             // Update cache
             {
                 let mut cache = self.cache.write().unwrap();
+                
                 // Manage cache size
-                if cache.len() >= self.max_cache_size {
+                if cache.len() >= self.max_cache_size && !cache.contains_key(id) {
                     if let Some(id_to_remove) = cache.keys().next().cloned() {
                         cache.remove(&id_to_remove);
                     }
                 }
+                
+                // Add to cache
                 cache.insert(id.clone(), bytes.clone());
             }
             
@@ -840,8 +847,10 @@ pub mod storage {
             let result = self.backing_store.remove(id);
             
             // Remove from cache if present
-            let mut cache = self.cache.write().unwrap();
-            cache.remove(id);
+            {
+                let mut cache = self.cache.write().unwrap();
+                cache.remove(id);
+            }
             
             result
         }
@@ -851,11 +860,11 @@ pub mod storage {
             self.backing_store.clear();
             
             // Clear cache
-            let mut cache = self.cache.write().unwrap();
-            cache.clear();
+            self.clear_cache();
         }
         
         fn len(&self) -> usize {
+            // Use backing store size
             self.backing_store.len()
         }
     }
@@ -924,6 +933,7 @@ pub use storage::{StorageFactory, ContentRef};
 /// Module for content addressed storage metrics
 pub mod metrics {
     use super::storage::*;
+    use super::ContentId;
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use std::time::{Duration, Instant};
@@ -1005,38 +1015,32 @@ pub mod metrics {
     }
     
     impl ContentAddressedStorage for MetricStorage {
-        fn store<T: ContentAddressed>(&self, object: &T) -> Result<ContentId, StorageError> {
+        fn store_bytes(&self, bytes: &[u8]) -> Result<ContentId, StorageError> {
             let start = Instant::now();
             
             // Store in underlying storage
-            let result = self.storage.store(object);
+            let result = self.storage.store_bytes(bytes);
             
             // Update metrics
-            if let Ok(content_id) = &result {
+            let duration = start.elapsed();
+            {
                 let mut metrics = self.metrics.write().unwrap();
                 metrics.total_stores += 1;
                 
-                // Track object size
-                if let Ok(bytes) = object.to_bytes() {
-                    let size = bytes.len();
-                    metrics.bytes_stored += size as u64;
+                let new_avg = ((metrics.avg_store_latency.as_nanos() as f64 * (metrics.total_stores - 1) as f64)
+                    + duration.as_nanos() as f64) / metrics.total_stores as f64;
                     
-                    // Update size tracker
-                    let mut tracker = self.size_tracker.write().unwrap();
-                    tracker.insert(content_id.clone(), size);
+                metrics.avg_store_latency = Duration::from_nanos(new_avg as u64);
+                
+                // Track object size
+                let size = bytes.len();
+                metrics.bytes_stored += size as u64;
+                
+                // Update size tracker if result is successful
+                if let Ok(content_id) = &result {
+                    let mut size_tracker = self.size_tracker.write().unwrap();
+                    size_tracker.insert(content_id.clone(), size);
                 }
-                
-                // Update latency metrics
-                let duration = start.elapsed();
-                metrics.avg_store_latency = if metrics.total_stores == 1 {
-                    duration
-                } else {
-                    let total = metrics.avg_store_latency.as_nanos() * (metrics.total_stores - 1) as u128;
-                    let new_avg = (total + duration.as_nanos()) / metrics.total_stores as u128;
-                    Duration::from_nanos(new_avg as u64)
-                };
-                
-                metrics.current_objects = self.storage.len();
             }
             
             result
@@ -1053,20 +1057,20 @@ pub mod metrics {
             let result = self.storage.get_bytes(id);
             
             // Update metrics
-            if let Ok(bytes) = &result {
+            let duration = start.elapsed();
+            {
                 let mut metrics = self.metrics.write().unwrap();
                 metrics.total_gets += 1;
-                metrics.bytes_retrieved += bytes.len() as u64;
                 
-                // Update latency metrics
-                let duration = start.elapsed();
-                metrics.avg_get_latency = if metrics.total_gets == 1 {
-                    duration
-                } else {
-                    let total = metrics.avg_get_latency.as_nanos() * (metrics.total_gets - 1) as u128;
-                    let new_avg = (total + duration.as_nanos()) / metrics.total_gets as u128;
-                    Duration::from_nanos(new_avg as u64)
-                };
+                let new_avg = ((metrics.avg_get_latency.as_nanos() as f64 * (metrics.total_gets - 1) as f64)
+                    + duration.as_nanos() as f64) / metrics.total_gets as f64;
+                    
+                metrics.avg_get_latency = Duration::from_nanos(new_avg as u64);
+                
+                // Track bytes retrieved
+                if let Ok(bytes) = &result {
+                    metrics.bytes_retrieved += bytes.len() as u64;
+                }
             }
             
             result
@@ -1075,23 +1079,25 @@ pub mod metrics {
         fn remove(&self, id: &ContentId) -> Result<(), StorageError> {
             // Track size before removal
             let size = {
-                let tracker = self.size_tracker.read().unwrap();
-                tracker.get(id).cloned()
+                let size_tracker = self.size_tracker.read().unwrap();
+                size_tracker.get(id).cloned()
             };
             
             // Remove from underlying storage
             let result = self.storage.remove(id);
             
             // Update metrics
-            if result.is_ok() {
+            {
                 let mut metrics = self.metrics.write().unwrap();
                 metrics.total_removes += 1;
-                metrics.current_objects = self.storage.len();
                 
-                // Update size tracker
-                if let Some(size) = size {
-                    let mut tracker = self.size_tracker.write().unwrap();
-                    tracker.remove(id);
+                // Remove from size tracker
+                if result.is_ok() {
+                    let mut size_tracker = self.size_tracker.write().unwrap();
+                    size_tracker.remove(id);
+                    
+                    // Update current objects
+                    metrics.current_objects = self.len();
                 }
             }
             
@@ -1102,13 +1108,12 @@ pub mod metrics {
             // Clear underlying storage
             self.storage.clear();
             
+            // Clear size tracker
+            self.size_tracker.write().unwrap().clear();
+            
             // Update metrics
             let mut metrics = self.metrics.write().unwrap();
             metrics.current_objects = 0;
-            
-            // Clear size tracker
-            let mut tracker = self.size_tracker.write().unwrap();
-            tracker.clear();
         }
         
         fn len(&self) -> usize {
@@ -1480,7 +1485,7 @@ pub mod normalization {
                 
                 // Sort keys if requested
                 let keys: Vec<String> = if options.sort_map_keys {
-                    let mut keys = map.keys().cloned().collect();
+                    let mut keys: Vec<String> = map.keys().cloned().collect();
                     keys.sort();
                     keys
                 } else {
@@ -2002,4 +2007,11 @@ pub use deferred::{
     DeferredHashId, DeferredHashBatch, DeferredHashBatchManager,
     DeferredNormalizableContentAddressed, DeferredHashingMetrics,
     global_hash_manager
-}; 
+};
+
+// Use the storage traits directly
+use self::storage::{ContentAddressedStorage, ContentAddressedStorageExt};
+
+// Enable ContentAddressedStorageExt for all ContentAddressedStorage implementors
+// This restores the blanket implementation but avoids conflicts with specific implementations
+impl<T> ContentAddressedStorageExt for T where T: ContentAddressedStorage + ?Sized {} 

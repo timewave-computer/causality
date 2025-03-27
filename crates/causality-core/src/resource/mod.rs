@@ -4,6 +4,7 @@
 // including resource interfaces, actor system, and SMT integration.
 
 pub mod actor;
+pub mod agent;
 pub mod protocol;
 pub mod storage;
 pub mod validation;
@@ -67,6 +68,26 @@ pub use query::{
     ResourceQuery, QueryEngine, FilterExpression, FilterCondition, FilterOperator, FilterValue,
     Sort, SortDirection, Pagination, QueryError, QueryResult, QueryOptions, QueryExecution,
     ResourceIndex, InMemoryResourceIndex, BasicQueryEngine,
+};
+
+pub use agent::{
+    AgentId,
+    AgentType,
+    AgentState,
+    AgentRelationship,
+    RelationshipType,
+    AgentError,
+    Agent,
+    AgentImpl,
+    AgentBuilder,
+    Operation,
+    OperationId,
+    OperationType,
+    OperationContext,
+    OperationResult,
+    OperationStatus,
+    OperationError,
+    OperationBuilder,
 };
 
 /// Resource error

@@ -13,19 +13,122 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use std::str::FromStr;
 use rand;
 
-// Import types from causality-types crate
-use causality_types::{
-    HashOutput, HashAlgorithm, HashError, ContentId, 
-    ContentAddressed, ContentHash
-};
+// Define our own types that would normally come from causality-types
+// Note: Remove when causality-types dependency is restored
+
+/// Error that can occur during hashing operations
+#[derive(Debug, Error)]
+pub enum HashError {
+    /// Hash algorithm not supported
+    #[error("Unsupported hash algorithm: {0}")]
+    UnsupportedAlgorithm(String),
+    
+    /// Invalid hash format
+    #[error("Invalid hash format")]
+    InvalidFormat,
+    
+    /// Invalid hash length
+    #[error("Invalid hash length")]
+    InvalidLength,
+    
+    /// Serialization error
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    /// I/O error 
+    #[error("I/O error: {0}")]
+    IoError(String),
+    
+    /// Internal error during hashing
+    #[error("Internal hash error: {0}")]
+    InternalError(String),
+}
+
+/// Hash algorithm options
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
+pub enum HashAlgorithm {
+    /// BLAKE3 cryptographic hash function
+    Blake3,
+    /// Poseidon hash function (ZK-friendly)
+    Poseidon,
+}
+
+impl Default for HashAlgorithm {
+    fn default() -> Self {
+        Self::Blake3
+    }
+}
+
+impl fmt::Display for HashAlgorithm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Blake3 => write!(f, "blake3"),
+            Self::Poseidon => write!(f, "poseidon"),
+        }
+    }
+}
+
+impl FromStr for HashAlgorithm {
+    type Err = HashError;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "blake3" => Ok(Self::Blake3),
+            "poseidon" => Ok(Self::Poseidon),
+            _ => Err(HashError::UnsupportedAlgorithm(s.to_string())),
+        }
+    }
+}
 
 /// Output of a hash function with algorithm awareness
-#[derive(Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, Debug)]
 pub struct HashOutput {
     /// The raw bytes of the hash
     data: [u8; 32],
     /// The algorithm used to generate this hash
     algorithm: HashAlgorithm,
+}
+
+/// Content hash with algorithm information
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
+pub struct ContentHash {
+    /// The algorithm used for hashing
+    pub algorithm: String,
+    /// The raw hash bytes
+    pub bytes: Vec<u8>,
+}
+
+impl ContentHash {
+    /// Create a new content hash with the specified algorithm and bytes
+    pub fn new(algorithm: &str, bytes: Vec<u8>) -> Self {
+        Self {
+            algorithm: algorithm.to_string(),
+            bytes,
+        }
+    }
+    
+    /// Create a ContentHash from a HashOutput
+    pub fn from_hash_output(hash_output: &HashOutput) -> Self {
+        let algorithm = hash_output.algorithm().to_string();
+        let bytes = hash_output.as_bytes().to_vec();
+        Self::new(&algorithm, bytes)
+    }
+    
+    /// Convert to a hex string
+    pub fn to_hex(&self) -> String {
+        hex::encode(&self.bytes)
+    }
+    
+    /// Convert to string representation
+    pub fn to_string(&self) -> String {
+        format!("{}:{}", self.algorithm.to_lowercase(), self.to_hex())
+    }
+}
+
+impl fmt::Display for ContentHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_string())
+    }
 }
 
 impl HashOutput {
@@ -80,17 +183,6 @@ impl HashOutput {
         
         Self::from_hex(parts[1], algorithm)
     }
-    
-    /// Get a deterministic unique identifier for this hash
-    pub fn to_content_id(&self) -> ContentId {
-        ContentId::from(*self)
-    }
-}
-
-impl fmt::Debug for HashOutput {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HashOutput({}, {})", self.algorithm, self.to_hex())
-    }
 }
 
 impl fmt::Display for HashOutput {
@@ -99,274 +191,89 @@ impl fmt::Display for HashOutput {
     }
 }
 
-/// A content-derived identifier replacing UUID for object identification
-#[derive(Clone, Debug, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
-pub struct ContentId(HashOutput);
-
-impl ContentId {
-    /// Create a new ContentId from a hash output
-    pub fn from(hash: HashOutput) -> Self {
-        Self(hash)
-    }
-    
-    /// Create a zero-value ContentId for use as a placeholder
-    pub fn nil() -> Self {
-        let zero_bytes = [0u8; 32];
-        Self(HashOutput::new(zero_bytes, HashAlgorithm::default()))
-    }
-    
-    /// Get the underlying hash output
-    pub fn hash(&self) -> &HashOutput {
-        &self.0
-    }
-    
-    /// Get raw bytes from the content id
-    pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
-    }
-    
-    /// Convert to string representation
-    pub fn to_string(&self) -> String {
-        format!("cid:{}", self.0.to_hex_string())
-    }
-    
-    /// Create a new ContentId from a string
-    pub fn new(id: impl Into<String>) -> Self {
-        // Convert to string first
-        let id_str = id.into();
-        
-        // If it looks like a properly formatted ContentId, try to parse it
-        if id_str.starts_with("cid:") {
-            if let Ok(content_id) = Self::parse(&id_str) {
-                return content_id;
-            }
-        }
-        
-        // Otherwise, treat it as raw data and hash it
-        Self::from(id_str.as_bytes())
-    }
-    
-    /// Parse from string
-    pub fn parse(s: &str) -> Result<Self, HashError> {
-        if let Some(hex) = s.strip_prefix("cid:") {
-            let hash = HashOutput::from_hex_string(hex)?;
-            Ok(Self(hash))
-        } else {
-            Err(HashError::InvalidFormat)
-        }
-    }
-}
-
-impl fmt::Display for ContentId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
-    }
-}
-
-impl From<&[u8]> for ContentId {
-    fn from(data: &[u8]) -> Self {
-        let hash_factory = HashFactory::default();
-        let hasher = hash_factory.create_hasher().expect("Failed to create hasher");
-        Self(hasher.hash(data))
-    }
-}
-
-/// Hash algorithm options
-#[derive(Debug, Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
-pub enum HashAlgorithm {
-    /// BLAKE3 cryptographic hash function
-    Blake3,
-    /// Poseidon hash function (ZK-friendly)
-    Poseidon,
-}
-
-impl Default for HashAlgorithm {
-    fn default() -> Self {
-        Self::Blake3
-    }
-}
-
-impl fmt::Display for HashAlgorithm {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Blake3 => write!(f, "Blake3"),
-            Self::Poseidon => write!(f, "Poseidon"),
-        }
-    }
-}
-
-impl FromStr for HashAlgorithm {
-    type Err = HashError;
-    
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "blake3" => Ok(Self::Blake3),
-            "poseidon" => Ok(Self::Poseidon),
-            _ => Err(HashError::UnsupportedAlgorithm(s.to_string())),
-        }
-    }
-}
-
-/// Error type for hash operations
-#[derive(Debug, Error)]
-pub enum HashError {
-    /// Invalid hash format
-    #[error("Invalid hash format")]
-    InvalidFormat,
-    
-    /// Invalid hash length
-    #[error("Invalid hash length")]
-    InvalidLength,
-    
-    /// Unsupported hash algorithm
-    #[error("Unsupported hash algorithm: {0}")]
-    UnsupportedAlgorithm(String),
-    
-    /// Internal error during hashing
-    #[error("Internal hash error: {0}")]
-    InternalError(String),
-    
-    /// Serialization error
-    #[error("Serialization error: {0}")]
-    SerializationError(String),
-}
-
 /// Interface for hash functions
 pub trait HashFunction: Send + Sync {
-    /// Hash the provided data
+    /// Compute a hash of the given bytes
     fn hash(&self, data: &[u8]) -> HashOutput;
     
     /// Get the algorithm used by this hash function
     fn algorithm(&self) -> HashAlgorithm;
+    
+    /// Create a Hasher that can incrementally build a hash
+    fn create_hasher(&self) -> Box<dyn ContentHasher>;
 }
 
-/// Extension trait for content addressing support
-pub trait ContentHasher: HashFunction {
-    /// Hash a content-addressed object
-    fn hash_object<T: ContentAddressed>(&self, object: &T) -> Result<HashOutput, HashError> {
-        let bytes = object.to_bytes()?;
-        Ok(self.hash(&bytes))
-    }
+/// Interface for content hashers that can build hashes incrementally
+pub trait ContentHasher: Send + Sync {
+    /// Update the hasher with more data
+    fn update(&mut self, data: &[u8]);
     
-    /// Verify a content hash against an object
-    fn verify_object<T: ContentAddressed>(&self, object: &T, hash: &HashOutput) -> Result<bool, HashError> {
-        let computed = self.hash_object(object)?;
-        Ok(computed == *hash)
-    }
-}
-
-/// Implement ContentHasher for all HashFunction implementations
-impl<T: HashFunction + ?Sized> ContentHasher for T {}
-
-/// Content addressing trait for objects that can be uniquely identified by their content
-pub trait ContentAddressed {
-    /// Get the content hash of this object
-    fn content_hash(&self) -> Result<HashOutput, HashError>;
-    
-    /// Get a deterministic identifier derived from content
-    fn content_id(&self) -> Result<ContentId, HashError> {
-        let hash = self.content_hash()?;
-        Ok(ContentId::from(hash))
-    }
-    
-    /// Verify that the object matches its hash
-    fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
-        let actual_hash = self.content_hash()?;
-        Ok(actual_hash == *expected_hash)
-    }
-    
-    /// Convert to a serialized form for storage
-    fn to_bytes(&self) -> Result<Vec<u8>, HashError>;
-    
-    /// Create from serialized form
-    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> where Self: Sized;
-}
-
-/// A concrete hasher implementation
-pub struct Hasher {
-    function: Arc<dyn HashFunction>,
-}
-
-impl Hasher {
-    /// Create a new hasher with the given hash function
-    pub fn new(function: Arc<dyn HashFunction>) -> Self {
-        Self { function }
-    }
-    
-    /// Hash the provided data
-    pub fn hash(&self, data: &[u8]) -> HashOutput {
-        self.function.hash(data)
-    }
+    /// Finalize and get the hash output
+    fn finalize(&self) -> HashOutput;
     
     /// Get the algorithm used by this hasher
-    pub fn algorithm(&self) -> HashAlgorithm {
-        self.function.algorithm()
+    fn algorithm(&self) -> HashAlgorithm;
+    
+    /// Reset the hasher to its initial state
+    fn reset(&mut self);
+    
+    /// Convenience method to hash data in one step
+    fn hash(&self, data: &[u8]) -> HashOutput {
+        let mut hasher = self.reset_copy();
+        hasher.update(data);
+        hasher.finalize()
     }
     
-    /// Hash a content-addressed object
-    pub fn hash_object<T: ContentAddressed>(&self, object: &T) -> Result<HashOutput, HashError> {
-        self.function.hash_object(object)
-    }
-    
-    /// Verify a content hash against an object
-    pub fn verify_object<T: ContentAddressed>(&self, object: &T, hash: &HashOutput) -> Result<bool, HashError> {
-        self.function.verify_object(object, hash)
-    }
+    /// Create a copy of this hasher in its initial state
+    fn reset_copy(&self) -> Box<dyn ContentHasher>;
 }
 
-/// Factory for creating hash functions
-#[derive(Clone)]
+/// Factory for creating hash functions and hashers
 pub struct HashFactory {
+    /// The default algorithm to use
     default_algorithm: HashAlgorithm,
 }
 
 impl HashFactory {
-    /// Create a new hash factory with the specified default algorithm
+    /// Create a new HashFactory with the specified default algorithm
     pub fn new(default_algorithm: HashAlgorithm) -> Self {
         Self { default_algorithm }
     }
     
-    /// Create a new hash factory with the default algorithm
-    pub fn default() -> Self {
-        Self::new(HashAlgorithm::default())
-    }
-    
-    /// Create a hasher using the default algorithm
-    pub fn create_hasher(&self) -> Result<Hasher, HashError> {
-        self.create_hasher_with_algorithm(self.default_algorithm)
-    }
-    
-    /// Create a hasher with the specified algorithm
-    pub fn create_hasher_with_algorithm(&self, algorithm: HashAlgorithm) -> Result<Hasher, HashError> {
+    /// Create a hash function for the specified algorithm
+    pub fn create_hash_function(&self, algorithm: HashAlgorithm) -> Result<Box<dyn HashFunction>, HashError> {
         match algorithm {
-            HashAlgorithm::Blake3 => {
-                let function = Arc::new(Blake3HashFunction::new());
-                Ok(Hasher::new(function))
-            },
+            HashAlgorithm::Blake3 => Ok(Box::new(Blake3HashFunction)),
             HashAlgorithm::Poseidon => {
                 #[cfg(feature = "poseidon")]
                 {
-                    let function = Arc::new(PoseidonHashFunction::new());
-                    Ok(Hasher::new(function))
+                    Ok(Box::new(PoseidonHashFunction))
                 }
+                
                 #[cfg(not(feature = "poseidon"))]
                 {
-                    Err(HashError::UnsupportedAlgorithm("Poseidon not enabled".to_string()))
+                    Err(HashError::UnsupportedAlgorithm("Poseidon hash not enabled".to_string()))
                 }
-            },
+            }
         }
     }
-}
-
-/// BLAKE3 hash function implementation
-pub struct Blake3HashFunction;
-
-impl Blake3HashFunction {
-    /// Create a new BLAKE3 hash function
-    pub fn new() -> Self {
-        Self
+    
+    /// Create a hash function with the default algorithm
+    pub fn create_hasher(&self) -> Result<Box<dyn ContentHasher>, HashError> {
+        self.create_hash_function(self.default_algorithm)
+            .map(|f| f.create_hasher())
     }
 }
+
+impl Default for HashFactory {
+    fn default() -> Self {
+        Self::new(HashAlgorithm::Blake3)
+    }
+}
+
+/// BLAKE3 implementation of HashFunction
+#[derive(Clone, Copy, Debug)]
+pub struct Blake3HashFunction;
 
 impl HashFunction for Blake3HashFunction {
     fn hash(&self, data: &[u8]) -> HashOutput {
@@ -378,6 +285,56 @@ impl HashFunction for Blake3HashFunction {
     
     fn algorithm(&self) -> HashAlgorithm {
         HashAlgorithm::Blake3
+    }
+    
+    fn create_hasher(&self) -> Box<dyn ContentHasher> {
+        Box::new(Blake3Hasher::new())
+    }
+}
+
+/// BLAKE3 implementation of ContentHasher
+#[derive(Clone)]
+pub struct Blake3Hasher {
+    hasher: blake3::Hasher,
+}
+
+impl Blake3Hasher {
+    /// Create a new Blake3Hasher
+    pub fn new() -> Self {
+        Self {
+            hasher: blake3::Hasher::new(),
+        }
+    }
+}
+
+impl Default for Blake3Hasher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ContentHasher for Blake3Hasher {
+    fn update(&mut self, data: &[u8]) {
+        self.hasher.update(data);
+    }
+    
+    fn finalize(&self) -> HashOutput {
+        let hash = self.hasher.finalize();
+        let mut output = [0u8; 32];
+        output.copy_from_slice(hash.as_bytes());
+        HashOutput::new(output, HashAlgorithm::Blake3)
+    }
+    
+    fn algorithm(&self) -> HashAlgorithm {
+        HashAlgorithm::Blake3
+    }
+    
+    fn reset(&mut self) {
+        self.hasher = blake3::Hasher::new();
+    }
+    
+    fn reset_copy(&self) -> Box<dyn ContentHasher> {
+        Box::new(Self::new())
     }
 }
 
@@ -416,85 +373,9 @@ impl HashFunction for PoseidonHashFunction {
     fn algorithm(&self) -> HashAlgorithm {
         HashAlgorithm::Poseidon
     }
-}
-
-/// Interface for deferred hash computation
-pub trait DeferredHashing {
-    /// Request a hash computation (creates a placeholder)
-    fn request_hash(
-        &mut self, 
-        data: &[u8], 
-        algorithm: HashAlgorithm
-    ) -> DeferredHashId;
     
-    /// Check if a deferred hash result is available
-    fn has_hash_result(&self, id: &DeferredHashId) -> bool;
-    
-    /// Get the result of a deferred hash operation
-    fn get_hash_result(&self, id: &DeferredHashId) -> Option<HashOutput>;
-    
-    /// Perform all deferred hash computations
-    fn compute_deferred_hashes(&mut self);
-}
-
-/// A deferred hash ID for content that will be hashed later
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct DeferredHashId(String);
-
-impl DeferredHashId {
-    /// Create a new deferred hash ID
-    pub fn new() -> Self {
-        // Generate a content ID with a random nonce
-        let content = DeferredIdContent {
-            creation_time: chrono::Utc::now().timestamp_millis(),
-            nonce: rand::random::<[u8; 16]>(),
-        };
-        
-        let content_id = content.content_id().unwrap();
-        Self(format!("deferred:{}", content_id))
-    }
-    
-    /// Get the string representation
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl From<ContentId> for DeferredHashId {
-    fn from(content_id: ContentId) -> Self {
-        Self(format!("deferred:{}", content_id))
-    }
-}
-
-/// Content type for deferred hash IDs
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-struct DeferredIdContent {
-    /// Creation timestamp
-    creation_time: i64,
-    /// Random nonce for uniqueness
-    nonce: [u8; 16],
-}
-
-impl ContentAddressed for DeferredIdContent {
-    fn content_hash(&self) -> Result<HashOutput, HashError> {
-        let hash_factory = HashFactory::default();
-        let hasher = hash_factory.create_hasher().unwrap();
-        let data = self.try_to_vec()?;
-        Ok(hasher.hash(&data))
-    }
-    
-    fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
-        let actual_hash = self.content_hash()?;
-        Ok(actual_hash == *expected_hash)
-    }
-    
-    fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
-        self.try_to_vec()
-    }
-    
-    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
-        BorshDeserialize::try_from_slice(bytes)
-            .map_err(|e| HashError::SerializationError(e.to_string()))
+    fn create_hasher(&self) -> Box<dyn ContentHasher> {
+        Box::new(PoseidonHasher::new())
     }
 }
 

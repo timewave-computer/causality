@@ -115,5 +115,10 @@ scripts/
 # Benchmarks and examples - uncomment if needed
 benches/
 examples/
-analysis/
+analysis/*
 breakdeps/
+*.workspace
+migration/
+migrations/
+docs/implementation-status.md
+docs/summary-of-progress.md

@@ -12,10 +12,15 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{
+use crate::crypto_primitives::{
     ContentAddressed, 
+    ContentId, 
+    ContentHash,
     HashOutput, 
     HashError,
+};
+
+use crate::{
     DomainId,
     verification::{
         VerificationRegistry,
@@ -121,6 +126,7 @@ impl DomainVerificationContext {
 
     /// Checks if a hash algorithm is allowed in this domain
     pub fn is_algorithm_allowed(&self, algorithm: &str) -> bool {
+        // Check allowed algorithms policies
         for policy in &self.trust_policies {
             if let TrustPolicy::AllowedAlgorithms(algorithms) = policy {
                 return algorithms.iter().any(|a| a == algorithm);
@@ -301,7 +307,7 @@ impl CrossDomainVerificationManager {
         })?;
 
         // Check if hash algorithm is allowed
-        if !target_context.is_algorithm_allowed(content_hash.algorithm()) {
+        if !target_context.is_algorithm_allowed(&content_hash.algorithm().to_string()) {
             return Ok(VerificationResult::failed(format!(
                 "Hash algorithm '{}' not allowed in domain '{}'",
                 content_hash.algorithm(),
@@ -335,16 +341,19 @@ impl CrossDomainVerificationManager {
         let content_hash = object.content_hash().map_err(|e| {
             CrossDomainVerificationError::Other(format!("Failed to compute content hash: {}", e))
         })?;
+        
+        // Convert HashOutput to ContentHash for comparison
+        let content_hash_converted = ContentHash::from_hash_output(&content_hash);
 
         // Check if content hash matches the proof
-        if content_hash != proof.content_hash {
+        if content_hash_converted != proof.content_hash {
             return Ok(VerificationResult::failed(
                 "Content hash does not match proof".to_string(),
             ));
         }
 
         // Check if hash algorithm is allowed
-        if !target_context.is_algorithm_allowed(content_hash.algorithm()) {
+        if !target_context.is_algorithm_allowed(&content_hash.algorithm().to_string()) {
             return Ok(VerificationResult::failed(format!(
                 "Hash algorithm '{}' not allowed in domain '{}'",
                 content_hash.algorithm(),
@@ -401,9 +410,12 @@ impl CrossDomainVerificationManager {
         proof_data: Vec<u8>,
     ) -> Result<VerificationProof, CrossDomainVerificationError> {
         // Compute content hash
-        let content_hash = object.content_hash().map_err(|e| {
+        let hash_output = object.content_hash().map_err(|e| {
             CrossDomainVerificationError::Other(format!("Failed to compute content hash: {}", e))
         })?;
+        
+        // Convert HashOutput to ContentHash
+        let content_hash = ContentHash::from_hash_output(&hash_output);
 
         // Create proof
         Ok(VerificationProof::new(
@@ -462,8 +474,31 @@ impl<T: ContentAddressed> CrossDomainVerificationPoint<T> {
 
     /// Verifies the object
     pub fn verify(&self) -> Result<VerificationResult, CrossDomainVerificationError> {
-        self.manager
-            .verify_cross_domain(&self.object, &self.source_domain, &self.target_domain)
+        self.manager.verify_cross_domain(
+            &self.object,
+            &self.source_domain,
+            &self.target_domain,
+        )
+    }
+    
+    /// Verifies the object and converts the result to VerificationResult
+    pub fn verify_and_convert(&self) -> Result<VerificationResult, VerificationError> {
+        self.verify().map_err(|e| VerificationError::Other(e.to_string()))
+    }
+
+    /// Get verification result compatible with VerificationError
+    pub fn into_verified(self) -> Result<T, VerificationError> {
+        // Convert from CrossDomainVerificationError to VerificationError if needed
+        let result = self.verify().map_err(|e| VerificationError::Other(e.to_string()))?;
+        
+        if result.is_verified() {
+            Ok(self.object)
+        } else {
+            Err(VerificationError::VerificationFailed { 
+                object_id: "cross-domain-object".to_string(),
+                reason: result.failure_reason().unwrap_or("Cross-domain verification failed").to_string()
+            })
+        }
     }
 
     /// Verifies the object with a proof
@@ -491,19 +526,6 @@ impl<T: ContentAddressed> CrossDomainVerificationPoint<T> {
             proof_data,
         )
     }
-
-    /// Verifies the object and consumes the verification point
-    pub fn into_verified(self) -> Result<T, VerificationError> {
-        let result = self.verify()?;
-        if result.is_verified() {
-            Ok(self.object)
-        } else {
-            Err(VerificationError::VerificationFailed {
-                object_id: self.object.content_hash()?.to_string(),
-                reason: "Cross-domain verification failed".to_string(),
-            })
-        }
-    }
 }
 
 /// Extension trait for content-addressed types to support cross-domain verification
@@ -519,6 +541,5 @@ pub trait CrossDomainVerifiable: ContentAddressed + Sized {
     }
 }
 
-// Implement for all types that implement ContentAddressed
-impl<T: ContentAddressed> CrossDomainVerifiable for T {} 
+/// Implement CrossDomainVerifiable for all types that implement ContentAddressed
 impl<T: ContentAddressed> CrossDomainVerifiable for T {} 

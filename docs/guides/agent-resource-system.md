@@ -208,4 +208,267 @@ The agent resource system is currently in development. The following components 
 
 ## Migration
 
-If you are currently using the actor system, we recommend waiting for the complete implementation of the agent-resource system before migrating. A detailed migration guide will be provided when the implementation is complete. 
+If you are currently using the actor system, we recommend waiting for the complete implementation of the agent-resource system before migrating. A detailed migration guide will be provided when the implementation is complete.
+
+# Agent Resource System Integration Guide
+
+This guide explains how to integrate and use the Agent Resource System in your Causality applications. The Agent Resource System provides a unified approach to modeling users, committees, and operators as specialized resources with consistent identity, capabilities, and state management.
+
+## Getting Started
+
+To use the Agent Resource System, you'll need to import the necessary components from the `causality-core` crate:
+
+```rust
+use causality_core::resource::agent::{
+    Agent, AgentBuilder, AgentId, AgentRegistry, AgentType, AgentState,
+    capability::{Capability, CapabilityBundle},
+    messaging::{Message, MessageFactory, MessageType},
+    operation::{Operation, OperationType},
+};
+```
+
+## Creating Agents
+
+Agents can be created using the `AgentBuilder`:
+
+```rust
+// Create a new user agent
+let user_agent = AgentBuilder::new()
+    .agent_type(AgentType::User)
+    .state(AgentState::Active)
+    .with_capability(Capability::new("resource123", "read", None))
+    .with_metadata("display_name", "Alice")
+    .build()
+    .unwrap();
+
+// Create a committee agent
+let committee_agent = AgentBuilder::new()
+    .agent_type(AgentType::Committee)
+    .state(AgentState::Active)
+    .with_capability(Capability::new("resource456", "write", None))
+    .with_metadata("committee_type", "reviewers")
+    .build()
+    .unwrap();
+
+// Create an operator agent
+let operator_agent = AgentBuilder::new()
+    .agent_type(AgentType::Operator)
+    .state(AgentState::Active)
+    .with_capability(Capability::new("*", "admin", None))
+    .with_metadata("service", "content_manager")
+    .build()
+    .unwrap();
+```
+
+## Managing Agents with AgentRegistry
+
+The `AgentRegistry` provides agent registration, lookup, and management:
+
+```rust
+// Register agents
+registry.register_agent(Box::new(user_agent.clone())).await?;
+registry.register_agent(Box::new(committee_agent.clone())).await?;
+registry.register_agent(Box::new(operator_agent.clone())).await?;
+
+// Look up agents
+let found_agent = registry.get_agent_by_id(&user_agent.agent_id()).await?;
+let agents = registry.find_agents_by_type(AgentType::User).await?;
+let alice = registry.find_agents_by_metadata("display_name", "Alice").await?;
+
+// Deregister an agent
+registry.deregister_agent(&operator_agent.agent_id()).await?;
+```
+
+## Working with Agent Operations
+
+Operations allow agents to interact with resources through capability-checked effects:
+
+```rust
+// Create an operation
+let operation = user_agent.create_operation()
+    .target_resource(resource_id)
+    .operation_type(OperationType::Read)
+    .add_effect(read_effect)
+    .build()?;
+
+// Execute the operation
+let result = user_agent.execute_operation(operation, context).await?;
+
+// Check operation result
+match result {
+    OperationResult::Success(data) => println!("Operation succeeded: {:?}", data),
+    OperationResult::Failure(error) => println!("Operation failed: {:?}", error),
+    OperationResult::Pending => println!("Operation is pending further approval"),
+}
+```
+
+## Agent Messaging
+
+The Messaging System enables communication between agents:
+
+```rust
+// Create a message factory
+let message_factory = MessageFactory::new();
+
+// Create a message
+let message = message_factory.create_message(
+    user_agent.agent_id().clone(),
+    committee_agent.agent_id().clone(),
+    MessageType::Request,
+    "Request for document approval".to_string(),
+    Some(json!({
+        "document_id": "doc123",
+        "urgency": "high"
+    })),
+)?;
+
+// Send the message
+messaging_system.send_message(message).await?;
+
+// Receive messages
+let inbox = messaging_system.get_inbox(user_agent.agent_id()).await?;
+for message in inbox {
+    println!("Message: {:?}", message);
+}
+
+// Create and track conversation
+let conversation = messaging_system.create_conversation(
+    user_agent.agent_id().clone(),
+    committee_agent.agent_id().clone(),
+    "Document approval".to_string(),
+)?;
+
+messaging_system.add_to_conversation(message_id, conversation.id()).await?;
+```
+
+## Working with Capability Bundles
+
+Capability bundles allow grouping and delegating capabilities:
+
+```rust
+// Create a capability bundle
+let bundle = CapabilityBundle::new("document_editor")
+    .add_capability(Capability::new("documents", "read", None))
+    .add_capability(Capability::new("documents", "write", None))
+    .add_capability(Capability::new("comments", "create", None))
+    .set_delegation_rules(DelegationRules::AllowWithApproval);
+
+// Apply bundle to an agent
+user_agent.apply_capability_bundle(bundle)?;
+
+// Delegate a bundle to another agent
+let delegation = user_agent.delegate_capability_bundle(
+    bundle.id(),
+    another_agent.agent_id(),
+    Some(expiration_time),
+)?;
+
+// Revoke a delegation
+user_agent.revoke_delegation(delegation.id())?;
+```
+
+## Checking Agent Status
+
+Service status allows advertising and discovering agent capabilities:
+
+```rust
+// Update agent service status
+user_agent.update_service_status(
+    ServiceStatus::new()
+        .add_service("document_processing")
+        .set_availability(Availability::Available)
+        .with_capacity(0.75)
+)?;
+
+// Find agents providing a service
+let service_providers = registry.find_agents_by_service("document_processing").await?;
+```
+
+## Handling Obligations
+
+Obligation Manager tracks capability-related commitments:
+
+```rust
+// Create an obligation
+let obligation = Obligation::new(
+    user_agent.agent_id().clone(),
+    committee_agent.agent_id().clone(),
+    "review_document",
+    json!({"document_id": "doc123"}),
+    expiration_time,
+)?;
+
+// Track the obligation
+obligation_manager.add_obligation(obligation)?;
+
+// Check agent obligations
+let agent_obligations = obligation_manager.get_obligations_for_agent(user_agent.agent_id())?;
+
+// Complete an obligation
+obligation_manager.complete_obligation(obligation_id)?;
+```
+
+## Error Handling
+
+The Agent Resource System provides structured error types:
+
+```rust
+match result {
+    Ok(value) => println!("Success: {:?}", value),
+    Err(AgentError::CapabilityMissing(details)) => {
+        println!("Missing capability: {:?}", details);
+    },
+    Err(AgentError::InvalidOperation(details)) => {
+        println!("Invalid operation: {:?}", details);
+    },
+    Err(e) => println!("Other error: {:?}", e),
+}
+```
+
+## Testing with Agent Resources
+
+Test utilities simplify testing with agent resources:
+
+```rust
+// Create a test agent
+let test_agent = test_utils::create_test_agent(
+    AgentType::User,
+    vec![
+        Capability::new("test_resource", "read", None),
+        Capability::new("test_resource", "write", None),
+    ],
+)?;
+
+// Set up a test registry
+let test_registry = test_utils::create_test_registry(vec![test_agent.clone()])?;
+
+// Execute test operations
+let result = test_utils::execute_test_operation(
+    test_agent,
+    resource_id,
+    OperationType::Read,
+    effect,
+)?;
+```
+
+## Best Practices
+
+1. **Use Agent Types Appropriately**: Match the agent type to the entity's role - User for human users, Committee for groups, and Operator for automated services.
+
+2. **Scope Capabilities Narrowly**: Provide agents with the minimum capabilities needed for their tasks.
+
+3. **Use Capability Bundles**: Group related capabilities into bundles for easier management.
+
+4. **Leverage the Registry**: Use the agent registry for agent discovery and lifecycle management.
+
+5. **Standardize Messaging**: Define standard message types and formats for consistent communication.
+
+6. **Track Obligations**: Use obligations to manage capability commitments and ensure accountability.
+
+7. **Automate Verifications**: Use the built-in capability verification for all agent operations.
+
+8. **Handle Delegations Carefully**: Set appropriate expiration times for delegated capabilities.
+
+## Migration from Actor System
+
+If you are migrating from the legacy actor system, see the [Actor to Agent Migration Guide](../migrations/actor-to-agent.md) for detailed instructions. 

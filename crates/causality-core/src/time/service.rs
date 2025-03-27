@@ -7,12 +7,180 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 
 use causality_types::time_snapshot::{TimeEffect, TimeEffectResult, AttestationSource};
 use crate::time::{
     TimeEffectHandler, TimeMap, DomainId, TimeProvider,
     DEFAULT_TICK_INTERVAL, DEFAULT_TICK_COUNT,
 };
+use crate::types::FactId;
+use crate::time::effect::{
+    TimeError, 
+    CausalTimeEffect, 
+    ClockTimeEffect, 
+    TimeAttestation, 
+    TemporalDistance
+};
+
+/// Service for causal time operations
+#[async_trait]
+pub trait CausalTimeService: Send + Sync + 'static {
+    /// Get the current logical clock for a domain
+    async fn get_logical_clock(&self, domain_id: &DomainId) -> Result<u64, TimeError>;
+    
+    /// Get the current vector clock for a domain
+    async fn get_vector_clock(&self, domain_id: &DomainId) 
+        -> Result<HashMap<DomainId, u64>, TimeError>;
+    
+    /// Advance the logical clock for a domain
+    async fn advance_logical_clock(&self, domain_id: &DomainId) -> Result<u64, TimeError>;
+    
+    /// Update the vector clock for a domain
+    async fn update_vector_clock(
+        &self, 
+        domain_id: &DomainId,
+        updates: HashMap<DomainId, u64>,
+    ) -> Result<(), TimeError>;
+    
+    /// Create a causal time effect
+    async fn create_causal_time_effect(
+        &self,
+        domain_id: &DomainId,
+        dependencies: Vec<FactId>,
+    ) -> Result<CausalTimeEffect, TimeError>;
+}
+
+/// Service for clock time operations
+#[async_trait]
+pub trait ClockTimeService: Send + Sync + 'static {
+    /// Get the current clock time
+    async fn get_current_time(&self) -> Result<DateTime<Utc>, TimeError>;
+    
+    /// Get a time attestation
+    async fn get_time_attestation(&self) -> Result<TimeAttestation, TimeError>;
+    
+    /// Verify a time attestation
+    async fn verify_attestation(&self, attestation: &TimeAttestation) -> Result<bool, TimeError>;
+    
+    /// Create a clock time effect
+    async fn create_clock_time_effect(
+        &self,
+        domain_id: &DomainId,
+    ) -> Result<ClockTimeEffect, TimeError>;
+}
+
+/// Combined time service for temporal operations
+#[async_trait]
+pub trait TimeService: Send + Sync + 'static {
+    /// Get the causal time service
+    fn causal_time(&self) -> &dyn CausalTimeService;
+    
+    /// Get the clock time service
+    fn clock_time(&self) -> &dyn ClockTimeService;
+    
+    /// Check if a fact happened before another based on causal time
+    async fn happened_before(
+        &self,
+        fact1: &FactId,
+        fact2: &FactId,
+    ) -> Result<bool, TimeError>;
+    
+    /// Get the temporal distance between facts
+    async fn temporal_distance(
+        &self,
+        fact1: &FactId,
+        fact2: &FactId,
+    ) -> Result<TemporalDistance, TimeError>;
+    
+    /// Get a timeline of facts ordered by causal time
+    async fn get_timeline(
+        &self,
+        facts: &[FactId],
+    ) -> Result<Vec<FactId>, TimeError>;
+    
+    /// Check if facts are concurrent (no causal dependency)
+    async fn are_concurrent(
+        &self,
+        facts: &[FactId],
+    ) -> Result<bool, TimeError>;
+}
+
+/// Storage for time attestations
+#[async_trait]
+pub trait TimeAttestationStore: Send + Sync + 'static {
+    /// Store a time attestation
+    async fn store_attestation(
+        &self,
+        domain_id: DomainId,
+        attestation: TimeAttestation,
+    ) -> Result<(), TimeError>;
+    
+    /// Get a time attestation for a domain
+    async fn get_attestation(
+        &self,
+        domain_id: &DomainId,
+    ) -> Result<Option<TimeAttestation>, TimeError>;
+    
+    /// Get all attestations for a domain
+    async fn get_attestations(
+        &self,
+        domain_id: &DomainId,
+    ) -> Result<Vec<TimeAttestation>, TimeError>;
+}
+
+/// Storage for fact timing information
+#[async_trait]
+pub trait FactTimeStore: Send + Sync + 'static {
+    /// Record logical time for a fact
+    async fn record_logical_time(
+        &self,
+        fact_id: &FactId,
+        domain_id: &DomainId,
+        logical_time: u64,
+    ) -> Result<(), TimeError>;
+    
+    /// Record wall clock time for a fact
+    async fn record_wall_time(
+        &self,
+        fact_id: &FactId,
+        domain_id: &DomainId,
+        wall_time: DateTime<Utc>,
+    ) -> Result<(), TimeError>;
+    
+    /// Get logical time for a fact
+    async fn get_logical_time(
+        &self,
+        fact_id: &FactId,
+        domain_id: &DomainId,
+    ) -> Result<Option<u64>, TimeError>;
+    
+    /// Get wall clock time for a fact
+    async fn get_wall_time(
+        &self,
+        fact_id: &FactId,
+        domain_id: &DomainId,
+    ) -> Result<Option<DateTime<Utc>>, TimeError>;
+    
+    /// Record fact dependencies
+    async fn record_dependencies(
+        &self,
+        fact_id: &FactId,
+        dependencies: &[FactId],
+    ) -> Result<(), TimeError>;
+    
+    /// Get fact dependencies
+    async fn get_dependencies(
+        &self,
+        fact_id: &FactId,
+    ) -> Result<Vec<FactId>, TimeError>;
+    
+    /// Get facts that depend on this fact
+    async fn get_dependents(
+        &self,
+        fact_id: &FactId,
+    ) -> Result<Vec<FactId>, TimeError>;
+}
 
 /// Service for managing time through effects
 pub struct TimeService {

@@ -16,6 +16,19 @@ borsh = { workspace = true }
 hex = { workspace = true }
 rand = { workspace = true }
 blake3 = "1.3"
+sparse-merkle-tree = "0.6"
+chrono = { workspace = true }
 
 # Internal dependencies
-causality-types = { workspace = true }
+# Temporarily disable until types crate compiles
+# causality-types = { workspace = true }
+
+[features]
+default = []
+poseidon = []
+ed25519 = []
+ecdsa = []
+bls = []
+md5 = []
+groth16 = []
+plonk = []

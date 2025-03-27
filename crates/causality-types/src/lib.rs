@@ -44,15 +44,16 @@ pub use utils::{
 };
 
 // Export verification types
-pub use verification::{
-    VerificationError,
-    VerificationResult,
-    TrustBoundary,
-    VerificationMetrics,
-    VerificationRegistry,
-    VerificationPoint,
-    Verifiable,
-};
+pub use verification::error::VerificationError;
+pub use verification::error::VerificationResult;
+pub use verification::trust::TrustBoundary;
+pub use verification::metrics::VerificationMetric as VerificationMetrics;
+pub use verification::registry::VerificationRegistry;
+pub use verification::trust::VerificationPoint;
+pub use verification::trust::Verifiable;
+
+// Re-export Result for use throughout the crate
+pub use std::result::Result;
 
 // Export time system types
 pub use time_effect_system::{
@@ -92,8 +93,8 @@ pub mod trace {
     #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
     pub struct TraceId(pub String);
     
-    /// Content type for trace ID generation
-    #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+    /// Content for a trace ID
+    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, borsh::BorshSerialize, borsh::BorshDeserialize)]
     struct TraceIdContent {
         /// Creation timestamp
         timestamp: i64,
@@ -142,7 +143,10 @@ pub mod trace {
             
             // Handle potential error from content_id(), falling back to a default ID if needed
             let content_id = content.content_id().unwrap_or_else(|_| {
-                ContentId::from("default-trace-id")
+                // Create a temporary hash output for the default case
+                let zero_bytes = [0u8; 32];
+                let hash_output = HashOutput::new(zero_bytes, HashAlgorithm::default());
+                ContentId::from(hash_output)
             });
             TraceId(format!("trace:{}", content_id))
         }
@@ -158,7 +162,8 @@ pub mod trace {
             
             // Handle potential error from content_id(), falling back to a default ID if needed
             let content_id = content.content_id().unwrap_or_else(|_| {
-                ContentId::from(format!("child-of-{}", parent.as_str()))
+                // Create a content ID from the parent string
+                ContentId::new(format!("child-of-{}", parent.as_str()))
             });
             TraceId(format!("trace:{}", content_id))
         }

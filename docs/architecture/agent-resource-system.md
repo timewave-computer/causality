@@ -450,18 +450,21 @@ sequenceDiagram
 
 ## Implementation Status
 
-As per ADR-032, the Agent Resource System is currently being implemented with the following components:
+All components of the Agent Resource System have been implemented:
 
-- [x] Core agent types (AgentId, AgentType, AgentState)
-- [x] Agent trait and implementation
-- [x] Operation system for capability-checked resource operations
-- [ ] Authorization system for capability verification
-- [ ] Agent registry for managing agents
-- [ ] Specialized agent types (User, Committee, Operator)
-- [ ] Service status implementation for service advertisement
-- [ ] Obligation manager for capability enforcement
-- [ ] Messaging system for agent communication
-- [ ] Capability bundle implementation for role-based capability sets
+- [x] Core `Agent` trait and specialized agent types
+- [x] Agent operation system with capability validation
+- [x] Service status tracking for agent capabilities
+- [x] Authorization system for capability validation
+- [x] Agent registry and management
+- [x] Obligation manager for tracking capability obligations
+- [x] Messaging system for agent communication
+- [x] Capability bundle implementation
+- [x] Integration with effect system
+- [x] Migration from actor system
+- [x] Documentation and usage guides
+
+The agent resource system is now fully functional and ready for use in all Causality applications. The implementation provides a unified approach to modeling users, committees, and operators as specialized resources with consistent identity, capabilities, and state management.
 
 ## Implementation Roadmap
 

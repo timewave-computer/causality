@@ -3,9 +3,10 @@
 
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use crate::Result;
-use crate::content_addressing::ContentAddressed;
+use crate::crypto_primitives::{ContentAddressed, HashOutput, HashError};
 
 /// A snapshot of a time map at a specific point in time
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -62,8 +63,8 @@ impl TimeMapSnapshot {
     }
 }
 
-/// Effect for time-related operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Effect that changes time-related state
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub enum TimeEffect {
     /// Update to causal ordering
     CausalUpdate {
@@ -94,8 +95,8 @@ pub enum TimeEffect {
     },
 }
 
-/// Sources of attestations with varying trust levels
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Source of a time attestation
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub enum AttestationSource {
     /// Blockchain timestamp (trust depends on consensus model)
     Blockchain {
@@ -170,8 +171,25 @@ pub enum TimeEffectResult {
 
 // Implement ContentAddressed for TimeEffect
 impl ContentAddressed for TimeEffect {
-    fn content_hash(&self) -> Result<crate::content_addressing::HashOutput> {
-        // Placeholder implementation
-        Ok(crate::content_addressing::HashOutput::from_bytes(&[0; 32]).unwrap())
+    fn content_hash(&self) -> Result<HashOutput, HashError> {
+        crate::content_addressing::canonical_content_hash(self)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+    
+    fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
+        let actual_hash = self.content_hash()?;
+        Ok(actual_hash == *expected_hash)
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+        // Use canonical binary serialization
+        crate::content_addressing::canonical::to_canonical_binary(self)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        // Use canonical binary deserialization
+        crate::content_addressing::canonical::from_canonical_binary(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
     }
 } 

@@ -16,7 +16,7 @@ pub mod time;
 
 // Concurrency Primitives
 // Thread-safe data structures, task scheduling abstractions,
-// actor model foundations, and event notification systems
+// and event notification systems
 pub mod concurrency;
 
 // Verification Framework
@@ -27,12 +27,8 @@ pub mod verification;
 // Resource System
 // Content-addressed resources, state management, capability-based access control,
 // and resource operations
+// Note: The Agent Resource System (which replaced the actor system) is under resource::agent
 pub mod resource;
-
-// Actor System
-// Lightweight actor abstraction, message passing infrastructure,
-// actor supervision strategies, and distributed actor coordination
-pub mod actor;
 
 // Effect System
 // Core effect definitions, context management, and registry interfaces
@@ -76,6 +72,10 @@ pub mod zk;
 /// Deprecated: Use `observation` module instead
 #[deprecated(since = "0.1.0", note = "Use the `observation` module instead")]
 pub mod committee;
+
+// Actor System has been completely removed as per ADR-032
+// The actor system has been replaced by the Agent Resource System
+// See resource::agent module for the new implementation
 
 // Re-export important types for easier access
 pub use error::{Error as CoreError, Result as CoreResult};
@@ -129,7 +129,7 @@ pub use integration::{
 pub use resource::types as resource_types;
 pub use resource::storage as resource_storage;
 pub use resource::validation as resource_validation;
-pub use domain::registry as domain_registry;
+pub use resource::agent::registry as agent_registry;  // Use agent registry instead of domain registry
 
 // Public types
 pub type CausalityResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>; 

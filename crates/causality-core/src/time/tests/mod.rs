@@ -19,6 +19,11 @@ use crate::time::{
     ClockTime, TimeDelta, Timestamp,
 };
 
+// Time module tests
+
+// Include test modules
+pub mod effect_tests;
+
 #[test]
 fn test_time_map_creation() {
     let map = TimeMap::new();

@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::content_addressed::ContentAddressed;
+use crate::crypto_primitives::{ContentAddressed, ContentId, HashOutput};
 use crate::verification::error::{VerificationError, VerificationResult};
 use crate::verification::metrics::VerificationMetric;
 use crate::verification::registry::VerificationRegistry;

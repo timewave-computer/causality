@@ -188,4 +188,30 @@ pub enum TimeEvent {
     SyncRequest,
     /// An inconsistency was detected in the time system
     InconsistencyDetected(String),
+}
+
+// Effect system integration
+pub mod effect;
+pub mod service;
+pub mod handler;
+pub mod implementations;
+pub mod integration;
+
+// Re-export SystemClock for internal use
+use clock::SystemClock;
+
+/// Trait for components that need to be notified of time events
+pub trait TimeObserver {
+    /// Handle a time event
+    fn on_time_event(&mut self, event: TimeEvent) -> crate::error::Result<()>;
+}
+
+/// Types of time events that observers can handle
+pub enum TimeEvent {
+    /// A new time map snapshot is available
+    NewSnapshot(map::TimeMapSnapshot),
+    /// A request to synchronize time information
+    SyncRequest,
+    /// An inconsistency was detected in the time system
+    InconsistencyDetected(String),
 } 

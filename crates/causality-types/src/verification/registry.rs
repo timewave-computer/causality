@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use crate::content_addressed::ContentAddressed;
+use crate::crypto_primitives::ContentAddressed;
 use crate::verification::error::{VerificationError, VerificationResult};
 use crate::verification::metrics::{VerificationMetric, VerificationMetricsCollector};
 use crate::verification::trust::TrustBoundary;
@@ -47,7 +48,7 @@ impl VerificationRegistry {
         let content_hash = object.content_hash().map_err(|e| VerificationError::HashError(e.to_string()))?;
 
         // Verify the hash
-        let is_valid = object.verify_hash(&content_hash).map_err(|e| VerificationError::HashError(e.to_string()))?;
+        let is_valid = object.verify(&content_hash).map_err(|e| VerificationError::HashError(e.to_string()))?;
 
         // Record the result
         let duration = start_time.elapsed();

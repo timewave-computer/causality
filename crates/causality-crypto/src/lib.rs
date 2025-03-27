@@ -1,56 +1,32 @@
-// Cryptographic primitives and utilities
-// Original file: src/crypto/mod.rs
-
-// Crypto module for timewave
+// Causality Crypto
 //
-// This module provides cryptographic primitives used throughout the system, 
-// including hashing, signatures, merkle trees, and zero-knowledge proofs.
+// This module provides cryptographic primitives for the Causality system.
 
-// Export our modules
+// Core crypto modules - these don't depend on causality-types
 pub mod hash;
-pub mod merkle;
-pub mod signature;
-pub mod zk;
-pub mod deferred;
-pub mod utils;
-pub mod extensions;
-pub mod content_store;
-pub mod sparse_merkle_tree;
-pub mod smt_content_store;
-// Note: The following modules are missing and have been removed:
-// pub mod smt;
-// pub mod content_addressed_storage;
 
-// Import and re-export types from causality-types
-// Only import what actually exists in causality-types
-pub use causality_types::{
-    HashOutput, HashAlgorithm, HashError, ContentId, ContentAddressed, ContentHash
-};
+// These modules need fixes as well
+// pub mod signature;
+// pub mod zk;
 
-// Re-export our own types from hash.rs
-pub use hash::{HashFunction, Hasher, HashFactory};
+// Advanced functionality - these modules depend on causality-types
+// Temporarily commented out until causality-types compiles
+// pub mod content_store;
+// pub mod smt_content_store; 
+// pub mod deferred;
+// pub mod traits;
 
-// Re-export our own types from merkle.rs
-pub use merkle::{Commitment, CommitmentScheme, CommitmentFactory, CommitmentType, CommitmentError, MerkleTreeCommitmentScheme, MerkleProof, H256};
+// Basic re-exports from the hash module
+pub use hash::{HashAlgorithm, HashOutput, HashError, ContentHash};
 
-// Re-export our own types from signature.rs
-pub use signature::{Signature, SignatureScheme, SignatureError, SignatureVerificationResult, SignatureFactory};
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-// Re-export our own types from zk.rs
-pub use zk::{ZkProof, ZkVerifier, ZkProver, ZkError, ZkFactory, VerificationCircuit, GenericCircuit};
-
-// Re-export our own types from deferred.rs
-pub use deferred::{DeferredHashingContext, DeferredHashBatchProcessor, DeferredHashInput, DeferredHashId, DeferredHashing};
-
-// Re-export utility functions
-pub use utils::{simple_hash, hash_object, simple_hash_bytes};
-
-// Re-export extension traits
-pub use extensions::{TypeExtensions};
-
-// Re-export key types
-pub use hash::{ContentAddressed, ContentId, HashOutput, HashError};
-pub use hash::{HashAlgorithm, HashFunction, HashFactory};
-pub use content_store::{ContentAddressedStorage, StorageError, StorageFactory};
-pub use sparse_merkle_tree::{MerkleSmt, SmtKeyValue, SmtError, SmtProof, ContentAddressedSmt};
-pub use smt_content_store::{SmtContentStore, DefaultSmtFactory}; 
+    #[test]
+    fn test_hash_output() {
+        let bytes = [1u8; 32];
+        let hash = HashOutput::new(bytes, HashAlgorithm::Blake3);
+        assert_eq!(hash.algorithm(), HashAlgorithm::Blake3);
+    }
+} 

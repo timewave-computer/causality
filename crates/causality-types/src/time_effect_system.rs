@@ -154,18 +154,17 @@ impl Default for TimeMap {
     }
 }
 
-/// Handler interface for time-related effects
-#[async_trait]
+/// Defines the API for handling time-related effects
 pub trait TimeEffectHandler: Send + Sync {
     /// Handle a causal time update
-    async fn handle_causal_update(
+    fn handle_causal_update(
         &self, 
         operations: Vec<String>, 
         ordering: Vec<(String, String)>
     ) -> anyhow::Result<TimeEffectResult>;
     
     /// Handle a clock time attestation
-    async fn handle_clock_attestation(
+    fn handle_clock_attestation(
         &self,
         domain_id: String,
         timestamp: u64,
@@ -174,7 +173,7 @@ pub trait TimeEffectHandler: Send + Sync {
     ) -> anyhow::Result<TimeEffectResult>;
     
     /// Handle a time map update
-    async fn handle_time_map_update(
+    fn handle_time_map_update(
         &self,
         positions: HashMap<String, u64>,
         proofs: HashMap<String, String>,
@@ -231,9 +230,8 @@ impl Default for TimeService {
     }
 }
 
-#[async_trait]
 impl TimeEffectHandler for TimeService {
-    async fn handle_causal_update(
+    fn handle_causal_update(
         &self, 
         operations: Vec<String>, 
         ordering: Vec<(String, String)>
@@ -247,7 +245,7 @@ impl TimeEffectHandler for TimeService {
         })
     }
     
-    async fn handle_clock_attestation(
+    fn handle_clock_attestation(
         &self,
         domain_id: String,
         timestamp: u64,
@@ -287,10 +285,10 @@ impl TimeEffectHandler for TimeService {
         })
     }
     
-    async fn handle_time_map_update(
+    fn handle_time_map_update(
         &self,
         positions: HashMap<String, u64>,
-        _proofs: HashMap<String, String>,
+        proofs: HashMap<String, String>,
     ) -> anyhow::Result<TimeEffectResult> {
         let mut time_map = self.time_map.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
@@ -312,29 +310,29 @@ impl TimeEffectHandler for TimeService {
     }
 }
 
-/// Effect handler wrapper for time effects
+/// Wrapper for TimeEffectHandler to make it usable as a trait object
 pub struct TimeEffectHandlerWrapper {
     /// The underlying time effect handler
-    handler: Arc<dyn TimeEffectHandler>,
+    handler: Arc<TimeService>,
 }
 
 impl TimeEffectHandlerWrapper {
     /// Create a new time effect handler wrapper
-    pub fn new(handler: Arc<dyn TimeEffectHandler>) -> Self {
+    pub fn new(handler: Arc<TimeService>) -> Self {
         Self { handler }
     }
     
     /// Handle a time effect
-    pub async fn handle(&self, effect: TimeEffect) -> anyhow::Result<TimeEffectResult> {
+    pub fn handle(&self, effect: TimeEffect) -> anyhow::Result<TimeEffectResult> {
         match effect {
             TimeEffect::CausalUpdate { operations, ordering } => {
-                self.handler.handle_causal_update(operations, ordering).await
+                self.handler.handle_causal_update(operations, ordering)
             },
             TimeEffect::ClockAttestation { domain_id, timestamp, source, confidence } => {
-                self.handler.handle_clock_attestation(domain_id, timestamp, source, confidence).await
+                self.handler.handle_clock_attestation(domain_id, timestamp, source, confidence)
             },
             TimeEffect::TimeMapUpdate { positions, proofs } => {
-                self.handler.handle_time_map_update(positions, proofs).await
+                self.handler.handle_time_map_update(positions, proofs)
             },
         }
     }
@@ -344,8 +342,8 @@ impl TimeEffectHandlerWrapper {
 mod tests {
     use super::*;
     
-    #[tokio::test]
-    async fn test_time_effect_handler() {
+    #[test]
+    fn test_time_effect_handler() {
         // Create a time service
         let time_service = Arc::new(TimeService::new());
         
@@ -364,7 +362,7 @@ mod tests {
         };
         
         // Handle the effect
-        let result = effect_handler.handle(effect).await;
+        let result = effect_handler.handle(effect);
         
         // Verify the result
         assert!(result.is_ok());

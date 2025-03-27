@@ -10,10 +10,10 @@ pub use self::registry::VerificationRegistry;
 pub use self::trust::{TrustBoundary, VerificationPoint, Verifiable};
 
 // Module structure
-mod error;
-mod metrics;
-mod registry;
-mod trust;
+pub mod error;
+pub mod metrics;
+pub mod registry;
+pub mod trust;
 
 // Cross-domain verification module
 pub mod cross_domain;

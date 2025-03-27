@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -21,6 +23,9 @@ use crate::effect::{
 use crate::resource::ResourceId;
 use super::{ClockTime, Timestamp, TimeDelta, Timer, TimeObserver, Duration as TimeDuration};
 use super::map::{DomainPosition, TimeMap};
+use crate::crypto::Signature;
+use crate::crypto::PublicKey;
+use crate::types::FactId;
 
 /// Time domain identifier
 pub type TimeDomainId = DomainId;
@@ -845,4 +850,143 @@ impl<T: std::any::Any> AsAny for T {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-} 
+}
+
+/// Error type for time-related operations
+#[derive(Debug, thiserror::Error)]
+pub enum TimeError {
+    /// Error related to causal time
+    #[error("Causal time error: {0}")]
+    CausalTimeError(String),
+
+    /// Error related to clock time
+    #[error("Clock time error: {0}")]
+    ClockTimeError(String),
+
+    /// Error validating time attestation
+    #[error("Time attestation validation error: {0}")]
+    AttestationError(String),
+
+    /// Error accessing time data
+    #[error("Time data access error: {0}")]
+    DataAccessError(String),
+
+    /// Error with temporal relationship
+    #[error("Temporal relationship error: {0}")]
+    TemporalRelationshipError(String),
+
+    /// General time error
+    #[error("Time error: {0}")]
+    GeneralError(String),
+}
+
+/// Effect for updating causal time
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CausalTimeEffect {
+    /// Domain for which to update time
+    pub domain_id: DomainId,
+    
+    /// New logical clock value
+    pub logical_clock: u64,
+    
+    /// Vector clock updates
+    pub vector_clock_updates: HashMap<DomainId, u64>,
+    
+    /// Dependencies (facts that must be in the past)
+    pub dependencies: Vec<FactId>,
+}
+
+/// Effect for updating clock time
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClockTimeEffect {
+    /// Domain for which to update time
+    pub domain_id: DomainId,
+    
+    /// Wall clock time
+    pub wall_time: DateTime<Utc>,
+    
+    /// Time source information
+    pub time_source: TimeSource,
+    
+    /// Time attestation (if available)
+    pub attestation: Option<TimeAttestation>,
+}
+
+/// Sources of time
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TimeSource {
+    /// Local system clock
+    LocalSystem,
+    
+    /// Network Time Protocol
+    NTP(String),
+    
+    /// Trusted external source
+    TrustedSource(String),
+    
+    /// Consensus-derived time
+    Consensus(Vec<String>),
+}
+
+/// Time attestation from an external source
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeAttestation {
+    /// Source of the attestation
+    pub source: String,
+    
+    /// Attested time
+    pub time: DateTime<Utc>,
+    
+    /// Signature from the source
+    pub signature: Signature,
+    
+    /// Public key of the source
+    pub public_key: PublicKey,
+}
+
+/// Temporal distance between two facts
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TemporalDistance {
+    /// Facts are causally related with a specific distance
+    Causal(u64),
+    
+    /// Facts are temporally related with a specific duration
+    Temporal(std::time::Duration),
+    
+    /// Facts have no known temporal relationship
+    Unknown,
+}
+
+/// Effect for temporal query
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemporalQueryEffect {
+    /// Domain for the query
+    pub domain_id: DomainId,
+    
+    /// Facts to query
+    pub facts: Vec<FactId>,
+    
+    /// Query type
+    pub query_type: TemporalQueryType,
+}
+
+/// Types of temporal queries
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TemporalQueryType {
+    /// Check if fact1 happened before fact2
+    HappenedBefore(FactId, FactId),
+    
+    /// Get the temporal distance between facts
+    Distance(FactId, FactId),
+    
+    /// Check if facts happened concurrently
+    Concurrent(Vec<FactId>),
+    
+    /// Get a timeline of facts
+    Timeline(Vec<FactId>),
+}
+
+// Future implementation:
+// - Effect handler implementations for each effect type
+// - Integration with the effect system
+// - Time service interfaces 

@@ -8,14 +8,12 @@ use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::H256;
+use serde::{Serialize, Deserialize};
 
-use crate::{
-    ContentAddressed, ContentId, HashOutput, HashError,
-    content_store::{ContentAddressedStorage, StorageError},
-    sparse_merkle_tree::{
-        MerkleSmt, SmtKeyValue, SmtError, SmtProof, SmtFactory, ContentAddressedSmt
-    }
-};
+// Use our local types
+use crate::hash::{HashOutput, ContentId};
+use crate::traits::{ContentAddressed, ContentAddressedStorage, ContentAddressedStorageExt, StorageError};
+use crate::sparse_merkle_tree::{MerkleSmt, SmtKeyValue, SmtError, SmtProof, SmtFactory, ContentAddressedSmt};
 
 /// A content-addressed storage implementation backed by a Sparse Merkle Tree
 pub struct SmtContentStore<S> {
@@ -103,27 +101,41 @@ impl<S: sparse_merkle_tree::traits::StoreReadOps<SmtKeyValue> +
         Send + Sync + 'static> 
     ContentAddressedStorage for SmtContentStore<S> 
 {
-    fn store<T: ContentAddressed>(&self, object: &T) -> Result<ContentId, StorageError> {
-        // Get the content hash and ID
-        let content_hash = object.content_hash()?;
-        let content_id = ContentId::from(content_hash.clone());
+    fn store_bytes(&self, bytes: &[u8]) -> Result<ContentId, StorageError> {
+        // Create a content ID from the bytes
+        let hash_factory = crate::hash::HashFactory::default();
+        let hasher = hash_factory.create_hasher()
+            .map_err(|e| StorageError::HashError(e))?;
+        let hash = hasher.hash(bytes);
+        let content_id = ContentId::from(hash);
         
         // Check if already stored
         if self.contains(&content_id) {
             return Ok(content_id);
         }
         
-        // Serialize the object
-        let serialized = object.to_bytes()?;
-        
         // Store the serialized data in cache
         {
             let mut cache = self.data_cache.write().unwrap();
-            cache.insert(content_id.clone(), serialized.clone());
+            cache.insert(content_id.clone(), bytes.to_vec());
         }
         
-        // Store the object in the SMT
-        let (_, _, new_root) = self.smt.store_content(object)
+        // Store the bytes in the SMT
+        // Convert to a key-value pair for the SMT
+        let hash_bytes = content_id.hash().as_bytes();
+        let mut key = [0u8; 32];
+        key.copy_from_slice(hash_bytes);
+        let smt_key = H256::from(key);
+        
+        // Create a value from the bytes
+        let mut value_bytes = [0u8; 32];
+        // Use first 32 bytes or pad with zeros
+        let copy_len = std::cmp::min(bytes.len(), 32);
+        value_bytes[..copy_len].copy_from_slice(&bytes[..copy_len]);
+        let smt_value = H256::from(value_bytes);
+        
+        // Store in SMT
+        let (_, new_root) = self.smt.update(&smt_key, &smt_value)
             .map_err(|e| StorageError::IoError(format!("SMT store error: {}", e)))?;
         
         // Update root
@@ -216,10 +228,18 @@ impl<S: sparse_merkle_tree::traits::StoreReadOps<SmtKeyValue> +
     }
 }
 
+// Implement ContentAddressedStorageExt for SmtContentStore
+impl<S: sparse_merkle_tree::traits::StoreReadOps<SmtKeyValue> + 
+        sparse_merkle_tree::traits::StoreWriteOps<SmtKeyValue> + 
+        Send + Sync + 'static> 
+    ContentAddressedStorageExt for SmtContentStore<S> {
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::HashFactory;
+    use crate::hash::{HashOutput, HashError, HashFactory};
+    use crate::traits::{ContentAddressed};
     use borsh::{BorshSerialize, BorshDeserialize};
     
     #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
@@ -261,14 +281,16 @@ mod tests {
             data: vec![1, 2, 3, 4, 5],
         };
         
-        // Store the object
-        let content_id = store.store(&obj).unwrap();
+        // Store the object using store_bytes
+        let bytes = obj.to_bytes().unwrap();
+        let content_id = store.store_bytes(&bytes).unwrap();
         
         // Verify contains
         assert!(store.contains(&content_id));
         
         // Retrieve the object
-        let retrieved: TestObject = store.get(&content_id).unwrap();
+        let retrieved_bytes = store.get_bytes(&content_id).unwrap();
+        let retrieved = TestObject::from_bytes(&retrieved_bytes).unwrap();
         
         // Verify retrieved object
         assert_eq!(obj, retrieved);

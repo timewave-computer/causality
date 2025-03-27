@@ -10,7 +10,7 @@ use std::fmt;
 use std::sync::Arc;
 use thiserror::Error;
 
-use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashError};
+use causality_types::{ContentAddressed, ContentId, HashOutput, HashError};
 
 pub use sparse_merkle_tree::H256;
 use sparse_merkle_tree::default_store::DefaultStore;
