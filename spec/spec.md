@@ -72,40 +72,40 @@ All components within Causality adhere to these fundamental principles:
     - [2.6 Time Services](#26-time-services)
     - [2.7 Temporal Fact Validation](#27-temporal-fact-validation)
     - [2.8 Integration with Effect System](#28-integration-with-effect-system)
-  - [3. Effect System \[ADR-001, ADR-023, ADR-031, ADR-033\]](#3-effect-system-adr-001-adr-023-adr-031-adr-033)
+  - [3. Effect System \[ADR-001, ADR-023, ADR-031, ADR-032\]](#3-effect-system-adr-001-adr-023-adr-031-adr-032)
     - [3.1 Algebraic Effects \[ADR-023\]](#31-algebraic-effects-adr-023)
       - [Usage Example: Creating a Custom Effect](#usage-example-creating-a-custom-effect)
     - [3.2 Effect Constraints \[ADR-023\]](#32-effect-constraints-adr-023)
     - [3.3 Domain Adapter as Effect \[ADR-031\]](#33-domain-adapter-as-effect-adr-031)
     - [3.4 Effect Execution Lifecycle](#34-effect-execution-lifecycle)
     - [3.5 Cross-Domain Effect Composition](#35-cross-domain-effect-composition)
-    - [3.6 Effect Interpreter \[ADR-033\]](#36-effect-interpreter-adr-033)
-    - [3.7 Operation and Effect Integration \[ADR-033\]](#37-operation-and-effect-integration-adr-033)
-  - [4. Resource System \[ADR-002, ADR-030, ADR-033\]](#4-resource-system-adr-002-adr-030-adr-033)
-    - [4.1 Resource Model \[ADR-002, ADR-033\]](#41-resource-model-adr-002-adr-033)
-    - [4.2 Resource Operations \[ADR-033\]](#42-resource-operations-adr-033)
-    - [4.3 Resource Logic \[ADR-033\]](#43-resource-logic-adr-033)
-    - [4.4 Resource Lifecycle \[ADR-033\]](#44-resource-lifecycle-adr-033)
+    - [3.6 Effect Interpreter \[ADR-032\]](#36-effect-interpreter-adr-032)
+    - [3.7 Operation and Effect Integration \[ADR-032\]](#37-operation-and-effect-integration-adr-032)
+  - [4. Resource System \[ADR-002, ADR-030, ADR-032\]](#4-resource-system-adr-002-adr-030-adr-032)
+    - [4.1 Resource Model \[ADR-002, ADR-032\]](#41-resource-model-adr-002-adr-032)
+    - [4.2 Resource Operations \[ADR-032\]](#42-resource-operations-adr-032)
+    - [4.3 Resource Logic \[ADR-032\]](#43-resource-logic-adr-032)
+    - [4.4 Resource Lifecycle \[ADR-032\]](#44-resource-lifecycle-adr-032)
     - [4.5 Resource System Interaction Diagram](#45-resource-system-interaction-diagram)
     - [4.6 Resource Query Language](#46-resource-query-language)
-  - [5. Capability System \[ADR-003, ADR-032, ADR-033\]](#5-capability-system-adr-003-adr-032-adr-033)
+  - [5. Capability System \[ADR-003, ADR-032, ADR-032\]](#5-capability-system-adr-003-adr-032-adr-032)
     - [5.1 Capability Model \[ADR-003\]](#51-capability-model-adr-003)
     - [5.2 Capability Delegation \[ADR-032\]](#52-capability-delegation-adr-032)
       - [Usage Example: Creating and Delegating Capabilities](#usage-example-creating-and-delegating-capabilities)
     - [5.3 Capability Store](#53-capability-store)
     - [5.4 Capability Integration with Effects](#54-capability-integration-with-effects)
-    - [5.5 Capability Registry \[ADR-033\]](#55-capability-registry-adr-033)
+    - [5.5 Capability Registry \[ADR-032\]](#55-capability-registry-adr-032)
     - [5.6 Capability Constraints](#56-capability-constraints)
     - [5.7 Capability System Interaction Diagram](#57-capability-system-interaction-diagram)
     - [5.8 Capability-based Security Model](#58-capability-based-security-model)
-  - [6. Agent System \[ADR-005, ADR-032, ADR-033\]](#6-agent-system-adr-005-adr-032-adr-033)
-    - [6.1 Agent Definition \[ADR-033\]](#61-agent-definition-adr-033)
-    - [6.2 Agent Profiles \[ADR-033\]](#62-agent-profiles-adr-033)
-    - [6.3 Service Status \[ADR-033\]](#63-service-status-adr-033)
-    - [6.4 Obligation Manager \[ADR-033\]](#64-obligation-manager-adr-033)
-    - [6.5 Messaging \[ADR-033\]](#65-messaging-adr-033)
+  - [6. Agent System \[ADR-005, ADR-032, ADR-032\]](#6-agent-system-adr-005-adr-032-adr-032)
+    - [6.1 Agent Definition \[ADR-032\]](#61-agent-definition-adr-032)
+    - [6.2 Agent Profiles \[ADR-032\]](#62-agent-profiles-adr-032)
+    - [6.3 Service Status \[ADR-032\]](#63-service-status-adr-032)
+    - [6.4 Obligation Manager \[ADR-032\]](#64-obligation-manager-adr-032)
+    - [6.5 Messaging \[ADR-032\]](#65-messaging-adr-032)
     - [6.6 Agent System Diagram](#66-agent-system-diagram)
-  - [7. Operation System \[ADR-033\]](#7-operation-system-adr-033)
+  - [7. Operation System \[ADR-032\]](#7-operation-system-adr-032)
     - [7.1 Operation Model](#71-operation-model)
     - [7.2 Authorization](#72-authorization)
     - [7.3 Operation Execution](#73-operation-execution)
@@ -128,10 +128,10 @@ All components within Causality adhere to these fundamental principles:
 4. **User Sovereignty**: Programs cannot be forcibly upgraded [ADR-019]
 5. **Deterministic Replay**: All program state is fully reconstructible from logs [ADR-009, ADR-017]
 6. **Domain Agnosticism**: Programs do not require domain-specific logic [ADR-018, ADR-031]
-7. **Capability-Based Security**: Operations require explicit capabilities [ADR-022, ADR-033]
+7. **Capability-Based Security**: Operations require explicit capabilities [ADR-022, ADR-032]
 8. **Algebraic Effect Model**: Effects have explicit inputs, outputs, and constraints [ADR-001, ADR-023]
-9. **Resource Centricity**: All stateful objects are modeled as resources [ADR-033]
-10. **Explicit Authorization**: Operations require explicit validation of capabilities [ADR-033]
+9. **Resource Centricity**: All stateful objects are modeled as resources [ADR-032]
+10. **Explicit Authorization**: Operations require explicit validation of capabilities [ADR-032]
 
 ## Architecture Overview
 
@@ -730,7 +730,7 @@ pub async fn execute_effect_with_temporal_validation<E: Effect>(
 }
 ```
 
-## 3. Effect System [ADR-001, ADR-023, ADR-031, ADR-033]
+## 3. Effect System [ADR-001, ADR-023, ADR-031, ADR-032]
 
 The effect system provides a framework for expressing and executing operations with proper authorization and validation. Effects are the primary mechanism for defining state transitions and actions within Causality.
 
@@ -1488,7 +1488,7 @@ impl EffectHandler for CrossDomainTransferHandler {
 }
 ```
 
-### 3.6 Effect Interpreter [ADR-033]
+### 3.6 Effect Interpreter [ADR-032]
 
 The effect interpreter is responsible for executing effects and producing outcomes:
 
@@ -1612,7 +1612,7 @@ impl EffectInterpreter {
 }
 ```
 
-### 3.7 Operation and Effect Integration [ADR-033]
+### 3.7 Operation and Effect Integration [ADR-032]
 
 Operations are defined as requests to perform effects with explicit authorization:
 
@@ -1691,11 +1691,11 @@ impl Operation for CrossDomainTransferOperation {
 }
 ```
 
-## 4. Resource System [ADR-002, ADR-030, ADR-033]
+## 4. Resource System [ADR-002, ADR-030, ADR-032]
 
 The resource system manages access to state across domains through a unified abstraction layer that ensures consistency and proper authorization.
 
-### 4.1 Resource Model [ADR-002, ADR-033]
+### 4.1 Resource Model [ADR-002, ADR-032]
 
 Resources are the fundamental unit of state in Causality. Each resource:
 
@@ -1801,7 +1801,7 @@ impl ContentAddressed for ResourceId {
 }
 ```
 
-### 4.2 Resource Operations [ADR-033]
+### 4.2 Resource Operations [ADR-032]
 
 Resource operations are defined as requests to perform effects with explicit authorization:
 
@@ -1880,7 +1880,7 @@ impl Operation for CrossDomainTransferOperation {
 }
 ```
 
-### 4.3 Resource Logic [ADR-033]
+### 4.3 Resource Logic [ADR-032]
 
 Resource logic is defined as the rules and behaviors associated with resources:
 
@@ -1958,7 +1958,7 @@ impl ResourceLogic for CrossDomainTransferLogic {
 }
 ```
 
-### 4.4 Resource Lifecycle [ADR-033]
+### 4.4 Resource Lifecycle [ADR-032]
 
 Resource lifecycle management is defined as the rules and behaviors associated with the creation, update, and deletion of resources:
 
@@ -2262,7 +2262,7 @@ impl ResourceQuery {
 }
 ```
 
-## 5. Capability System [ADR-003, ADR-032, ADR-033]
+## 5. Capability System [ADR-003, ADR-032, ADR-032]
 
 The capability system provides a secure authorization model that governs access to resources based on unforgeable capability tokens with explicit delegation paths.
 
@@ -2874,7 +2874,7 @@ pub async fn execute_effect_with_capabilities(
 }
 ```
 
-### 5.5 Capability Registry [ADR-033]
+### 5.5 Capability Registry [ADR-032]
 
 The capability registry is responsible for managing capabilities and their relationships:
 
@@ -3230,11 +3230,11 @@ async fn capability_based_authorization(
 }
 ```
 
-## 6. Agent System [ADR-005, ADR-032, ADR-033]
+## 6. Agent System [ADR-005, ADR-032, ADR-032]
 
 The Agent System represents the evolution of the previous Actor System into a fully integrated, resource-based model. As described in ADR-032 and ADR-003, agents are content-addressed specialized resource types that hold capabilities and perform operations:
 
-### 6.1 Agent Definition [ADR-033]
+### 6.1 Agent Definition [ADR-032]
 
 An agent is a specialized resource that holds capabilities and performs operations:
 
@@ -3306,7 +3306,7 @@ impl Agent {
 }
 ```
 
-### 6.2 Agent Profiles [ADR-033]
+### 6.2 Agent Profiles [ADR-032]
 
 Agent profiles are specialized resources that define rules and behaviors associated with agents:
 
@@ -3369,7 +3369,7 @@ impl AgentProfile {
 }
 ```
 
-### 6.3 Service Status [ADR-033]
+### 6.3 Service Status [ADR-032]
 
 Service status is a specialized resource that defines the rules and behaviors associated with agents offering services:
 
@@ -3432,7 +3432,7 @@ impl ServiceStatus {
 }
 ```
 
-### 6.4 Obligation Manager [ADR-033]
+### 6.4 Obligation Manager [ADR-032]
 
 The obligation manager is a component responsible for managing usage-based expectations on capabilities:
 
@@ -3495,7 +3495,7 @@ impl ObligationManager {
 }
 ```
 
-### 6.5 Messaging [ADR-033]
+### 6.5 Messaging [ADR-032]
 
 Messaging is defined as a resource-based system for asynchronous communication between agents:
 
@@ -3581,7 +3581,7 @@ The Agent System integrates fully with the Resource System:
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-## 7. Operation System [ADR-033]
+## 7. Operation System [ADR-032]
 
 The operation system is responsible for defining and executing operations:
 

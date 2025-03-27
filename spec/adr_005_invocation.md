@@ -1,5 +1,6 @@
 # ADR-005: Invocation Model
 
+**Note: This ADR is superseded by [ADR-032: Agent-Based Resource System](./adr_032_consolidated_agent_resource_system.md) which replaces the actor model with an agent-based resource system.**
 ## Status
 
 Accepted

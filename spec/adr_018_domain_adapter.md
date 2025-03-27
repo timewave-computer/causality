@@ -1,5 +1,7 @@
 # ADR-018: Domain Adapter Architecture
 
+**Note: This ADR is superseded by [ADR-031: Domain Adapter as Effect](./adr_031_domain_adapter_as_effect.md) which refines the domain adapter architecture by implementing it through the effect system.**
+
 ## Status
 
 Accepted, Implemented

@@ -1,5 +1,7 @@
 # ADR-001: Rust Algebraic Effects Library optimized for RISC-V ZK VM Compilation
 
+**Note: This ADR is extended by [ADR-032: Agent-Based Resource System](./adr_032_consolidated_agent_resource_system.md), which integrates the effect system directly into the core crate.**
+
 ## Status
 
 Accepted

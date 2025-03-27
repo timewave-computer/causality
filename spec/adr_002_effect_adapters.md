@@ -1,5 +1,6 @@
 # ADR-002: Effect Adapters
 
+**Note: This ADR is superseded by [ADR-023: Three-Layer Effect Architecture](./adr_023_domain_adapter_effect_handler_unification.md) and further extended by [ADR-032: Agent-Based Resource System](./adr_032_consolidated_agent_resource_system.md), which provide a unified approach to effect handling and integration with resources.**
 
 ## Status
 

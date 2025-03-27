@@ -1,5 +1,7 @@
 # ADR-023: Three-Layer Effect Architecture with TEL Integration
 
+**Note: This ADR is extended by [ADR-032: Agent-Based Resource System](./adr_032_consolidated_agent_resource_system.md), which further evolves the effect system architecture and integrates it with the agent-based resource model.**
+
 ## Status
 
 Accepted

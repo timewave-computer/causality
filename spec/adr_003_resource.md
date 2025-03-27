@@ -1,5 +1,7 @@
 # ADR-003: Resource System
 
+**Note: This ADR is superseded by [ADR-032: Agent-Based Resource System](./adr_032_consolidated_agent_resource_system.md) which extends the resource system with an agent-based model and specialized resource types.**
+
 ## Status
 
 Accepted
