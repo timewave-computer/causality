@@ -11,7 +11,8 @@ use serde::{Serialize, Deserialize};
 use thiserror::Error;
 
 use super::types::EffectId;
-use crate::resource::{ContentId, ResourceId};
+use causality_types::ContentId;
+use crate::resource_types::ResourceId;
 
 /// Status of an effect execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

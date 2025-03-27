@@ -8,8 +8,11 @@ use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 use serde::{Serialize, Deserialize};
 
-use crate::resource::{ContentId, Resource, ResourceType};
-use super::{QueryError, FilterExpression, FilterCondition, FilterOperator, FilterValue};
+use causality_types::ContentId;
+use crate::resource::Resource;
+use crate::resource_types::ResourceType;
+use super::{QueryError, FilterExpression, FilterCondition, FilterOperator};
+use crate::resource::query::filter::FilterValue;
 
 /// Key for indexing resources
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

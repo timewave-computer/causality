@@ -10,9 +10,7 @@ use thiserror::Error;
 use serde::{Serialize, Deserialize};
 
 use crate::resource::types::{ResourceId, ResourceType};
-use crate::resource::interface::StateTransitionError;
-use crate::crypto::CryptoError;
-use crate::smt::SmtError;
+use crate::resource::StateTransitionError;
 use crate::resource::ResourceError;
 
 /// Core error type incorporating all possible error categories
@@ -48,11 +46,11 @@ pub enum Error {
 
     /// Crypto error
     #[error("Crypto error: {0}")]
-    CryptoError(#[from] CryptoError),
+    CryptoError(String),
 
     /// SMT error
     #[error("SMT error: {0}")]
-    SmtError(#[from] SmtError),
+    SmtError(String),
 
     /// Committee error
     #[error("Committee error: {0}")]
@@ -99,15 +97,15 @@ impl Error {
     pub fn serialization(msg: impl Into<String>) -> Self {
         Self::SerializationError(msg.into())
     }
-}
-
-/// Convert from any error that implements std::error::Error
-impl<E> From<E> for Error 
-where
-    E: StdError + Send + Sync + 'static
-{
-    fn from(err: E) -> Self {
-        Self::Unknown(err.to_string())
+    
+    /// Create a new crypto error
+    pub fn crypto(msg: impl Into<String>) -> Self {
+        Self::CryptoError(msg.into())
+    }
+    
+    /// Create a new smt error
+    pub fn smt(msg: impl Into<String>) -> Self {
+        Self::SmtError(msg.into())
     }
 }
 
@@ -135,7 +133,7 @@ where
     {
         self.map_err(|e| {
             let msg = format!("{}: {}", context, e);
-            Self::Unknown(msg)
+            Error::Unknown(msg)
         })
     }
     
@@ -147,73 +145,15 @@ where
         self.map_err(|e| {
             let context = f();
             let msg = format!("{}: {}", context, e);
-            Self::Unknown(msg)
+            Error::Unknown(msg)
         })
     }
 }
 
-/// Error types for resource operations
-#[derive(Debug, Error, Clone, Serialize, Deserialize)]
-pub enum ResourceError {
-    /// Resource not found
-    #[error("Resource not found: {0}")]
-    NotFound(ResourceId),
-    
-    /// Resource already exists
-    #[error("Resource already exists: {0}")]
-    AlreadyExists(ResourceId),
-    
-    /// Resource type mismatch
-    #[error("Resource type mismatch: expected {expected}, got {actual}")]
-    TypeMismatch {
-        expected: ResourceType,
-        actual: ResourceType,
-    },
-    
-    /// Invalid state transition
-    #[error("Invalid state transition: {0}")]
-    InvalidStateTransition(String),
-    
-    /// Permission denied
-    #[error("Permission denied: {0}")]
-    PermissionDenied(String),
-    
-    /// Content addressing error
-    #[error("Content addressing error: {0}")]
-    ContentAddressingError(String),
-    
-    /// Serialization error
-    #[error("Serialization error: {0}")]
-    SerializationError(String),
-    
-    /// Deserialization error
-    #[error("Deserialization error: {0}")]
-    DeserializationError(String),
-    
-    /// Validation error
-    #[error("Validation error: {0}")]
-    ValidationError(String),
-    
-    /// Resource Registry error
-    #[error("Resource registry error: {0}")]
-    RegistryError(String),
-    
-    /// Reference error
-    #[error("Reference error: {0}")]
-    ReferenceError(String),
-    
-    /// Store error
-    #[error("Store error: {0}")]
-    StoreError(String),
-    
-    /// Internal error
-    #[error("Internal error: {0}")]
-    InternalError(String),
-}
-
-impl From<StateTransitionError> for ResourceError {
+/// From conversion from StateTransitionError
+impl From<StateTransitionError> for Error {
     fn from(err: StateTransitionError) -> Self {
-        ResourceError::InvalidStateTransition(err.to_string())
+        Self::ResourceError(ResourceError::InvalidStateTransition(err.to_string()))
     }
 }
 

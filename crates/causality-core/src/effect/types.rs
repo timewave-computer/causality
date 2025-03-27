@@ -3,10 +3,11 @@
 // This module defines core types for the effect system, including
 // identifiers, type information, and content addressing integration.
 
-use std::fmt::{Debug, Display};
+use std::fmt::{self, Debug, Display};
+use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
+use causality_types::ContentId;
 
-use crate::resource::ContentId;
 use crate::serialization::{to_bytes, from_bytes};
 
 /// Unique identifier for an effect instance

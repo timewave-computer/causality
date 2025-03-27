@@ -823,12 +823,12 @@ mod tests {
     
     /// Create a test agent ID
     fn create_test_agent_id(name: &str) -> AgentId {
-        AgentId::from_content_hash(ContentHash::calculate(name.as_bytes()))
+        AgentId::from_content_hash(ContentHash::calculate(name.as_bytes()).as_bytes(), AgentType::User)
     }
     
     /// Create a test resource ID
     fn create_test_resource_id(name: &str) -> ResourceId {
-        ResourceId::from_content_hash(ContentHash::calculate(name.as_bytes()))
+        ResourceId::new(ContentHash::calculate(name.as_bytes()))
     }
     
     #[test]

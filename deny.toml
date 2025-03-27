@@ -1,0 +1,4 @@
+[bans]
+deny = [
+    { name = "uuid", reason = "Use ContentId trait from types crate instead." },
+] 

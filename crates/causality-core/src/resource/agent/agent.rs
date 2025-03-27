@@ -1,20 +1,26 @@
-// agent.rs - Agent trait and implementation
+// agent.rs - Core agent implementation
 //
-// This file defines the Agent trait and its implementation as a specialized resource type.
+// This file implements the Agent trait which forms the foundation
+// for all agent components in the system.
 
-use crate::resource::{Resource, ResourceId, ResourceType, ResourceError, ResourceResult};
+use crate::resource::{Resource, ResourceResult, ResourceState};
+use crate::resource_types::{ResourceId, ResourceType};
 use crate::capability::Capability;
-use crate::serialization::{Serializable, DeserializationError};
 use crate::crypto::ContentHash;
+use crate::effect::Effect;
 
 use super::types::{AgentId, AgentType, AgentState, AgentRelationship, AgentError};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
+use std::fmt::Debug;
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
+use anyhow::Result;
 
-/// Trait representing an agent in the system
+/// Agent trait defining the core functionality for all agent types
+/// 
+/// This trait extends the Resource trait and adds agent-specific functionality.
 #[async_trait]
 pub trait Agent: Resource + Send + Sync {
     /// Get the agent ID
@@ -30,7 +36,7 @@ pub trait Agent: Resource + Send + Sync {
     async fn set_state(&mut self, state: AgentState) -> Result<(), AgentError>;
     
     /// Add a capability to the agent
-    async fn add_capability(&mut self, capability: Capability) -> Result<(), AgentError>;
+    async fn add_capability(&mut self, capability: Capability<Resource>) -> Result<(), AgentError>;
     
     /// Remove a capability from the agent
     async fn remove_capability(&mut self, capability_id: &str) -> Result<(), AgentError>;
@@ -39,7 +45,7 @@ pub trait Agent: Resource + Send + Sync {
     fn has_capability(&self, capability_id: &str) -> bool;
     
     /// Get all capabilities
-    fn capabilities(&self) -> Vec<Capability>;
+    fn capabilities(&self) -> Vec<Capability<Resource>>;
     
     /// Add a relationship with another resource
     async fn add_relationship(&mut self, relationship: AgentRelationship) -> Result<(), AgentError>;
@@ -57,7 +63,10 @@ pub trait Agent: Resource + Send + Sync {
     fn clone_agent(&self) -> Box<dyn Agent>;
 }
 
-/// Basic agent implementation
+/// Base implementation of an agent
+/// 
+/// This struct implements both the Agent and Resource traits
+/// and provides the foundation for specialized agent types.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AgentImpl {
     /// The resource ID
@@ -73,7 +82,7 @@ pub struct AgentImpl {
     state: AgentState,
     
     /// The agent's capabilities
-    capabilities: Vec<Capability>,
+    capabilities: Vec<Capability<Resource>>,
     
     /// Relationships with other resources
     relationships: Vec<AgentRelationship>,
@@ -91,7 +100,7 @@ impl AgentImpl {
     pub fn new(
         agent_type: AgentType,
         initial_state: Option<AgentState>,
-        initial_capabilities: Option<Vec<Capability>>,
+        initial_capabilities: Option<Vec<Capability<Resource>>>,
         initial_relationships: Option<Vec<AgentRelationship>>,
         metadata: Option<HashMap<String, String>>,
     ) -> Result<Self, AgentError> {
@@ -151,7 +160,7 @@ impl AgentImpl {
 struct AgentContentView {
     agent_type: AgentType,
     state: AgentState,
-    capabilities: Vec<Capability>,
+    capabilities: Vec<Capability<Resource>>,
     relationships: Vec<AgentRelationship>,
     metadata: HashMap<String, String>,
 }
@@ -163,24 +172,33 @@ impl AgentContentView {
     }
 }
 
-impl Resource for AgentImpl {
-    fn id(&self) -> &ResourceId {
-        &self.resource_id
+impl crate::resource::Resource for AgentImpl {
+    fn id(&self) -> crate::resource_types::ResourceId {
+        self.resource_id.clone()
     }
     
-    fn resource_type(&self) -> ResourceType {
-        ResourceType::Agent
+    fn resource_type(&self) -> crate::resource_types::ResourceType {
+        crate::resource_types::ResourceType::new("agent", "1.0")
     }
     
-    fn metadata(&self) -> &HashMap<String, String> {
-        &self.metadata
+    fn state(&self) -> crate::resource::ResourceState {
+        match &self.state {
+            AgentState::Active => crate::resource::ResourceState::Active,
+            AgentState::Inactive => crate::resource::ResourceState::Frozen,
+            AgentState::Suspended { .. } => crate::resource::ResourceState::Locked,
+        }
     }
     
-    fn metadata_mut(&mut self) -> &mut HashMap<String, String> {
-        &mut self.metadata
+    fn get_metadata(&self, key: &str) -> Option<String> {
+        self.metadata.get(key).cloned()
     }
     
-    fn clone_resource(&self) -> Box<dyn Resource> {
+    fn set_metadata(&mut self, key: &str, value: &str) -> crate::resource::ResourceResult<()> {
+        self.metadata.insert(key.to_string(), value.to_string());
+        Ok(())
+    }
+    
+    fn clone_resource(&self) -> Box<dyn crate::resource::Resource> {
         Box::new(self.clone())
     }
 }
@@ -209,7 +227,7 @@ impl Agent for AgentImpl {
         Ok(())
     }
     
-    async fn add_capability(&mut self, capability: Capability) -> Result<(), AgentError> {
+    async fn add_capability(&mut self, capability: Capability<Resource>) -> Result<(), AgentError> {
         // Check if the capability already exists
         if self.capabilities.iter().any(|c| c.id() == capability.id()) {
             return Err(AgentError::Other(format!(
@@ -249,7 +267,7 @@ impl Agent for AgentImpl {
         self.capabilities.iter().any(|c| c.id() == capability_id)
     }
     
-    fn capabilities(&self) -> Vec<Capability> {
+    fn capabilities(&self) -> Vec<Capability<Resource>> {
         self.capabilities.clone()
     }
     
@@ -319,7 +337,7 @@ impl AgentImpl {
 pub struct AgentBuilder {
     agent_type: AgentType,
     state: AgentState,
-    capabilities: Vec<Capability>,
+    capabilities: Vec<Capability<Resource>>,
     relationships: Vec<AgentRelationship>,
     metadata: HashMap<String, String>,
 }
@@ -349,13 +367,13 @@ impl AgentBuilder {
     }
     
     /// Add a capability
-    pub fn with_capability(mut self, capability: Capability) -> Self {
+    pub fn with_capability(mut self, capability: Capability<Resource>) -> Self {
         self.capabilities.push(capability);
         self
     }
     
     /// Add multiple capabilities
-    pub fn with_capabilities(mut self, capabilities: Vec<Capability>) -> Self {
+    pub fn with_capabilities(mut self, capabilities: Vec<Capability<Resource>>) -> Self {
         self.capabilities.extend(capabilities);
         self
     }

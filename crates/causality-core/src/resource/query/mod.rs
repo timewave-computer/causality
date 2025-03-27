@@ -23,7 +23,9 @@ use std::collections::HashMap;
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
 
-use crate::resource::{ContentId, Resource, ResourceType};
+use causality_types::ContentId;
+use crate::resource::Resource;
+use crate::resource_types::ResourceType;
 
 /// Error types for resource query operations
 #[derive(Error, Debug)]

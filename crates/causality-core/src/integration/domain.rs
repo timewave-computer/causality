@@ -8,8 +8,8 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use async_trait::async_trait;
 use thiserror::Error;
+use causality_types::ContentId;
 
-use crate::content::ContentId;
 use crate::capability::{Capability, Right};
 use crate::resource::{
     ResourceTypeId, CrossDomainResourceId, ResourceProjectionType,

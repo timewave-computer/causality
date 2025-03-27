@@ -276,7 +276,7 @@ impl CommitteeAgent {
         description: String,
     ) -> Result<String, CommitteeAgentError> {
         // Generate a decision ID
-        let decision_id = format!("decision-{}", uuid::Uuid::new_v4());
+        let decision_id = crate::id_utils::generate_decision_id();
         
         // Create a new decision
         let decision = CommitteeDecision {
@@ -534,20 +534,29 @@ impl Agent for CommitteeAgent {
 
 // Implement the Resource trait through delegation to the base agent
 impl crate::resource::Resource for CommitteeAgent {
-    fn id(&self) -> &ResourceId {
-        self.base.id()
+    fn id(&self) -> crate::resource_types::ResourceId {
+        self.base.id().clone()
     }
     
-    fn resource_type(&self) -> ResourceType {
+    fn resource_type(&self) -> crate::resource_types::ResourceType {
         self.base.resource_type()
     }
     
-    fn metadata(&self) -> &HashMap<String, String> {
-        self.base.metadata()
+    fn state(&self) -> crate::resource::ResourceState {
+        match self.base.state() {
+            AgentState::Active => crate::resource::ResourceState::Active,
+            AgentState::Inactive => crate::resource::ResourceState::Frozen,
+            AgentState::Suspended { .. } => crate::resource::ResourceState::Locked,
+        }
     }
     
-    fn metadata_mut(&mut self) -> &mut HashMap<String, String> {
-        self.base.metadata_mut()
+    fn get_metadata(&self, key: &str) -> Option<String> {
+        self.base.metadata().get(key).cloned()
+    }
+    
+    fn set_metadata(&mut self, key: &str, value: &str) -> crate::resource::ResourceResult<()> {
+        *self.base.metadata_mut().entry(key.to_string()).or_insert_with(String::new) = value.to_string();
+        Ok(())
     }
     
     fn clone_resource(&self) -> Box<dyn crate::resource::Resource> {
@@ -708,7 +717,7 @@ mod tests {
         
         // Create a member
         let member = CommitteeMember {
-            agent_id: AgentId::from_content_hash(ContentHash::default()),
+            agent_id: AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::Validator),
             role: MemberRole::Validator,
             voting_weight: 1,
             public_key: "public-key".to_string(),
@@ -750,7 +759,7 @@ mod tests {
         
         // Create two members
         let member1 = CommitteeMember {
-            agent_id: AgentId::from_content_hash(ContentHash::default()),
+            agent_id: AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::Leader),
             role: MemberRole::Leader,
             voting_weight: 2,
             public_key: "public-key-1".to_string(),
@@ -758,7 +767,7 @@ mod tests {
         };
         
         let member2 = CommitteeMember {
-            agent_id: AgentId::from_content_hash(ContentHash::from_str("test2").unwrap()),
+            agent_id: AgentId::from_content_hash(crate::crypto::ContentHash::create_from_bytes("test2".as_bytes()).unwrap().as_bytes(), AgentType::Validator),
             role: MemberRole::Validator,
             voting_weight: 1,
             public_key: "public-key-2".to_string(),
@@ -798,15 +807,5 @@ mod tests {
         
         // Check active decisions again
         assert_eq!(committee.active_decisions().len(), 0);
-    }
-}
-
-// Helper to create ContentHash from string (for testing)
-impl ContentHash {
-    fn from_str(s: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(s.as_bytes());
-        let hash = hasher.finalize();
-        Ok(ContentHash::new(hash.as_bytes().to_vec())?)
     }
 } 

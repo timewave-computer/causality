@@ -95,7 +95,7 @@ pub mod trace {
     
     /// Content for a trace ID
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, borsh::BorshSerialize, borsh::BorshDeserialize)]
-    struct TraceIdContent {
+    pub struct TraceIdContent {
         /// Creation timestamp
         timestamp: i64,
         /// Random nonce for uniqueness

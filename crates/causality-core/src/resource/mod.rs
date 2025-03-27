@@ -23,22 +23,19 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::crypto::{ContentId, ContentAddressed};
+// Use proper imports from causality_crypto and causality_types
+use causality_crypto::ContentHash;
+use causality_types::{ContentId, ContentAddressed};
 
 pub use interface::*;
+pub use types::*;
+pub use validation::*;
+pub use storage::*;
+pub use agent::*;
+pub use query::*;
 
-pub use types::{
-    ResourceTypeId,
-    ResourceSchema,
-    ResourceTypeCompatibility,
-    ResourceTypeDefinition,
-    ResourceTypeRegistry,
-    ResourceTypeRegistryError,
-    ResourceTypeRegistryResult,
-    ContentAddressedResourceTypeRegistry,
-    InMemoryResourceTypeRegistry,
-    create_resource_type_registry,
-};
+// Re-export specific types from resource_types
+pub use crate::resource_types::{ResourceId, ResourceType, ResourceTypeId};
 
 pub use protocol::{
     CrossDomainResourceId,
@@ -56,19 +53,18 @@ pub use protocol::{
     create_cross_domain_protocol,
 };
 
-pub use storage::{
-    ResourceStorage, ResourceStorageError, ResourceStorageResult,
-    ResourceVersion, ResourceIndexEntry, ContentAddressedResourceStorage,
-    InMemoryResourceStorage, ResourceStorageConfig, create_resource_storage,
-};
-
 // Re-export query system
 pub use query::{
-    ResourceQuery, QueryEngine, FilterExpression, FilterCondition, FilterOperator, FilterValue,
-    Sort, SortDirection, Pagination, QueryError, QueryResult, QueryOptions, QueryExecution,
-    ResourceIndex, InMemoryResourceIndex, BasicQueryEngine,
+    ResourceQuery, QueryEngine, QueryResult, QueryOptions, QueryExecution,
+    Filter, FilterExpression, FilterCondition, FilterOperator,
+    Sort, SortDirection, SortOptions,
+    Pagination, PaginationOptions, PaginationResult,
+    ResourceIndex, IndexKey, IndexType, IndexEntry,
+    QueryBuilder, FilterBuilder, SortBuilder,
+    QueryError
 };
 
+// Re-export agent system
 pub use agent::{
     AgentId,
     AgentType,
@@ -79,6 +75,10 @@ pub use agent::{
     Agent,
     AgentImpl,
     AgentBuilder,
+};
+
+// Re-export agent operation submodule
+pub use agent::operation::{
     Operation,
     OperationId,
     OperationType,
@@ -107,6 +107,29 @@ pub enum ResourceError {
 
 /// Resource result
 pub type ResourceResult<T> = Result<T, ResourceError>;
+
+/// Resource trait
+///
+/// This trait defines the core interface for all resources in the system.
+pub trait Resource: Send + Sync + Debug {
+    /// Get the unique identifier for this resource
+    fn id(&self) -> crate::resource_types::ResourceId;
+    
+    /// Get the type of this resource
+    fn resource_type(&self) -> crate::resource_types::ResourceType;
+    
+    /// Get the current state of this resource
+    fn state(&self) -> ResourceState;
+    
+    /// Get a specific metadata value
+    fn get_metadata(&self, key: &str) -> Option<String>;
+    
+    /// Set a metadata value
+    fn set_metadata(&mut self, key: &str, value: &str) -> ResourceResult<()>;
+    
+    /// Clone this resource into a boxed trait object
+    fn clone_resource(&self) -> Box<dyn Resource>;
+}
 
 /// Resource configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

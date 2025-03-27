@@ -5,11 +5,12 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
-use crate::resource::ResourceType;
+use crate::resource_types::ResourceType;
 use super::{
     ResourceQuery, FilterExpression, FilterOperator, 
-    FilterValue, FilterCondition, Sort, SortDirection, Pagination
+    FilterCondition, Sort, SortDirection, Pagination
 };
+use crate::resource::query::filter::FilterValue;
 
 /// Builder for constructing resource queries
 #[derive(Debug, Clone)]

@@ -237,7 +237,7 @@ impl ResourceTransferOperation {
         authorization: Capability,
     ) -> Self {
         Self {
-            id: format!("transfer-{}", uuid::Uuid::new_v4()),
+            id: crate::id_utils::generate_transfer_id(),
             resource_id,
             source_domain,
             target_domain,
@@ -319,42 +319,42 @@ pub trait CrossDomainResourceProtocol: Send + Sync + Debug {
         target_domain: DomainId,
         projection_type: ResourceProjectionType,
         verification_level: VerificationLevel,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<ResourceReference>;
     
     /// Verify a resource reference is valid
     async fn verify_reference(
         &self,
         reference: &ResourceReference,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<VerificationResult>;
     
     /// Resolve a resource reference to get its data
     async fn resolve_reference(
         &self,
         reference: &ResourceReference,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<Vec<u8>>;
     
     /// Transfer a resource between domains
     async fn transfer_resource(
         &self,
         operation: ResourceTransferOperation,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<ResourceReference>;
     
     /// Get the status of a transfer operation
     async fn get_transfer_status(
         &self,
         transfer_id: &str,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<TransferStatus>;
     
     /// Synchronize a resource reference with its source
     async fn synchronize_reference(
         &self,
         reference: &ResourceReference,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<ResourceReference>;
 }
 
@@ -373,42 +373,42 @@ pub trait DomainResourceAdapter: Send + Sync + Debug {
         resource_id: &CrossDomainResourceId,
         data: &[u8],
         metadata: &HashMap<String, String>,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<()>;
     
     /// Retrieve a resource from this domain
     async fn retrieve_resource(
         &self,
         resource_id: &CrossDomainResourceId,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<Vec<u8>>;
     
     /// Check if a resource exists in this domain
     async fn has_resource(
         &self,
         resource_id: &CrossDomainResourceId,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<bool>;
     
     /// Verify a resource in this domain
     async fn verify_resource(
         &self,
         resource_id: &CrossDomainResourceId,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<VerificationResult>;
     
     /// Transfer a resource to another domain
     async fn transfer_resource(
         &self,
         operation: &ResourceTransferOperation,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<()>;
     
     /// Receive a resource from another domain
     async fn receive_resource(
         &self,
         operation: &ResourceTransferOperation,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<()>;
     
     /// Update a projected resource
@@ -416,7 +416,7 @@ pub trait DomainResourceAdapter: Send + Sync + Debug {
         &self,
         reference: &ResourceReference,
         data: &[u8],
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<()>;
 }
 
@@ -499,7 +499,7 @@ impl CrossDomainResourceProtocol for BasicCrossDomainResourceProtocol {
         target_domain: DomainId,
         projection_type: ResourceProjectionType,
         verification_level: VerificationLevel,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<ResourceReference> {
         // Check if source domain is supported
         let source_adapter = self.get_adapter(&resource_id.source_domain)?;
@@ -539,7 +539,7 @@ impl CrossDomainResourceProtocol for BasicCrossDomainResourceProtocol {
     async fn verify_reference(
         &self,
         reference: &ResourceReference,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<VerificationResult> {
         // Check if reference is expired
         if reference.is_expired() {
@@ -561,7 +561,7 @@ impl CrossDomainResourceProtocol for BasicCrossDomainResourceProtocol {
     async fn resolve_reference(
         &self,
         reference: &ResourceReference,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<Vec<u8>> {
         // Check if reference is expired
         if reference.is_expired() {
@@ -578,7 +578,7 @@ impl CrossDomainResourceProtocol for BasicCrossDomainResourceProtocol {
     async fn transfer_resource(
         &self,
         operation: ResourceTransferOperation,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<ResourceReference> {
         // Check if source domain is supported
         let source_adapter = self.get_adapter(&operation.source_domain)?;
@@ -634,7 +634,7 @@ impl CrossDomainResourceProtocol for BasicCrossDomainResourceProtocol {
     async fn get_transfer_status(
         &self,
         transfer_id: &str,
-        _context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<TransferStatus> {
         // Get the transfer operation
         let operation = self.get_transfer(transfer_id)
@@ -648,7 +648,7 @@ impl CrossDomainResourceProtocol for BasicCrossDomainResourceProtocol {
     async fn synchronize_reference(
         &self,
         reference: &ResourceReference,
-        context: &EffectContext,
+        context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<ResourceReference> {
         // Check if source domain is supported
         let source_adapter = self.get_adapter(&reference.id.source_domain)?;
@@ -737,7 +737,7 @@ mod tests {
             resource_id: &CrossDomainResourceId,
             data: &[u8],
             _metadata: &HashMap<String, String>,
-            _context: &EffectContext,
+            _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<()> {
             let mut adapter = self.clone();
             adapter.resources.insert(resource_id.content_id.to_string(), data.to_vec());
@@ -747,7 +747,7 @@ mod tests {
         async fn retrieve_resource(
             &self,
             resource_id: &CrossDomainResourceId,
-            _context: &EffectContext,
+            _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<Vec<u8>> {
             self.resources.get(&resource_id.content_id.to_string())
                 .cloned()
@@ -759,7 +759,7 @@ mod tests {
         async fn has_resource(
             &self,
             resource_id: &CrossDomainResourceId,
-            _context: &EffectContext,
+            _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<bool> {
             Ok(self.resources.contains_key(&resource_id.content_id.to_string()))
         }
@@ -767,7 +767,7 @@ mod tests {
         async fn verify_resource(
             &self,
             resource_id: &CrossDomainResourceId,
-            _context: &EffectContext,
+            _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<VerificationResult> {
             if self.resources.contains_key(&resource_id.content_id.to_string()) {
                 Ok(VerificationResult::Valid)
@@ -779,7 +779,7 @@ mod tests {
         async fn transfer_resource(
             &self,
             operation: &ResourceTransferOperation,
-            _context: &EffectContext,
+            _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<()> {
             // In a real implementation, this would lock or remove the resource
             // For testing, just ensure the resource exists
@@ -797,7 +797,7 @@ mod tests {
         async fn receive_resource(
             &self,
             operation: &ResourceTransferOperation,
-            _context: &EffectContext,
+            _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<()> {
             // In a real implementation, this would create the resource in the target domain
             // For testing, just add an empty resource
@@ -814,7 +814,7 @@ mod tests {
             &self,
             reference: &ResourceReference,
             data: &[u8],
-            _context: &EffectContext,
+            _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<()> {
             // Update the projection
             let mut adapter = self.clone();

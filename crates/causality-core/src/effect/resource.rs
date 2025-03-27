@@ -13,7 +13,8 @@ use serde::{Serialize, Deserialize};
 use thiserror::Error;
 
 use crate::capability::{Capability, CapabilityGrants};
-use crate::resource::{ResourceId, ContentId};
+use causality_types::ContentId;
+use crate::resource_types::ResourceId;
 use super::{Effect, EffectContext, EffectError, EffectOutcome, EffectResult};
 use super::types::{EffectId, EffectTypeId};
 
@@ -143,6 +144,9 @@ pub enum ResourceEffectError {
     InternalError(String),
 }
 
+/// Resource effect result
+pub type ResourceEffectResult<T> = Result<T, ResourceEffectError>;
+
 /// Convert ResourceEffectError to EffectError
 impl From<ResourceEffectError> for EffectError {
     fn from(err: ResourceEffectError) -> Self {
@@ -163,7 +167,7 @@ pub trait ResourceEffect: Effect {
     fn operation(&self) -> &ResourceOperation;
     
     /// Handle the resource effect
-    async fn handle_resource_effect(&self, context: &dyn EffectContext) -> Result<ResourceEffectOutcome, ResourceEffectError>;
+    async fn handle_resource_effect(&self, context: &dyn EffectContext) -> ResourceEffectResult<ResourceEffectOutcome>;
 }
 
 /// Basic resource effect implementation
@@ -288,6 +292,51 @@ impl Effect for BasicResourceEffect {
             operation: self.operation.clone(),
         })
     }
+    
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    
+    fn display_name(&self) -> String {
+        format!("{} on {}", self.operation, self.resource_id)
+    }
+    
+    fn description(&self) -> String {
+        match &self.operation {
+            ResourceOperation::Create { resource_type, .. } => 
+                format!("Create resource of type {} with ID {}", resource_type, self.resource_id),
+            ResourceOperation::Read { fields } => 
+                format!("Read fields {:?} from resource {}", fields, self.resource_id),
+            ResourceOperation::Update { updates, partial } => {
+                let update_type = if *partial { "partial" } else { "full" };
+                format!("Apply {} update to resource {} with fields {:?}", 
+                    update_type, self.resource_id, updates.keys().collect::<Vec<_>>())
+            },
+            ResourceOperation::Delete => 
+                format!("Delete resource {}", self.resource_id),
+            ResourceOperation::Transfer { new_owner } => 
+                format!("Transfer resource {} to new owner {}", self.resource_id, new_owner),
+            ResourceOperation::Clone { new_resource_id } => 
+                format!("Clone resource {} to new ID {:?}", self.resource_id, new_resource_id),
+            ResourceOperation::Move { new_location } => 
+                format!("Move resource {} to {}", self.resource_id, new_location),
+            ResourceOperation::Custom { operation, .. } => 
+                format!("Apply custom operation '{}' to resource {}", operation, self.resource_id),
+        }
+    }
+    
+    async fn execute(&self, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
+        let result = self.handle_resource_effect(context).await
+            .map_err(|e| EffectError::ExecutionError(e.to_string()))?;
+            
+        if result.success {
+            Ok(EffectOutcome::Success(Box::new(result)))
+        } else {
+            Ok(EffectOutcome::Error(Box::new(
+                EffectError::ExecutionError(result.error.unwrap_or_else(|| "Unknown error".to_string()))
+            )))
+        }
+    }
 }
 
 #[async_trait]
@@ -304,49 +353,49 @@ impl ResourceEffect for BasicResourceEffect {
         &self.operation
     }
     
-    async fn handle_resource_effect(&self, context: &dyn EffectContext) -> Result<ResourceEffectOutcome, ResourceEffectError> {
+    async fn handle_resource_effect(&self, context: &dyn EffectContext) -> ResourceEffectResult<ResourceEffectOutcome> {
         // Check if we have the required capability
         self.check_capability(context)?;
         
         match &self.operation {
             ResourceOperation::Create { resource_type, initial_data } => {
                 // In a real implementation, we would create the resource here
-                self.success_result(Some(format!("Created resource of type {}", resource_type)))
+                Ok(self.success_result(Some(format!("Created resource of type {}", resource_type))))
             },
             ResourceOperation::Read { fields } => {
                 // In a real implementation, we would read the resource here
-                self.success_result(Some(format!("Read fields: {:?}", fields)))
+                Ok(self.success_result(Some(format!("Read fields: {:?}", fields))))
             },
             ResourceOperation::Update { updates, partial } => {
                 // In a real implementation, we would update the resource here
                 let update_type = if *partial { "partial" } else { "full" };
-                self.success_result(Some(format!("Applied {} update with {} fields", update_type, updates.len())))
+                Ok(self.success_result(Some(format!("Applied {} update with {} fields", update_type, updates.len()))))
             },
             ResourceOperation::Delete => {
                 // In a real implementation, we would delete the resource here
-                self.success_result(Some("Resource deleted".to_string()))
+                Ok(self.success_result(Some("Resource deleted".to_string())))
             },
             ResourceOperation::Transfer { new_owner } => {
                 // In a real implementation, we would transfer the resource here
-                self.success_result(Some(format!("Resource transferred to {}", new_owner)))
+                Ok(self.success_result(Some(format!("Resource transferred to {}", new_owner))))
             },
             ResourceOperation::Clone { new_resource_id } => {
                 // In a real implementation, we would clone the resource here
                 let id_info = new_resource_id.as_ref()
                     .map(|id| id.to_string())
                     .unwrap_or_else(|| "auto-generated ID".to_string());
-                self.success_result(Some(format!("Resource cloned with {}", id_info)))
+                Ok(self.success_result(Some(format!("Resource cloned with {}", id_info))))
             },
             ResourceOperation::Move { new_location } => {
                 // In a real implementation, we would move the resource here
-                self.success_result(Some(format!("Resource moved to {}", new_location)))
+                Ok(self.success_result(Some(format!("Resource moved to {}", new_location))))
             },
             ResourceOperation::Custom { operation, data } => {
                 // In a real implementation, we would perform the custom operation here
                 let data_info = data.as_ref()
                     .map(|d| format!(" with data: {}", d))
                     .unwrap_or_default();
-                self.success_result(Some(format!("Custom operation '{}'{}", operation, data_info)))
+                Ok(self.success_result(Some(format!("Custom operation '{}'{}", operation, data_info))))
             },
         }
     }

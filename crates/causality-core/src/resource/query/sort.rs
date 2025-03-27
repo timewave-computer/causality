@@ -161,7 +161,9 @@ impl SortOptions {
 }
 
 /// Extract a field value from a JSON object by path
-fn extract_field_value(json: &Value, field_path: &str) -> Result<&Value, QueryError> {
+/// 
+/// This function allows accessing nested fields using dot notation
+fn extract_field_value<'a>(json: &'a Value, field_path: &'a str) -> Result<&'a Value, QueryError> {
     let path_parts: Vec<&str> = field_path.split('.').collect();
     
     let mut current = json;

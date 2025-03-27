@@ -4,7 +4,7 @@
 
 | Status    | Date       | Revision |
 |:----------|:-----------|:---------|
-| Accepted  | 2023-04-26 | 1.0      |
+| Accepted  | 2023-03-27 | 1.0      |
 
 ## Context
 

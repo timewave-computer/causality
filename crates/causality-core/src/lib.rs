@@ -9,6 +9,12 @@
 // Re-export crypto module from causality-crypto
 pub use causality_crypto as crypto;
 
+// Re-export important types from causality_types
+pub use causality_types::{
+    ContentId, ContentAddressed, ContentHash, HashOutput, HashAlgorithm, HashError,
+    content_addressing,
+};
+
 // Time Management
 // Provides abstractions for temporal operations, logical time tracking,
 // clock synchronization, and timestamp validation
@@ -27,7 +33,6 @@ pub mod verification;
 // Resource System
 // Content-addressed resources, state management, capability-based access control,
 // and resource operations
-// Note: The Agent Resource System (which replaced the actor system) is under resource::agent
 pub mod resource;
 
 // Effect System
@@ -59,6 +64,54 @@ pub mod smt;
 // Integration components for connecting different parts of the system
 pub mod integration;
 
+// ID Utilities
+// Helper functions for generating content-addressed identifiers
+pub mod id_utils {
+    use crate::ContentId;
+    
+    /// Generate a unique content-addressed identifier for an operation
+    pub fn generate_operation_id(prefix: &str) -> String {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        
+        // Create a content hash from the timestamp and a random component
+        let mut data = Vec::new();
+        data.extend_from_slice(&timestamp.to_be_bytes());
+        
+        // Add some randomness (using thread_rng since it's for local identifiers)
+        let rand_bytes: [u8; 8] = rand::random();
+        data.extend_from_slice(&rand_bytes);
+        
+        // Create a ContentId using the causality-types functionality
+        let content_id = ContentId::from(&data[..]);
+        
+        // Format with the specified prefix
+        format!("{}-{}", prefix, content_id.to_string())
+    }
+    
+    /// Generate a unique content-addressed identifier for a decision
+    pub fn generate_decision_id() -> String {
+        generate_operation_id("decision")
+    }
+    
+    /// Generate a unique content-addressed identifier for a system operation
+    pub fn generate_system_operation_id() -> String {
+        generate_operation_id("operation")
+    }
+    
+    /// Generate a unique content-addressed identifier for a maintenance window
+    pub fn generate_maintenance_window_id() -> String {
+        generate_operation_id("window")
+    }
+    
+    /// Generate a unique content-addressed identifier for a transfer
+    pub fn generate_transfer_id() -> String {
+        generate_operation_id("transfer")
+    }
+}
+
 // =================================================================
 // Legacy modules - these are being evaluated for refactoring or removal
 // =================================================================
@@ -68,14 +121,6 @@ pub mod integration;
 // TODO: Evaluate if this should remain in core or be moved
 #[cfg(feature = "zk")]
 pub mod zk;
-
-/// Deprecated: Use `observation` module instead
-#[deprecated(since = "0.1.0", note = "Use the `observation` module instead")]
-pub mod committee;
-
-// Actor System has been completely removed as per ADR-032
-// The actor system has been replaced by the Agent Resource System
-// See resource::agent module for the new implementation
 
 // Re-export important types for easier access
 pub use error::{Error as CoreError, Result as CoreResult};

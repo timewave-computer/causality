@@ -5,18 +5,104 @@
 // different message types, routing, and delivery guarantees.
 
 use crate::resource_types::ResourceId;
-use crate::resource::agent::types::{AgentId, AgentError};
-use crate::crypto::{Signature, SignatureError, ContentHash};
+use crate::resource::ResourceType;
+use causality_types::{ContentId, ContentHash as TypesContentHash};
+use crate::resource::AgentType;
+use super::types::{AgentId, AgentError};
 use crate::effect::Effect;
+use crate::id_utils;
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::fmt;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
-use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 use async_trait::async_trait;
+use blake3;
+use hex;
+use rand;
+
+/// A content hash value for a message
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessageHash(String);
+
+impl MessageHash {
+    /// Calculate a content hash for the given data
+    pub fn calculate(data: &[u8]) -> Self {
+        let hash = blake3::hash(data);
+        Self(format!("blake3:{}", hex::encode(hash.as_bytes())))
+    }
+    
+    /// Create a new content hash from a string
+    pub fn new(hash: impl Into<String>) -> Self {
+        Self(hash.into())
+    }
+    
+    /// Get the hash string
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+    
+    /// Verify data against this hash
+    pub fn verify(&self, data: &[u8]) -> bool {
+        // Parse the algorithm and hash value
+        if let Some(hash_value) = self.0.strip_prefix("blake3:") {
+            if let Ok(expected_bytes) = hex::decode(hash_value) {
+                let actual_hash = blake3::hash(data);
+                return actual_hash.as_bytes() == expected_bytes.as_slice();
+            }
+        }
+        false
+    }
+}
+
+impl fmt::Display for MessageHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// A cryptographic signature
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Signature(Vec<u8>);
+
+impl Signature {
+    /// Create a new signature from bytes
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+    
+    /// Get the raw bytes of the signature
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+    
+    /// Convert to a byte vector
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+/// Errors related to cryptographic signatures
+#[derive(Debug, Error, Clone)]
+pub enum SignatureError {
+    /// Invalid signature format
+    #[error("Invalid signature format: {0}")]
+    InvalidFormat(String),
+    
+    /// Signature verification failed
+    #[error("Signature verification failed: {0}")]
+    VerificationFailed(String),
+    
+    /// Invalid key
+    #[error("Invalid key: {0}")]
+    InvalidKey(String),
+    
+    /// Other error
+    #[error("Signature error: {0}")]
+    Other(String),
+}
 
 /// Errors that can occur when working with the messaging system
 #[derive(Error, Debug)]
@@ -59,22 +145,22 @@ pub type MessagingResult<T> = Result<T, MessagingError>;
 
 /// Unique identifier for a message
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct MessageId(String);
+pub struct MessageId(ContentId);
 
 impl MessageId {
     /// Create a new message ID
-    pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
+    pub fn new(id: ContentId) -> Self {
+        Self(id)
     }
     
-    /// Generate a new random message ID
+    /// Generate a new random message ID based on content addressing
     pub fn generate() -> Self {
-        Self(Uuid::new_v4().to_string())
+        generate_message_id()
     }
     
     /// Get the string representation of the message ID
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_ref()
     }
 }
 
@@ -84,15 +170,21 @@ impl fmt::Display for MessageId {
     }
 }
 
-impl From<String> for MessageId {
-    fn from(s: String) -> Self {
-        Self(s)
+impl From<ContentId> for MessageId {
+    fn from(id: ContentId) -> Self {
+        Self(id)
     }
 }
 
 impl From<&str> for MessageId {
     fn from(s: &str) -> Self {
-        Self(s.to_string())
+        Self(ContentId::from(s))
+    }
+}
+
+impl From<String> for MessageId {
+    fn from(s: String) -> Self {
+        Self(ContentId::from(s.as_str()))
     }
 }
 
@@ -277,7 +369,7 @@ pub struct Message {
     metadata: HashMap<String, String>,
     
     /// Content hash
-    content_hash: ContentHash,
+    content_hash: MessageHash,
 }
 
 impl Message {
@@ -292,7 +384,7 @@ impl Message {
     ) -> Self {
         let subject = subject.into();
         let content = content.into();
-        let content_hash = ContentHash::calculate(&content);
+        let content_hash = MessageHash::calculate(&content);
         
         Self {
             id: MessageId::generate(),
@@ -462,13 +554,13 @@ impl Message {
     }
     
     /// Get the content hash
-    pub fn content_hash(&self) -> &ContentHash {
+    pub fn content_hash(&self) -> &MessageHash {
         &self.content_hash
     }
     
     /// Verify the content hash
     pub fn verify_content_hash(&self) -> bool {
-        let calculated_hash = ContentHash::calculate(&self.content);
+        let calculated_hash = MessageHash::calculate(&self.content);
         calculated_hash == self.content_hash
     }
     
@@ -479,7 +571,7 @@ impl Message {
         format: MessageFormat,
     ) -> Self {
         let content = content.into();
-        let content_hash = ContentHash::calculate(&content);
+        let content_hash = MessageHash::calculate(&content);
         
         let message_type = match self.message_type {
             MessageType::ActionRequest => MessageType::ActionResponse {
@@ -817,7 +909,7 @@ impl MessageBuilder {
             MessagingError::ValidationError("Content is required".to_string())
         })?;
         
-        let content_hash = ContentHash::calculate(&content);
+        let content_hash = MessageHash::calculate(&content);
         
         let mut message = Message {
             id: MessageId::generate(),
@@ -1020,7 +1112,7 @@ impl MessageFactory {
         }).to_string();
         
         // Service announcements are broadcast
-        let broadcast_id = AgentId::from_content_hash(ContentHash::calculate(b"broadcast"));
+        let broadcast_id = AgentId::from_content_hash(MessageHash::calculate(b"broadcast").as_str().as_bytes(), AgentType::Operator);
         
         self.create_message(
             sender_id,
@@ -1596,6 +1688,21 @@ impl MessageEffect {
     }
 }
 
+/// Generate a random message ID based on content addressing
+pub fn generate_message_id() -> MessageId {
+    let timestamp = Utc::now().timestamp_nanos();
+    let mut random_bytes = [0u8; 16];
+    rand::thread_rng().fill(&mut random_bytes);
+    
+    let mut input = Vec::with_capacity(4 + 8 + 16);
+    input.extend_from_slice(b"msg:");
+    input.extend_from_slice(&timestamp.to_be_bytes());
+    input.extend_from_slice(&random_bytes);
+    
+    let hash = blake3::hash(&input);
+    MessageId::from(ContentId::from_bytes(hash.as_bytes()))
+}
+
 /// Agent messaging system tests
 #[cfg(test)]
 mod tests {
@@ -1603,7 +1710,7 @@ mod tests {
     use crate::crypto::ContentHash;
 
     fn create_test_agent_id(name: &str) -> AgentId {
-        AgentId::from_content_hash(ContentHash::calculate(name.as_bytes()))
+        AgentId::from_content_hash(ContentHash::calculate(name.as_bytes()).as_bytes(), AgentType::Operator)
     }
     
     #[tokio::test]
@@ -1761,7 +1868,7 @@ mod tests {
         router.register_agent(recipient3.clone()).await.unwrap();
         
         // Broadcast agent ID (special agent for broadcasts)
-        let broadcast_id = AgentId::from_content_hash(ContentHash::calculate(b"broadcast"));
+        let broadcast_id = AgentId::from_content_hash(MessageHash::calculate(b"broadcast").as_str().as_bytes(), AgentType::Operator);
         
         // Create a broadcast message
         let broadcast_message = Message::new(

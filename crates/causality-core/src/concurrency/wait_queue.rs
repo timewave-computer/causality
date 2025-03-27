@@ -383,7 +383,7 @@ pub struct WaitFuture {
 }
 
 impl Future for WaitFuture {
-    type Output = Result<()>;
+    type Output = Result<(), std::io::Error>;
     
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // Register the waker

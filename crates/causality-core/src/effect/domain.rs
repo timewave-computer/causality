@@ -4,7 +4,7 @@
 // system. Each domain represents a separate execution context with its own rules,
 // resources, and capabilities.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use super::{Effect, EffectContext, EffectError, EffectOutcome, EffectResult};
 use super::types::{EffectId, EffectTypeId, ExecutionBoundary};
-use crate::resource::ResourceId;
+use crate::resource_types::ResourceId;
 
 /// Domain identifier
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

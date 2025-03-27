@@ -8,7 +8,8 @@ use std::str::FromStr;
 use serde::{Serialize, Deserialize};
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use crate::capability::ContentHash;
+use causality_types::{ContentId, ContentHash, ContentAddressed, HashError, HashOutput};
+use causality_types::content_addressing::HashAlgorithm;
 
 /// Resource identifier type
 ///
@@ -225,7 +226,6 @@ use async_trait::async_trait;
 use thiserror::Error;
 use crate::storage::{ContentAddressedStorage, ContentAddressedStorageError};
 use crate::serialization::{SerializationError, to_bytes, from_bytes};
-use crate::content::{ContentId, ContentAddressing, ContentAddressingError};
 
 /// Unique identifier for a resource type
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -374,21 +374,37 @@ impl std::fmt::Display for ResourceTypeId {
     }
 }
 
-impl ContentAddressing for ResourceTypeId {
-    fn content_hash(&self) -> Result<ContentId, ContentAddressingError> {
+/// Helper function to convert ContentId to HashOutput
+fn to_hash_output(content_id: &ContentId) -> HashOutput {
+    HashOutput {
+        algorithm: HashAlgorithm::Blake3,
+        bytes: content_id.to_bytes(),
+    }
+}
+
+impl ContentAddressed for ResourceTypeId {
+    fn content_hash(&self) -> Result<HashOutput, HashError> {
         // If we already have a content hash, use it
         if let Some(hash) = &self.content_hash {
-            return Ok(hash.clone());
+            return Ok(to_hash_output(hash));
         }
         
         // Otherwise, compute it
-        let bytes = to_bytes(self)
-            .map_err(|e| ContentAddressingError::SerializationError(e.to_string()))?;
-        
+        let bytes = self.to_bytes()?;
         let hash = ContentId::from_bytes(&bytes)
-            .map_err(|e| ContentAddressingError::InvalidContent(e.to_string()))?;
+            .map_err(|e| HashError::InvalidData(e.to_string()))?;
         
-        Ok(hash)
+        Ok(to_hash_output(&hash))
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+        serde_json::to_vec(self)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        serde_json::from_slice(bytes)
+            .map_err(|e| HashError::DeserializationError(e.to_string()))
     }
 }
 
@@ -408,21 +424,29 @@ pub struct ResourceSchema {
     pub content_hash: Option<ContentId>,
 }
 
-impl ContentAddressing for ResourceSchema {
-    fn content_hash(&self) -> Result<ContentId, ContentAddressingError> {
+impl ContentAddressed for ResourceSchema {
+    fn content_hash(&self) -> Result<HashOutput, HashError> {
         // If we already have a content hash, use it
         if let Some(hash) = &self.content_hash {
-            return Ok(hash.clone());
+            return Ok(to_hash_output(hash));
         }
         
         // Otherwise, compute it
-        let bytes = to_bytes(self)
-            .map_err(|e| ContentAddressingError::SerializationError(e.to_string()))?;
-        
+        let bytes = self.to_bytes()?;
         let hash = ContentId::from_bytes(&bytes)
-            .map_err(|e| ContentAddressingError::InvalidContent(e.to_string()))?;
+            .map_err(|e| HashError::InvalidData(e.to_string()))?;
         
-        Ok(hash)
+        Ok(to_hash_output(&hash))
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+        serde_json::to_vec(self)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        serde_json::from_slice(bytes)
+            .map_err(|e| HashError::DeserializationError(e.to_string()))
     }
 }
 
@@ -470,16 +494,34 @@ pub struct ResourceTypeDefinition {
     pub updated_at: u64,
 }
 
-impl ContentAddressing for ResourceTypeDefinition {
-    fn content_hash(&self) -> Result<ContentId, ContentAddressingError> {
-        // Compute hash of the entire definition
-        let bytes = to_bytes(self)
-            .map_err(|e| ContentAddressingError::SerializationError(e.to_string()))?;
-        
-        let hash = ContentId::from_bytes(&bytes)
-            .map_err(|e| ContentAddressingError::InvalidContent(e.to_string()))?;
-        
-        Ok(hash)
+impl ContentAddressed for ResourceTypeDefinition {
+    fn content_hash(&self) -> Result<HashOutput, HashError> {
+        // If we already have a content hash, return it
+        if let Some(content_hash) = &self.id.content_hash() {
+            // Convert from our internal ContentHash to HashOutput
+            Ok(to_hash_output(content_hash))
+        } else {
+            // Compute a hash for the definition
+            let serialized = serde_json::to_string(self)
+                .map_err(|e| HashError::SerializationError(e.to_string()))?;
+                
+            // Create a content hash
+            let hash = causality_types::content_addressing::content_hash_from_bytes(
+                serialized.as_bytes()
+            );
+            
+            Ok(to_hash_output(&hash))
+        }
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+        serde_json::to_vec(self)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        serde_json::from_slice(bytes)
+            .map_err(|e| HashError::SerializationError(e.to_string()))
     }
 }
 

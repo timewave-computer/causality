@@ -334,7 +334,7 @@ impl OperatorAgent {
         }
         
         // Generate an operation ID
-        let operation_id = format!("operation-{}", uuid::Uuid::new_v4());
+        let operation_id = crate::id_utils::generate_system_operation_id();
         
         // Create a new operation
         let operation = SystemOperation {
@@ -429,7 +429,7 @@ impl OperatorAgent {
         }
         
         // Generate a window ID
-        let window_id = format!("window-{}", uuid::Uuid::new_v4());
+        let window_id = crate::id_utils::generate_maintenance_window_id();
         
         // Create a new maintenance window
         let window = MaintenanceWindow {
@@ -617,20 +617,29 @@ impl Agent for OperatorAgent {
 
 // Implement the Resource trait through delegation to the base agent
 impl crate::resource::Resource for OperatorAgent {
-    fn id(&self) -> &ResourceId {
-        self.base.id()
+    fn id(&self) -> crate::resource_types::ResourceId {
+        self.base.id().clone()
     }
     
-    fn resource_type(&self) -> ResourceType {
+    fn resource_type(&self) -> crate::resource_types::ResourceType {
         self.base.resource_type()
     }
     
-    fn metadata(&self) -> &HashMap<String, String> {
-        self.base.metadata()
+    fn state(&self) -> crate::resource::ResourceState {
+        match self.base.state() {
+            AgentState::Active => crate::resource::ResourceState::Active,
+            AgentState::Inactive => crate::resource::ResourceState::Frozen,
+            AgentState::Suspended { .. } => crate::resource::ResourceState::Locked,
+        }
     }
     
-    fn metadata_mut(&mut self) -> &mut HashMap<String, String> {
-        self.base.metadata_mut()
+    fn get_metadata(&self, key: &str) -> Option<String> {
+        self.base.metadata().get(key).cloned()
+    }
+    
+    fn set_metadata(&mut self, key: &str, value: &str) -> crate::resource::ResourceResult<()> {
+        *self.base.metadata_mut().entry(key.to_string()).or_insert_with(String::new) = value.to_string();
+        Ok(())
     }
     
     fn clone_resource(&self) -> Box<dyn crate::resource::Resource> {

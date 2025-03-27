@@ -6,7 +6,7 @@ use std::sync::{Arc, RwLock};
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
 
-use crate::resource::{ResourceId, ResourceTypeId};
+use crate::resource_types::{ResourceId, ResourceTypeId};
 
 use super::result::{ValidationSeverity, ValidationResult, ValidationIssue};
 use super::context::ValidationContext;

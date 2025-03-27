@@ -1078,10 +1078,11 @@ impl ObligationEffect {
 mod tests {
     use super::*;
     use tokio;
+    use crate::resource::agent::AgentType;
     
     #[tokio::test]
     async fn test_obligation_creation() {
-        let agent_id = AgentId::from_content_hash(ContentHash::default());
+        let agent_id = AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::User);
         let created_by = agent_id.clone();
         
         // Create an obligation
@@ -1106,7 +1107,7 @@ mod tests {
     
     #[tokio::test]
     async fn test_obligation_status_updates() {
-        let agent_id = AgentId::from_content_hash(ContentHash::default());
+        let agent_id = AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::User);
         let created_by = agent_id.clone();
         
         // Create an obligation
@@ -1152,7 +1153,7 @@ mod tests {
         );
         
         // Waive the obligation
-        let waiver_agent = AgentId::from_content_hash(ContentHash::calculate(b"waiver-agent"));
+        let waiver_agent = AgentId::from_content_hash(ContentHash::calculate(b"waiver-agent").as_bytes(), AgentType::Operator);
         obligation3.waive("No longer required", waiver_agent.clone());
         
         // Check status
@@ -1167,7 +1168,7 @@ mod tests {
     #[tokio::test]
     async fn test_obligation_manager_basic() {
         let manager = ObligationManager::new();
-        let agent_id = AgentId::from_content_hash(ContentHash::default());
+        let agent_id = AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::User);
         let created_by = agent_id.clone();
         
         // Create and add an obligation
@@ -1196,7 +1197,7 @@ mod tests {
     #[tokio::test]
     async fn test_obligation_usage_tracking() {
         let manager = ObligationManager::new();
-        let agent_id = AgentId::from_content_hash(ContentHash::default());
+        let agent_id = AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::User);
         let created_by = agent_id.clone();
         
         // Create a minimum usage obligation
@@ -1253,7 +1254,7 @@ mod tests {
     #[tokio::test]
     async fn test_obligation_summary() {
         let manager = ObligationManager::new();
-        let agent_id = AgentId::from_content_hash(ContentHash::default());
+        let agent_id = AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::User);
         let created_by = agent_id.clone();
         
         // Create different obligations with different statuses
@@ -1308,7 +1309,7 @@ mod tests {
     #[tokio::test]
     async fn test_capability_obligation_trait() {
         let manager = ObligationManager::new();
-        let agent_id = AgentId::from_content_hash(ContentHash::default());
+        let agent_id = AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::User);
         
         // Add an obligation using the trait
         let obligation_id = manager.add_obligation_to_capability(

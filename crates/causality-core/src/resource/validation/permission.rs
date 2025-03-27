@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
 
-use crate::resource::{ResourceId, ResourceTypeId};
+use crate::resource_types::{ResourceId, ResourceTypeId};
 use crate::capability::{Capability, CapabilitySet};
 
 use super::context::ValidationContext;

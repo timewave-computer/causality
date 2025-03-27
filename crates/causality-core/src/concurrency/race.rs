@@ -8,6 +8,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use tokio::sync::oneshot;
 
@@ -57,78 +58,35 @@ where
 /// Run multiple fallible futures concurrently and return the result of the first one to succeed
 ///
 /// If all futures fail, returns the last error received.
-pub async fn race_ok<F, T, E>(futures: Vec<F>) -> Result<T>
+pub async fn race_ok<F, T, E>(futures: Vec<F>) -> Result<T, E>
 where
     F: Future<Output = std::result::Result<T, E>> + Send + 'static,
     T: Send + 'static,
-    E: Into<Error> + Send + 'static,
+    E: Send + 'static + Default,
 {
-    // Convert the result type to our Error type
-    let futures = futures
-        .into_iter()
-        .map(|future| async move {
-            match future.await {
-                Ok(value) => Ok(value),
-                Err(err) => Err(err.into()),
-            }
-        })
-        .collect::<Vec<_>>();
-    
-    // Special case for empty futures
     if futures.is_empty() {
-        return Err(Error::OperationFailed("Cannot race empty futures".to_string()));
+        panic!("Empty futures vector passed to race_ok");
     }
+
+    // Use an mpsc channel instead of cloning oneshot::Sender
+    let (result_tx, mut result_rx) = tokio::sync::mpsc::channel(futures.len());
     
-    // Special case for a single future
-    if futures.len() == 1 {
-        return futures.into_iter().next().unwrap().await;
-    }
-    
-    // Create a channel for the first success result
-    let (success_tx, success_rx) = oneshot::channel();
-    
-    // Create a channel for the last error result
-    let (error_tx, error_rx) = oneshot::channel();
-    
-    // Keep track of how many futures are still running
-    let remaining = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(futures.len()));
-    
-    // Spawn tasks for each future
-    for future in futures {
-        let success_tx = success_tx.clone();
-        let error_tx = error_tx.clone();
-        let remaining = remaining.clone();
+    for (idx, future) in futures.into_iter().enumerate() {
+        let result_tx = result_tx.clone();
         
         tokio::spawn(async move {
             let result = future.await;
-            
-            match result {
-                Ok(value) => {
-                    // Send the successful result, but it's OK if the receiver is dropped
-                    let _ = success_tx.send(value);
-                }
-                Err(err) => {
-                    // Decrement the remaining count
-                    let prev = remaining.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
-                    
-                    // If this is the last future to complete and it failed, send the error
-                    if prev == 1 {
-                        let _ = error_tx.send(err);
-                    }
-                }
-            }
+            let _ = result_tx.send((idx, result)).await;
         });
     }
     
-    // Drop the original senders to avoid memory leaks
-    drop(success_tx);
-    drop(error_tx);
+    // Drop the original sender
+    drop(result_tx);
     
-    // Create a combined future that waits for either a success or the last error
-    tokio::select! {
-        Ok(result) = success_rx => Ok(result),
-        Ok(err) = error_rx => Err(err),
-        else => Err(Error::OperationFailed("All racing futures were dropped without sending a result".to_string())),
+    // Wait for any result
+    match result_rx.recv().await {
+        Some((_, result)) => result,
+        None => Err(E::default()),
     }
 }
 
@@ -137,11 +95,11 @@ where
 /// This is similar to `race`, but for futures that return `Result<T, E>`.
 /// Unlike `race_ok`, this returns the result of the first future to complete,
 /// whether it's a success or failure.
-pub async fn race_result<F, T, E>(futures: Vec<F>) -> std::result::Result<T, Error>
+pub async fn race_result<F, T, E>(futures: Vec<F>) -> std::result::Result<T, E>
 where
     F: Future<Output = std::result::Result<T, E>> + Send + 'static,
     T: Send + 'static,
-    E: Into<Error> + Send + 'static,
+    E: Send + 'static,
 {
     // Convert the result type to our Error type
     let futures = futures
@@ -149,7 +107,7 @@ where
         .map(|future| async move {
             match future.await {
                 Ok(value) => Ok(value),
-                Err(err) => Err(err.into()),
+                Err(err) => Err(err),
             }
         })
         .collect::<Vec<_>>();
@@ -168,50 +126,88 @@ where
     T: Clone + Send + 'static,
     P: Fn(&T) -> bool + Send + Sync + 'static,
 {
-    // Special case for empty futures
     if futures.is_empty() {
-        panic!("Cannot race empty futures");
+        panic!("Empty futures vector passed to race_until");
     }
     
-    // Special case for a single future
-    if futures.len() == 1 {
-        let result = futures.into_iter().next().unwrap().await;
-        if predicate(&result) {
-            return result;
-        } else {
-            panic!("The only future didn't satisfy the predicate");
-        }
-    }
+    // Use an mpsc channel instead of cloning oneshot
+    let (result_tx, mut result_rx) = tokio::sync::mpsc::channel(futures.len());
+    let predicate = Arc::new(predicate);
     
-    // Create a channel for the first result that satisfies the predicate
-    let (tx, rx) = oneshot::channel();
-    
-    // Create a predicate Arc for sharing
-    let predicate = std::sync::Arc::new(predicate);
-    
-    // Spawn tasks for each future
-    for future in futures {
-        let tx = tx.clone();
-        let predicate = predicate.clone();
+    for (idx, future) in futures.into_iter().enumerate() {
+        let result_tx = result_tx.clone();
+        let predicate = Arc::clone(&predicate);
         
         tokio::spawn(async move {
             let result = future.await;
             
             if predicate(&result) {
-                // It's OK if the receiver is dropped - that means another future already won the race
-                let _ = tx.send(result);
+                let _ = result_tx.send((idx, result)).await;
             }
         });
     }
     
-    // Drop the original sender to avoid a memory leak if no future completes
-    drop(tx);
+    // Drop the original sender
+    drop(result_tx);
     
     // Wait for a result that satisfies the predicate
-    match rx.await {
-        Ok(result) => result,
-        Err(_) => panic!("All racing futures were dropped without sending a result that satisfied the predicate"),
+    match result_rx.recv().await {
+        Some((_, result)) => result,
+        None => panic!("All racing futures were dropped without sending a result that satisfied the predicate"),
     }
+}
+
+// Replace implementation with a version that doesn't need to clone oneshot::Sender
+pub async fn race_first_ok_error<F, T, E>(futures: Vec<F>) -> (Option<T>, Option<E>)
+where
+    F: Future<Output = std::result::Result<T, E>> + Send + 'static,
+    T: Send + 'static,
+    E: Send + 'static,
+{
+    if futures.is_empty() {
+        return (None, None);
+    }
+
+    // Use mpsc channels for both success and error results
+    let (result_tx, mut result_rx) = tokio::sync::mpsc::channel(futures.len());
+    
+    for (idx, future) in futures.into_iter().enumerate() {
+        let result_tx = result_tx.clone();
+        
+        tokio::spawn(async move {
+            match future.await {
+                Ok(result) => {
+                    let _ = result_tx.send((idx, Ok(result))).await;
+                }
+                Err(error) => {
+                    let _ = result_tx.send((idx, Err(error))).await;
+                }
+            }
+        });
+    }
+    
+    // Drop the original sender
+    drop(result_tx);
+    
+    let mut success = None;
+    let mut error = None;
+    
+    // Process results until we get a success or run out of results
+    while let Some((_, result)) = result_rx.recv().await {
+        match result {
+            Ok(value) => {
+                success = Some(value);
+                break;
+            }
+            Err(err) => {
+                if error.is_none() {
+                    error = Some(err);
+                }
+            }
+        }
+    }
+    
+    (success, error)
 }
 
 #[cfg(test)]

@@ -46,7 +46,7 @@ where
 ///
 /// This is similar to `fork`, but for futures that return `Result<T, E>`.
 /// If any future fails, the error is returned, otherwise a vector of results is returned.
-pub async fn fork_join<F, T, E>(futures: Vec<F>) -> Result<Vec<T>>
+pub async fn fork_join<F, T, E>(futures: Vec<F>) -> Result<Vec<T>, E>
 where
     F: Future<Output = std::result::Result<T, E>> + Send + 'static,
     T: Send + 'static,

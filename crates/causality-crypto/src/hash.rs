@@ -244,24 +244,21 @@ impl HashFactory {
     pub fn create_hash_function(&self, algorithm: HashAlgorithm) -> Result<Box<dyn HashFunction>, HashError> {
         match algorithm {
             HashAlgorithm::Blake3 => Ok(Box::new(Blake3HashFunction)),
-            HashAlgorithm::Poseidon => {
-                #[cfg(feature = "poseidon")]
-                {
-                    Ok(Box::new(PoseidonHashFunction))
-                }
-                
-                #[cfg(not(feature = "poseidon"))]
-                {
-                    Err(HashError::UnsupportedAlgorithm("Poseidon hash not enabled".to_string()))
-                }
-            }
+            #[cfg(feature = "poseidon")]
+            HashAlgorithm::Poseidon => Ok(Box::new(PoseidonHashFunction::new())),
+            #[cfg(not(feature = "poseidon"))]
+            HashAlgorithm::Poseidon => Err(HashError::UnsupportedAlgorithm("poseidon".to_string())),
         }
     }
     
-    /// Create a hash function with the default algorithm
+    /// Create a content hasher for the default algorithm
     pub fn create_hasher(&self) -> Result<Box<dyn ContentHasher>, HashError> {
-        self.create_hash_function(self.default_algorithm)
-            .map(|f| f.create_hasher())
+        self.create_hasher_with_algorithm(self.default_algorithm)
+    }
+    
+    /// Create a content hasher for the specified algorithm
+    pub fn create_hasher_with_algorithm(&self, algorithm: HashAlgorithm) -> Result<Box<dyn ContentHasher>, HashError> {
+        Ok(self.create_hash_function(algorithm)?.create_hasher())
     }
 }
 
@@ -274,6 +271,13 @@ impl Default for HashFactory {
 /// BLAKE3 implementation of HashFunction
 #[derive(Clone, Copy, Debug)]
 pub struct Blake3HashFunction;
+
+impl Blake3HashFunction {
+    /// Create a new Blake3HashFunction
+    pub fn new() -> Self {
+        Self
+    }
+}
 
 impl HashFunction for Blake3HashFunction {
     fn hash(&self, data: &[u8]) -> HashOutput {

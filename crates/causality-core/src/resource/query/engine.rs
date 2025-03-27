@@ -7,11 +7,15 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 use async_trait::async_trait;
+use serde_json::Value;
 
-use crate::resource::{ContentId, Resource, ResourceType};
+use causality_types::ContentId;
+use crate::resource::Resource;
+use crate::resource_types::ResourceType;
 use crate::capability::{Capability, Right};
 use super::{
-    ResourceQuery, FilterExpression, QueryError, QueryResult,
+    ResourceQuery, FilterExpression, FilterCondition, FilterOperator,
+    QueryError, QueryResult,
     Sort, SortDirection, Pagination, PaginationResult,
     ResourceIndex, InMemoryResourceIndex
 };

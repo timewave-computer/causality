@@ -4,15 +4,14 @@
 // following the design outlined in ADR-032.
 
 use crate::resource::{ResourceId, ResourceError, ResourceType};
-use crate::serialization::{Serializable, DeserializationError};
-use crate::capability::Capability;
-use crate::crypto::ContentHash;
-
-use std::collections::HashMap;
+use crate::error::Error as CoreError;
+use crate::capability::{Capability, ContentAddressingError, IdentityId};
+use causality_types::ContentId;
 use std::fmt;
 use std::str::FromStr;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
+use std::collections::HashMap;
 
 /// Unique identifier for an agent
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -41,6 +40,17 @@ impl AgentId {
     /// Get the agent type
     pub fn agent_type(&self) -> &AgentType {
         &self.agent_type
+    }
+    
+    /// Create an agent ID from a content hash
+    pub fn from_content_hash(hash: &[u8], agent_type: AgentType) -> Self {
+        let content_id = ContentId::from_bytes(hash)
+            .expect("Failed to create ContentId from hash bytes");
+        let resource_id = ResourceId::from(content_id);
+        AgentId {
+            resource_id,
+            agent_type,
+        }
     }
 }
 
@@ -145,7 +155,7 @@ pub struct AgentRelationship {
     target_resource_id: ResourceId,
     
     /// Capabilities granted by this relationship
-    capabilities: Vec<Capability>,
+    capabilities: Vec<Capability<dyn std::any::Any + Send + Sync>>,
     
     /// Additional metadata about the relationship
     metadata: HashMap<String, String>,
@@ -156,7 +166,7 @@ impl AgentRelationship {
     pub fn new(
         relationship_type: RelationshipType,
         target_resource_id: ResourceId,
-        capabilities: Vec<Capability>,
+        capabilities: Vec<Capability<dyn std::any::Any + Send + Sync>>,
         metadata: HashMap<String, String>,
     ) -> Self {
         Self {
@@ -178,7 +188,7 @@ impl AgentRelationship {
     }
     
     /// Get the capabilities
-    pub fn capabilities(&self) -> &[Capability] {
+    pub fn capabilities(&self) -> &[Capability<dyn std::any::Any + Send + Sync>] {
         &self.capabilities
     }
     
@@ -308,10 +318,18 @@ impl From<ResourceError> for AgentError {
     }
 }
 
-impl From<DeserializationError> for AgentError {
-    fn from(err: DeserializationError) -> Self {
+impl From<CoreError> for AgentError {
+    fn from(err: CoreError) -> Self {
         Self::SerializationError(err.to_string())
     }
+}
+
+pub struct AgentCapabilities {
+    /// Agent's main identity 
+    identity: IdentityId,
+    
+    /// Capabilities granted to this agent
+    capabilities: Vec<Capability<dyn std::any::Any + Send + Sync>>,
 }
 
 #[cfg(test)]
@@ -320,7 +338,8 @@ mod tests {
     
     #[test]
     fn test_agent_id_display_and_parse() {
-        let resource_id = ResourceId::new(ResourceType::Agent, vec![1, 2, 3, 4]);
+        let content_id = ContentId::generate();
+        let resource_id = ResourceId::from(content_id);
         let agent_type = AgentType::User;
         let agent_id = AgentId::new(resource_id.clone(), agent_type);
         

@@ -96,7 +96,7 @@ pub enum ProxyEvent {
 #[async_trait]
 pub trait ProxyEventHandler: Send + Sync {
     /// Handle a proxy event
-    async fn handle_event(&self, event: ProxyEvent) -> Result<()>;
+    async fn handle_event(&self, event: ProxyEvent) -> Result<(), ProxyError>;
 }
 
 /// A simple event handler that logs events
@@ -104,7 +104,7 @@ pub struct LoggingEventHandler;
 
 #[async_trait]
 impl ProxyEventHandler for LoggingEventHandler {
-    async fn handle_event(&self, event: ProxyEvent) -> Result<()> {
+    async fn handle_event(&self, event: ProxyEvent) -> Result<(), ProxyError> {
         match event {
             ProxyEvent::IndexerStatusChanged { chain_id, status } => {
                 log::info!("Chain {}: Status changed to {:?}", chain_id, status);

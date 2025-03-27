@@ -10,7 +10,8 @@ use std::sync::Arc;
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
 
-use crate::resource::{ResourceId, ContentId};
+use causality_types::ContentId;
+use crate::resource_types::ResourceId;
 use crate::capability::{Capability, CapabilityGrants, CapabilityError, ResourceId as CapResourceId};
 use super::types::{EffectId, EffectTypeId, ExecutionBoundary};
 

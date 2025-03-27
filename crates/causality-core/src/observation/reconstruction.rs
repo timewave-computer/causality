@@ -60,13 +60,13 @@ pub struct ReconstructionStatus {
 /// An interface for reconstructing logs from facts
 pub trait LogReconstructor: Send + Sync {
     /// Process a fact for reconstruction
-    fn process_fact(&self, fact: &ExtractedFact) -> Result<()>;
+    fn process_fact(&self, fact: &ExtractedFact) -> Result<(), ReconstructionError>;
     
-    /// Get the status of the reconstructor
-    fn get_status(&self) -> Result<ReconstructionStatus>;
+    /// Get the current status of reconstruction
+    fn get_status(&self) -> Result<ReconstructionStatus, ReconstructionError>;
     
-    /// Get the reconstructed log
-    fn get_log(&self) -> Result<Arc<dyn LogStorage>>;
+    /// Get the log storage
+    fn get_log(&self) -> Result<Arc<dyn LogStorage>, ReconstructionError>;
 }
 
 /// Factory for creating log reconstructors
@@ -230,7 +230,7 @@ impl BasicReconstructor {
 
 impl LogReconstructor for BasicReconstructor {
     /// Process a fact for reconstruction
-    fn process_fact(&self, fact: &ExtractedFact) -> Result<()> {
+    fn process_fact(&self, fact: &ExtractedFact) -> Result<(), ReconstructionError> {
         // Check if this fact type is relevant
         if !self.config.fact_types.is_empty() && 
            !self.config.fact_types.contains(&fact.fact_type) {
@@ -254,16 +254,16 @@ impl LogReconstructor for BasicReconstructor {
         Ok(())
     }
     
-    /// Get the status of the reconstructor
-    fn get_status(&self) -> Result<ReconstructionStatus> {
+    /// Get the current status of reconstruction
+    fn get_status(&self) -> Result<ReconstructionStatus, ReconstructionError> {
         let status = self.status.lock().map_err(|_| 
             Error::Internal("Failed to lock status".to_string()))?;
             
         Ok(status.clone())
     }
     
-    /// Get the reconstructed log
-    fn get_log(&self) -> Result<Arc<dyn LogStorage>> {
+    /// Get the log storage
+    fn get_log(&self) -> Result<Arc<dyn LogStorage>, ReconstructionError> {
         Ok(self.log_storage.clone())
     }
 } 

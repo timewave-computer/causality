@@ -11,8 +11,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::crypto::ContentId;
-use crate::crypto::ContentAddressed;
+use causality_types::ContentId;
 
 /// SMT node
 #[derive(Debug, Clone, Serialize, Deserialize)]

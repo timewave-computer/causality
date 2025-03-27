@@ -6,9 +6,29 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
+use thiserror::Error;
 
 use causality_types::{Error, Result};
 use crate::indexer::BlockData;
+
+/// Errors that can occur during extraction
+#[derive(Error, Debug)]
+pub enum ExtractionError {
+    #[error("Internal error: {0}")]
+    Internal(String),
+    
+    #[error("Configuration error: {0}")]
+    Configuration(String),
+    
+    #[error("Data error: {0}")]
+    Data(String),
+    
+    #[error("Rule error: {0}")]
+    Rule(String),
+    
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+}
 
 /// A fact extracted from blockchain data
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,13 +181,13 @@ impl FilterCondition {
 #[async_trait]
 pub trait FactExtractor: Send + Sync {
     /// Extract facts from block data
-    async fn extract_facts(&self, block_data: &BlockData) -> Result<Vec<ExtractedFact>>;
+    async fn extract_facts(&self, block_data: &BlockData) -> Result<Vec<ExtractedFact>, ExtractionError>;
     
     /// Add an extraction rule
-    fn add_rule(&self, rule: ExtractionRule) -> Result<()>;
+    fn add_rule(&self, rule: ExtractionRule) -> Result<(), ExtractionError>;
     
     /// Load rules from a TOML string
-    fn load_rules_from_toml(&self, toml_str: &str) -> Result<()>;
+    fn load_rules_from_toml(&self, toml_str: &str) -> Result<(), ExtractionError>;
 }
 
 /// An engine for managing extraction rules
@@ -185,9 +205,8 @@ impl RuleEngine {
     }
     
     /// Add a rule to the engine
-    pub fn add_rule(&self, rule: ExtractionRule) -> Result<()> {
-        let mut rules = self.rules.write().map_err(|_| 
-            Error::Internal("Failed to lock rules for writing".to_string()))?;
+    pub fn add_rule(&self, rule: ExtractionRule) -> Result<(), ExtractionError> {
+        let mut rules = self.rules.write().map_err(|e| ExtractionError::Internal(e.to_string()))?;
             
         rules.push(rule);
         
@@ -195,12 +214,11 @@ impl RuleEngine {
     }
     
     /// Load rules from a TOML string
-    pub fn load_rules_from_toml(&self, toml_str: &str) -> Result<()> {
+    pub fn load_rules_from_toml(&self, toml_str: &str) -> Result<(), ExtractionError> {
         let rules: Vec<ExtractionRule> = toml::from_str(toml_str)
-            .map_err(|e| Error::Configuration(format!("Failed to parse TOML: {}", e)))?;
+            .map_err(|e| ExtractionError::Configuration(format!("Failed to parse TOML: {}", e)))?;
             
-        let mut current_rules = self.rules.write().map_err(|_| 
-            Error::Internal("Failed to lock rules for writing".to_string()))?;
+        let mut current_rules = self.rules.write().map_err(|e| ExtractionError::Internal(e.to_string()))?;
             
         for rule in rules {
             current_rules.push(rule);
@@ -211,8 +229,7 @@ impl RuleEngine {
     
     /// Get all rules that apply to a chain
     pub fn get_rules_for_chain(&self, chain_id: &str) -> Result<Vec<ExtractionRule>> {
-        let rules = self.rules.read().map_err(|_| 
-            Error::Internal("Failed to lock rules for reading".to_string()))?;
+        let rules = self.rules.read().map_err(|e| ExtractionError::Internal(e.to_string()))?;
             
         Ok(rules.iter()
             .filter(|rule| rule.chain_id == "*" || rule.chain_id == chain_id)
@@ -298,10 +315,10 @@ impl BasicExtractor {
 #[async_trait]
 impl FactExtractor for BasicExtractor {
     /// Extract facts from block data
-    async fn extract_facts(&self, block_data: &BlockData) -> Result<Vec<ExtractedFact>> {
+    async fn extract_facts(&self, block_data: &BlockData) -> Result<Vec<ExtractedFact>, ExtractionError> {
         // Verify chain ID
         if block_data.chain_id != self.chain_id {
-            return Err(Error::Data(format!(
+            return Err(ExtractionError::Data(format!(
                 "Chain ID mismatch: expected {}, got {}",
                 self.chain_id, block_data.chain_id
             )));
@@ -312,12 +329,12 @@ impl FactExtractor for BasicExtractor {
     }
     
     /// Add an extraction rule
-    fn add_rule(&self, rule: ExtractionRule) -> Result<()> {
+    fn add_rule(&self, rule: ExtractionRule) -> Result<(), ExtractionError> {
         self.rule_engine.add_rule(rule)
     }
     
     /// Load rules from a TOML string
-    fn load_rules_from_toml(&self, toml_str: &str) -> Result<()> {
+    fn load_rules_from_toml(&self, toml_str: &str) -> Result<(), ExtractionError> {
         self.rule_engine.load_rules_from_toml(toml_str)
     }
 } 

@@ -249,24 +249,34 @@ impl ServiceStatus {
     }
 }
 
-impl Resource for ServiceStatus {
-    fn id(&self) -> &ResourceId {
-        &self.id
+impl crate::resource::Resource for ServiceStatus {
+    fn id(&self) -> crate::resource_types::ResourceId {
+        self.id.clone()
     }
     
-    fn resource_type(&self) -> ResourceType {
-        ResourceType::ServiceStatus
+    fn resource_type(&self) -> crate::resource_types::ResourceType {
+        crate::resource_types::ResourceType::new("service_status", "1.0")
     }
     
-    fn metadata(&self) -> &HashMap<String, String> {
-        &self.metadata
+    fn state(&self) -> crate::resource::ResourceState {
+        match self.state {
+            ServiceState::Available => crate::resource::ResourceState::Active,
+            ServiceState::Unavailable => crate::resource::ResourceState::Frozen,
+            ServiceState::Degraded { .. } => crate::resource::ResourceState::Active,
+            ServiceState::Maintenance { .. } => crate::resource::ResourceState::Locked,
+        }
     }
     
-    fn metadata_mut(&mut self) -> &mut HashMap<String, String> {
-        &mut self.metadata
+    fn get_metadata(&self, key: &str) -> Option<String> {
+        self.metadata.get(key).cloned()
     }
     
-    fn clone_resource(&self) -> Box<dyn Resource> {
+    fn set_metadata(&mut self, key: &str, value: &str) -> crate::resource::ResourceResult<()> {
+        self.metadata.insert(key.to_string(), value.to_string());
+        Ok(())
+    }
+    
+    fn clone_resource(&self) -> Box<dyn crate::resource::Resource> {
         Box::new(self.clone())
     }
 }
@@ -729,7 +739,7 @@ mod tests {
     
     // Helper function to create a test agent ID
     fn create_test_agent_id() -> AgentId {
-        AgentId::from_content_hash(ContentHash::default())
+        AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::User)
     }
     
     #[tokio::test]
@@ -860,7 +870,7 @@ mod tests {
     #[tokio::test]
     async fn test_agent_services() {
         let agent1_id = create_test_agent_id();
-        let agent2_id = AgentId::from_content_hash(ContentHash::calculate(b"agent2"));
+        let agent2_id = AgentId::from_content_hash(ContentHash::calculate(b"agent2").as_bytes(), AgentType::User);
         let manager = ServiceStatusManager::new();
         
         // Create services for different agents

@@ -8,7 +8,9 @@ use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 
-use crate::resource::{ContentId, Resource, ResourceType};
+use causality_types::ContentId;
+use crate::resource::Resource;
+use crate::resource_types::ResourceType;
 use super::QueryError;
 
 /// Filter condition for querying resources

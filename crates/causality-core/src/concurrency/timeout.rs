@@ -14,13 +14,15 @@ use futures::future::FutureExt;
 use tokio::time::sleep;
 
 use causality_types::{Error, Result};
-use crate::effect::{EffectContext, random::{RandomEffectFactory, RandomType}};
+use crate::effect::EffectContext;
+use crate::error::Error;
+use std::result::Result;
 
 /// Run a future with a timeout
 ///
 /// If the future completes within the timeout, its result is returned.
 /// Otherwise, an error is returned.
-pub async fn timeout<F, T>(duration: Duration, future: F) -> Result<T>
+pub async fn timeout<F, T>(duration: Duration, future: F) -> Result<T, Error>
 where
     F: Future<Output = T> + Send + 'static,
     T: Send + 'static,
@@ -36,7 +38,7 @@ where
 /// If the future completes successfully within the timeout, its result is returned.
 /// If the future fails, its error is returned.
 /// If the future times out, a timeout error is returned.
-pub async fn timeout_result<F, T, E>(duration: Duration, future: F) -> Result<T>
+pub async fn timeout_result<F, T, E>(duration: Duration, future: F) -> Result<T, Error>
 where
     F: Future<Output = std::result::Result<T, E>> + Send + 'static,
     T: Send + 'static,
@@ -80,22 +82,34 @@ impl<F, T> Future for WithTimeout<F, T>
 where
     F: Future<Output = T> + Unpin,
 {
-    type Output = Result<T>;
+    type Output = Result<T, Error>;
     
     fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
         let this = self.get_mut();
         
         // Create a timer future for the timeout
-        let timer = sleep(this.timeout);
-        let mut timer = Box::pin(timer);
+        let mut timer = Box::pin(sleep(this.timeout));
         
-        // Use tokio's select! macro to poll both futures
-        futures::select_biased! {
-            result = this.future.boxed() => {
-                std::task::Poll::Ready(Ok(result))
-            },
-            _ = timer => {
-                std::task::Poll::Ready(Err(Error::Timeout(format!("Operation timed out after {:?}", this.timeout))))
+        // Poll both futures
+        match this.future.poll_unpin(cx) {
+            std::task::Poll::Ready(result) => {
+                // Future completed first
+                return std::task::Poll::Ready(Ok(result));
+            }
+            std::task::Poll::Pending => {
+                // Check if the timer is ready
+                match timer.as_mut().poll(cx) {
+                    std::task::Poll::Ready(_) => {
+                        // Timer completed first
+                        return std::task::Poll::Ready(Err(Error::Timeout(
+                            format!("Operation timed out after {:?}", this.timeout)
+                        )));
+                    }
+                    std::task::Poll::Pending => {
+                        // Neither is ready
+                        return std::task::Poll::Pending;
+                    }
+                }
             }
         }
     }
@@ -121,7 +135,7 @@ pub async fn timeout_with_retry<F, Fut, T, E>(
     timeout: Duration,
     max_retries: usize,
     retry_delay: Duration,
-) -> Result<T>
+) -> Result<T, Error>
 where
     F: Fn() -> Fut + Send + Sync + 'static,
     Fut: Future<Output = std::result::Result<T, E>> + Send + 'static,
@@ -164,13 +178,7 @@ pub async fn calculate_retry_delay(retry_attempt: u32, base_delay: Duration) -> 
     let exp_backoff = base_delay.mul_f64(2.0f64.powi(retry_attempt as i32));
     
     // Apply jitter (-10% to +10%)
-    let context = EffectContext::default();
-    let random_effect = RandomEffectFactory::create_effect(RandomType::Standard);
-    
-    // Get a random float
-    let random_float = random_effect.gen_f64(&context)
-        .await
-        .unwrap_or(0.5);
+    let random_float: f64 = rand::random();
     
     let jitter = (random_float * 0.2 - 0.1) * exp_backoff.as_secs_f64();
     let with_jitter = exp_backoff.as_secs_f64() + jitter;

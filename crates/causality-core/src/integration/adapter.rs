@@ -4,11 +4,11 @@
 // testing and demonstration purposes.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
+use causality_types::ContentId;
 
 use crate::capability::{Capability, BasicCapability};
-use crate::content::ContentId;
 use crate::effect::{
     Effect, EffectContext, EffectOutcome, EffectResult, EffectError,
     domain::{

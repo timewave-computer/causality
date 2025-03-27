@@ -3,11 +3,35 @@
 // This module provides data provider functionality for observations.
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, Mutex};
+use std::time::Duration;
+
+use thiserror::Error;
+use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 
-use causality_types::{Error, Result};
-use crate::log::{LogEntry, LogStorage};
+use crate::observation::{ExtractedFact};
+
+#[derive(Error, Debug)]
+pub enum ProviderError {
+    #[error("Internal error: {0}")]
+    Internal(String),
+    
+    #[error("Configuration error: {0}")]
+    Configuration(String),
+    
+    #[error("Network error: {0}")]
+    Network(String),
+    
+    #[error("Data error: {0}")]
+    Data(String),
+    
+    #[error("Provider not running")]
+    NotRunning,
+    
+    #[error("Provider already running")]
+    AlreadyRunning,
+}
 
 /// Configuration for a data provider
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,26 +62,26 @@ pub struct ProvidedData {
 }
 
 /// Factory for creating data providers
-pub struct ProviderFactory {
+pub struct ProviderRegistry {
     /// Registered provider types
     provider_types: RwLock<HashMap<String, Box<dyn ProviderCreator>>>,
 }
 
-impl ProviderFactory {
+impl ProviderRegistry {
     /// Create a new provider factory
     pub fn new() -> Self {
-        ProviderFactory {
+        ProviderRegistry {
             provider_types: RwLock::new(HashMap::new()),
         }
     }
     
     /// Register a provider creator
-    pub fn register_provider<C>(&self, provider_type: &str, creator: C) -> Result<()>
+    pub fn register_provider<C>(&self, provider_type: &str, creator: C) -> Result<(), ProviderError>
     where
         C: ProviderCreator + 'static,
     {
-        let mut types = self.provider_types.write().map_err(|_| 
-            Error::Internal("Failed to lock provider types".to_string()))?;
+        let mut types = self.provider_types.write().map_err(|e| 
+            ProviderError::Internal(format!("Failed to lock provider types: {}", e)))?;
             
         types.insert(provider_type.to_string(), Box::new(creator));
         
@@ -65,12 +89,12 @@ impl ProviderFactory {
     }
     
     /// Create a provider from configuration
-    pub fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>> {
-        let types = self.provider_types.read().map_err(|_| 
-            Error::Internal("Failed to lock provider types".to_string()))?;
+    pub fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>, ProviderError> {
+        let types = self.provider_types.read().map_err(|e| 
+            ProviderError::Internal(format!("Failed to lock provider types: {}", e)))?;
             
         let creator = types.get(&config.provider_type)
-            .ok_or_else(|| Error::Configuration(
+            .ok_or_else(|| ProviderError::Configuration(
                 format!("Unknown provider type: {}", config.provider_type)
             ))?;
             
@@ -81,28 +105,29 @@ impl ProviderFactory {
 /// An interface for creating data providers
 pub trait ProviderCreator: Send + Sync {
     /// Create a provider from configuration
-    fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>>;
+    fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>, ProviderError>;
 }
 
 /// An interface for data providers
+#[async_trait]
 pub trait DataProvider: Send + Sync {
     /// Get the provider ID
     fn get_id(&self) -> &str;
     
     /// Initialize the provider
-    fn initialize(&self) -> Result<()>;
+    fn initialize(&self) -> Result<(), ProviderError>;
     
     /// Start providing data
-    fn start(&self) -> Result<()>;
+    fn start(&self) -> Result<(), ProviderError>;
     
     /// Stop providing data
-    fn stop(&self) -> Result<()>;
+    fn stop(&self) -> Result<(), ProviderError>;
     
     /// Get provider status
-    fn get_status(&self) -> Result<ProviderStatus>;
+    fn get_status(&self) -> Result<ProviderStatus, ProviderError>;
     
     /// Set the target log
-    fn set_target_log(&self, log: Arc<dyn LogStorage>) -> Result<()>;
+    fn set_target_log(&self, log: Arc<dyn LogStorage>) -> Result<(), ProviderError>;
 }
 
 /// Status of a data provider
@@ -181,7 +206,7 @@ impl HttpProvider {
         // Update status
         {
             let mut status = self.status.write().map_err(|_| 
-                Error::Internal("Failed to lock status".to_string()))?;
+                ProviderError::Internal("Failed to lock status".to_string()))?;
                 
             status.running = true;
         }
@@ -223,7 +248,7 @@ impl HttpProvider {
     }
     
     /// Poll for data
-    async fn poll_data(&self) -> Result<Vec<ProvidedData>> {
+    async fn poll_data(&self) -> Result<Vec<ProvidedData>, ProviderError> {
         // Build URL
         let url = format!("{}{}", self.config.base_url, self.config.endpoint);
         
@@ -231,7 +256,7 @@ impl HttpProvider {
         let mut request = match self.config.method.to_uppercase().as_str() {
             "GET" => self.client.get(&url),
             "POST" => self.client.post(&url),
-            method => return Err(Error::Configuration(format!("Unsupported HTTP method: {}", method))),
+            method => return Err(ProviderError::Configuration(format!("Unsupported HTTP method: {}", method))),
         };
         
         // Add headers
@@ -246,18 +271,18 @@ impl HttpProvider {
         
         // Send request
         let response = request.send().await.map_err(|e| 
-            Error::External(format!("HTTP request failed: {}", e)))?;
+            ProviderError::Network(format!("HTTP request failed: {}", e)))?;
             
         // Check status
         if !response.status().is_success() {
-            return Err(Error::External(format!(
+            return Err(ProviderError::Network(format!(
                 "HTTP request failed with status: {}", response.status()
             )));
         }
         
         // Parse response
         let json = response.json::<serde_json::Value>().await.map_err(|e| 
-            Error::Serialization(format!("Failed to parse response: {}", e)))?;
+            ProviderError::Serialization(format!("Failed to parse response: {}", e)))?;
             
         // Convert to provided data
         let timestamp = std::time::SystemTime::now()
@@ -278,14 +303,14 @@ impl HttpProvider {
     }
     
     /// Process a provided data item
-    async fn process_item(&self, item: ProvidedData) -> Result<()> {
+    async fn process_item(&self, item: ProvidedData) -> Result<(), ProviderError> {
         // Get target log
         let target_log = {
-            let log = self.target_log.read().map_err(|_| 
-                Error::Internal("Failed to lock target log".to_string()))?;
+            let log = self.target_log.read().map_err(|e| 
+                ProviderError::Internal(format!("Failed to lock target log: {}", e)))?;
                 
             log.clone().ok_or_else(|| 
-                Error::Configuration("No target log configured".to_string())
+                ProviderError::Configuration("No target log configured".to_string())
             )?
         };
         
@@ -295,18 +320,18 @@ impl HttpProvider {
             sequence: 0, // Will be assigned by storage
             timestamp: item.timestamp,
             data: serde_json::to_value(item.clone()).map_err(|e| 
-                Error::Serialization(format!("Failed to serialize item: {}", e)))?,
+                ProviderError::Serialization(format!("Failed to serialize item: {}", e)))?,
             metadata: item.metadata.clone(),
         };
         
         // Append to log
         target_log.append(entry).map_err(|e| 
-            Error::Storage(format!("Failed to append to log: {}", e)))?;
+            ProviderError::Storage(format!("Failed to append to log: {}", e)))?;
             
         // Update status
         {
-            let mut status = self.status.write().map_err(|_| 
-                Error::Internal("Failed to lock status".to_string()))?;
+            let mut status = self.status.write().map_err(|e| 
+                ProviderError::Internal(format!("Failed to lock status: {}", e)))?;
                 
             status.items_provided += 1;
             status.latest_timestamp = Some(item.timestamp);
@@ -323,13 +348,13 @@ impl DataProvider for HttpProvider {
     }
     
     /// Initialize the provider
-    fn initialize(&self) -> Result<()> {
+    fn initialize(&self) -> Result<(), ProviderError> {
         // Nothing to do for HTTP provider
         Ok(())
     }
     
     /// Start providing data
-    fn start(&self) -> Result<()> {
+    fn start(&self) -> Result<(), ProviderError> {
         // Start polling
         let provider = Arc::new(self.clone());
         provider.start_polling()?;
@@ -338,10 +363,10 @@ impl DataProvider for HttpProvider {
     }
     
     /// Stop providing data
-    fn stop(&self) -> Result<()> {
+    fn stop(&self) -> Result<(), ProviderError> {
         // Update status
-        let mut status = self.status.write().map_err(|_| 
-            Error::Internal("Failed to lock status".to_string()))?;
+        let mut status = self.status.write().map_err(|e| 
+            ProviderError::Internal(format!("Failed to lock status: {}", e)))?;
             
         status.running = false;
         
@@ -349,17 +374,17 @@ impl DataProvider for HttpProvider {
     }
     
     /// Get provider status
-    fn get_status(&self) -> Result<ProviderStatus> {
-        let status = self.status.read().map_err(|_| 
-            Error::Internal("Failed to lock status".to_string()))?;
+    fn get_status(&self) -> Result<ProviderStatus, ProviderError> {
+        let status = self.status.read().map_err(|e| 
+            ProviderError::Internal(format!("Failed to lock status: {}", e)))?;
             
         Ok(status.clone())
     }
     
     /// Set the target log
-    fn set_target_log(&self, log: Arc<dyn LogStorage>) -> Result<()> {
-        let mut target = self.target_log.write().map_err(|_| 
-            Error::Internal("Failed to lock target log".to_string()))?;
+    fn set_target_log(&self, log: Arc<dyn LogStorage>) -> Result<(), ProviderError> {
+        let mut target = self.target_log.write().map_err(|e| 
+            ProviderError::Internal(format!("Failed to lock target log: {}", e)))?;
             
         *target = Some(log);
         
@@ -392,10 +417,10 @@ impl Clone for HttpProvider {
 pub struct HttpProviderCreator;
 
 impl ProviderCreator for HttpProviderCreator {
-    fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>> {
+    fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>, ProviderError> {
         // Parse HTTP-specific config
         let http_config: HttpProviderConfig = serde_json::from_value(config.config.clone())
-            .map_err(|e| Error::Configuration(format!(
+            .map_err(|e| ProviderError::Configuration(format!(
                 "Invalid HTTP provider configuration: {}", e
             )))?;
             
@@ -404,4 +429,10 @@ impl ProviderCreator for HttpProviderCreator {
         
         Ok(Arc::new(provider))
     }
+}
+
+/// Create a factory for a provider type
+pub trait ProviderFactory: Send + Sync {
+    /// Create a new provider
+    fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>, ProviderError>;
 } 

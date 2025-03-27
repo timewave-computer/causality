@@ -4,10 +4,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::resource::{
+use crate::resource_types::{
     ResourceId, ResourceTypeId, ResourceState,
-    ResourcePermission, ResourceSchema,
 };
+use crate::resource_validation::ResourcePermission;
+use crate::resource::ResourceSchema;
 use crate::capability::{CapabilitySet, Capability};
 use crate::effect::EffectContext;
 use crate::time::TimeContext;
@@ -111,7 +112,7 @@ pub struct ValidationContext {
     pub domain_id: Option<DomainId>,
     
     /// Effect context (if available)
-    pub effect_context: Option<EffectContext>,
+    pub effect_context: Option<Box<dyn EffectContext>>,
     
     /// Time context
     pub time_context: Option<TimeContext>,
@@ -188,7 +189,7 @@ impl ValidationContext {
     }
     
     /// Set the effect context
-    pub fn with_effect_context(mut self, context: EffectContext) -> Self {
+    pub fn with_effect_context(mut self, context: Box<dyn EffectContext>) -> Self {
         self.effect_context = Some(context);
         self
     }
@@ -286,7 +287,7 @@ impl ValidationContextBuilder {
     }
     
     /// Set the effect context
-    pub fn effect_context(mut self, context: EffectContext) -> Self {
+    pub fn effect_context(mut self, context: Box<dyn EffectContext>) -> Self {
         self.context.effect_context = Some(context);
         self
     }

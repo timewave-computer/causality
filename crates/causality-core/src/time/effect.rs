@@ -928,22 +928,6 @@ pub enum TimeSource {
     Consensus(Vec<String>),
 }
 
-/// Time attestation from an external source
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TimeAttestation {
-    /// Source of the attestation
-    pub source: String,
-    
-    /// Attested time
-    pub time: DateTime<Utc>,
-    
-    /// Signature from the source
-    pub signature: Signature,
-    
-    /// Public key of the source
-    pub public_key: PublicKey,
-}
-
 /// Temporal distance between two facts
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TemporalDistance {

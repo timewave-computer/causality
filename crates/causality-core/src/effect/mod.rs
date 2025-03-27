@@ -3,15 +3,10 @@
 // This module provides a type-driven algebraic effect system for Causality,
 // providing abstractions for managing state changes and side effects.
 
-use std::collections::HashMap;
-use std::fmt::{Debug, Display};
-use std::sync::Arc;
+use std::fmt::Debug;
 
-use async_trait::async_trait;
-use thiserror::Error;
-use serde::{Serialize, Deserialize};
-
-use crate::resource::ContentId;
+use causality_types::ContentId;
+use crate::resource_types::ResourceId;
 use crate::capability::Right;
 
 pub mod context;
@@ -65,29 +60,8 @@ pub use storage::{
 
 pub use types::{EffectId, EffectTypeId, ExecutionBoundary};
 
-/// Error that can occur during effect execution
-#[derive(Error, Debug)]
-pub enum EffectError {
-    #[error("Effect execution error: {0}")]
-    ExecutionError(String),
-    
-    #[error("Effect serialization error: {0}")]
-    SerializationError(String),
-    
-    #[error("Effect deserialization error: {0}")]
-    DeserializationError(String),
-    
-    #[error("Effect validation error: {0}")]
-    ValidationError(String),
-    
-    #[error("Effect context error: {0}")]
-    ContextError(#[from] EffectContextError),
-}
-
-/// Result type for effect operations
-pub type EffectResult<T> = Result<T, EffectError>;
-
 /// Trait for effects that can be executed
+#[async_trait::async_trait]
 pub trait Effect: Debug + Send + Sync {
     /// Get the ID of this effect
     fn id(&self) -> &EffectId;
@@ -125,16 +99,6 @@ pub trait Effect: Debug + Send + Sync {
     
     /// Cast to Any for downcasting
     fn as_any(&self) -> &dyn std::any::Any;
-}
-
-/// Core effect trait that all effects must implement
-#[async_trait]
-pub trait Effect: Debug + Send + Sync {
-    /// Get the unique identifier for this effect
-    fn id(&self) -> &EffectId;
-    
-    /// Get the type identifier for this effect
-    fn type_id(&self) -> EffectTypeId;
     
     /// Get a human-readable name for this effect
     fn display_name(&self) -> String;
@@ -143,7 +107,7 @@ pub trait Effect: Debug + Send + Sync {
     fn description(&self) -> String;
     
     /// Execute the effect with the given context
-    async fn execute(&self, context: &EffectContext) -> EffectResult<EffectOutcome>;
+    async fn execute(&self, context: &dyn EffectContext) -> EffectResult<EffectOutcome>;
     
     /// Get the capabilities required to execute this effect
     fn required_capabilities(&self) -> Vec<(ContentId, Right)> {
@@ -161,31 +125,7 @@ pub trait Effect: Debug + Send + Sync {
     }
     
     /// Get a map of parameters for display purposes
-    fn display_parameters(&self) -> HashMap<String, String> {
-        HashMap::new()
-    }
-}
-
-/// Trait for domain-specific effects
-#[async_trait]
-pub trait DomainEffect: Effect {
-    /// Get the domain ID for this effect
-    fn domain_id(&self) -> &str;
-    
-    /// Check if this effect can be executed in the specified domain
-    fn can_execute_in_domain(&self, domain_id: &str) -> bool {
-        self.domain_id() == domain_id
-    }
-}
-
-/// Trait for resource-specific effects
-#[async_trait]
-pub trait ResourceEffect: Effect {
-    /// Get the resource ID this effect operates on
-    fn resource_id(&self) -> &ContentId;
-    
-    /// Check if this effect can be applied to the specified resource
-    fn can_apply_to(&self, resource_id: &ContentId) -> bool {
-        self.resource_id() == resource_id
+    fn display_parameters(&self) -> std::collections::HashMap<String, String> {
+        std::collections::HashMap::new()
     }
 } 
