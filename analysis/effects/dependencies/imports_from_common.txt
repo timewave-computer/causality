@@ -1,3 +1,0 @@
-   1 crates/causality-effects/src/resource/tests/resource_integration_test.rs:use causality_common::identity::ContentId;
-   1 crates/causality-effects/src/resource/implementation.rs:use causality_common::identity::ContentId;
-   1 crates/causality-effects/benches/resource_benchmarks.rs:use causality_common::identity::ContentId;
