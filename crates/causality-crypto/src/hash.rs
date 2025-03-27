@@ -243,37 +243,42 @@ pub trait HashFunction: Send + Sync {
 /// Extension trait for content addressing support
 pub trait ContentHasher: HashFunction {
     /// Hash a content-addressed object
-    fn hash_object<T: ContentAddressed>(&self, object: &T) -> HashOutput {
-        self.hash(&object.to_bytes())
+    fn hash_object<T: ContentAddressed>(&self, object: &T) -> Result<HashOutput, HashError> {
+        let bytes = object.to_bytes()?;
+        Ok(self.hash(&bytes))
     }
     
     /// Verify a content hash against an object
-    fn verify_object<T: ContentAddressed>(&self, object: &T, hash: &HashOutput) -> bool {
-        let computed = self.hash_object(object);
-        computed == *hash
+    fn verify_object<T: ContentAddressed>(&self, object: &T, hash: &HashOutput) -> Result<bool, HashError> {
+        let computed = self.hash_object(object)?;
+        Ok(computed == *hash)
     }
 }
 
 /// Implement ContentHasher for all HashFunction implementations
 impl<T: HashFunction + ?Sized> ContentHasher for T {}
 
-/// Trait for content-addressed objects
+/// Content addressing trait for objects that can be uniquely identified by their content
 pub trait ContentAddressed {
     /// Get the content hash of this object
-    fn content_hash(&self) -> HashOutput;
+    fn content_hash(&self) -> Result<HashOutput, HashError>;
     
     /// Get a deterministic identifier derived from content
-    fn content_id(&self) -> ContentId {
-        ContentId::from(self.content_hash())
+    fn content_id(&self) -> Result<ContentId, HashError> {
+        let hash = self.content_hash()?;
+        Ok(ContentId::from(hash))
     }
     
     /// Verify that the object matches its hash
-    fn verify(&self) -> bool;
+    fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
+        let actual_hash = self.content_hash()?;
+        Ok(actual_hash == *expected_hash)
+    }
     
-    /// Convert to a serialized form for storage using Borsh
-    fn to_bytes(&self) -> Vec<u8>;
+    /// Convert to a serialized form for storage
+    fn to_bytes(&self) -> Result<Vec<u8>, HashError>;
     
-    /// Create from serialized form using Borsh
+    /// Create from serialized form
     fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> where Self: Sized;
 }
 
@@ -299,12 +304,12 @@ impl Hasher {
     }
     
     /// Hash a content-addressed object
-    pub fn hash_object<T: ContentAddressed>(&self, object: &T) -> HashOutput {
+    pub fn hash_object<T: ContentAddressed>(&self, object: &T) -> Result<HashOutput, HashError> {
         self.function.hash_object(object)
     }
     
     /// Verify a content hash against an object
-    pub fn verify_object<T: ContentAddressed>(&self, object: &T, hash: &HashOutput) -> bool {
+    pub fn verify_object<T: ContentAddressed>(&self, object: &T, hash: &HashOutput) -> Result<bool, HashError> {
         self.function.verify_object(object, hash)
     }
 }
@@ -445,7 +450,7 @@ impl DeferredHashId {
             nonce: rand::random::<[u8; 16]>(),
         };
         
-        let content_id = content.content_id();
+        let content_id = content.content_id().unwrap();
         Self(format!("deferred:{}", content_id))
     }
     
@@ -471,24 +476,20 @@ struct DeferredIdContent {
 }
 
 impl ContentAddressed for DeferredIdContent {
-    fn content_hash(&self) -> HashOutput {
+    fn content_hash(&self) -> Result<HashOutput, HashError> {
         let hash_factory = HashFactory::default();
         let hasher = hash_factory.create_hasher().unwrap();
-        let data = self.try_to_vec().unwrap();
-        hasher.hash(&data)
+        let data = self.try_to_vec()?;
+        Ok(hasher.hash(&data))
     }
     
-    fn verify(&self) -> bool {
-        let hash = self.content_hash();
-        let serialized = self.to_bytes();
-        
-        let hash_factory = HashFactory::default();
-        let hasher = hash_factory.create_hasher().unwrap();
-        hasher.hash(&serialized) == hash
+    fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
+        let actual_hash = self.content_hash()?;
+        Ok(actual_hash == *expected_hash)
     }
     
-    fn to_bytes(&self) -> Vec<u8> {
-        self.try_to_vec().unwrap()
+    fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+        self.try_to_vec()
     }
     
     fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {

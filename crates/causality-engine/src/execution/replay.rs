@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 
 use causality_types::{Error, Result};
-use causality_effects::ContentHash;
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::ContentHash;
 use crate::execution::{ContextId, ExecutionContext, ExecutionEvent, Value};
 use causality_engine::ExecutionTracer;
 

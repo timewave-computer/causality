@@ -14,6 +14,16 @@ use borsh::{BorshSerialize, BorshDeserialize};
 
 // Export crypto_primitives module
 pub mod crypto_primitives;
+// Export content_addressing module
+pub mod content_addressing;
+// Export utilities module
+pub mod utils;
+// Export verification module
+pub mod verification;
+// Export time_snapshot module
+pub mod time_snapshot;
+// Export time_effect_system module
+pub mod time_effect_system;
 
 // Export core types from crypto_primitives module
 pub use crypto_primitives::{
@@ -23,6 +33,32 @@ pub use crypto_primitives::{
     HashOutput,
     HashAlgorithm,
     HashError,
+};
+
+// Export utility functions
+pub use utils::{
+    debug_format,
+    display_format,
+    truncate_str,
+    truncate_lines,
+};
+
+// Export verification types
+pub use verification::{
+    VerificationError,
+    VerificationResult,
+    TrustBoundary,
+    VerificationMetrics,
+    VerificationRegistry,
+    VerificationPoint,
+    Verifiable,
+};
+
+// Export time system types
+pub use time_effect_system::{
+    TimeEffectHandler,
+    TimeService,
+    TimeEffectHandlerWrapper,
 };
 
 // LamportTime definition for logical clock timestamps
@@ -70,29 +106,26 @@ pub mod trace {
     }
     
     impl ContentAddressed for TraceIdContent {
-        fn content_hash(&self) -> HashOutput {
-            let data = self.try_to_vec().unwrap();
-            // Simplified hashing as we've moved the hash function implementation
-            // Just use default algorithm (Blake3) and zero-fill the bytes
-            // The actual hashing will be implemented in causality-crypto
-            let mut bytes = [0u8; 32];
-            for (i, b) in data.iter().enumerate().take(32) {
-                bytes[i] = *b;
-            }
-            HashOutput::new(bytes, HashAlgorithm::Blake3)
+        fn content_hash(&self) -> Result<HashOutput, HashError> {
+            // Use canonical serialization for content hashing
+            crate::content_addressing::canonical_content_hash(self)
+                .map_err(|e| HashError::SerializationError(e.to_string()))
         }
         
-        fn verify(&self) -> bool {
-            // Simplified implementation since hash function implementation is in crypto crate
-            true
+        fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
+            let actual_hash = self.content_hash()?;
+            Ok(actual_hash == *expected_hash)
         }
         
-        fn to_bytes(&self) -> Vec<u8> {
-            self.try_to_vec().unwrap()
+        fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+            // Use canonical binary serialization
+            crate::content_addressing::canonical::to_canonical_binary(self)
+                .map_err(|e| HashError::SerializationError(e.to_string()))
         }
         
         fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
-            BorshDeserialize::try_from_slice(bytes)
+            // Use canonical binary deserialization
+            crate::content_addressing::canonical::from_canonical_binary(bytes)
                 .map_err(|e| HashError::SerializationError(e.to_string()))
         }
     }
@@ -107,7 +140,10 @@ pub mod trace {
                 operation: None,
             };
             
-            let content_id = content.content_id();
+            // Handle potential error from content_id(), falling back to a default ID if needed
+            let content_id = content.content_id().unwrap_or_else(|_| {
+                ContentId::from("default-trace-id")
+            });
             TraceId(format!("trace:{}", content_id))
         }
         
@@ -120,7 +156,10 @@ pub mod trace {
                 operation: operation.map(|s| s.to_string()),
             };
             
-            let content_id = content.content_id();
+            // Handle potential error from content_id(), falling back to a default ID if needed
+            let content_id = content.content_id().unwrap_or_else(|_| {
+                ContentId::from(format!("child-of-{}", parent.as_str()))
+            });
             TraceId(format!("trace:{}", content_id))
         }
         
@@ -607,48 +646,6 @@ pub enum Visibility {
     
     /// Visible to specific entities
     Restricted(Vec<String>),
-}
-
-/// Trait for extended type operations
-pub trait TypeExtensions {
-    /// Get a string representation of the type
-    fn to_string_representation(&self) -> String;
-    
-    /// Get a stable hash of the type
-    fn stable_hash(&self) -> u64;
-}
-
-// Implement TypeExtensions for the ContentId struct
-impl TypeExtensions for ContentId {
-    fn to_string_representation(&self) -> String {
-        self.to_string()
-    }
-    
-    fn stable_hash(&self) -> u64 {
-        // Simple hash function for example purposes
-        let mut hash: u64 = 0;
-        for byte in self.hash().as_bytes() {
-            hash = hash.wrapping_mul(31).wrapping_add(*byte as u64);
-        }
-        hash
-    }
-}
-
-// Use the DomainId struct from the domain module
-// Avoid having two implementations for the same underlying type
-impl TypeExtensions for domain::DomainId {
-    fn to_string_representation(&self) -> String {
-        self.as_str().to_string()
-    }
-    
-    fn stable_hash(&self) -> u64 {
-        // Simple hash function for example purposes
-        let mut hash: u64 = 0;
-        for byte in self.as_str().as_bytes() {
-            hash = hash.wrapping_mul(31).wrapping_add(*byte as u64);
-        }
-        hash
-    }
 }
 
 #[cfg(test)]

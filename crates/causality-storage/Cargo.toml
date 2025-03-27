@@ -5,6 +5,12 @@ edition = "2021"
 description = "Causality - Storage abstractions"
 license = "MIT OR Apache-2.0"
 
+[features]
+default = []
+memory = []
+rocks = []
+all-db = ["memory", "rocks"]
+
 [dependencies]
 # External dependencies
 serde = { workspace = true, features = ["derive"] }
@@ -15,3 +21,7 @@ tracing = { workspace = true }
 # Internal dependencies
 causality-types = { workspace = true }
 causality-core = { workspace = true }
+
+# DEPRECATED: Using causality-db creates a circular dependency
+# This functionality has been consolidated into causality-core
+# causality-db = { workspace = true, optional = true }

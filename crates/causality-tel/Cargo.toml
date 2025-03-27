@@ -15,6 +15,9 @@ tracing = { workspace = true }
 # Internal dependencies
 causality-types = { workspace = true }
 causality-core = { workspace = true }
-causality-resource = { workspace = true }
-causality-effects = { workspace = true }
 causality-engine = { workspace = true }
+
+# DEPRECATED: Dependencies on legacy crates have been removed
+# All functionality is now available through causality-core
+# causality-resource = { workspace = true }
+# causality-effects = { workspace = true }

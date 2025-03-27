@@ -16,5 +16,7 @@ borsh = { workspace = true }
 rand = { workspace = true }
 chrono = { workspace = true }
 hex = { workspace = true }
+lazy_static = "1.4"
+parking_lot = "0.12"
 
-# No internal dependencies - this is now a base crate
+# This is a base crate with no internal dependencies

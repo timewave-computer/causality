@@ -18,7 +18,7 @@ use tokio::time::{sleep, timeout};
 use causality_types::{Error, Result};
 use causality_crypto::ContentId;
 use causality_core::primitives::{ResourceManager, SharedResourceManager};
-use causality_resource::ResourceRegister;
+use :ResourceRegister:causality_core::resource::Resource::ResourceRegister;
 
 /// A barrier that waits for a condition to be true
 ///

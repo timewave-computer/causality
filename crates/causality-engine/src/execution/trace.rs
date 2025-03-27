@@ -16,7 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Serialize, Deserialize};
 
-use causality_effects::ContentHash;
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::ContentHash;
 use causality_types::{Error, Result};
 use crate::execution::{ContextId, ExecutionEvent};
 use causality_engine::Value;

@@ -138,12 +138,38 @@ impl ResourceOperation {
     /// Verify the operation's proof
     pub fn verify(&self) -> bool {
         if let (Some(proof), Some(key)) = (&self.proof, &self.verification_key) {
-            // In a real implementation, this would verify the proof
-            // using the verification key and operation data
+            // Instead of just returning true, we'll do some basic checks
+            // In a real implementation, this would use cryptographic verification
             
-            // For now, we'll just return true as a placeholder
-            true
+            // 1. Check that the proof has data
+            if proof.data.is_empty() {
+                tracing::warn!("Empty proof data for operation on {:?}", self.target);
+                return false;
+            }
+            
+            // 2. Check that we have a verification key with data
+            if key.is_empty() {
+                tracing::warn!("Empty verification key for operation on {:?}", self.target);
+                return false;
+            }
+            
+            // 3. Check that the proof type is recognized
+            match proof.proof_type.as_str() {
+                "signature" | "zk" | "merkle" | "sha256" | "multisig" => {
+                    // Recognized proof types
+                    // In a real implementation, we would do type-specific verification
+                    tracing::info!("Recognized proof type: {}", proof.proof_type);
+                    
+                    // For now just check that the key and data have reasonable lengths
+                    key.len() >= 16 && proof.data.len() >= 32
+                }
+                _ => {
+                    tracing::warn!("Unrecognized proof type: {}", proof.proof_type);
+                    false
+                }
+            }
         } else {
+            // No proof or key provided
             false
         }
     }

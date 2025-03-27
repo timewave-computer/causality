@@ -1,68 +1,152 @@
 // Domain capability system
 // Original file: src/domain/capability.rs
 
-// Domain Capabilities System
-//
-// This module implements a capability system specifically for domain adapters,
-// integrating with the general capability system.
+//! Domain-specific capability system for domain adapters
+//!
+//! This module provides a capability-based system specifically for domain adapters,
+//! integrating with the general capability system.
 
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use async_trait::async_trait;
-use serde::{Serialize, Deserialize};
-
-use crate::domain::{DomainId, DomainType, DomainAdapter};
-use causality_types::{Error, Result};
-use crate::resource::{
-    CapabilityId, ContentId, Right,
-    capability_system::{
-        RigorousCapability, CapabilityConstraint, CapabilitySystem,
-        CapabilityStatus, AuthenticationFactor
-    }
+// Re-export from core capability system
+pub use causality_core::capability::{
+    // Core types
+    ResourceId,
+    IdentityId,
+    Capability,
+    CapabilityGrants,
+    ResourceGuard,
+    ResourceRegistry,
+    CapabilityError,
+    
+    // Content addressing
+    ContentHash,
+    ContentRef,
+    ContentAddressed,
+    ContentAddressedCapability,
+    ContentAddressedRegistry,
+    ContentAddressedStorage,
+    ContentAddressingError,
+    
+    // Domain-specific capability types
+    domain::{
+        DomainCapability,
+        DomainCapabilityType,
+        DomainCapabilityRegistry,
+        DomainCapabilityError,
+    },
 };
-use causality_types::Address;
 
-/// Standard domain capabilities that can be supported by domain adapters
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum DomainCapability {
-    // Transaction capabilities
-    SendTransaction,
-    SignTransaction,
-    BatchTransactions,
+// Re-export helpers
+pub use causality_core::capability::domain::helpers;
+
+// Domain-specific extensions and utilities
+pub mod extensions {
+    use super::*;
+    use crate::domain::{DomainId, DomainType, DomainAdapter};
+    use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
     
-    // Smart contract capabilities
-    DeployContract,
-    ExecuteContract,
-    QueryContract,
+    /// Extension trait for domain adapters
+    pub trait DomainCapabilityExtension {
+        /// Check if this domain adapter has a specific capability
+        fn has_domain_capability(&self, capability: &DomainCapabilityType) -> bool;
+        
+        /// Get all domain capabilities
+        fn domain_capabilities(&self) -> HashSet<DomainCapabilityType>;
+    }
     
-    // State capabilities
-    ReadState,
-    WriteState,
+    impl<T: DomainAdapter> DomainCapabilityExtension for T {
+        fn has_domain_capability(&self, capability: &DomainCapabilityType) -> bool {
+            let capability_str = capability.to_string();
+            self.capabilities().contains(&capability_str)
+        }
+        
+        fn domain_capabilities(&self) -> HashSet<DomainCapabilityType> {
+            self.capabilities()
+                .into_iter()
+                .filter_map(|s| match DomainCapabilityType::from_string(&s) {
+                    Some(cap) => Some(cap),
+                    None => None,
+                })
+                .collect()
+        }
+    }
     
-    // Cryptographic capabilities
-    VerifySignature,
-    GenerateProof,
-    VerifyProof,
+    /// Helper method to get domain-specific capabilities
+    pub fn capabilities_for_domain_type(domain_type: &DomainType) -> HashSet<DomainCapabilityType> {
+        let mut capabilities = HashSet::new();
+        
+        // Common capabilities for all domains
+        capabilities.insert(DomainCapabilityType::SendTransaction);
+        capabilities.insert(DomainCapabilityType::ReadState);
+        
+        // Add capabilities based on domain type
+        match domain_type {
+            DomainType::Blockchain => {
+                capabilities.insert(DomainCapabilityType::DeployContract);
+                capabilities.insert(DomainCapabilityType::ExecuteContract);
+                capabilities.insert(DomainCapabilityType::SignTransaction);
+            },
+            DomainType::StateMachine => {
+                capabilities.insert(DomainCapabilityType::WriteState);
+            },
+            DomainType::Database => {
+                capabilities.insert(DomainCapabilityType::WriteState);
+                capabilities.insert(DomainCapabilityType::QueryContract);
+            },
+            DomainType::ZkRollup => {
+                capabilities.insert(DomainCapabilityType::ZkProve);
+                capabilities.insert(DomainCapabilityType::ZkVerify);
+                capabilities.insert(DomainCapabilityType::GenerateProof);
+            },
+            DomainType::Bridge => {
+                capabilities.insert(DomainCapabilityType::BridgeAssets);
+                capabilities.insert(DomainCapabilityType::VerifyBridgeTransaction);
+            },
+            // Add more domain types as needed
+            _ => {
+                // Default capabilities already added
+            }
+        }
+        
+        capabilities
+    }
     
-    // ZK capabilities
-    ZkProve,
-    ZkVerify,
+    /// Create a capability for the specified domain
+    pub fn create_domain_capability_for_adapter(
+        adapter: &dyn DomainAdapter,
+        capability_type: DomainCapabilityType,
+        owner: IdentityId
+    ) -> DomainCapability {
+        capability_type.create_capability(CapabilityGrants::default(), owner)
+    }
     
-    // Consensus capabilities
-    Stake,
-    Validate,
-    Vote,
-    
-    // Governance capabilities
-    ProposeUpgrade,
-    VoteOnProposal,
-    
-    // Cross-domain capabilities
-    BridgeAssets,
-    VerifyBridgeTransaction,
-    
-    // Custom capability (with name)
-    Custom(String)
+    /// Helper to convert string to capability type
+    pub fn domain_capability_from_string(s: &str) -> Option<DomainCapabilityType> {
+        match s {
+            "send_transaction" => Some(DomainCapabilityType::SendTransaction),
+            "sign_transaction" => Some(DomainCapabilityType::SignTransaction),
+            "batch_transactions" => Some(DomainCapabilityType::BatchTransactions),
+            "deploy_contract" => Some(DomainCapabilityType::DeployContract),
+            "execute_contract" => Some(DomainCapabilityType::ExecuteContract),
+            "query_contract" => Some(DomainCapabilityType::QueryContract),
+            "read_state" => Some(DomainCapabilityType::ReadState),
+            "write_state" => Some(DomainCapabilityType::WriteState),
+            "verify_signature" => Some(DomainCapabilityType::VerifySignature),
+            "generate_proof" => Some(DomainCapabilityType::GenerateProof),
+            "verify_proof" => Some(DomainCapabilityType::VerifyProof),
+            "zk_prove" => Some(DomainCapabilityType::ZkProve),
+            "zk_verify" => Some(DomainCapabilityType::ZkVerify),
+            "stake" => Some(DomainCapabilityType::Stake),
+            "validate" => Some(DomainCapabilityType::Validate),
+            "vote" => Some(DomainCapabilityType::Vote),
+            "propose_upgrade" => Some(DomainCapabilityType::ProposeUpgrade),
+            "vote_on_proposal" => Some(DomainCapabilityType::VoteOnProposal),
+            "bridge_assets" => Some(DomainCapabilityType::BridgeAssets),
+            "verify_bridge_transaction" => Some(DomainCapabilityType::VerifyBridgeTransaction),
+            s if s.starts_with("custom_") => Some(DomainCapabilityType::Custom(s[7..].to_string())),
+            _ => None,
+        }
+    }
 }
 
 impl DomainCapability {
@@ -171,18 +255,6 @@ impl DomainCapability {
         
         capabilities
     }
-}
-
-/// Domain capability manager that integrates with the resource capability system
-pub struct DomainCapabilityManager {
-    /// Reference to the general capability system
-    capability_system: Arc<dyn CapabilitySystem>,
-    
-    /// Default domain capabilities by domain type
-    default_capabilities: HashMap<DomainType, HashSet<DomainCapability>>,
-    
-    /// Cache of domain capabilities by domain ID
-    domain_capabilities: HashMap<DomainId, HashSet<DomainCapability>>,
 }
 
 impl DomainCapabilityManager {
@@ -356,29 +428,6 @@ impl DomainCapabilityManager {
         
         // No valid capability found
         Ok(false)
-    }
-}
-
-/// Trait extension for DomainAdapter to provide capability methods
-pub trait DomainCapabilityExtension {
-    /// Check if this domain adapter has a specific capability
-    fn has_domain_capability(&self, capability: &DomainCapability) -> bool;
-    
-    /// Get all domain capabilities
-    fn domain_capabilities(&self) -> HashSet<DomainCapability>;
-}
-
-impl<T: DomainAdapter> DomainCapabilityExtension for T {
-    fn has_domain_capability(&self, capability: &DomainCapability) -> bool {
-        let capability_str = capability.to_string();
-        self.has_capability(&capability_str)
-    }
-    
-    fn domain_capabilities(&self) -> HashSet<DomainCapability> {
-        self.capabilities()
-            .iter()
-            .filter_map(|cap_str| DomainCapability::from_string(cap_str))
-            .collect()
     }
 }
 
@@ -563,17 +612,17 @@ mod tests {
         );
         
         // Test capability check
-        assert!(adapter.has_domain_capability(&DomainCapability::SendTransaction));
-        assert!(adapter.has_domain_capability(&DomainCapability::ExecuteContract));
-        assert!(adapter.has_domain_capability(&DomainCapability::QueryContract));
-        assert!(!adapter.has_domain_capability(&DomainCapability::DeployContract));
+        assert!(adapter.has_domain_capability(&DomainCapabilityType::SendTransaction));
+        assert!(adapter.has_domain_capability(&DomainCapabilityType::ExecuteContract));
+        assert!(adapter.has_domain_capability(&DomainCapabilityType::QueryContract));
+        assert!(!adapter.has_domain_capability(&DomainCapabilityType::DeployContract));
         
         // Test getting all capabilities
         let caps = adapter.domain_capabilities();
         assert_eq!(caps.len(), 3);
-        assert!(caps.contains(&DomainCapability::SendTransaction));
-        assert!(caps.contains(&DomainCapability::ExecuteContract));
-        assert!(caps.contains(&DomainCapability::QueryContract));
+        assert!(caps.contains(&DomainCapabilityType::SendTransaction));
+        assert!(caps.contains(&DomainCapabilityType::ExecuteContract));
+        assert!(caps.contains(&DomainCapabilityType::QueryContract));
     }
     
     #[test]

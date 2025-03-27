@@ -18,5 +18,5 @@ pub mod messaging;
 pub mod types;
 
 // Re-exports of core types
-pub use types::{GenericActorId, UuidActorId, ActorIdBox};
+pub use types::{GenericActorId, ActorIdBox};
 pub use role::ActorRole; 

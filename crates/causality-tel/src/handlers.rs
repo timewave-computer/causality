@@ -21,7 +21,7 @@ use crate::effect::{
     Effect, EffectContext, EffectOutcome, EffectResult,
     TransferEffect, QueryEffect, StorageEffect
 };
-use causality_tel::TelScript;
+use crate::script::{TelScript, TelOperation, TelOperationType};
 
 /// Base trait for all TEL handlers
 #[async_trait]
@@ -201,61 +201,37 @@ impl<C: Effect + ?Sized> TelHandler for BaseTelHandler<C> {
     }
 }
 
-/// Parameters for transfer operations
+/// Standard parameters for transfer operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransferParams {
     /// Source address
-    pub from: Address,
-    
+    pub from: String,
     /// Destination address
-    pub to: Address,
-    
-    /// Amount to transfer
-    pub amount: Quantity,
-    
-    /// Token/resource ID
-    pub token: ContentId,
-    
-    /// Domain ID
-    pub domain_id: DomainId,
-    
-    /// Additional parameters
-    #[serde(flatten)]
-    pub additional: HashMap<String, Value>,
+    pub to: String,
+    /// Asset identifier
+    pub asset: String,
+    /// Transfer amount
+    pub amount: String,
 }
 
-/// Parameters for storage operations
+/// Standard parameters for storage operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageParams {
-    /// Register ID
-    pub register_id: ContentId,
-    
+    /// Register ID to store data in
+    pub register_id: String,
     /// Fields to store
     pub fields: Vec<String>,
-    
-    /// Domain ID
-    pub domain_id: DomainId,
-    
     /// Storage strategy
     pub strategy: String,
-    
-    /// Additional parameters
-    #[serde(flatten)]
-    pub additional: HashMap<String, Value>,
 }
 
-/// Parameters for query operations
+/// Standard parameters for query operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryParams {
-    /// Query type
-    pub query_type: String,
-    
-    /// Domain ID
-    pub domain_id: DomainId,
-    
-    /// Query parameters
-    #[serde(flatten)]
-    pub parameters: HashMap<String, Value>,
+    /// Function to call
+    pub function: String,
+    /// Arguments to the function
+    pub args: Value,
 }
 
 /// TEL compiler interface
@@ -268,9 +244,9 @@ pub trait TelCompiler {
     async fn execute(&self, script: &TelScript, context: EffectContext) -> Result<Vec<EffectOutcome>, anyhow::Error>;
 }
 
-/// Standard TEL compiler implementation
+/// Standard implementation of TEL compiler
 pub struct StandardTelCompiler {
-    /// Handler registry
+    /// Registry of handlers
     handler_registry: Arc<TelHandlerRegistry>,
 }
 
@@ -281,29 +257,100 @@ impl StandardTelCompiler {
             handler_registry,
         }
     }
+    
+    /// Convert a single TEL operation to effects
+    async fn operation_to_effects(
+        &self,
+        operation: &TelOperation,
+        context: &EffectContext,
+    ) -> Result<Vec<Arc<dyn Effect>>, anyhow::Error> {
+        match operation.operation_type {
+            TelOperationType::Transfer | TelOperationType::Store | TelOperationType::Query => {
+                // For atomic operations, find a handler and create the effect
+                let domain_id = operation.domain_id.clone().ok_or_else(|| 
+                    anyhow::anyhow!("Domain ID is required for operation: {}", operation.function_name))?;
+                    
+                let handler = self.handler_registry.find_handler_for_domain(
+                    &operation.function_name, 
+                    &domain_id
+                ).ok_or_else(|| 
+                    anyhow::anyhow!("No handler found for: {} on domain {}", 
+                        operation.function_name, domain_id))?;
+                
+                let effect = handler.create_effect(operation.parameters.clone(), context).await?;
+                Ok(vec![effect])
+            },
+            TelOperationType::Sequence => {
+                // For sequence operations, process each child in order
+                let mut effects = Vec::new();
+                for child in &operation.children {
+                    let child_effects = self.operation_to_effects(child, context).await?;
+                    effects.extend(child_effects);
+                }
+                Ok(effects)
+            },
+            TelOperationType::Parallel => {
+                // For parallel operations, process all children (in real implementation would be concurrent)
+                let mut effects = Vec::new();
+                for child in &operation.children {
+                    let child_effects = self.operation_to_effects(child, context).await?;
+                    effects.extend(child_effects);
+                }
+                Ok(effects)
+            },
+            TelOperationType::Conditional => {
+                // For conditional operations, we need special handling
+                // In a real implementation, this would create a conditional effect
+                // For now, we'll just process the first child (condition) and return an error
+                if operation.children.is_empty() {
+                    return Err(anyhow::anyhow!("Conditional operation requires at least one child"));
+                }
+                
+                Err(anyhow::anyhow!("Conditional operations not fully implemented yet"))
+            },
+            TelOperationType::Custom(_) => {
+                // Custom operations would require special handling
+                Err(anyhow::anyhow!("Custom operations not implemented yet"))
+            },
+        }
+    }
 }
 
 #[async_trait]
 impl TelCompiler for StandardTelCompiler {
-    async fn compile(&self, _script: &TelScript, _context: &EffectContext) -> Result<Vec<Arc<dyn Effect>>, anyhow::Error> {
-        // This is a placeholder - the actual implementation would:
-        // 1. Parse the TEL script
-        // 2. For each operation, find the appropriate handler
-        // 3. Create effects using the handlers
-        // 4. Return the resulting effects
-        Err(anyhow::anyhow!("TEL compilation not yet implemented"))
+    async fn compile(&self, script: &TelScript, context: &EffectContext) -> Result<Vec<Arc<dyn Effect>>, anyhow::Error> {
+        // Basic implementation that processes each operation in the script
+        
+        // Check if the script is empty
+        if script.operations().is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        // Process each top-level operation
+        let mut all_effects = Vec::new();
+        for operation in script.operations() {
+            let effects = self.operation_to_effects(operation, context).await?;
+            all_effects.extend(effects);
+        }
+        
+        Ok(all_effects)
     }
     
     async fn execute(&self, script: &TelScript, context: EffectContext) -> Result<Vec<EffectOutcome>, anyhow::Error> {
         // Compile the script into effects
         let effects = self.compile(script, &context).await?;
         
+        // If no effects, return empty result
+        if effects.is_empty() {
+            return Ok(Vec::new());
+        }
+        
         // Create orchestrator for execution
         let validator = crate::effect::EffectValidator::new(
             // These would be provided in a real implementation
             Arc::new(crate::domain::DomainRegistry::new()),
-            Arc::new(causality_resource::MockCapabilityRepository::new()),
-            Arc::new(causality_resource::MockResourceAPI::new()),
+            Arc::new(crate::resource::MockCapabilityRepository::new()),
+            Arc::new(crate::resource::MockResourceAPI::new()),
         );
         let orchestrator = crate::effect::EffectOrchestrator::new(validator);
         

@@ -15,7 +15,7 @@ use causality_tel::{Address};
 use causality_tel::{TelError, TelResult};
 use causality_crypto::ContentId;
 use crate::resource::ResourceRegister;
-use causality_resource::RegisterState;
+use :ResourceRegister:causality_core::resource::Resource::RegisterState;
 use super::manager::ResourceManager;
 
 /// Types of access to a resource

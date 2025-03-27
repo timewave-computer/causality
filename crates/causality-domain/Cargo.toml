@@ -5,6 +5,14 @@ edition = "2021"
 description = "Causality - Domain system"
 license = "MIT OR Apache-2.0"
 
+[features]
+default = []
+resource = []
+# Effects integration with abstract interfaces
+effects-integration = []
+# DEPRECATED: Full effects integration is now provided through causality-core
+effects-provider = ["effects-integration"]
+
 [dependencies]
 # External dependencies
 serde = { workspace = true, features = ["derive"] }
@@ -15,5 +23,8 @@ tracing = { workspace = true }
 # Internal dependencies
 causality-types = { workspace = true }
 causality-core = { workspace = true }
-causality-resource = { workspace = true }
-causality-effects = { workspace = true }
+
+# DEPRECATED: These dependencies have been consolidated into causality-core
+# All functionality is now available through the core crate
+# causality-resource = { workspace = true }
+# causality-effects = { workspace = true, optional = true }

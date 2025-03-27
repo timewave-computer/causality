@@ -42,7 +42,7 @@ pub enum StorageError {
     HashError(#[from] HashError),
 }
 
-/// Interface for content-addressed storage
+/// Storage for content-addressed objects
 pub trait ContentAddressedStorage: Send + Sync {
     /// Store an object in the content-addressed storage
     fn store<T: ContentAddressed>(&self, object: &T) -> Result<ContentId, StorageError>;
@@ -90,27 +90,27 @@ impl InMemoryStorage {
 
 impl ContentAddressedStorage for InMemoryStorage {
     fn store<T: ContentAddressed>(&self, object: &T) -> Result<ContentId, StorageError> {
-        let id = object.content_id();
-        let data = object.to_bytes();
+        // Get the content hash
+        let content_hash = object.content_hash()?;
         
-        // Verify the object's content hash
-        if !object.verify() {
-            return Err(StorageError::HashMismatch(
-                format!("Object verification failed: {}", id)
-            ));
-        }
+        // Serialize the object
+        let bytes = object.to_bytes()?;
         
+        // Create a content ID
+        let content_id = ContentId::from(content_hash);
+        
+        // Store the bytes with the content ID as the key
         let mut objects = self.objects.write().unwrap();
         
-        // Check for duplicates
-        if objects.contains_key(&id) {
-            return Err(StorageError::Duplicate(
-                format!("Object already exists: {}", id)
-            ));
+        // Skip if already exists
+        if objects.contains_key(&content_id) {
+            return Ok(content_id);
         }
         
-        objects.insert(id.clone(), data);
-        Ok(id)
+        // Store the object
+        objects.insert(content_id.clone(), bytes);
+        
+        Ok(content_id)
     }
     
     fn contains(&self, id: &ContentId) -> bool {
@@ -151,6 +151,124 @@ impl ContentAddressedStorage for InMemoryStorage {
     }
 }
 
+/// Caching storage that wraps another storage
+pub struct CachingStorage {
+    /// The backing storage
+    backing: Arc<dyn ContentAddressedStorage>,
+    /// Cache for content data
+    cache: RwLock<HashMap<ContentId, Vec<u8>>>,
+    /// Maximum cache size
+    capacity: usize,
+}
+
+impl CachingStorage {
+    /// Create a new caching storage with the specified backing store and capacity
+    pub fn new(backing: Arc<dyn ContentAddressedStorage>, capacity: usize) -> Self {
+        Self {
+            backing,
+            cache: RwLock::new(HashMap::with_capacity(capacity)),
+            capacity,
+        }
+    }
+    
+    /// Clear the cache
+    pub fn clear_cache(&self) {
+        let mut cache = self.cache.write().unwrap();
+        cache.clear();
+    }
+}
+
+impl ContentAddressedStorage for CachingStorage {
+    fn store<T: ContentAddressed>(&self, object: &T) -> Result<ContentId, StorageError> {
+        // Store in backing storage
+        let content_id = self.backing.store(object)?;
+        
+        // Cache the object's bytes
+        if let Ok(bytes) = object.to_bytes() {
+            let mut cache = self.cache.write().unwrap();
+            
+            // If cache is at capacity, remove an item
+            if cache.len() >= self.capacity && !cache.contains_key(&content_id) {
+                if let Some(key) = cache.keys().next().cloned() {
+                    cache.remove(&key);
+                }
+            }
+            
+            cache.insert(content_id.clone(), bytes);
+        }
+        
+        Ok(content_id)
+    }
+    
+    fn contains(&self, id: &ContentId) -> bool {
+        // Check cache first
+        {
+            let cache = self.cache.read().unwrap();
+            if cache.contains_key(id) {
+                return true;
+            }
+        }
+        
+        // Fall back to backing storage
+        self.backing.contains(id)
+    }
+    
+    fn get_bytes(&self, id: &ContentId) -> Result<Vec<u8>, StorageError> {
+        // Check cache first
+        {
+            let cache = self.cache.read().unwrap();
+            if let Some(bytes) = cache.get(id) {
+                return Ok(bytes.clone());
+            }
+        }
+        
+        // Get from backing storage
+        let bytes = self.backing.get_bytes(id)?;
+        
+        // Cache the result
+        {
+            let mut cache = self.cache.write().unwrap();
+            
+            // If cache is at capacity, remove an item
+            if cache.len() >= self.capacity && !cache.contains_key(id) {
+                if let Some(key) = cache.keys().next().cloned() {
+                    cache.remove(&key);
+                }
+            }
+            
+            cache.insert(id.clone(), bytes.clone());
+        }
+        
+        Ok(bytes)
+    }
+    
+    fn remove(&self, id: &ContentId) -> Result<(), StorageError> {
+        // Remove from cache
+        {
+            let mut cache = self.cache.write().unwrap();
+            cache.remove(id);
+        }
+        
+        // Remove from backing storage
+        self.backing.remove(id)
+    }
+    
+    fn clear(&self) {
+        // Clear cache
+        {
+            let mut cache = self.cache.write().unwrap();
+            cache.clear();
+        }
+        
+        // Clear backing storage
+        self.backing.clear();
+    }
+    
+    fn len(&self) -> usize {
+        self.backing.len()
+    }
+}
+
 /// Factory for creating content-addressed storage instances
 pub struct StorageFactory {
     storage_type: StorageType,
@@ -161,6 +279,16 @@ pub struct StorageFactory {
 pub enum StorageType {
     /// In-memory storage
     InMemory,
+    /// Caching storage
+    Caching,
+    /// SMT-backed storage
+    Smt,
+}
+
+impl Default for StorageType {
+    fn default() -> Self {
+        StorageType::InMemory
+    }
 }
 
 impl StorageFactory {
@@ -169,11 +297,30 @@ impl StorageFactory {
         Self { storage_type }
     }
     
-    /// Create a storage instance
+    /// Create a new storage instance based on the factory's configuration
     pub fn create_storage(&self) -> Arc<dyn ContentAddressedStorage> {
         match self.storage_type {
             StorageType::InMemory => Arc::new(InMemoryStorage::new()),
+            StorageType::Caching => self.create_caching_storage(1000),
+            StorageType::Smt => self.create_smt_storage(),
         }
+    }
+    
+    /// Create a new in-memory storage
+    pub fn create_in_memory_storage(&self) -> Arc<dyn ContentAddressedStorage> {
+        Arc::new(InMemoryStorage::new())
+    }
+    
+    /// Create a new caching storage that wraps another storage
+    pub fn create_caching_storage(&self, capacity: usize) -> Arc<dyn ContentAddressedStorage> {
+        let base_storage = self.create_in_memory_storage();
+        Arc::new(CachingStorage::new(base_storage, capacity))
+    }
+    
+    /// Create a new SMT-backed storage
+    pub fn create_smt_storage(&self) -> Arc<dyn ContentAddressedStorage> {
+        use crate::smt_content_store::SmtContentStore;
+        Arc::new(SmtContentStore::new_default())
     }
 }
 
@@ -205,23 +352,24 @@ mod tests {
     }
     
     impl ContentAddressed for TestObject {
-        fn content_hash(&self) -> HashOutput {
+        fn content_hash(&self) -> Result<HashOutput, HashError> {
             // Get a hash factory
             let hasher = crate::crypto::HashFactory::default()
                 .create_hasher()
                 .unwrap();
             
             // Serialize and hash
-            let data = self.try_to_vec().unwrap();
-            hasher.hash(&data)
+            let data = self.try_to_vec().map_err(|e| HashError::SerializationError(e.to_string()))?;
+            Ok(hasher.hash(&data))
         }
         
-        fn verify(&self) -> bool {
-            true  // Simplified for tests
+        fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
+            let actual_hash = self.content_hash()?;
+            Ok(actual_hash == *expected_hash)
         }
         
-        fn to_bytes(&self) -> Vec<u8> {
-            self.try_to_vec().unwrap()
+        fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+            self.try_to_vec().map_err(|e| HashError::SerializationError(e.to_string()))
         }
         
         fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {

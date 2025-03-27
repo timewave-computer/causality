@@ -1,0 +1,26 @@
+[package]
+name = "causality-db"
+version = "0.1.0"
+edition = "2021"
+description = "Causality - Database implementations (memory and RocksDB)"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["memory"]
+memory = []
+rocks = ["dep:rocksdb"]
+all = ["memory", "rocks"]
+
+[dependencies]
+# External dependencies
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+rocksdb = { workspace = true, optional = true }
+
+# Internal dependencies
+causality-types = { workspace = true }
+
+# DEPRECATED: This dependency creates a circular reference
+# causality-storage = { workspace = true } 

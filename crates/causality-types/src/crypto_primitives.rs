@@ -213,6 +213,18 @@ impl ContentId {
         }
         Self(HashOutput::new(bytes, HashAlgorithm::Blake3))
     }
+
+    /// Try to convert this ContentId to a core ContentHash
+    pub fn to_core_content_hash(&self) -> Result<ContentHash, HashError> {
+        let hash_output = self.hash();
+        Ok(ContentHash::from_hash_output(hash_output))
+    }
+    
+    /// Create a ContentId from a core ContentHash
+    pub fn from_core_content_hash(hash: &ContentHash) -> Result<Self, HashError> {
+        let hash_output = hash.to_hash_output()?;
+        Ok(Self::from(hash_output))
+    }
 }
 
 impl fmt::Display for ContentId {
@@ -243,18 +255,22 @@ impl From<&[u8]> for ContentId {
 /// Trait for content addressing support
 pub trait ContentAddressed {
     /// Get the content hash of this object
-    fn content_hash(&self) -> HashOutput;
+    fn content_hash(&self) -> Result<HashOutput, HashError>;
     
     /// Get a deterministic identifier derived from content
-    fn content_id(&self) -> ContentId {
-        ContentId::from(self.content_hash())
+    fn content_id(&self) -> Result<ContentId, HashError> {
+        let hash = self.content_hash()?;
+        Ok(ContentId::from(hash))
     }
     
     /// Verify that the object matches its hash
-    fn verify(&self) -> bool;
+    fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
+        let actual_hash = self.content_hash()?;
+        Ok(actual_hash == *expected_hash)
+    }
     
     /// Convert to a serialized form for storage
-    fn to_bytes(&self) -> Vec<u8>;
+    fn to_bytes(&self) -> Result<Vec<u8>, HashError>;
     
     /// Create from serialized form
     fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> where Self: Sized;
@@ -270,7 +286,7 @@ pub struct ContentHash {
 }
 
 impl ContentHash {
-    /// Create a new content hash
+    /// Create a new content hash with the specified algorithm and bytes
     pub fn new(algorithm: &str, bytes: Vec<u8>) -> Self {
         Self {
             algorithm: algorithm.to_string(),
@@ -278,18 +294,36 @@ impl ContentHash {
         }
     }
     
-    /// Convert the hash to a hex string
-    pub fn to_hex(&self) -> String {
-        let mut result = String::with_capacity(self.bytes.len() * 2);
-        for byte in &self.bytes {
-            result.push_str(&format!("{:02x}", byte));
-        }
-        result
+    /// Create a ContentHash from a HashOutput
+    pub fn from_hash_output(hash_output: &HashOutput) -> Self {
+        let algorithm = hash_output.algorithm().to_string();
+        let bytes = hash_output.as_bytes().to_vec();
+        Self::new(&algorithm, bytes)
     }
     
-    /// Get canonical string representation
+    /// Try to convert to a HashOutput
+    pub fn to_hash_output(&self) -> Result<HashOutput, HashError> {
+        let algorithm = HashAlgorithm::from_str(&self.algorithm)
+            .map_err(|_| HashError::UnsupportedAlgorithm(self.algorithm.clone()))?;
+            
+        if self.bytes.len() != 32 {
+            return Err(HashError::InvalidLength);
+        }
+        
+        let mut data = [0u8; 32];
+        data.copy_from_slice(&self.bytes);
+        
+        Ok(HashOutput::new(data, algorithm))
+    }
+    
+    /// Convert to a hex string
+    pub fn to_hex(&self) -> String {
+        hex::encode(&self.bytes)
+    }
+    
+    /// Convert to string representation
     pub fn to_string(&self) -> String {
-        format!("{}:{}", self.algorithm, self.to_hex())
+        format!("{}:{}", self.algorithm.to_lowercase(), self.to_hex())
     }
 }
 

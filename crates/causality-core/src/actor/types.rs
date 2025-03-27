@@ -201,9 +201,14 @@ pub enum ActorIdBox {
 }
 
 impl ActorIdBox {
-    /// Create a new random actor ID using GenericActorId
+    /// Create a new random actor ID using ContentAddressedActorId
     pub fn new() -> Self {
         Self::ContentAddressed(ContentAddressedActorId::new())
+    }
+    
+    /// Create a new ID with a name
+    pub fn with_name(name: impl Into<String>) -> Self {
+        Self::ContentAddressed(ContentAddressedActorId::with_name(name))
     }
     
     /// Create from a GenericActorId

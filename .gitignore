@@ -115,3 +115,5 @@ scripts/
 # Benchmarks and examples - uncomment if needed
 benches/
 examples/
+analysis/
+breakdeps/

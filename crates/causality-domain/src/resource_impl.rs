@@ -12,7 +12,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use causality_common::identity::ContentId;
-use causality_resource::interface::{
+use :ResourceRegister:causality_core::resource::Resource::interface::{
     ResourceState, ResourceAccessType, LockType, DependencyType, LockStatus,
     ResourceAccess, ResourceLifecycle, ResourceLocking, ResourceDependency,
     ResourceContext, ResourceAccessRecord, ResourceLockInfo, ResourceDependencyInfo,
@@ -266,15 +266,15 @@ impl ResourceLifecycle for DomainResourceImplementation {
         context: &dyn ResourceContext
     ) -> Result<()> {
         // Create a register for the resource
-        let mut register = causality_resource::ResourceRegister {
+        let mut register = :ResourceRegister:causality_core::resource::Resource::ResourceRegister {
             id: resource_id.clone(),
             state: match initial_state {
-                ResourceState::Created => causality_resource::RegisterState::Created,
-                ResourceState::Active => causality_resource::RegisterState::Active,
-                ResourceState::Locked => causality_resource::RegisterState::Locked,
-                ResourceState::Frozen => causality_resource::RegisterState::Frozen,
-                ResourceState::Consumed => causality_resource::RegisterState::Consumed,
-                ResourceState::Archived => causality_resource::RegisterState::Archived,
+                ResourceState::Created => :ResourceRegister:causality_core::resource::Resource::RegisterState::Created,
+                ResourceState::Active => :ResourceRegister:causality_core::resource::Resource::RegisterState::Active,
+                ResourceState::Locked => :ResourceRegister:causality_core::resource::Resource::RegisterState::Locked,
+                ResourceState::Frozen => :ResourceRegister:causality_core::resource::Resource::RegisterState::Frozen,
+                ResourceState::Consumed => :ResourceRegister:causality_core::resource::Resource::RegisterState::Consumed,
+                ResourceState::Archived => :ResourceRegister:causality_core::resource::Resource::RegisterState::Archived,
             },
             metadata: context.metadata().clone(),
             ..Default::default()
@@ -322,12 +322,12 @@ impl ResourceLifecycle for DomainResourceImplementation {
         // Update the state
         let mut updated_register = register.clone();
         updated_register.state = match new_state {
-            ResourceState::Created => causality_resource::RegisterState::Created,
-            ResourceState::Active => causality_resource::RegisterState::Active,
-            ResourceState::Locked => causality_resource::RegisterState::Locked,
-            ResourceState::Frozen => causality_resource::RegisterState::Frozen,
-            ResourceState::Consumed => causality_resource::RegisterState::Consumed,
-            ResourceState::Archived => causality_resource::RegisterState::Archived,
+            ResourceState::Created => :ResourceRegister:causality_core::resource::Resource::RegisterState::Created,
+            ResourceState::Active => :ResourceRegister:causality_core::resource::Resource::RegisterState::Active,
+            ResourceState::Locked => :ResourceRegister:causality_core::resource::Resource::RegisterState::Locked,
+            ResourceState::Frozen => :ResourceRegister:causality_core::resource::Resource::RegisterState::Frozen,
+            ResourceState::Consumed => :ResourceRegister:causality_core::resource::Resource::RegisterState::Consumed,
+            ResourceState::Archived => :ResourceRegister:causality_core::resource::Resource::RegisterState::Archived,
         };
         
         // Update metadata
@@ -383,12 +383,12 @@ impl ResourceLifecycle for DomainResourceImplementation {
         
         // Convert the state
         let state = match register.state {
-            causality_resource::RegisterState::Created => ResourceState::Created,
-            causality_resource::RegisterState::Active => ResourceState::Active,
-            causality_resource::RegisterState::Locked => ResourceState::Locked,
-            causality_resource::RegisterState::Frozen => ResourceState::Frozen,
-            causality_resource::RegisterState::Consumed => ResourceState::Consumed,
-            causality_resource::RegisterState::Archived => ResourceState::Archived,
+            :ResourceRegister:causality_core::resource::Resource::RegisterState::Created => ResourceState::Created,
+            :ResourceRegister:causality_core::resource::Resource::RegisterState::Active => ResourceState::Active,
+            :ResourceRegister:causality_core::resource::Resource::RegisterState::Locked => ResourceState::Locked,
+            :ResourceRegister:causality_core::resource::Resource::RegisterState::Frozen => ResourceState::Frozen,
+            :ResourceRegister:causality_core::resource::Resource::RegisterState::Consumed => ResourceState::Consumed,
+            :ResourceRegister:causality_core::resource::Resource::RegisterState::Archived => ResourceState::Archived,
         };
         
         // Update our cache

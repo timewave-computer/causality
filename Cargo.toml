@@ -4,11 +4,11 @@ members = [
     "crates/causality-types",
     "crates/causality-crypto",
     "crates/causality-core",
-    "crates/causality-resource",
-    "crates/causality-effects",
+    # DEPRECATED: Legacy crates pending removal
+    # "crates/causality-resource",
+    # "crates/causality-effects",
     "crates/causality-storage",
-    "crates/causality-db-memory",
-    "crates/causality-db-rocks",
+    "crates/causality-db",
     "crates/causality-engine",
     "crates/causality-tel",
     "crates/causality-boundary",
@@ -43,11 +43,11 @@ hex = "0.4"
 causality-types = { path = "crates/causality-types" }
 causality-crypto = { path = "crates/causality-crypto" }
 causality-core = { path = "crates/causality-core" }
-causality-resource = { path = "crates/causality-resource" }
-causality-effects = { path = "crates/causality-effects" }
+# DEPRECATED: Legacy crates pending removal
+# causality-resource = { path = "crates/causality-resource" }
+# causality-effects = { path = "crates/causality-effects" }
 causality-storage = { path = "crates/causality-storage" }
-causality-db-memory = { path = "crates/causality-db-memory" }
-causality-db-rocks = { path = "crates/causality-db-rocks" }
+causality-db = { path = "crates/causality-db" }
 causality-engine = { path = "crates/causality-engine" }
 causality-tel = { path = "crates/causality-tel" }
 causality-boundary = { path = "crates/causality-boundary" }
@@ -58,3 +58,12 @@ causality-domain-evm = { path = "domains/causality-domain-evm" }
 causality-domain-cosmwasm = { path = "domains/causality-domain-cosmwasm" }
 causality-domain-succinct = { path = "domains/causality-domain-succinct" }
 causality-domain-sdk = { path = "domains/causality-domain-sdk" }
+
+[workspace.metadata.examples]
+capability_content_addressing = { path = "examples/capability_content_addressing.rs" }
+content_normalization = { path = "examples/content_normalization.rs" }
+deferred_hashing = { path = "examples/deferred_hashing.rs" }
+sparse_merkle_tree = { path = "examples/sparse_merkle_tree.rs" }
+smt_integration = { path = "examples/smt_integration.rs" }
+verification_system = { path = "examples/verification_system.rs" }
+cross_domain_verification = { path = "examples/cross_domain_verification.rs" }

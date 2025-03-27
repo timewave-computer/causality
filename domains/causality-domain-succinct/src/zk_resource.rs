@@ -15,7 +15,7 @@ use crate::domain::DomainId;
 use causality_domain::DomainAdapter;
 use causality_engine_types::FactType;
 use causality_engine::FactId;
-use causality_resource::{
+use causality_core::resource::{
     ResourceRegister, ResourceLogic, FungibilityDomain, 
     Quantity, StorageStrategy, StateVisibility
 };

@@ -16,8 +16,8 @@ use borsh::{BorshSerialize, BorshDeserialize};
 
 use causality_types::{Error, Result};
 use crate::effect::EffectType;
-use causality_effects::ContentHash;
-use causality_effects;
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::ContentHash;
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime;
 use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 /// A unique identifier for an execution context

@@ -102,9 +102,20 @@ impl SmtProof {
     
     /// Verify this proof against a root and key
     pub fn verify(&self, root: &H256, key: &H256) -> bool {
-        // This is a placeholder for future implementation
-        // Will use sparse_merkle_tree verification
-        true
+        // Convert to sparse_merkle_tree's MerkleProof
+        let mut leaves = Vec::new();
+        if let Some((leaf_key, leaf_value)) = &self.leaf {
+            leaves.push((*leaf_key, leaf_value.clone()));
+        }
+        
+        // Create a SparseMerkleTree proof
+        let smt_proof = sparse_merkle_tree::CompiledMerkleProof::new(
+            self.siblings.clone(),
+            leaves
+        );
+        
+        // Verify the proof against the root and key
+        smt_proof.verify(*root, vec![*key]).is_ok()
     }
     
     /// Convert proof to bytes for serialization

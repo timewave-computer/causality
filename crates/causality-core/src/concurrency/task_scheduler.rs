@@ -1,504 +1,559 @@
-// Task scheduler implementation
-// Original file: src/concurrency/scheduler/task_scheduler.rs
-
-// Task scheduler for concurrent tasks
+// Task scheduling utilities
 //
-// This module provides a scheduler for managing concurrent tasks.
+// This module provides a task scheduler for handling concurrent task execution
+// with resource dependencies.
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, Mutex};
+use std::fmt;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::future::Future;
-use std::pin::Pin;
-
-use tokio::sync::oneshot;
-use tokio::task::JoinHandle;
 
 use causality_types::{Error, Result};
 use causality_crypto::ContentId;
-use causality_core::primitives::{TaskId, ResourceManager, SharedResourceManager, ResourceGuard};
-use causality_resource::ResourceRegister;
 
-/// A task scheduler for managing concurrent tasks
-///
-/// The task scheduler manages the execution of tasks, handling resource
-/// acquisition, prioritization, and scheduling.
-#[derive(Clone)]
+use super::lock::DeterministicMutex;
+use super::resource_manager::{ResourceManager, SharedResourceManager};
+use super::task_id::{TaskId, TaskPriority};
+
+/// Metrics for the task scheduler.
+#[derive(Debug, Default, Clone)]
+pub struct TaskSchedulerMetrics {
+    /// Total number of tasks processed since scheduler creation
+    pub total_tasks: usize,
+    /// Number of tasks currently queued
+    pub queued_tasks: usize,
+    /// Number of tasks currently running
+    pub running_tasks: usize,
+    /// Number of tasks completed successfully
+    pub completed_tasks: usize,
+    /// Number of tasks that failed
+    pub failed_tasks: usize,
+    /// Average task waiting time in milliseconds
+    pub avg_wait_time_ms: u64,
+    /// Average task execution time in milliseconds
+    pub avg_execution_time_ms: u64,
+}
+
+/// State of a task in the scheduler.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TaskState {
+    /// Task is queued and waiting for execution
+    Queued,
+    /// Task is currently running
+    Running,
+    /// Task completed successfully
+    Completed,
+    /// Task failed with an error
+    Failed(String),
+    /// Task was cancelled before execution
+    Cancelled,
+}
+
+/// Information about a task in the scheduler.
+#[derive(Debug, Clone)]
+pub struct TaskInfo {
+    /// Unique identifier for the task
+    pub id: TaskId,
+    /// Priority of the task
+    pub priority: TaskPriority,
+    /// Resources required by the task
+    pub required_resources: HashSet<ContentId>,
+    /// Current state of the task
+    pub state: TaskState,
+    /// Time when the task was created
+    pub created_at: Instant,
+    /// Time when the task started execution (if started)
+    pub started_at: Option<Instant>,
+    /// Time when the task completed execution (if completed)
+    pub completed_at: Option<Instant>,
+}
+
+impl TaskInfo {
+    /// Create a new task info
+    pub fn new(
+        id: TaskId,
+        priority: TaskPriority,
+        required_resources: HashSet<ContentId>,
+    ) -> Self {
+        Self {
+            id,
+            priority,
+            required_resources,
+            state: TaskState::Queued,
+            created_at: Instant::now(),
+            started_at: None,
+            completed_at: None,
+        }
+    }
+    
+    /// Get the waiting time for the task in milliseconds
+    pub fn wait_time_ms(&self) -> u64 {
+        match self.started_at {
+            Some(started) => started
+                .duration_since(self.created_at)
+                .as_millis() as u64,
+            None => Instant::now()
+                .duration_since(self.created_at)
+                .as_millis() as u64,
+        }
+    }
+    
+    /// Get the execution time for the task in milliseconds
+    pub fn execution_time_ms(&self) -> Option<u64> {
+        match (self.started_at, self.completed_at) {
+            (Some(started), Some(completed)) => Some(completed
+                .duration_since(started)
+                .as_millis() as u64),
+            (Some(started), None) => Some(Instant::now()
+                .duration_since(started)
+                .as_millis() as u64),
+            _ => None,
+        }
+    }
+    
+    /// Check if the task has completed (successfully or with error)
+    pub fn is_completed(&self) -> bool {
+        matches!(self.state, TaskState::Completed | TaskState::Failed(_))
+    }
+    
+    /// Check if the task is running
+    pub fn is_running(&self) -> bool {
+        matches!(self.state, TaskState::Running)
+    }
+    
+    /// Check if the task is queued
+    pub fn is_queued(&self) -> bool {
+        matches!(self.state, TaskState::Queued)
+    }
+    
+    /// Check if the task was cancelled
+    pub fn is_cancelled(&self) -> bool {
+        matches!(self.state, TaskState::Cancelled)
+    }
+}
+
+/// A scheduler for concurrent task execution.
 pub struct TaskScheduler {
-    /// The resource manager to use for acquiring resources
+    /// Resource manager for handling resource allocation
     resource_manager: SharedResourceManager,
-    /// The tasks currently running
-    tasks: Arc<Mutex<HashMap<TaskId, TaskInfo>>>,
-    /// The task queue for pending tasks
-    task_queue: Arc<Mutex<VecDeque<TaskId>>>,
-    /// The maximum number of concurrent tasks
-    max_concurrent_tasks: Arc<Mutex<usize>>,
+    /// Tasks managed by the scheduler
+    tasks: DeterministicMutex<HashMap<TaskId, TaskInfo>>,
+    /// Queue of tasks waiting to be executed
+    task_queue: DeterministicMutex<VecDeque<TaskId>>,
+    /// Maximum number of concurrent tasks
+    max_concurrent_tasks: DeterministicMutex<usize>,
+    /// Metrics for the scheduler
+    metrics: DeterministicMutex<TaskSchedulerMetrics>,
 }
-
-/// Information about a task
-#[derive(Clone)]
-struct TaskInfo {
-    /// The task ID
-    id: TaskId,
-    /// The task priority (higher is more important)
-    priority: usize,
-    /// The resources required by the task
-    required_resources: HashSet<ContentId>,
-    /// The resources currently held by the task
-    held_resources: HashSet<ContentId>,
-    /// The time the task was created
-    created_at: Instant,
-    /// The time the task was started, if it's running
-    started_at: Option<Instant>,
-    /// The sender for the task result
-    result_sender: Option<oneshot::Sender<Box<dyn Any + Send + 'static>>>,
-    /// The join handle for the task
-    join_handle: Option<JoinHandle<()>>,
-    /// Flag indicating if this task requires ResourceRegister resources
-    requires_resource_registers: bool,
-}
-
-use std::any::Any;
 
 impl TaskScheduler {
     /// Create a new task scheduler
     pub fn new(resource_manager: SharedResourceManager) -> Self {
-        TaskScheduler {
+        Self {
             resource_manager,
-            tasks: Arc::new(Mutex::new(HashMap::new())),
-            task_queue: Arc::new(Mutex::new(VecDeque::new())),
-            max_concurrent_tasks: Arc::new(Mutex::new(10)), // Default to 10 concurrent tasks
+            tasks: DeterministicMutex::new(HashMap::new()),
+            task_queue: DeterministicMutex::new(VecDeque::new()),
+            max_concurrent_tasks: DeterministicMutex::new(4), // Default concurrency
+            metrics: DeterministicMutex::new(TaskSchedulerMetrics::default()),
         }
     }
     
     /// Set the maximum number of concurrent tasks
-    pub fn set_max_concurrent_tasks(&self, max: usize) -> Result<()> {
-        let mut max_concurrent_tasks = self.max_concurrent_tasks.lock().map_err(|_| 
-            Error::InternalError("Failed to lock max_concurrent_tasks".to_string()))?;
-            
-        *max_concurrent_tasks = max;
+    pub fn set_max_concurrent_tasks(&self, max: usize) {
+        let mut max_tasks = self.max_concurrent_tasks.lock();
+        *max_tasks = max;
+    }
+    
+    /// Get the maximum number of concurrent tasks
+    pub fn get_max_concurrent_tasks(&self) -> usize {
+        let max_tasks = self.max_concurrent_tasks.lock();
+        *max_tasks
+    }
+    
+    /// Get the number of currently running tasks
+    pub fn get_running_tasks_count(&self) -> usize {
+        let tasks = self.tasks.lock();
+        tasks.values()
+            .filter(|task| task.is_running())
+            .count()
+    }
+    
+    /// Get the number of currently queued tasks
+    pub fn get_queued_tasks_count(&self) -> usize {
+        let queue = self.task_queue.lock();
+        queue.len()
+    }
+    
+    /// Schedule a task for execution
+    pub fn schedule(
+        &self,
+        id: TaskId, 
+        priority: TaskPriority,
+        required_resources: HashSet<ContentId>,
+    ) -> Result<()> {
+        // Create task info
+        let task_info = TaskInfo::new(
+            id.clone(),
+            priority,
+            required_resources,
+        );
+        
+        // Add to tasks map
+        let mut tasks = self.tasks.lock();
+        if tasks.contains_key(&id) {
+            return Err(Error::OperationFailed(
+                format!("Task with ID {} already exists", id)
+            ));
+        }
+        tasks.insert(id.clone(), task_info);
+        
+        // Add to queue
+        let mut queue = self.task_queue.lock();
+        queue.push_back(id);
+        
+        // Update metrics
+        let mut metrics = self.metrics.lock();
+        metrics.total_tasks += 1;
+        metrics.queued_tasks += 1;
         
         Ok(())
     }
     
-    /// Get the maximum number of concurrent tasks
-    pub fn get_max_concurrent_tasks(&self) -> Result<usize> {
-        let max_concurrent_tasks = self.max_concurrent_tasks.lock().map_err(|_| 
-            Error::InternalError("Failed to lock max_concurrent_tasks".to_string()))?;
-            
-        Ok(*max_concurrent_tasks)
-    }
-    
-    /// Get the number of running tasks
-    pub fn get_running_tasks_count(&self) -> Result<usize> {
-        let tasks = self.tasks.lock().map_err(|_| 
-            Error::InternalError("Failed to lock tasks".to_string()))?;
-            
-        Ok(tasks.values().filter(|task| task.started_at.is_some()).count())
-    }
-    
-    /// Get the number of queued tasks
-    pub fn get_queued_tasks_count(&self) -> Result<usize> {
-        let queue = self.task_queue.lock().map_err(|_| 
-            Error::InternalError("Failed to lock task_queue".to_string()))?;
-            
-        Ok(queue.len())
-    }
-    
-    /// Schedule a task for execution
-    ///
-    /// This method adds a task to the scheduler and schedules it
-    /// for execution when resources are available.
-    pub fn schedule<F, T>(&self, 
-        id: TaskId, 
-        future: F, 
-        required_resources: HashSet<ContentId>,
-        priority: usize,
-    ) -> impl Future<Output = Result<T>>
-    where
-        F: Future<Output = T> + Send + 'static,
-        T: Send + 'static,
-    {
-        // Create a channel for the task result
-        let (result_tx, result_rx) = oneshot::channel();
+    /// Try to execute the next task in the queue
+    pub fn try_execute_next(&self) -> Result<Option<TaskId>> {
+        // Check if we can run more tasks
+        let max_tasks = *self.max_concurrent_tasks.lock();
+        let running_count = self.get_running_tasks_count();
         
-        // Create task info
-        let task_info = TaskInfo {
-            id: id.clone(),
-            priority,
-            required_resources,
-            held_resources: HashSet::new(),
-            created_at: Instant::now(),
-            started_at: None,
-            result_sender: Some(result_tx),
-            join_handle: None,
-            requires_resource_registers: false, // Default to false
+        if running_count >= max_tasks {
+            return Ok(None);
+        }
+        
+        // Get the next task ID from the queue
+        let mut queue = self.task_queue.lock();
+        let task_id = match queue.pop_front() {
+            Some(id) => id,
+            None => return Ok(None),
         };
         
-        // Add the task to the task map
-        {
-            let mut tasks = self.tasks.lock().unwrap();
-            tasks.insert(id.clone(), task_info);
-        }
-        
-        // Add the task to the queue
-        {
-            let mut queue = self.task_queue.lock().unwrap();
-            queue.push_back(id.clone());
-        }
-        
-        // Try to schedule tasks
-        self.try_schedule_tasks();
-        
-        // Return a future that waits for the task to complete
-        async move {
-            match result_rx.await {
-                Ok(result) => {
-                    // Try to downcast the result
-                    match result.downcast::<Result<T>>() {
-                        Ok(result) => *result,
-                        Err(_) => Err(Error::InternalError("Failed to downcast task result".to_string())),
-                    }
-                },
-                Err(_) => Err(Error::OperationFailed("Task cancelled or panicked".to_string())),
+        // Get the task info
+        let mut tasks = self.tasks.lock();
+        let task = match tasks.get_mut(&task_id) {
+            Some(task) => task,
+            None => {
+                // This shouldn't happen, but if it does, just return none
+                return Ok(None);
             }
-        }
-    }
-    
-    /// Schedule a task that requires ResourceRegister resources
-    ///
-    /// This method adds a task to the scheduler and schedules it
-    /// for execution when ResourceRegister resources are available.
-    pub fn schedule_with_resource_registers<F, T>(&self, 
-        id: TaskId, 
-        future: F, 
-        required_resources: HashSet<ContentId>,
-        priority: usize,
-    ) -> impl Future<Output = Result<T>>
-    where
-        F: Future<Output = T> + Send + 'static,
-        T: Send + 'static,
-    {
-        // Create a channel for the task result
-        let (result_tx, result_rx) = oneshot::channel();
-        
-        // Create task info
-        let task_info = TaskInfo {
-            id: id.clone(),
-            priority,
-            required_resources,
-            held_resources: HashSet::new(),
-            created_at: Instant::now(),
-            started_at: None,
-            result_sender: Some(result_tx),
-            join_handle: None,
-            requires_resource_registers: true, // This task requires ResourceRegister resources
         };
         
-        // Add the task to the task map
-        {
-            let mut tasks = self.tasks.lock().unwrap();
-            tasks.insert(id.clone(), task_info);
-        }
-        
-        // Add the task to the queue
-        {
-            let mut queue = self.task_queue.lock().unwrap();
-            queue.push_back(id.clone());
-        }
-        
-        // Try to schedule tasks
-        self.try_schedule_tasks();
-        
-        // Return a future that waits for the task to complete
-        async move {
-            match result_rx.await {
-                Ok(result) => {
-                    // Try to downcast the result
-                    match result.downcast::<Result<T>>() {
-                        Ok(result) => *result,
-                        Err(_) => Err(Error::InternalError("Failed to downcast task result".to_string())),
-                    }
-                },
-                Err(_) => Err(Error::OperationFailed("Task cancelled or panicked".to_string())),
-            }
-        }
-    }
-    
-    /// Try to schedule pending tasks
-    ///
-    /// This method tries to schedule pending tasks from the queue.
-    fn try_schedule_tasks(&self) {
-        // Get the current state
-        let mut tasks = match self.tasks.lock() {
-            Ok(tasks) => tasks,
-            Err(_) => return,
-        };
-        
-        let mut queue = match self.task_queue.lock() {
-            Ok(queue) => queue,
-            Err(_) => return,
-        };
-        
-        let max_concurrent_tasks = match self.max_concurrent_tasks.lock() {
-            Ok(max) => *max,
-            Err(_) => return,
-        };
-        
-        // Count running tasks
-        let running_tasks = tasks.values().filter(|task| task.started_at.is_some()).count();
-        
-        // If we're at max capacity, don't schedule more tasks
-        if running_tasks >= max_concurrent_tasks {
-            return;
-        }
-        
-        // Try to schedule as many tasks as we can
-        let mut scheduled = 0;
-        
-        // Sort the queue by priority (highest first) and age (oldest first)
-        let mut task_ids: Vec<TaskId> = queue.iter().cloned().collect();
-        task_ids.sort_by(|a, b| {
-            let task_a = &tasks[a];
-            let task_b = &tasks[b];
+        // Check if the task has been cancelled
+        if task.is_cancelled() {
+            // Update metrics
+            let mut metrics = self.metrics.lock();
+            metrics.queued_tasks -= 1;
             
-            // Sort by priority (higher is more important)
-            let prio_cmp = task_b.priority.cmp(&task_a.priority);
-            if prio_cmp != std::cmp::Ordering::Equal {
-                return prio_cmp;
-            }
-            
-            // If priorities are equal, sort by age (older is more important)
-            task_a.created_at.cmp(&task_b.created_at)
+            return Ok(None);
+        }
+        
+        // Try to acquire all required resources
+        // For simplicity, we don't actually acquire them here, just check availability
+        let resources_available = task.required_resources.iter().all(|res| {
+            self.resource_manager.is_resource_available(res.clone()).unwrap_or(false)
         });
         
-        // Available slots
-        let available_slots = max_concurrent_tasks - running_tasks;
+        if !resources_available {
+            // Resources not available, put back in queue
+            queue.push_back(task_id);
+            return Ok(None);
+        }
         
-        // Try to schedule tasks
-        for _ in 0..available_slots {
-            if task_ids.is_empty() {
-                break;
-            }
-            
-            // Get the next task ID
-            let task_id = task_ids.remove(0);
-            
-            // Try to schedule the task
-            if let Some(task) = tasks.get_mut(&task_id) {
-                let resources_available = task.required_resources.iter().all(|resource| {
-                    // For ResourceRegister resources, check active state if required
-                    if task.requires_resource_registers {
-                        match self.resource_manager.is_resource_register_active(resource.clone()) {
-                            Ok(active) => active && self.resource_manager.is_resource_available(resource.clone()).unwrap_or(false),
-                            Err(_) => self.resource_manager.is_resource_available(resource.clone()).unwrap_or(false),
-                        }
-                    } else {
-                        // Standard resource availability check
-                        self.resource_manager.is_resource_available(resource.clone()).unwrap_or(false)
-                    }
-                });
-                
-                if resources_available {
-                    // Remove the task from the queue
-                    queue.retain(|id| *id != task_id);
-                    
-                    // Schedule the task
-                    let scheduler = self.clone();
-                    let task_id = task.id.clone();
-                    let required_resources = task.required_resources.clone();
-                    let requires_resource_registers = task.requires_resource_registers;
-                    
-                    // Take the result sender
-                    let result_sender = task.result_sender.take();
-                    
-                    // Start the task
+        // Update task state
+        task.state = TaskState::Running;
                     task.started_at = Some(Instant::now());
                     
-                    // Spawn a tokio task for the actual work
-                    let handle = tokio::spawn(async move {
-                        // Acquire resources based on whether ResourceRegisters are required
-                        if requires_resource_registers {
-                            // Acquire ResourceRegister resources
-                            let mut resource_guards = Vec::new();
-                            for resource in required_resources {
-                                match scheduler.resource_manager.acquire_resource::<ResourceRegister>(resource.clone(), &task_id.as_str()).await {
-                                    Ok(guard) => {
-                                        resource_guards.push(guard);
-                                    },
-                                    Err(err) => {
-                                        // Failed to acquire a resource, release the ones we already have
-                                        drop(resource_guards);
-                                        
-                                        // Send an error result
-                                        if let Some(sender) = result_sender {
-                                            let _ = sender.send(Box::new(Err::<(), Error>(err)));
-                                        }
-                                        
-                                        return;
-                                    }
-                                }
-                            }
-                            
-                            // TODO: Execute the actual task with ResourceRegister guards
-                            
-                            // Release resources
-                            drop(resource_guards);
+        // Update metrics
+        let mut metrics = self.metrics.lock();
+        metrics.queued_tasks -= 1;
+        metrics.running_tasks += 1;
+        
+        Ok(Some(task_id))
+    }
+    
+    /// Mark a task as completed
+    pub fn complete_task(&self, task_id: &TaskId, success: bool, error_msg: Option<String>) -> Result<()> {
+        let mut tasks = self.tasks.lock();
+        let task = match tasks.get_mut(task_id) {
+            Some(task) => task,
+            None => {
+                return Err(Error::OperationFailed(
+                    format!("Task with ID {} not found", task_id)
+                ));
+            }
+        };
+        
+        // Check if the task is running
+        if !task.is_running() {
+            return Err(Error::OperationFailed(
+                format!("Task with ID {} is not running", task_id)
+            ));
+        }
+        
+        // Update task state
+        task.completed_at = Some(Instant::now());
+        if success {
+            task.state = TaskState::Completed;
                         } else {
-                            // Acquire standard resources
-                            let mut guards = Vec::new();
-                            for resource in required_resources {
-                                match scheduler.resource_manager.acquire_resource::<()>(resource.clone(), &task_id.as_str()).await {
-                                    Ok(guard) => {
-                                        guards.push(guard);
-                                    },
-                                    Err(err) => {
-                                        // Failed to acquire a resource, release the ones we already have
-                                        drop(guards);
-                                        
-                                        // Send an error result
-                                        if let Some(sender) = result_sender {
-                                            let _ = sender.send(Box::new(Err::<(), Error>(err)));
-                                        }
-                                        
-                                        return;
-                                    }
-                                }
-                            }
-                            
-                            // TODO: Execute the actual task with standard guards
-                            
-                            // Release resources
-                            drop(guards);
-                        }
-                        
-                        // TODO: Send the result
-                    });
-                    
-                    // Store the join handle
-                    task.join_handle = Some(handle);
-                    
-                    scheduled += 1;
-                }
+            task.state = TaskState::Failed(error_msg.unwrap_or_else(|| "Unknown error".to_string()));
+        }
+        
+        // Update metrics
+        let mut metrics = self.metrics.lock();
+        metrics.running_tasks -= 1;
+        if success {
+            metrics.completed_tasks += 1;
+        } else {
+            metrics.failed_tasks += 1;
+        }
+        
+        // Update average times
+        if let Some(exec_time) = task.execution_time_ms() {
+            let current_avg = metrics.avg_execution_time_ms;
+            let current_count = metrics.completed_tasks + metrics.failed_tasks - 1;
+            
+            if current_count > 0 {
+                metrics.avg_execution_time_ms = 
+                    (current_avg * (current_count as u64) + exec_time) / (current_count as u64 + 1);
+            } else {
+                metrics.avg_execution_time_ms = exec_time;
             }
         }
         
-        // If we scheduled any tasks, update the queue
-        if scheduled > 0 {
-            // Rebuild the queue from the remaining task IDs
-            queue.clear();
-            for id in task_ids {
-                queue.push_back(id);
-            }
+        let wait_time = task.wait_time_ms();
+        let current_avg = metrics.avg_wait_time_ms;
+        let current_count = metrics.total_tasks - metrics.queued_tasks - 1;
+        
+        if current_count > 0 {
+            metrics.avg_wait_time_ms = 
+                (current_avg * (current_count as u64) + wait_time) / (current_count as u64 + 1);
+        } else {
+            metrics.avg_wait_time_ms = wait_time;
         }
+        
+        Ok(())
     }
     
     /// Cancel a task
-    ///
-    /// This method cancels a task, removing it from the scheduler.
-    pub fn cancel_task(&self, id: &TaskId) -> Result<()> {
-        // Remove the task from the task map
-        let mut tasks = self.tasks.lock().map_err(|_| 
-            Error::InternalError("Failed to lock tasks".to_string()))?;
-            
-        if let Some(task) = tasks.remove(id) {
-            // If the task is running, abort it
-            if let Some(handle) = task.join_handle {
-                handle.abort();
+    pub fn cancel_task(&self, task_id: &TaskId) -> Result<()> {
+        let mut tasks = self.tasks.lock();
+        let task = match tasks.get_mut(task_id) {
+            Some(task) => task,
+            None => {
+                return Err(Error::OperationFailed(
+                    format!("Task with ID {} not found", task_id)
+                ));
             }
-            
-            // If the task has a result sender, send a cancellation error
-            if let Some(sender) = task.result_sender {
-                let _ = sender.send(Box::new(Err::<(), Error>(Error::OperationCancelled("Task cancelled".to_string()))));
-            }
-            
-            // Remove the task from the queue
-            let mut queue = self.task_queue.lock().map_err(|_| 
-                Error::InternalError("Failed to lock task_queue".to_string()))?;
-                
-            queue.retain(|qid| qid != id);
+        };
+        
+        // Check if the task can be cancelled
+        if !task.is_queued() {
+            return Err(Error::OperationFailed(
+                format!("Task with ID {} is not in a cancellable state", task_id)
+            ));
+        }
+        
+        // Update task state
+        task.state = TaskState::Cancelled;
+        
+        // No need to remove from queue now, it will be skipped when processed
             
             Ok(())
-        } else {
-            Err(Error::OperationFailed(format!("Task not found: {:?}", id)))
-        }
     }
     
-    /// Wait for all tasks to complete
-    ///
-    /// This method waits for all currently scheduled tasks to complete.
-    pub async fn wait_for_all(&self) -> Result<()> {
-        loop {
-            // Get the number of tasks
-            let tasks_count = {
-                let tasks = self.tasks.lock().map_err(|_| 
-                    Error::InternalError("Failed to lock tasks".to_string()))?;
-                    
-                tasks.len()
-            };
-            
-            // If there are no tasks, we're done
-            if tasks_count == 0 {
-                return Ok(());
-            }
-            
-            // Wait a bit
-            tokio::time::sleep(Duration::from_millis(10)).await;
+    /// Get the current metrics for the scheduler
+    pub fn get_metrics(&self) -> TaskSchedulerMetrics {
+        let metrics = self.metrics.lock();
+        metrics.clone()
+    }
+    
+    /// Get a task by ID
+    pub fn get_task(&self, task_id: &TaskId) -> Option<TaskInfo> {
+        let tasks = self.tasks.lock();
+        tasks.get(task_id).cloned()
+    }
+    
+    /// Get all tasks in the scheduler
+    pub fn get_all_tasks(&self) -> Vec<TaskInfo> {
+        let tasks = self.tasks.lock();
+        tasks.values().cloned().collect()
+    }
+    
+    /// Get all running tasks
+    pub fn get_running_tasks(&self) -> Vec<TaskInfo> {
+        let tasks = self.tasks.lock();
+        tasks.values()
+            .filter(|task| task.is_running())
+            .cloned()
+            .collect()
+    }
+    
+    /// Get all queued tasks
+    pub fn get_queued_tasks(&self) -> Vec<TaskInfo> {
+        let tasks = self.tasks.lock();
+        tasks.values()
+            .filter(|task| task.is_queued())
+            .cloned()
+            .collect()
+    }
+    
+    /// Clean up completed and cancelled tasks older than the specified duration
+    pub fn cleanup_old_tasks(&self, older_than: Duration) -> usize {
+        let mut tasks = self.tasks.lock();
+        let now = Instant::now();
+        
+        let to_remove: Vec<TaskId> = tasks.iter()
+            .filter(|(_, task)| {
+                (task.is_completed() || task.is_cancelled()) && 
+                match task.completed_at {
+                    Some(time) => now.duration_since(time) > older_than,
+                    None => false,
+                }
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        
+        for id in &to_remove {
+            tasks.remove(id);
         }
+        
+        to_remove.len()
+    }
+}
+
+impl fmt::Debug for TaskScheduler {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TaskScheduler")
+            .field("running_tasks", &self.get_running_tasks_count())
+            .field("queued_tasks", &self.get_queued_tasks_count())
+            .field("max_concurrent_tasks", &self.get_max_concurrent_tasks())
+            .field("metrics", &self.get_metrics())
+            .finish()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_core::primitives::ResourceManager;
-    use causality_resource::{ResourceRegister, ResourceLogic, FungibilityDomain, Quantity, StorageStrategy, StateVisibility};
+    use std::thread;
     
-    #[tokio::test]
-    async fn test_task_scheduler_basic() -> Result<()> {
-        // Create a resource manager
-        let resource_manager = Arc::new(ResourceManager::new());
-        
-        // Create a scheduler
-        let scheduler = TaskScheduler::new(resource_manager.clone());
-        
-        // Set max concurrent tasks
-        scheduler.set_max_concurrent_tasks(5)?;
-        assert_eq!(scheduler.get_max_concurrent_tasks()?, 5);
-        
-        // TODO: Test scheduling and executing tasks
-        
-        Ok(())
+    // Helper function to create a test scheduler
+    fn create_test_scheduler() -> TaskScheduler {
+        let resource_manager = ResourceManager::<ContentId, ()>::new();
+        TaskScheduler::new(Arc::new(resource_manager))
     }
     
-    #[tokio::test]
-    async fn test_task_scheduler_with_resource_registers() -> Result<()> {
-        // Create a resource manager
-        let resource_manager = Arc::new(ResourceManager::new());
+    #[test]
+    fn test_task_scheduling_basic() {
+        let scheduler = create_test_scheduler();
+        let task_id = TaskId::new(1, TaskPriority::Normal);
         
-        // Create and register a ResourceRegister
-        let register = ResourceRegister::new(
-            ContentId::new("test-register"),
-            ResourceLogic::Fungible,
-            FungibilityDomain("ETH".to_string()),
-            Quantity(100),
-            Default::default(),
-            StorageStrategy::FullyOnChain { visibility: StateVisibility::Public },
-        );
+        // Schedule a task
+        scheduler.schedule(task_id.clone(), TaskPriority::Normal, HashSet::new()).unwrap();
         
-        // Register the resource
-        resource_manager.register_resource_register(register)?;
+        // Check task exists
+        let task = scheduler.get_task(&task_id).unwrap();
+        assert_eq!(task.id, task_id);
+        assert_eq!(task.state, TaskState::Queued);
         
-        // Create a scheduler
-        let scheduler = TaskScheduler::new(resource_manager.clone());
+        // Try to execute it
+        let executed = scheduler.try_execute_next().unwrap();
+        assert_eq!(executed, Some(task_id.clone()));
         
-        // Set max concurrent tasks
-        scheduler.set_max_concurrent_tasks(5)?;
+        // Check state changed
+        let task = scheduler.get_task(&task_id).unwrap();
+        assert_eq!(task.state, TaskState::Running);
         
-        // TODO: Test scheduling and executing tasks with ResourceRegister resources
+        // Complete the task
+        scheduler.complete_task(&task_id, true, None).unwrap();
         
-        Ok(())
+        // Check state changed again
+        let task = scheduler.get_task(&task_id).unwrap();
+        assert_eq!(task.state, TaskState::Completed);
     }
     
-    // TODO: Add more tests
+    #[test]
+    fn test_task_cancellation() {
+        let scheduler = create_test_scheduler();
+        let task_id = TaskId::new(1, TaskPriority::Normal);
+        
+        // Schedule a task
+        scheduler.schedule(task_id.clone(), TaskPriority::Normal, HashSet::new()).unwrap();
+        
+        // Cancel it
+        scheduler.cancel_task(&task_id).unwrap();
+        
+        // Check state
+        let task = scheduler.get_task(&task_id).unwrap();
+        assert_eq!(task.state, TaskState::Cancelled);
+        
+        // Try to execute - should skip the cancelled task
+        let executed = scheduler.try_execute_next().unwrap();
+        assert_eq!(executed, None);
+    }
+    
+    #[test]
+    fn test_task_metrics() {
+        let scheduler = create_test_scheduler();
+        
+        // Schedule and execute some tasks
+        for i in 0..5 {
+            let task_id = TaskId::new(i, TaskPriority::Normal);
+            scheduler.schedule(task_id.clone(), TaskPriority::Normal, HashSet::new()).unwrap();
+            
+            if let Some(id) = scheduler.try_execute_next().unwrap() {
+                // Simulate some work
+                thread::sleep(Duration::from_millis(10));
+                
+                // Complete task
+                if i % 2 == 0 {
+                    scheduler.complete_task(&id, true, None).unwrap();
+                } else {
+                    scheduler.complete_task(&id, false, Some("Test error".to_string())).unwrap();
+                }
+            }
+        }
+        
+        // Check metrics
+        let metrics = scheduler.get_metrics();
+        assert_eq!(metrics.total_tasks, 5);
+        assert_eq!(metrics.completed_tasks + metrics.failed_tasks, 4); // 4 completed or failed
+        assert!(metrics.avg_execution_time_ms > 0); // Should have some execution time
+    }
+    
+    #[test]
+    fn test_concurrent_tasks_limit() {
+        let scheduler = create_test_scheduler();
+        scheduler.set_max_concurrent_tasks(2);
+        
+        // Schedule 5 tasks
+        for i in 0..5 {
+            let task_id = TaskId::new(i, TaskPriority::Normal);
+            scheduler.schedule(task_id, TaskPriority::Normal, HashSet::new()).unwrap();
+        }
+        
+        // Should only be able to execute 2
+        let task1 = scheduler.try_execute_next().unwrap();
+        let task2 = scheduler.try_execute_next().unwrap();
+        let task3 = scheduler.try_execute_next().unwrap();
+        
+        assert!(task1.is_some());
+        assert!(task2.is_some());
+        assert!(task3.is_none()); // Should not execute 3rd task
+        
+        // Complete one task
+        scheduler.complete_task(&task1.unwrap(), true, None).unwrap();
+        
+        // Now should be able to execute one more
+        let task3 = scheduler.try_execute_next().unwrap();
+        assert!(task3.is_some());
+    }
 } 

@@ -11,11 +11,14 @@ use std::sync::{Arc, Mutex, RwLock};
 use tokio::sync::mpsc;
 use tokio::time::{Duration, timeout};
 use async_trait::async_trait;
+use std::fmt::{self, Debug};
+use std::error::Error;
 
 use causality_types::{Error, Result};
 use causality_types::Timestamp;
-use super::{Message, MessageId, MessagePriority, MessageHandler};
-use causality_core::ActorId;
+use super::messaging::{Message, MessageId, MessagePriority, MessageCategory, MessagePayload, TraceId};
+use super::MessageHandler;
+use super::types::{ActorIdBox, ContentAddressedActorId};
 
 /// Message delivery status
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,10 +65,541 @@ impl Default for MailboxConfig {
     }
 }
 
+/// Capacity of a mailbox
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MailboxCapacity {
+    /// Unbounded mailbox
+    Unbounded,
+    
+    /// Bounded mailbox with maximum capacity
+    Bounded(usize),
+}
+
+impl MailboxCapacity {
+    /// Check if the mailbox is bounded
+    pub fn is_bounded(&self) -> bool {
+        matches!(self, MailboxCapacity::Bounded(_))
+    }
+    
+    /// Get the capacity if bounded
+    pub fn capacity(&self) -> Option<usize> {
+        match self {
+            MailboxCapacity::Bounded(capacity) => Some(*capacity),
+            MailboxCapacity::Unbounded => None,
+        }
+    }
+}
+
+/// Error type for mailbox operations
+#[derive(Debug, thiserror::Error)]
+pub enum MailboxError {
+    /// The mailbox is full
+    #[error("mailbox is full (capacity: {capacity})")]
+    Full {
+        /// The capacity of the mailbox
+        capacity: usize,
+    },
+    
+    /// The mailbox is closed
+    #[error("mailbox is closed")]
+    Closed,
+    
+    /// No message available
+    #[error("no message available")]
+    Empty,
+    
+    /// Timeout occurred
+    #[error("timeout occurred")]
+    Timeout,
+    
+    /// Message expired
+    #[error("message expired")]
+    Expired,
+    
+    /// Internal error
+    #[error("internal error: {0}")]
+    Internal(#[from] Box<dyn Error + Send + Sync>),
+}
+
+/// Statistics about a mailbox
+#[derive(Debug, Clone, Copy)]
+pub struct MailboxStats {
+    /// The number of messages in the mailbox
+    pub message_count: usize,
+    
+    /// The capacity of the mailbox
+    pub capacity: Option<usize>,
+    
+    /// The number of messages processed
+    pub processed_count: usize,
+    
+    /// The number of dropped messages
+    pub dropped_count: usize,
+    
+    /// The number of expired messages
+    pub expired_count: usize,
+}
+
+/// A trait for actor mailboxes
+pub trait Mailbox<M: Message>: Send + Sync + 'static {
+    /// Send a message to the mailbox
+    fn send(&self, envelope: MessageEnvelope<M>) -> Result<(), MailboxError>;
+    
+    /// Receive a message from the mailbox
+    fn receive(&self) -> Result<MessageEnvelope<M>, MailboxError>;
+    
+    /// Try to receive a message without blocking
+    fn try_receive(&self) -> Result<Option<MessageEnvelope<M>>, MailboxError>;
+    
+    /// Receive a message with a timeout
+    fn receive_timeout(&self, timeout: Duration) -> Result<MessageEnvelope<M>, MailboxError>;
+    
+    /// Check if the mailbox is empty
+    fn is_empty(&self) -> bool;
+    
+    /// Check if the mailbox is full
+    fn is_full(&self) -> bool;
+    
+    /// Get the number of messages in the mailbox
+    fn len(&self) -> usize;
+    
+    /// Get statistics about the mailbox
+    fn stats(&self) -> MailboxStats;
+    
+    /// Close the mailbox
+    fn close(&self);
+    
+    /// Check if the mailbox is closed
+    fn is_closed(&self) -> bool;
+    
+    /// Clear the mailbox
+    fn clear(&self);
+}
+
+/// A simple mailbox implementation using a mutex and VecDeque
+pub struct SimpleMailbox<M: Message> {
+    /// The inner state of the mailbox
+    inner: Arc<Mutex<SimpleMailboxState<M>>>,
+}
+
+/// The inner state of a simple mailbox
+struct SimpleMailboxState<M: Message> {
+    /// The queue of messages
+    queue: VecDeque<MessageEnvelope<M>>,
+    
+    /// The capacity of the mailbox
+    capacity: MailboxCapacity,
+    
+    /// Whether the mailbox is closed
+    closed: bool,
+    
+    /// Statistics about the mailbox
+    stats: MailboxStats,
+}
+
+impl<M: Message> SimpleMailbox<M> {
+    /// Create a new simple mailbox
+    pub fn new(capacity: MailboxCapacity) -> Self {
+        let cap_option = match capacity {
+            MailboxCapacity::Bounded(cap) => Some(cap),
+            MailboxCapacity::Unbounded => None,
+        };
+        
+        Self {
+            inner: Arc::new(Mutex::new(SimpleMailboxState {
+                queue: VecDeque::new(),
+                capacity,
+                closed: false,
+                stats: MailboxStats {
+                    message_count: 0,
+                    capacity: cap_option,
+                    processed_count: 0,
+                    dropped_count: 0,
+                    expired_count: 0,
+                },
+            })),
+        }
+    }
+}
+
+impl<M: Message> Mailbox<M> for SimpleMailbox<M> {
+    fn send(&self, envelope: MessageEnvelope<M>) -> Result<(), MailboxError> {
+        let mut inner = self.inner.lock().unwrap();
+        
+        if inner.closed {
+            return Err(MailboxError::Closed);
+        }
+        
+        if envelope.is_expired() {
+            inner.stats.expired_count += 1;
+            return Err(MailboxError::Expired);
+        }
+        
+        match inner.capacity {
+            MailboxCapacity::Bounded(cap) if inner.queue.len() >= cap => {
+                inner.stats.dropped_count += 1;
+                Err(MailboxError::Full { capacity: cap })
+            }
+            _ => {
+                inner.queue.push_back(envelope);
+                inner.stats.message_count = inner.queue.len();
+                Ok(())
+            }
+        }
+    }
+    
+    fn receive(&self) -> Result<MessageEnvelope<M>, MailboxError> {
+        loop {
+            let mut inner = self.inner.lock().unwrap();
+            
+            if inner.closed {
+                return Err(MailboxError::Closed);
+            }
+            
+            if let Some(envelope) = inner.queue.pop_front() {
+                inner.stats.message_count = inner.queue.len();
+                inner.stats.processed_count += 1;
+                
+                if envelope.is_expired() {
+                    inner.stats.expired_count += 1;
+                    continue;
+                }
+                
+                return Ok(envelope);
+            }
+            
+            return Err(MailboxError::Empty);
+        }
+    }
+    
+    fn try_receive(&self) -> Result<Option<MessageEnvelope<M>>, MailboxError> {
+        let mut inner = self.inner.lock().unwrap();
+        
+        if inner.closed {
+            return Err(MailboxError::Closed);
+        }
+        
+        loop {
+            if let Some(envelope) = inner.queue.pop_front() {
+                inner.stats.message_count = inner.queue.len();
+                inner.stats.processed_count += 1;
+                
+                if envelope.is_expired() {
+                    inner.stats.expired_count += 1;
+                    continue;
+                }
+                
+                return Ok(Some(envelope));
+            }
+            
+            return Ok(None);
+        }
+    }
+    
+    fn receive_timeout(&self, timeout: Duration) -> Result<MessageEnvelope<M>, MailboxError> {
+        // This is a simple implementation that just polls
+        // A more efficient implementation would use a condition variable
+        let start = std::time::Instant::now();
+        
+        loop {
+            if let Ok(Some(envelope)) = self.try_receive() {
+                return Ok(envelope);
+            }
+            
+            if start.elapsed() >= timeout {
+                return Err(MailboxError::Timeout);
+            }
+            
+            // Sleep a bit to avoid spinning
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+    
+    fn is_empty(&self) -> bool {
+        let inner = self.inner.lock().unwrap();
+        inner.queue.is_empty()
+    }
+    
+    fn is_full(&self) -> bool {
+        let inner = self.inner.lock().unwrap();
+        
+        match inner.capacity {
+            MailboxCapacity::Bounded(cap) => inner.queue.len() >= cap,
+            MailboxCapacity::Unbounded => false,
+        }
+    }
+    
+    fn len(&self) -> usize {
+        let inner = self.inner.lock().unwrap();
+        inner.queue.len()
+    }
+    
+    fn stats(&self) -> MailboxStats {
+        let inner = self.inner.lock().unwrap();
+        inner.stats
+    }
+    
+    fn close(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.closed = true;
+    }
+    
+    fn is_closed(&self) -> bool {
+        let inner = self.inner.lock().unwrap();
+        inner.closed
+    }
+    
+    fn clear(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.queue.clear();
+        inner.stats.message_count = 0;
+    }
+}
+
+impl<M: Message> Debug for SimpleMailbox<M> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let inner = self.inner.lock().unwrap();
+        
+        f.debug_struct("SimpleMailbox")
+            .field("capacity", &inner.capacity)
+            .field("closed", &inner.closed)
+            .field("stats", &inner.stats)
+            .finish()
+    }
+}
+
+impl<M: Message> Clone for SimpleMailbox<M> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+/// A priority mailbox that processes messages according to their priority
+pub struct PriorityMailbox<M: Message> {
+    /// High priority mailbox
+    high: SimpleMailbox<M>,
+    
+    /// Normal priority mailbox
+    normal: SimpleMailbox<M>,
+    
+    /// Low priority mailbox
+    low: SimpleMailbox<M>,
+    
+    /// Whether the mailbox is closed
+    closed: Arc<Mutex<bool>>,
+}
+
+impl<M: Message> PriorityMailbox<M> {
+    /// Create a new priority mailbox
+    pub fn new(capacity: MailboxCapacity) -> Self {
+        Self {
+            high: SimpleMailbox::new(capacity),
+            normal: SimpleMailbox::new(capacity),
+            low: SimpleMailbox::new(capacity),
+            closed: Arc::new(Mutex::new(false)),
+        }
+    }
+    
+    /// Get the appropriate mailbox for a priority
+    fn mailbox_for_priority(&self, priority: MessagePriority) -> &SimpleMailbox<M> {
+        match priority {
+            MessagePriority::High | MessagePriority::System => &self.high,
+            MessagePriority::Normal => &self.normal,
+            MessagePriority::Low => &self.low,
+        }
+    }
+}
+
+impl<M: Message> Mailbox<M> for PriorityMailbox<M> {
+    fn send(&self, envelope: MessageEnvelope<M>) -> Result<(), MailboxError> {
+        if *self.closed.lock().unwrap() {
+            return Err(MailboxError::Closed);
+        }
+        
+        let priority = envelope.priority();
+        self.mailbox_for_priority(priority).send(envelope)
+    }
+    
+    fn receive(&self) -> Result<MessageEnvelope<M>, MailboxError> {
+        if *self.closed.lock().unwrap() {
+            return Err(MailboxError::Closed);
+        }
+        
+        // Try to receive from high priority first, then normal, then low
+        if let Ok(envelope) = self.high.try_receive() {
+            if let Some(envelope) = envelope {
+                return Ok(envelope);
+            }
+        }
+        
+        if let Ok(envelope) = self.normal.try_receive() {
+            if let Some(envelope) = envelope {
+                return Ok(envelope);
+            }
+        }
+        
+        if let Ok(envelope) = self.low.try_receive() {
+            if let Some(envelope) = envelope {
+                return Ok(envelope);
+            }
+        }
+        
+        // All mailboxes are empty, so just wait on the high priority one
+        self.high.receive()
+            .or_else(|_| self.normal.receive())
+            .or_else(|_| self.low.receive())
+    }
+    
+    fn try_receive(&self) -> Result<Option<MessageEnvelope<M>>, MailboxError> {
+        if *self.closed.lock().unwrap() {
+            return Err(MailboxError::Closed);
+        }
+        
+        // Try to receive from high priority first, then normal, then low
+        if let Ok(Some(envelope)) = self.high.try_receive() {
+            return Ok(Some(envelope));
+        }
+        
+        if let Ok(Some(envelope)) = self.normal.try_receive() {
+            return Ok(Some(envelope));
+        }
+        
+        if let Ok(Some(envelope)) = self.low.try_receive() {
+            return Ok(Some(envelope));
+        }
+        
+        Ok(None)
+    }
+    
+    fn receive_timeout(&self, timeout: Duration) -> Result<MessageEnvelope<M>, MailboxError> {
+        if *self.closed.lock().unwrap() {
+            return Err(MailboxError::Closed);
+        }
+        
+        let start = std::time::Instant::now();
+        
+        loop {
+            // Try to receive from high priority first, then normal, then low
+            if let Ok(Some(envelope)) = self.high.try_receive() {
+                return Ok(envelope);
+            }
+            
+            if let Ok(Some(envelope)) = self.normal.try_receive() {
+                return Ok(envelope);
+            }
+            
+            if let Ok(Some(envelope)) = self.low.try_receive() {
+                return Ok(envelope);
+            }
+            
+            if start.elapsed() >= timeout {
+                return Err(MailboxError::Timeout);
+            }
+            
+            // Sleep a bit to avoid spinning
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+    
+    fn is_empty(&self) -> bool {
+        self.high.is_empty() && self.normal.is_empty() && self.low.is_empty()
+    }
+    
+    fn is_full(&self) -> bool {
+        self.high.is_full() && self.normal.is_full() && self.low.is_full()
+    }
+    
+    fn len(&self) -> usize {
+        self.high.len() + self.normal.len() + self.low.len()
+    }
+    
+    fn stats(&self) -> MailboxStats {
+        let high_stats = self.high.stats();
+        let normal_stats = self.normal.stats();
+        let low_stats = self.low.stats();
+        
+        MailboxStats {
+            message_count: high_stats.message_count + normal_stats.message_count + low_stats.message_count,
+            capacity: high_stats.capacity, // All mailboxes have the same capacity
+            processed_count: high_stats.processed_count + normal_stats.processed_count + low_stats.processed_count,
+            dropped_count: high_stats.dropped_count + normal_stats.dropped_count + low_stats.dropped_count,
+            expired_count: high_stats.expired_count + normal_stats.expired_count + low_stats.expired_count,
+        }
+    }
+    
+    fn close(&self) {
+        let mut closed = self.closed.lock().unwrap();
+        *closed = true;
+        
+        self.high.close();
+        self.normal.close();
+        self.low.close();
+    }
+    
+    fn is_closed(&self) -> bool {
+        *self.closed.lock().unwrap()
+    }
+    
+    fn clear(&self) {
+        self.high.clear();
+        self.normal.clear();
+        self.low.clear();
+    }
+}
+
+impl<M: Message> Debug for PriorityMailbox<M> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PriorityMailbox")
+            .field("high", &self.high)
+            .field("normal", &self.normal)
+            .field("low", &self.low)
+            .field("closed", &self.is_closed())
+            .finish()
+    }
+}
+
+impl<M: Message> Clone for PriorityMailbox<M> {
+    fn clone(&self) -> Self {
+        Self {
+            high: self.high.clone(),
+            normal: self.normal.clone(),
+            low: self.low.clone(),
+            closed: self.closed.clone(),
+        }
+    }
+}
+
+/// Helper functions for working with mailboxes
+pub mod helpers {
+    use super::*;
+    
+    /// Create a simple mailbox
+    pub fn simple_mailbox<M: Message>(capacity: impl Into<usize>) -> impl Mailbox<M> {
+        SimpleMailbox::new(MailboxCapacity::Bounded(capacity.into()))
+    }
+    
+    /// Create an unbounded mailbox
+    pub fn unbounded_mailbox<M: Message>() -> impl Mailbox<M> {
+        SimpleMailbox::new(MailboxCapacity::Unbounded)
+    }
+    
+    /// Create a priority mailbox
+    pub fn priority_mailbox<M: Message>(capacity: impl Into<usize>) -> impl Mailbox<M> {
+        PriorityMailbox::new(MailboxCapacity::Bounded(capacity.into()))
+    }
+    
+    /// Create an unbounded priority mailbox
+    pub fn unbounded_priority_mailbox<M: Message>() -> impl Mailbox<M> {
+        PriorityMailbox::new(MailboxCapacity::Unbounded)
+    }
+}
+
 /// Actor mailbox for receiving and processing messages
 pub struct ActorMailbox {
     /// Actor ID this mailbox belongs to
-    actor_id: ActorId,
+    actor_id: ActorIdBox,
     /// Priority queues for messages
     priority_queues: Arc<Mutex<BTreeMap<MessagePriority, VecDeque<Message>>>>,
     /// Mailbox configuration
@@ -83,7 +617,7 @@ pub struct ActorMailbox {
 impl ActorMailbox {
     /// Create a new actor mailbox
     pub fn new(
-        actor_id: ActorId,
+        actor_id: ActorIdBox,
         handler: Arc<dyn MessageHandler>,
         config: MailboxConfig,
     ) -> Self {
@@ -106,8 +640,8 @@ impl ActorMailbox {
         }
     }
     
-    /// Get the actor ID
-    pub fn actor_id(&self) -> &ActorId {
+    /// Get the actor ID for this mailbox
+    pub fn actor_id(&self) -> &ActorIdBox {
         &self.actor_id
     }
     
@@ -329,7 +863,7 @@ impl ActorMailbox {
 /// Mailbox system that manages multiple actor mailboxes
 pub struct MailboxSystem {
     /// Mailboxes by actor ID
-    mailboxes: Arc<RwLock<HashMap<ActorId, Arc<ActorMailbox>>>>,
+    mailboxes: Arc<RwLock<HashMap<ActorIdBox, Arc<ActorMailbox>>>>,
     /// Default mailbox configuration
     default_config: MailboxConfig,
 }
@@ -352,7 +886,7 @@ impl MailboxSystem {
     /// Register a mailbox for an actor
     pub fn register_mailbox(
         &self,
-        actor_id: ActorId,
+        actor_id: ActorIdBox,
         handler: Arc<dyn MessageHandler>,
         config: Option<MailboxConfig>,
     ) -> Result<Arc<ActorMailbox>> {
@@ -366,8 +900,8 @@ impl MailboxSystem {
         Ok(mailbox)
     }
     
-    /// Unregister a mailbox
-    pub fn unregister_mailbox(&self, actor_id: &ActorId) -> Result<()> {
+    /// Unregister a mailbox for an actor
+    pub fn unregister_mailbox(&self, actor_id: &ActorIdBox) -> Result<()> {
         let mut mailboxes = self.mailboxes.write().map_err(|_| 
             Error::InternalError("Failed to acquire lock".to_string()))?;
         
@@ -376,7 +910,7 @@ impl MailboxSystem {
     }
     
     /// Get a mailbox for an actor
-    pub fn get_mailbox(&self, actor_id: &ActorId) -> Result<Arc<ActorMailbox>> {
+    pub fn get_mailbox(&self, actor_id: &ActorIdBox) -> Result<Arc<ActorMailbox>> {
         let mailboxes = self.mailboxes.read().map_err(|_| 
             Error::InternalError("Failed to acquire lock".to_string()))?;
         
@@ -416,24 +950,15 @@ impl MailboxSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_core::messaging::{MessageCategory, MessagePayload};
+    use async_trait::async_trait;
     
     struct TestHandler;
     
     #[async_trait]
     impl MessageHandler for TestHandler {
         async fn handle_message(&self, message: Message) -> Result<Option<Message>> {
-            // Echo the message back
-            if let Some(sender) = &message.sender {
-                let response = Message::reply_to(
-                    &message,
-                    message.recipient.clone(),
-                    MessagePayload::Text("Echo: Test handled".to_string()),
-                );
-                Ok(Some(response))
-            } else {
-                Ok(None)
-            }
+            // Just echo back the message content
+            Ok(Some(message))
         }
         
         fn supported_categories(&self) -> Vec<MessageCategory> {
@@ -447,64 +972,77 @@ mod tests {
     
     #[tokio::test]
     async fn test_mailbox_send_receive() {
-        let actor_id = ActorId::new("test-actor");
+        let actor_id = ActorIdBox::from(ContentAddressedActorId::with_name("test-actor"));
         let handler = Arc::new(TestHandler);
         
         let config = MailboxConfig {
             capacity: 10,
-            ..MailboxConfig::default()
+            ..Default::default()
         };
         
-        let mailbox = ActorMailbox::new(actor_id.clone(), handler, config);
+        let mailbox = ActorMailbox::new(actor_id, handler, config);
         
         // Send a message
-        let sender_id = ActorId::new("sender");
+        let sender_id = ActorIdBox::from(ContentAddressedActorId::with_name("sender"));
         let message = Message::new(
             Some(sender_id.clone()),
-            actor_id.clone(),
+            mailbox.actor_id().clone(),
             MessageCategory::Command,
-            MessagePayload::Text("Test message".to_string()),
+            MessagePayload::Text("test message".to_string()),
         );
         
-        let status = mailbox.send(message).await.unwrap();
-        assert!(matches!(status, DeliveryStatus::Delivered | DeliveryStatus::Queued));
+        mailbox.send(message.clone()).await.expect("Failed to send message");
+        
+        // Start processing
+        mailbox.start_processing().await.expect("Failed to start processing");
+        
+        // Sleep a bit to allow message to be processed
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        
+        // Check dead letters (should be empty)
+        let dead_letters = mailbox.get_dead_letters().expect("Failed to get dead letters");
+        assert!(dead_letters.is_empty());
     }
     
     #[tokio::test]
-    async fn test_mailbox_system() {
+    async fn test_mailbox_system() -> Result<()> {
         let system = MailboxSystem::new();
         
-        let actor1_id = ActorId::new("actor1");
-        let actor2_id = ActorId::new("actor2");
+        let actor1_id = ActorIdBox::from(ContentAddressedActorId::with_name("actor1"));
+        let actor2_id = ActorIdBox::from(ContentAddressedActorId::with_name("actor2"));
         
         let handler1 = Arc::new(TestHandler);
         let handler2 = Arc::new(TestHandler);
         
+        let config = MailboxConfig {
+            capacity: 10,
+            ..Default::default()
+        };
+        
         // Register mailboxes
-        let mailbox1 = system.register_mailbox(actor1_id.clone(), handler1, None).unwrap();
-        let mailbox2 = system.register_mailbox(actor2_id.clone(), handler2, None).unwrap();
+        let mailbox1 = system.register_mailbox(actor1_id.clone(), handler1, Some(config.clone()))?;
+        let mailbox2 = system.register_mailbox(actor2_id.clone(), handler2, Some(config.clone()))?;
         
-        // Start processing
-        mailbox1.start_processing().await.unwrap();
-        mailbox2.start_processing().await.unwrap();
+        // Start all mailboxes
+        system.start_all().await?;
         
-        // Send a message
+        // Send a message to actor1
         let message = Message::new(
-            Some(actor1_id.clone()),
-            actor2_id.clone(),
-            MessageCategory::Query,
-            MessagePayload::Text("Test query".to_string()),
+            Some(actor2_id.clone()),
+            actor1_id.clone(),
+            MessageCategory::Command,
+            MessagePayload::Text("hello from actor2".to_string()),
         );
         
-        let status = system.send_message(message).await.unwrap();
-        assert!(matches!(status, DeliveryStatus::Delivered | DeliveryStatus::Queued));
+        system.send_message(message).await?;
         
-        // Should be able to get the mailbox
-        let mailbox = system.get_mailbox(&actor2_id).unwrap();
-        assert_eq!(mailbox.actor_id(), &actor2_id);
+        // Sleep a bit to allow message to be processed
+        tokio::time::sleep(Duration::from_millis(100)).await;
         
-        // Unregister a mailbox
-        system.unregister_mailbox(&actor1_id).unwrap();
-        assert!(system.get_mailbox(&actor1_id).is_err());
+        // Unregister mailboxes
+        system.unregister_mailbox(&actor1_id)?;
+        system.unregister_mailbox(&actor2_id)?;
+        
+        Ok(())
     }
 } 

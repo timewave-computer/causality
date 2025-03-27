@@ -11,7 +11,7 @@ use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 
 use crate::crypto::ContentId;
-use causality_resource::ResourceRegister;
+use :ResourceRegister:causality_core::resource::Resource::ResourceRegister;
 use crate::operation::{RegisterOperationType, Operation};
 use causality_tel::{Proof, OperationId};
 use causality_tel::{TelError, TelResult};

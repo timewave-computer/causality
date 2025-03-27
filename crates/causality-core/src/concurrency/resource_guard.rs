@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use causality_types::{Error, Result};
 use causality_crypto::ContentId;
-use causality_resource::ResourceRegister;
+use :ResourceRegister:causality_core::resource::Resource::ResourceRegister;
 
 // Forward declarations for ResourceManager
 use super::ResourceManager;

@@ -1,12 +1,10 @@
-// CosmWasm storage strategy
-// Original file: src/domain_adapters/cosmwasm/storage_strategy.rs
-
-// CosmWasm-specific storage strategies for ResourceRegister
+// CosmWasm storage interface
 //
-// This module implements domain-specific storage strategies for CosmWasm chains,
-// as part of the unified Resource-Register model.
+// This module provides storage operations for the CosmWasm domain,
+// including on-chain register storage and commitment tracking.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
+use std::collections::HashMap;
 use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
@@ -15,11 +13,11 @@ use serde_json::json;
 use causality_types::Address;
 use crate::domain::DomainId;
 use crate::resource::{ContentId, ResourceRegister};
-use causality_resource::{
+use causality_core::resource::{
     StorageStrategy, 
-    StateVisibility, 
-    NullifierId
+    StateVisibility
 };
+use causality_core::crypto::NullifierId;
 use causality_crypto::Commitment;
 use crate::effect::{
     Effect, 
@@ -30,7 +28,7 @@ use crate::effect::{
     EffectError,
     ExecutionBoundary
 };
-use causality_effects::{
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::{
     StoreResult, 
     ReadResult, 
     StoreOnChainEffect, 

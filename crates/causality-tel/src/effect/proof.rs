@@ -24,7 +24,7 @@ use crate::tel::{
     effect::ResourceEffect,
 };
 use causality_crypto::ContentId;
-use causality_resource::{ResourceRegister, RegisterState};
+use :ResourceRegister:causality_core::resource::Resource::{ResourceRegister, RegisterState};
 use crate::operation::{Operation, RegisterOperationType};
 
 /// Format for effect proofs

@@ -20,7 +20,7 @@ use crate::domain::{
     DomainAdapter, DomainRegistry, DomainId,
     selection::DomainSelectionStrategy, Transaction
 };
-use causality_resource::{ResourceRegister, RegisterState};
+use :ResourceRegister:causality_core::resource::Resource::{ResourceRegister, RegisterState};
 #[cfg(feature = "cosmwasm_zk")]
 use causality_domain_succinct::ZkResourceAdapter;
 
@@ -57,13 +57,13 @@ pub enum CrossDomainResourceOperation {
 
     /// Store a ResourceRegister in a domain (for unified model)
     StoreRegister {
-        register: causality_resource::ResourceRegister,
+        register: :ResourceRegister:causality_core::resource::Resource::ResourceRegister,
         target_domain_id: DomainId,
     },
     
     /// Transfer a ResourceRegister between domains (for unified model)
     TransferRegister {
-        register: causality_resource::ResourceRegister,
+        register: :ResourceRegister:causality_core::resource::Resource::ResourceRegister,
         source_domain_id: DomainId,
         target_domain_id: DomainId,
         additional_metadata: HashMap<String, String>,
@@ -713,7 +713,7 @@ impl CrossDomainResourceManager {
     /// Store a ResourceRegister in the most appropriate domain based on selection strategy
     pub async fn store_resource_register_by_strategy(
         &self,
-        register: causality_resource::ResourceRegister,
+        register: :ResourceRegister:causality_core::resource::Resource::ResourceRegister,
         required_capabilities: std::collections::HashSet<String>,
         preferences: HashMap<String, String>,
     ) -> Result<CrossDomainResourceResult> {

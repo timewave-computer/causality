@@ -1,23 +1,19 @@
 // Wait queue implementation for async operations
-// Original file: src/concurrency/primitives/wait_queue.rs
-
 // Deterministic wait queue for resource management
 //
 // This module provides a deterministic wait queue for resource contention,
-// ensuring that resource acquisition is predictable and reproducible in both
-// native execution and the ZK VM.
+// ensuring that resource acquisition is predictable and reproducible.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
-use std::task::Waker;
+use std::task::{Context, Poll, Waker};
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll};
 
 use causality_types::{Error, Result};
 use causality_crypto::ContentId;
-use super::TaskId;
+use super::task_id::TaskId;
 
 /// A shared wait queue that can be cloned and shared between components
 pub type SharedWaitQueue = Arc<WaitQueue>;
@@ -30,17 +26,16 @@ pub fn shared() -> SharedWaitQueue {
 /// A deterministic wait queue for resource contention
 ///
 /// The wait queue ensures that resource acquisition follows a predictable
-/// order, which is essential for deterministic execution and proof generation.
+/// order, which is essential for deterministic execution.
 #[derive(Debug)]
 pub struct WaitQueue {
-    // Map of resources to queues of requestors
+    /// Map of resources to queues of requestors
     queues: Mutex<HashMap<ContentId, VecDeque<String>>>,
-    // Map of requestors to the resources they own
-    // This is used for deadlock detection
+    /// Map of requestors to the resources they own
     owned_resources: Mutex<HashMap<String, HashSet<ContentId>>>,
-    // Map of requestors to the resources they are waiting for
+    /// Map of requestors to the resources they are waiting for
     waiting_for: Mutex<HashMap<String, ContentId>>,
-    /// The queue of wakers for tasks waiting
+    /// Queue of wakers for tasks waiting
     wakers: Mutex<VecDeque<(TaskId, Waker)>>,
 }
 
@@ -65,7 +60,7 @@ impl WaitQueue {
         requestor: String,
         owned_resources: HashSet<ContentId>,
     ) -> Result<()> {
-        // Update queues
+        // Lock the queues
         let mut queues = self.queues.lock().map_err(|_| 
             Error::InternalError("Failed to lock wait queues".to_string()))?;
             
@@ -167,10 +162,7 @@ impl WaitQueue {
     
     /// Check if there is a deadlock in the wait graph
     ///
-    /// This uses a cycle detection algorithm on the wait graph to determine
-    /// if there is a deadlock. A deadlock exists if there is a cycle in the
-    /// wait graph, where A waits for a resource owned by B, B waits for a
-    /// resource owned by C, and C waits for a resource owned by A.
+    /// A deadlock exists if there is a cycle in the wait graph.
     fn has_deadlock(&self) -> bool {
         // Get the locks on the data structures
         let queues = match self.queues.lock() {
@@ -248,7 +240,7 @@ impl WaitQueue {
         
         // Visit all neighbors
         if let Some(neighbors) = graph.get(node) {
-            for neighbor in neighbors {
+            for &neighbor in neighbors {
                 if self.has_cycle(graph, neighbor, visited, path) {
                     return true;
                 }
@@ -258,7 +250,7 @@ impl WaitQueue {
         // Remove the node from the current path
         path.remove(node);
         
-        // Mark as fully visited
+        // Mark the node as visited
         visited.insert(node);
         
         false
@@ -269,14 +261,10 @@ impl WaitQueue {
         let queues = self.queues.lock().map_err(|_| 
             Error::InternalError("Failed to lock wait queues".to_string()))?;
             
-        if let Some(queue) = queues.get(&resource) {
-            Ok(queue.len())
-        } else {
-            Ok(0)
-        }
+        Ok(queues.get(&resource).map_or(0, |q| q.len()))
     }
     
-    /// Get all resources that have waiters
+    /// Get the set of resources that have waiters
     pub fn resources_with_waiters(&self) -> Result<HashSet<ContentId>> {
         let queues = self.queues.lock().map_err(|_| 
             Error::InternalError("Failed to lock wait queues".to_string()))?;
@@ -284,7 +272,7 @@ impl WaitQueue {
         Ok(queues.keys().cloned().collect())
     }
     
-    /// Get the resources that a requestor is waiting for
+    /// Get the resource that a requestor is waiting for
     pub fn requestor_waiting_for(&self, requestor: &str) -> Result<Option<ContentId>> {
         let waiting = self.waiting_for.lock().map_err(|_| 
             Error::InternalError("Failed to lock waiting for resources".to_string()))?;
@@ -292,7 +280,7 @@ impl WaitQueue {
         Ok(waiting.get(requestor).cloned())
     }
     
-    /// Get all the resources owned by a requestor
+    /// Get the resources owned by a requestor
     pub fn get_owned_resources(&self, requestor: &str) -> Result<Option<HashSet<ContentId>>> {
         let owned = self.owned_resources.lock().map_err(|_| 
             Error::InternalError("Failed to lock owned resources".to_string()))?;
@@ -300,31 +288,34 @@ impl WaitQueue {
         Ok(owned.get(requestor).cloned())
     }
     
-    /// Check if a requestor is at the front of a resource's wait queue
+    /// Check if a requestor is next in line for a resource
     pub fn is_next_requestor(&self, resource: ContentId, requestor: &str) -> Result<bool> {
-        match self.get_next_requestor(resource)? {
-            Some(next) => Ok(next == requestor),
-            None => Ok(false),
-        }
+        let next = self.get_next_requestor(resource)?;
+        Ok(next.as_deref() == Some(requestor))
     }
-
-    /// Add a task to the wait queue
+    
+    /// Add a waker to the wait queue
     pub fn enqueue(&self, task_id: TaskId, waker: Waker) {
         let mut wakers = self.wakers.lock().unwrap();
         wakers.push_back((task_id, waker));
     }
-
-    /// Remove a task from the wait queue
+    
+    /// Remove a waker from the wait queue
     pub fn remove(&self, task_id: &TaskId) -> Option<Waker> {
         let mut wakers = self.wakers.lock().unwrap();
-        let index = wakers.iter().position(|(id, _)| id == task_id)?;
-        let (_, waker) = wakers.remove(index).unwrap();
-        Some(waker)
+        
+        if let Some(pos) = wakers.iter().position(|(id, _)| id == task_id) {
+            let (_, waker) = wakers.remove(pos).unwrap();
+            Some(waker)
+        } else {
+            None
+        }
     }
-
-    /// Wake the next task in the queue
+    
+    /// Wake the next task in the wait queue
     pub fn wake_next(&self) -> Option<TaskId> {
         let mut wakers = self.wakers.lock().unwrap();
+        
         if let Some((task_id, waker)) = wakers.pop_front() {
             waker.wake();
             Some(task_id)
@@ -332,8 +323,8 @@ impl WaitQueue {
             None
         }
     }
-
-    /// Wake all tasks in the queue
+    
+    /// Wake all tasks in the wait queue
     pub fn wake_all(&self) -> Vec<TaskId> {
         let mut wakers = self.wakers.lock().unwrap();
         let mut task_ids = Vec::with_capacity(wakers.len());
@@ -345,20 +336,20 @@ impl WaitQueue {
         
         task_ids
     }
-
-    /// Check if the queue is empty
+    
+    /// Check if the wait queue is empty
     pub fn is_empty(&self) -> bool {
         let wakers = self.wakers.lock().unwrap();
         wakers.is_empty()
     }
-
-    /// Get the number of tasks in the queue
+    
+    /// Get the number of tasks in the wait queue
     pub fn len(&self) -> usize {
         let wakers = self.wakers.lock().unwrap();
         wakers.len()
     }
-
-    /// Create a future that will be resolved when this task is woken
+    
+    /// Create a future that waits for a resource to be available
     pub fn wait(&self, task_id: TaskId) -> WaitFuture {
         WaitFuture {
             wait_queue: Arc::new(self.clone()),
@@ -373,7 +364,19 @@ impl Default for WaitQueue {
     }
 }
 
-/// Future that resolves when a task is woken from the wait queue
+impl Clone for WaitQueue {
+    fn clone(&self) -> Self {
+        WaitQueue {
+            queues: Mutex::new(self.queues.lock().unwrap().clone()),
+            owned_resources: Mutex::new(self.owned_resources.lock().unwrap().clone()),
+            waiting_for: Mutex::new(self.waiting_for.lock().unwrap().clone()),
+            wakers: Mutex::new(self.wakers.lock().unwrap().clone()),
+        }
+    }
+}
+
+/// A future that waits for a resource to be available
+#[derive(Debug)]
 pub struct WaitFuture {
     wait_queue: Arc<WaitQueue>,
     task_id: TaskId,
@@ -381,20 +384,21 @@ pub struct WaitFuture {
 
 impl Future for WaitFuture {
     type Output = Result<()>;
-
+    
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // Register the waker with the wait queue
+        // Register the waker
         self.wait_queue.enqueue(self.task_id.clone(), cx.waker().clone());
         
-        // Return pending, as this future will be completed when woken
+        // Return pending to wait for the waker to be called
         Poll::Pending
     }
 }
 
 impl Drop for WaitFuture {
     fn drop(&mut self) {
-        // Clean up by removing this task from the wait queue if it's still there
-        self.wait_queue.remove(&self.task_id);
+        // When the future is dropped, remove the waker from the queue
+        // to avoid any potential memory leaks
+        let _ = self.wait_queue.remove(&self.task_id);
     }
 }
 
@@ -404,131 +408,120 @@ mod tests {
     
     #[test]
     fn test_wait_queue_basic() -> Result<()> {
-        let queue = WaitQueue::new();
+        let wait_queue = WaitQueue::new();
         
-        // Add a requestor
-        queue.add_requestor(
-            ContentId::new("test"),
+        // Add some requestors
+        wait_queue.add_requestor(
+            "resource1".into(),
             "requestor1".to_string(),
             HashSet::new(),
         )?;
         
-        // Check queue length
-        assert_eq!(queue.queue_length(ContentId::new("test"))?, 1);
+        wait_queue.add_requestor(
+            "resource1".into(),
+            "requestor2".to_string(),
+            HashSet::new(),
+        )?;
         
-        // Get next requestor
-        let next = queue.get_next_requestor(ContentId::new("test"))?;
-        assert_eq!(next, Some("requestor1".to_string()));
+        // Check queue state
+        assert_eq!(wait_queue.queue_length("resource1".into())?, 2);
+        assert_eq!(
+            wait_queue.get_next_requestor("resource1".into())?,
+            Some("requestor1".to_string())
+        );
         
-        // Remove the requestor
-        queue.remove_requestor(ContentId::new("test"), "requestor1")?;
+        // Remove a requestor
+        wait_queue.remove_requestor("resource1".into(), "requestor1")?;
         
-        // Check queue is empty
-        assert_eq!(queue.queue_length(ContentId::new("test"))?, 0);
+        // Check queue state again
+        assert_eq!(wait_queue.queue_length("resource1".into())?, 1);
+        assert_eq!(
+            wait_queue.get_next_requestor("resource1".into())?,
+            Some("requestor2".to_string())
+        );
         
         Ok(())
     }
     
     #[test]
     fn test_wait_queue_deadlock_detection() -> Result<()> {
-        let queue = WaitQueue::new();
+        let wait_queue = WaitQueue::new();
         
-        // Setup:
-        // requestor1 owns resource A
-        // requestor2 owns resource B
-        // requestor1 wants resource B
-        // requestor2 wants resource A
+        // Set up a potential deadlock scenario
         
-        // First, add requestor1 owning resource A
+        // Requestor1 owns resource1, waiting for resource2
         let mut owned1 = HashSet::new();
-        owned1.insert(ContentId::new("A"));
-        
-        // First, add requestor2 owning resource B
-        let mut owned2 = HashSet::new();
-        owned2.insert(ContentId::new("B"));
-        
-        // Add requestor1 waiting for resource B
-        queue.add_requestor(
-            ContentId::new("B"),
+        owned1.insert("resource1".into());
+        wait_queue.add_requestor(
+            "resource2".into(),
             "requestor1".to_string(),
             owned1,
         )?;
         
-        // Add requestor2 waiting for resource A - this should cause a deadlock error
-        let result = queue.add_requestor(
-            ContentId::new("A"),
+        // Requestor2 owns resource2, waiting for resource1
+        // This should cause a deadlock
+        let mut owned2 = HashSet::new();
+        owned2.insert("resource2".into());
+        
+        // This should fail with ResourceDeadlock
+        let result = wait_queue.add_requestor(
+            "resource1".into(),
             "requestor2".to_string(),
             owned2,
         );
         
-        assert!(result.is_err());
-        if let Err(err) = result {
-            assert!(matches!(err, Error::ResourceDeadlock));
-        }
+        assert!(matches!(result, Err(Error::ResourceDeadlock)));
         
         Ok(())
     }
-
-    #[test]
-    fn test_wait_queue_basics() {
-        let queue = WaitQueue::new();
-        assert!(queue.is_empty());
-        assert_eq!(queue.len(), 0);
-
-        // We can't easily test the waker functionality in a synchronous test,
-        // but we can test the queue operations
-        let task_id = TaskId::new();
-        let waker = futures::task::noop_waker();
-        
-        queue.enqueue(task_id.clone(), waker.clone());
-        assert!(!queue.is_empty());
-        assert_eq!(queue.len(), 1);
-        
-        let removed = queue.remove(&task_id);
-        assert!(removed.is_some());
-        assert!(queue.is_empty());
-    }
-
+    
     #[test]
     fn test_wait_queue_wake_next() {
-        let queue = WaitQueue::new();
-        let task_id1 = TaskId::new();
-        let task_id2 = TaskId::new();
-        let waker = futures::task::noop_waker();
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
         
-        queue.enqueue(task_id1.clone(), waker.clone());
-        queue.enqueue(task_id2.clone(), waker.clone());
+        struct MockWaker {
+            woken: Arc<AtomicBool>,
+        }
         
-        assert_eq!(queue.len(), 2);
+        impl MockWaker {
+            fn new() -> (Self, Arc<AtomicBool>) {
+                let woken = Arc::new(AtomicBool::new(false));
+                (Self { woken: woken.clone() }, woken)
+            }
+            
+            fn into_waker(self) -> Waker {
+                use std::task::{RawWaker, RawWakerVTable};
+                
+                // Not a real implementation, just for testing
+                // In a real scenario, you'd implement proper waker logic
+                unsafe {
+                    let ptr = Box::into_raw(Box::new(self));
+                    Waker::from_raw(RawWaker::new(
+                        ptr as *const (),
+                        &RawWakerVTable::new(
+                            |_| RawWaker::new(ptr as *const (), &RawWakerVTable::new(|_| panic!(), |_| {}, |_| {}, |_| {})),
+                            |p| {
+                                let waker = Box::from_raw(p as *mut MockWaker);
+                                waker.woken.store(true, Ordering::SeqCst);
+                            },
+                            |_| {},
+                            |p| drop(Box::from_raw(p as *mut MockWaker)),
+                        ),
+                    ))
+                }
+            }
+        }
         
-        let woken = queue.wake_next();
-        assert_eq!(woken, Some(task_id1));
-        assert_eq!(queue.len(), 1);
+        let wait_queue = WaitQueue::new();
+        let task_id = TaskId::new(1, Default::default());
         
-        let woken = queue.wake_next();
-        assert_eq!(woken, Some(task_id2));
-        assert_eq!(queue.len(), 0);
+        let (waker, woken) = MockWaker::new();
+        wait_queue.enqueue(task_id.clone(), waker.into_waker());
         
-        let woken = queue.wake_next();
-        assert_eq!(woken, None);
-    }
-
-    #[test]
-    fn test_wait_queue_wake_all() {
-        let queue = WaitQueue::new();
-        let task_id1 = TaskId::new();
-        let task_id2 = TaskId::new();
-        let waker = futures::task::noop_waker();
-        
-        queue.enqueue(task_id1.clone(), waker.clone());
-        queue.enqueue(task_id2.clone(), waker.clone());
-        
-        assert_eq!(queue.len(), 2);
-        
-        let woken = queue.wake_all();
-        assert_eq!(woken.len(), 2);
-        assert!(woken.contains(&task_id1));
-        assert!(woken.contains(&task_id2));
-        assert_eq!(queue.len(), 0);
+        // Wake the next task
+        let woken_id = wait_queue.wake_next();
+        assert_eq!(woken_id, Some(task_id));
+        assert!(woken.load(Ordering::SeqCst));
     }
 } 

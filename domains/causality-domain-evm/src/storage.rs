@@ -7,6 +7,7 @@
 // other EVM-compatible chains, as part of the unified Resource-Register model.
 
 use std::collections::HashSet;
+use std::collections::HashMap;
 use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
@@ -16,12 +17,15 @@ use ethers::types::{Address, H256, U256};
 use causality_types::Address as CausalityAddress;
 use crate::domain::DomainId;
 use crate::resource::{ContentId, ResourceRegister};
-use causality_resource::{
+use causality_core::resource::{
     StorageStrategy, 
-    StateVisibility, 
+    StateVisibility
+};
+use causality_core::crypto::{
     Commitment, 
     NullifierId
 };
+use causality_core::capability::Right;
 use crate::effect::{
     Effect, 
     EffectContext, 
@@ -30,7 +34,7 @@ use crate::effect::{
     EffectOutcome, 
     StorageEffect
 };
-use causality_effects::{
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::{
     StoreResult, 
     ReadResult, 
     StoreOnChainEffect, 
@@ -261,7 +265,7 @@ impl Effect for EthereumStoreEffect {
         "Stores register data on Ethereum chain"
     }
     
-    fn required_capabilities(&self) -> Vec<(ContentId, causality_resource::Right)> {
+    fn required_capabilities(&self) -> Vec<(ContentId, causality_core::capability::Right)> {
         self.inner.required_capabilities()
     }
     
@@ -381,7 +385,7 @@ impl Effect for EthereumCommitmentEffect {
         "Stores register commitment on Ethereum chain"
     }
     
-    fn required_capabilities(&self) -> Vec<(ContentId, causality_resource::Right)> {
+    fn required_capabilities(&self) -> Vec<(ContentId, causality_core::capability::Right)> {
         self.inner.required_capabilities()
     }
     

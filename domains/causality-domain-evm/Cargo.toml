@@ -16,4 +16,7 @@ tracing = { workspace = true }
 causality-types = { workspace = true }
 causality-core = { workspace = true }
 causality-domain = { workspace = true }
-causality-resource = { workspace = true }
+
+# DEPRECATED: Dependencies on legacy crates have been removed
+# All functionality is now available through causality-core
+# causality-resource = { workspace = true }

@@ -15,7 +15,7 @@ use std::task::{Context, Poll};
 
 use causality_types::{Error, Result};
 use causality_crypto::ContentId;
-use causality_resource::{ResourceRegister, RegisterState};
+use :ResourceRegister:causality_core::resource::Resource::{ResourceRegister, RegisterState};
 
 use super::{SharedWaitQueue, WaitQueue};
 use super::ResourceGuard;

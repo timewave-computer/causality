@@ -1,1 +1,0 @@
-Implementation complete for: Domain adapters as effects integration

@@ -16,7 +16,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use crate::domain::{DomainId, DomainAdapter, FactQuery, FactType, FactObservationMeta};
 use causality_types::{Error, Result};
 use crate::effect::{Effect, EffectContext, EffectResult, EffectOutcome};
-use causality_effects::ExecutionBoundary;
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::ExecutionBoundary;
 use crate::crypto::{HashFactory, ContentId};
 use causality_crypto::ContentAddressed;
 

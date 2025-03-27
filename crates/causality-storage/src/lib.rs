@@ -140,25 +140,29 @@ pub trait Database: Send + Sync {
     fn close(&self) -> Result<(), DbError>;
 }
 
-/// Memory database implementation (for testing)
-pub mod in_memory;
-
-/// RocksDB implementation (when feature is enabled)
-#[cfg(feature = "rocksdb")]
-pub mod rocksdb;
+// Database implementations are now provided by the causality-db crate
 
 /// Database factory for creating database instances
 pub struct DbFactory;
 
 impl DbFactory {
     /// Create an in-memory database (for testing)
+    #[cfg(feature = "memory")]
     pub fn create_memory_db() -> Result<Box<dyn Database>, DbError> {
-        Ok(Box::new(in_memory::MemoryDb::open(DbConfig::new("in_memory"))?))
+        use causality_db::memory::MemoryDb;
+        Ok(Box::new(MemoryDb::open(DbConfig::new("in_memory"))?))
     }
     
     /// Create a RocksDB database (when feature is enabled)
-    #[cfg(feature = "rocksdb")]
+    #[cfg(feature = "rocks")]
     pub fn create_rocksdb(path: &str) -> Result<Box<dyn Database>, DbError> {
-        Ok(Box::new(rocksdb::RocksDb::open(DbConfig::new(path))?))
+        use causality_db::rocks::RocksDb;
+        Ok(Box::new(RocksDb::open(DbConfig::new(path))?))
+    }
+    
+    /// Create a default database based on available implementations
+    pub fn create_default_db(path: &str) -> Result<Box<dyn Database>, DbError> {
+        // Forward to the factory in causality-db crate
+        causality_db::DbFactory::create_default_db(path)
     }
 } 

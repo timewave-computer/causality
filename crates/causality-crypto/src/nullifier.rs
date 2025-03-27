@@ -301,18 +301,19 @@ mod tests {
     }
     
     impl ContentAddressed for TestObject {
-        fn content_hash(&self) -> HashOutput {
+        fn content_hash(&self) -> Result<HashOutput, HashError> {
             let hasher = HashFactory::default().create_hasher().unwrap();
-            let data = self.try_to_vec().unwrap();
-            hasher.hash(&data)
+            let data = self.try_to_vec().map_err(|e| HashError::SerializationError(e.to_string()))?;
+            Ok(hasher.hash(&data))
         }
         
-        fn verify(&self) -> bool {
-            true
+        fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
+            let actual_hash = self.content_hash()?;
+            Ok(actual_hash == *expected_hash)
         }
         
-        fn to_bytes(&self) -> Vec<u8> {
-            self.try_to_vec().unwrap()
+        fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+            self.try_to_vec().map_err(|e| HashError::SerializationError(e.to_string()))
         }
         
         fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
@@ -330,7 +331,7 @@ mod tests {
         
         let nullifier = Nullifier::new(&obj).unwrap();
         
-        assert_eq!(nullifier.content_id, obj.content_id());
+        assert_eq!(nullifier.content_id, obj.content_id().unwrap());
         assert!(!nullifier.value.iter().all(|&b| b == 0));
     }
     
@@ -343,7 +344,7 @@ mod tests {
             name: "Test Object".to_string(),
         };
         
-        let hash = obj.content_hash();
+        let hash = obj.content_hash().unwrap();
         let nullifier = registry.generate_nullifier(&hash).unwrap();
         
         // Initially not in registry

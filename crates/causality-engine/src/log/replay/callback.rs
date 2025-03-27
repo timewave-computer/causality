@@ -12,7 +12,7 @@ use causality_types::Error;
 use causality_engine::{LogEntry, EffectEntry, FactEntry};
 use causality_engine::ReplayResult;
 use causality_engine::{EventEntry, EventSeverity};
-use causality_effects::EffectType;
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::EffectType;
 
 /// Callback interface for log replay
 ///
@@ -270,7 +270,7 @@ mod tests {
     
     fn create_test_effect() -> EffectEntry {
         EffectEntry {
-            effect_type: causality_effects::EffectType::Transfer,
+            effect_type: :EffectRuntime:causality_core::effect::runtime::EffectRuntime::EffectType::Transfer,
             resources: Vec::new(),
             domains: Vec::new(),
             code_hash: None,

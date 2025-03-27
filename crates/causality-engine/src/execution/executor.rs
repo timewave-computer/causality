@@ -10,10 +10,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use causality_effects::ContentHash;
-use causality_effects::CodeRepository;
-use causality_effects::{CodeEntry, CodeMetadata};
-use causality_effects::{ContextId, Value, ExecutionEvent, ExecutionContext, SecuritySandbox};
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::ContentHash;
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::CodeRepository;
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::{CodeEntry, CodeMetadata};
+use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::{ContextId, Value, ExecutionEvent, ExecutionContext, SecuritySandbox};
 
 use causality_types::{Error, Result};
 use crate::resource::{ResourceAllocator, ResourceRequest, ResourceGrant, GrantId, ResourceUsage};

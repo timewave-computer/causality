@@ -12,6 +12,11 @@ pub mod merkle;
 pub mod signature;
 pub mod zk;
 pub mod deferred;
+pub mod utils;
+pub mod extensions;
+pub mod content_store;
+pub mod sparse_merkle_tree;
+pub mod smt_content_store;
 // Note: The following modules are missing and have been removed:
 // pub mod smt;
 // pub mod content_addressed_storage;
@@ -35,4 +40,17 @@ pub use signature::{Signature, SignatureScheme, SignatureError, SignatureVerific
 pub use zk::{ZkProof, ZkVerifier, ZkProver, ZkError, ZkFactory, VerificationCircuit, GenericCircuit};
 
 // Re-export our own types from deferred.rs
-pub use deferred::{DeferredHashingContext, DeferredHashBatchProcessor, DeferredHashInput, DeferredHashId, DeferredHashing}; 
+pub use deferred::{DeferredHashingContext, DeferredHashBatchProcessor, DeferredHashInput, DeferredHashId, DeferredHashing};
+
+// Re-export utility functions
+pub use utils::{simple_hash, hash_object, simple_hash_bytes};
+
+// Re-export extension traits
+pub use extensions::{TypeExtensions};
+
+// Re-export key types
+pub use hash::{ContentAddressed, ContentId, HashOutput, HashError};
+pub use hash::{HashAlgorithm, HashFunction, HashFactory};
+pub use content_store::{ContentAddressedStorage, StorageError, StorageFactory};
+pub use sparse_merkle_tree::{MerkleSmt, SmtKeyValue, SmtError, SmtProof, ContentAddressedSmt};
+pub use smt_content_store::{SmtContentStore, DefaultSmtFactory}; 
