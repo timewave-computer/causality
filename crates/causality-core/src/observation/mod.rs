@@ -1,32 +1,38 @@
-// Observation module
+// Observation Module
 //
-// This module provides functionality for observations, which are trusted observers
-// of external systems (like blockchains) used to extract facts and reconstruct logs.
+// This module provides observation capabilities for the causality core.
 
-// Re-export main types from submodules
-pub use self::extraction::{
-    ExtractedFact, ExtractionRule, FilterCondition, FactExtractor, 
-    RuleEngine, BasicExtractor
-};
-pub use self::proxy::{
-    ProxyConfig, ChainStatus, ProxyEvent, ProxyEventHandler, 
-    LoggingEventHandler, ObservationProxy
-};
-pub use self::reconstruction::{
-    ReconstructionConfig, ReconstructionStatus, LogReconstructor, 
-    ReconstructorFactory, BasicReconstructor
-};
-pub use self::provider::{
-    ProviderConfig, ProvidedData, ProviderFactory, ProviderCreator, 
-    DataProvider, ProviderStatus, HttpProvider, HttpProviderConfig,
-    HttpProviderCreator
-};
-
-// Export submodules
 pub mod extraction;
 pub mod proxy;
 pub mod reconstruction;
 pub mod provider;
+pub mod indexer;
+
+pub use extraction::{
+    ExtractedFact, ExtractionRule, FactExtractor, RuleEngine, 
+    BasicExtractor, BlockData, ExtractionError
+};
+
+pub use proxy::{
+    ProxyConfig, ProxyEvent, ProxyEventHandler, ChainStatus, 
+    ProxyError, ObservationProxy, LoggingEventHandler
+};
+
+pub use reconstruction::{
+    ReconstructionConfig, ReconstructionStatus, LogReconstructor,
+    BasicReconstructor, ReconstructorFactory, ReconstructionError
+};
+
+pub use provider::{
+    ObservationProvider, ObservationProviderConfig, ProviderConfig,
+    ProviderAuth, DataProvider, ProviderFactory, ProviderData,
+    ProviderStatus, ProviderError
+};
+
+pub use indexer::{
+    IndexerConfig, IndexerStatus, ChainIndexer, BasicIndexer,
+    IndexerFactory, IndexerCreator, BasicIndexerCreator, IndexerError
+};
 
 #[cfg(test)]
 mod tests {
@@ -34,8 +40,6 @@ mod tests {
     
     #[test]
     fn test_module_structure() {
-        // Just a simple test to verify the module structure
-        // This will fail to compile if any of the re-exports are invalid
-        assert!(true);
+        // Test that the module structure is as expected
     }
 } 

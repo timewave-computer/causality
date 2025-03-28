@@ -14,7 +14,7 @@ mod race;
 pub use race::{race, race_ok, race_result, race_until};
 
 mod barrier;
-pub use barrier::{Barrier, barrier, resource_barrier, timeout_barrier, wait_for_resources};
+pub use barrier::{Barrier, SharedBarrier, barrier, resource_barrier, timeout_barrier, wait_for_resources};
 
 mod timeout;
 pub use timeout::{timeout, timeout_result, with_timeout, WithTimeout, timeout_with_retry}; 

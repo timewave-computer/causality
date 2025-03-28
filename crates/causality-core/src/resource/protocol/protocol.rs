@@ -15,6 +15,7 @@ use crate::domain::{DomainId, DomainError};
 use crate::capability::Capability;
 use crate::effect::context::EffectContext;
 use crate::resource::types::{ResourceTypeId, ResourceTypeRegistry, ResourceTypeRegistryError};
+use crate::resource::Resource;
 
 /// Unique identifier for a cross-domain resource reference
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -214,7 +215,7 @@ pub struct ResourceTransferOperation {
     pub verification_level: VerificationLevel,
     
     /// Authorization capability
-    pub authorization: Capability,
+    pub authorization: Capability<dyn Resource>,
     
     /// Transfer status
     pub status: TransferStatus,
@@ -234,7 +235,7 @@ impl ResourceTransferOperation {
         target_domain: DomainId,
         projection_type: ResourceProjectionType,
         verification_level: VerificationLevel,
-        authorization: Capability,
+        authorization: Capability<dyn Resource>,
     ) -> Self {
         Self {
             id: crate::id_utils::generate_transfer_id(),
@@ -682,6 +683,22 @@ pub fn create_cross_domain_protocol(
     resource_type_registry: Arc<dyn ResourceTypeRegistry>,
 ) -> Arc<dyn CrossDomainResourceProtocol> {
     Arc::new(BasicCrossDomainResourceProtocol::new(resource_type_registry))
+}
+
+/// Authorization for a resource protocol operation
+#[derive(Debug)]
+pub struct ProtocolAuthorization {
+    /// The agent ID that is authorizing this operation
+    pub agent_id: String,
+    
+    /// The operation being authorized
+    pub operation: String,
+    
+    /// The authorization capability
+    pub authorization: Capability<dyn Resource>,
+    
+    /// Timestamp when this authorization was created
+    pub timestamp: u64,
 }
 
 #[cfg(test)]

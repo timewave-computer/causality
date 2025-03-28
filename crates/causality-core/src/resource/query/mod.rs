@@ -11,7 +11,7 @@ mod pagination;
 mod index;
 mod builder;
 
-pub use engine::{QueryEngine, QueryResult, QueryOptions, QueryExecution};
+pub use engine::{QueryEngine, QueryOptions, QueryExecution};
 pub use filter::{Filter, FilterCondition, FilterOperator, FilterExpression};
 pub use sort::{Sort, SortDirection, SortOptions};
 pub use pagination::{Pagination, PaginationOptions, PaginationResult};

@@ -41,7 +41,7 @@ pub struct Operation {
     effects: Vec<Box<dyn Effect>>,
     
     /// Required capabilities for this operation
-    required_capabilities: Vec<Capability>,
+    required_capabilities: Vec<Capability<dyn Resource>>,
     
     /// Operation metadata
     metadata: HashMap<String, String>,
@@ -55,7 +55,7 @@ impl Operation {
         operation_type: OperationType,
         parameters: HashMap<String, String>,
         effects: Vec<Box<dyn Effect>>,
-        required_capabilities: Vec<Capability>,
+        required_capabilities: Vec<Capability<dyn Resource>>,
         metadata: HashMap<String, String>,
     ) -> Result<Self, OperationError> {
         let mut operation = Self {
@@ -112,7 +112,7 @@ impl Operation {
     }
     
     /// Get the required capabilities
-    pub fn required_capabilities(&self) -> &[Capability] {
+    pub fn required_capabilities(&self) -> &[Capability<dyn Resource>] {
         &self.required_capabilities
     }
     
@@ -388,7 +388,7 @@ pub struct OperationBuilder {
     operation_type: Option<OperationType>,
     parameters: HashMap<String, String>,
     effects: Vec<Box<dyn Effect>>,
-    required_capabilities: Vec<Capability>,
+    required_capabilities: Vec<Capability<dyn Resource>>,
     metadata: HashMap<String, String>,
 }
 
@@ -443,7 +443,7 @@ impl OperationBuilder {
     }
     
     /// Add a required capability
-    pub fn require_capability(mut self, capability: Capability) -> Self {
+    pub fn require_capability(mut self, capability: Capability<dyn Resource>) -> Self {
         self.required_capabilities.push(capability);
         self
     }
@@ -483,6 +483,53 @@ impl Default for OperationBuilder {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// A basic operation configuration for agents
+#[derive(Debug, Clone)]
+pub struct OperationConfig {
+    /// The operation ID
+    pub id: OperationId,
+    
+    /// The operation type
+    pub operation_type: String,
+    
+    /// The target resource ID
+    pub target_id: ResourceId,
+    
+    /// Operation parameters
+    pub parameters: HashMap<String, String>,
+    
+    /// Required capabilities for this operation
+    pub required_capabilities: Vec<Capability<dyn Resource>>,
+    
+    /// Whether this operation requires authorization
+    pub requires_authorization: bool,
+}
+
+/// Generic operation definition for agent operations
+#[derive(Debug, Clone)]
+pub struct OperationDefinition {
+    /// The operation ID
+    pub id: OperationId,
+    
+    /// The operation type
+    pub operation_type: String,
+    
+    /// The target resource ID
+    pub target_id: ResourceId,
+    
+    /// Operation parameters
+    pub parameters: HashMap<String, String>,
+    
+    /// Required capabilities for this operation
+    pub required_capabilities: Vec<Capability<dyn Resource>>,
+    
+    /// Whether this operation requires authorization
+    pub requires_authorization: bool,
+    
+    /// The handler for this operation type
+    pub handler: String,
 }
 
 #[cfg(test)]

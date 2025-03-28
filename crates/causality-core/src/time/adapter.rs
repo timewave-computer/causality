@@ -24,7 +24,8 @@ use super::{
     },
     effect_handler::{TimeEffectHandlerImpl, AttestationStore, TimeAttestation},
     provider::{TimeProvider, TimeProviderFactory},
-    map::{TimeMap, DomainPosition},
+    map::TimeMap,
+    types::DomainPosition,
     Timer, Timestamp, ClockTime, TimeDelta,
 };
 

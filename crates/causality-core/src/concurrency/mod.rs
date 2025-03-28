@@ -1,9 +1,8 @@
 // Concurrency module
 //
-// This module provides concurrency primitives and patterns for safe, deterministic
-// concurrent execution across the Causality system.
+// This module provides various concurrency utilities and primitives.
 
-// Core concurrency modules
+// Core modules
 pub mod atomic;     // Atomic operations and primitives
 pub mod lock;       // Locking mechanisms
 pub mod pool;       // Resource pool implementation
@@ -13,12 +12,23 @@ pub mod resource_manager; // Resource management utilities
 pub mod task_scheduler;   // Task scheduling
 pub mod task_id;          // Task identifiers
 
-// Patterns module for higher-level concurrency patterns
+// Pattern modules
 pub mod patterns;   // High-level concurrency patterns
 pub mod barrier;    // Barrier synchronization
 pub mod fork;       // Fork-join parallelism
 pub mod race;       // Racing between tasks
 pub mod timeout;    // Timeout handling
+
+// Re-exporting core types for easier access
+use resource_manager::{ResourceManager, SharedResourceManager};
+use wait_queue::{WaitQueue, SharedWaitQueue};
+
+// Re-exporting common concurrency patterns
+pub use fork::{fork, join};
+pub use race::{race, select};
+pub use barrier::Barrier;
+pub use barrier::SharedBarrier;
+pub use timeout::{with_timeout, TimeoutError};
 
 // Re-exports for public API
 pub use atomic::{
@@ -55,13 +65,6 @@ pub use task_scheduler::{
 
 pub use task_id::{
     TaskId, TaskPriority,
-};
-
-pub use patterns::{
-    fork::{fork, join},
-    race::{race, select},
-    barrier::{Barrier, SharedBarrier},
-    timeout::{with_timeout, TimeoutError},
 };
 
 // Helper functions for creating common concurrency primitives

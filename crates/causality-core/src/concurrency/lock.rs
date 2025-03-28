@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::cell::UnsafeCell;
 use std::ops::{Deref, DerefMut};
 use std::fmt;
+use std::marker::PhantomData;
 
 /// A mutex for protecting data with exclusive access
 ///
@@ -275,16 +276,22 @@ where
 pub struct Cell<T> {
     /// The inner value
     value: UnsafeCell<T>,
+    /// Marker to prevent the struct from being Sync
+    _not_sync: PhantomData<*const ()>,
 }
 
-// Cell is not thread-safe
-impl<T> !Sync for Cell<T> {}
+// Instead of using negative trait bounds, we'll simply not implement Sync
+// and add a marker to ensure the type is not Send + Sync
+// This is safe because UnsafeCell<T> is not Sync
 
+// impl<T> !Sync for Cell<T> {}
+// PhantomData<*const ()> is !Sync, so this prevents the struct from being Sync
 impl<T> Cell<T> {
     /// Create a new cell
     pub fn new(value: T) -> Self {
         Self {
             value: UnsafeCell::new(value),
+            _not_sync: PhantomData,
         }
     }
     

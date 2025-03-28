@@ -134,8 +134,9 @@ impl<T, S> SignedData<T, S> {
     }
 }
 
-impl<T, S, E> Signed for SignedData<T, S> {
-    type Error = E;
+impl<T, S> Signed for SignedData<T, S> {
+    // Using a general std error for the error type
+    type Error = std::io::Error;
     type Data = T;
     type Signature = S;
     

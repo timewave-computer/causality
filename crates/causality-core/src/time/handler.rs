@@ -188,31 +188,49 @@ impl EffectHandler for TemporalQueryEffectHandler {
 
 /// Register time effect handlers with the effect system
 pub fn register_time_effect_handlers(
-    effect_registry: &mut dyn crate::effect::EffectRegistry,
+    registry: &mut impl crate::effect::EffectRegistry,
     causal_time_service: Arc<dyn CausalTimeService>,
     clock_time_service: Arc<dyn ClockTimeService>,
     fact_time_store: Arc<dyn FactTimeStore>,
     time_attestation_store: Arc<dyn TimeAttestationStore>,
 ) {
     // Create handlers
-    let causal_time_handler = Arc::new(CausalTimeEffectHandler::new(
+    let causal_time_handler = CausalTimeEffectHandler::new(
         causal_time_service,
         fact_time_store.clone(),
-    ));
+    );
     
-    let clock_time_handler = Arc::new(ClockTimeEffectHandler::new(
+    let clock_time_handler = ClockTimeEffectHandler::new(
         clock_time_service,
         time_attestation_store,
         fact_time_store.clone(),
-    ));
+    );
     
-    let temporal_query_handler = Arc::new(TemporalQueryEffectHandler::new(
+    let temporal_query_handler = TemporalQueryEffectHandler::new(
         fact_time_store,
-    ));
+    );
     
     // Register handlers
-    // Note: This is placeholder code - exact registration depends on the effect registry implementation
-    // effect_registry.register_handler::<CausalTimeEffect>(causal_time_handler);
-    // effect_registry.register_handler::<ClockTimeEffect>(clock_time_handler);
-    // effect_registry.register_handler::<TemporalQueryEffect>(temporal_query_handler);
+    let _ = registry.register_handler(causal_time_handler);
+    let _ = registry.register_handler(clock_time_handler);
+    let _ = registry.register_handler(temporal_query_handler);
+}
+
+impl TimeEffectHandlerImpl {
+    // ... existing code ...
+
+    // Update the method that uses dyn EffectRegistry
+    pub async fn register_with_effect_registry(
+        &self,
+        effect_registry: &mut impl EffectRegistry,
+    ) -> Result<(), TimeError> {
+        // Register handlers for all time effect types
+        let handler = Arc::new(self.clone());
+        effect_registry.register_handler(handler)
+            .map_err(|e| TimeError::Registration(format!("Failed to register time effect handler: {}", e)))?;
+        
+        Ok(())
+    }
+
+    // ... existing code ...
 } 

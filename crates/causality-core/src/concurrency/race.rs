@@ -10,9 +10,11 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use tokio::sync::oneshot;
+// Remove the unused import
+// use tokio::sync::oneshot;
 
-use causality_types::{Error, Result};
+use crate::error::Error;
+use causality_types::Result;
 
 /// Run multiple futures concurrently and return the result of the first one to complete
 ///
@@ -20,38 +22,31 @@ use causality_types::{Error, Result};
 pub async fn race<F, T>(futures: Vec<F>) -> T
 where
     F: Future<Output = T> + Send + 'static,
-    T: Send + 'static,
+    T: Clone + Send + 'static,
 {
-    // Special case for empty futures
     if futures.is_empty() {
-        panic!("Cannot race empty futures");
+        panic!("Empty futures vector passed to race");
     }
+
+    // Use an mpsc channel instead of cloning oneshot::Sender
+    let (result_tx, mut result_rx) = tokio::sync::mpsc::channel(futures.len());
     
-    // Special case for a single future
-    if futures.len() == 1 {
-        return futures.into_iter().next().unwrap().await;
-    }
-    
-    // Create a channel for the first result
-    let (tx, rx) = oneshot::channel();
-    
-    // Spawn tasks for each future
-    for future in futures {
-        let tx = tx.clone();
+    for (idx, future) in futures.into_iter().enumerate() {
+        let result_tx = result_tx.clone();
+        
         tokio::spawn(async move {
             let result = future.await;
-            // It's OK if the receiver is dropped - that just means another future won the race
-            let _ = tx.send(result);
+            let _ = result_tx.send((idx, result)).await;
         });
     }
     
-    // Drop the original sender to avoid a memory leak if no future completes
-    drop(tx);
+    // Drop the original sender
+    drop(result_tx);
     
     // Wait for the first result
-    match rx.await {
-        Ok(result) => result,
-        Err(_) => panic!("All racing futures were dropped without sending a result"),
+    match result_rx.recv().await {
+        Some((_, result)) => result,
+        None => panic!("All racing futures were dropped without completing"),
     }
 }
 
@@ -101,19 +96,30 @@ where
     T: Send + 'static,
     E: Send + 'static,
 {
-    // Convert the result type to our Error type
-    let futures = futures
-        .into_iter()
-        .map(|future| async move {
-            match future.await {
-                Ok(value) => Ok(value),
-                Err(err) => Err(err),
-            }
-        })
-        .collect::<Vec<_>>();
+    if futures.is_empty() {
+        panic!("Empty futures vector passed to race_result");
+    }
+
+    // Use an mpsc channel for results
+    let (result_tx, mut result_rx) = tokio::sync::mpsc::channel(futures.len());
     
-    // Race the futures
-    race(futures).await
+    for (idx, future) in futures.into_iter().enumerate() {
+        let result_tx = result_tx.clone();
+        
+        tokio::spawn(async move {
+            let result = future.await;
+            let _ = result_tx.send((idx, result)).await;
+        });
+    }
+    
+    // Drop the original sender
+    drop(result_tx);
+    
+    // Wait for the first result
+    match result_rx.recv().await {
+        Some((_, result)) => result,
+        None => panic!("All racing futures were dropped without completing"),
+    }
 }
 
 /// Run multiple futures concurrently until one of them returns a value that satisfies a predicate

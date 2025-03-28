@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use causality_types::{ContentId, ContentHash, ContentAddressed, HashError, HashOutput};
-use causality_types::content_addressing::HashAlgorithm;
+use causality_types::crypto_primitives::HashAlgorithm;
 
 /// Resource identifier type
 ///

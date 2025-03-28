@@ -1,4 +1,27 @@
 [bans]
 deny = [
-    { name = "uuid", reason = "Use ContentId trait from types crate instead." },
-] 
+    { name = "uuid", reason = "Use ContentId trait from causality-types crate instead. All stateful objects should be content addressed." },
+    { name = "sha2", reason = "Use cryptographic primitives from causality-crypto crate instead." },
+    { name = "blake3", reason = "Use cryptographic primitives from causality-crypto crate instead." },
+    { name = "poseidon-rs", reason = "Use cryptographic primitives from causality-crypto crate instead." },
+    { name = "hmac", reason = "Use cryptographic primitives from causality-crypto crate instead." },
+    { name = "signature", reason = "Use signature implementations from causality-crypto crate instead." },
+    { name = "ed25519", reason = "Use signature implementations from causality-crypto crate instead." },
+    { name = "serde_cbor", reason = "Use canonical serialization from causality-types crate for deterministic serialization." },
+    { name = "serde_json", reason = "Use canonical serialization from causality-types crate for deterministic serialization." },
+    { name = "rocksdb", reason = "Use storage implementations from causality-storage crate instead." },
+    { name = "redis", reason = "Use storage implementations from causality-storage crate instead." },
+    { name = "chrono", reason = "Use time primitives from causality-core crate for consistent time handling across domains." },
+    { name = "time", reason = "Use time primitives from causality-core crate for consistent time handling across domains." },
+    { name = "tokio-mutex", reason = "Use resource locking from causality-core crate to ensure deterministic concurrency." },
+    { name = "parking_lot", reason = "Use resource locking from causality-core crate to ensure deterministic concurrency." },
+    { name = "merkle_light", reason = "Use SMT implementations from causality-types crate instead." },
+    { name = "sparse-merkle-tree", reason = "Use SMT implementations from causality-types crate instead." },
+]
+
+[advisories]
+db-path = "~/.cargo/advisory-db"
+vulnerability = "deny"
+unmaintained = "warn"
+yanked = "warn"
+notice = "warn" 

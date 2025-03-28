@@ -23,15 +23,20 @@ pub use validation::{
 
 pub use schema::{
     SchemaValidator, SchemaValidationError,
-    ResourceSchema, SchemaCompatibility,
+    SchemaCompatibility,
     validate_schema_compatibility,
 };
 
+// Use resource types directly
+pub use crate::resource::ResourceSchema;
+
 pub use state::{
     StateTransitionValidator, StateTransitionError,
-    ResourceState, StateTransitionRule,
+    StateTransitionRule,
     validate_state_transition,
 };
+// Import ResourceState directly from the interface module
+pub use crate::resource::interface::ResourceState;
 
 pub use permission::{
     PermissionValidator, PermissionValidationError,

@@ -10,7 +10,8 @@ use anyhow::Result;
 
 use causality_types::time_snapshot::{TimeEffect, TimeEffectResult, AttestationSource};
 use crate::effects::{EffectHandler, EffectContext, Effect, EffectRegistry};
-use super::{TimeProvider, TimeMap, DomainPosition};
+use super::{TimeProvider, TimeMap};
+use super::types::DomainPosition;
 
 /// Handler for time effects that processes them using the time provider
 pub struct TimeEffectHandlerImpl {

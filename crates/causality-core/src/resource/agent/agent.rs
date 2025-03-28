@@ -36,7 +36,7 @@ pub trait Agent: Resource + Send + Sync {
     async fn set_state(&mut self, state: AgentState) -> Result<(), AgentError>;
     
     /// Add a capability to the agent
-    async fn add_capability(&mut self, capability: Capability<Resource>) -> Result<(), AgentError>;
+    async fn add_capability(&mut self, capability: Capability<dyn Resource>) -> Result<(), AgentError>;
     
     /// Remove a capability from the agent
     async fn remove_capability(&mut self, capability_id: &str) -> Result<(), AgentError>;
@@ -45,7 +45,7 @@ pub trait Agent: Resource + Send + Sync {
     fn has_capability(&self, capability_id: &str) -> bool;
     
     /// Get all capabilities
-    fn capabilities(&self) -> Vec<Capability<Resource>>;
+    fn capabilities(&self) -> Vec<Capability<dyn Resource>>;
     
     /// Add a relationship with another resource
     async fn add_relationship(&mut self, relationship: AgentRelationship) -> Result<(), AgentError>;
@@ -82,7 +82,7 @@ pub struct AgentImpl {
     state: AgentState,
     
     /// The agent's capabilities
-    capabilities: Vec<Capability<Resource>>,
+    capabilities: Vec<Capability<dyn Resource>>,
     
     /// Relationships with other resources
     relationships: Vec<AgentRelationship>,
@@ -100,7 +100,7 @@ impl AgentImpl {
     pub fn new(
         agent_type: AgentType,
         initial_state: Option<AgentState>,
-        initial_capabilities: Option<Vec<Capability<Resource>>>,
+        initial_capabilities: Option<Vec<Capability<dyn Resource>>>,
         initial_relationships: Option<Vec<AgentRelationship>>,
         metadata: Option<HashMap<String, String>>,
     ) -> Result<Self, AgentError> {
@@ -160,7 +160,7 @@ impl AgentImpl {
 struct AgentContentView {
     agent_type: AgentType,
     state: AgentState,
-    capabilities: Vec<Capability<Resource>>,
+    capabilities: Vec<Capability<dyn Resource>>,
     relationships: Vec<AgentRelationship>,
     metadata: HashMap<String, String>,
 }
@@ -227,7 +227,7 @@ impl Agent for AgentImpl {
         Ok(())
     }
     
-    async fn add_capability(&mut self, capability: Capability<Resource>) -> Result<(), AgentError> {
+    async fn add_capability(&mut self, capability: Capability<dyn Resource>) -> Result<(), AgentError> {
         // Check if the capability already exists
         if self.capabilities.iter().any(|c| c.id() == capability.id()) {
             return Err(AgentError::Other(format!(
@@ -267,7 +267,7 @@ impl Agent for AgentImpl {
         self.capabilities.iter().any(|c| c.id() == capability_id)
     }
     
-    fn capabilities(&self) -> Vec<Capability<Resource>> {
+    fn capabilities(&self) -> Vec<Capability<dyn Resource>> {
         self.capabilities.clone()
     }
     
@@ -337,7 +337,7 @@ impl AgentImpl {
 pub struct AgentBuilder {
     agent_type: AgentType,
     state: AgentState,
-    capabilities: Vec<Capability<Resource>>,
+    capabilities: Vec<Capability<dyn Resource>>,
     relationships: Vec<AgentRelationship>,
     metadata: HashMap<String, String>,
 }
@@ -367,13 +367,13 @@ impl AgentBuilder {
     }
     
     /// Add a capability
-    pub fn with_capability(mut self, capability: Capability<Resource>) -> Self {
+    pub fn with_capability(mut self, capability: Capability<dyn Resource>) -> Self {
         self.capabilities.push(capability);
         self
     }
     
     /// Add multiple capabilities
-    pub fn with_capabilities(mut self, capabilities: Vec<Capability<Resource>>) -> Self {
+    pub fn with_capabilities(mut self, capabilities: Vec<Capability<dyn Resource>>) -> Self {
         self.capabilities.extend(capabilities);
         self
     }

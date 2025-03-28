@@ -21,27 +21,48 @@ use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 
-/// Proof of authorization for an operation
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Authorization for an agent operation
+#[derive(Debug, Clone)]
 pub struct Authorization {
-    /// Agent that created the authorization
-    agent_id: AgentId,
+    /// The agent ID that is authorizing
+    pub agent_id: AgentId,
     
-    /// Operation being authorized
-    operation_id: OperationId,
+    /// The operation being authorized
+    pub operation_id: OperationId,
     
-    /// Capabilities being used
-    capabilities: Vec<Capability>,
+    /// The capabilities being granted for this operation
+    pub capabilities: Vec<Capability<dyn Resource>>,
     
-    /// Proof of authorization (e.g., signature)
-    proof: Vec<u8>,
+    /// Any constraints on this authorization
+    pub constraints: Vec<AuthorizationConstraint>,
     
-    /// Metadata
-    metadata: HashMap<String, String>,
+    /// Expiration time (if any)
+    pub expires_at: Option<u64>,
     
-    /// Content hash of the authorization
-    #[serde(skip)]
-    content_hash: Option<ContentHash>,
+    /// Metadata for this authorization
+    pub metadata: HashMap<String, String>,
+}
+
+/// Proposed authorization
+#[derive(Debug, Clone)]
+pub struct AuthorizationProposal {
+    /// The agent ID that is proposing authorization
+    pub agent_id: AgentId,
+    
+    /// The operation being authorized
+    pub operation_id: OperationId,
+    
+    /// The capabilities being proposed for this operation
+    pub capabilities: Vec<Capability<dyn Resource>>,
+    
+    /// Any constraints on this authorization
+    pub constraints: Vec<AuthorizationConstraint>,
+    
+    /// Expiration time (if any)
+    pub expires_at: Option<u64>,
+    
+    /// Metadata for this proposal
+    pub metadata: HashMap<String, String>,
 }
 
 impl Authorization {
@@ -49,22 +70,22 @@ impl Authorization {
     pub fn new(
         agent_id: AgentId,
         operation_id: OperationId,
-        capabilities: Vec<Capability>,
-        proof: Vec<u8>,
-        metadata: Option<HashMap<String, String>>,
+        capabilities: Vec<Capability<dyn Resource>>,
+        constraints: Vec<AuthorizationConstraint>,
+        expires_at: Option<u64>,
+        metadata: HashMap<String, String>,
     ) -> Result<Self, AuthorizationError> {
-        let mut authorization = Self {
+        let authorization = Self {
             agent_id,
             operation_id,
             capabilities,
-            proof,
-            metadata: metadata.unwrap_or_default(),
-            content_hash: None,
+            constraints,
+            expires_at,
+            metadata,
         };
         
         // Generate content hash
         let hash = authorization.compute_content_hash()?;
-        authorization.content_hash = Some(hash);
         
         Ok(authorization)
     }
@@ -80,13 +101,18 @@ impl Authorization {
     }
     
     /// Get the capabilities
-    pub fn capabilities(&self) -> &[Capability] {
+    pub fn capabilities(&self) -> &[Capability<dyn Resource>] {
         &self.capabilities
     }
     
-    /// Get the proof
-    pub fn proof(&self) -> &[u8] {
-        &self.proof
+    /// Get the constraints
+    pub fn constraints(&self) -> &[AuthorizationConstraint] {
+        &self.constraints
+    }
+    
+    /// Get the expires_at
+    pub fn expires_at(&self) -> Option<u64> {
+        self.expires_at
     }
     
     /// Get the metadata
@@ -106,7 +132,8 @@ impl Authorization {
             agent_id: self.agent_id.clone(),
             operation_id: self.operation_id.clone(),
             capabilities: self.capabilities.clone(),
-            proof: self.proof.clone(),
+            constraints: self.constraints.clone(),
+            expires_at: self.expires_at,
             metadata: self.metadata.clone(),
         };
         
@@ -119,18 +146,14 @@ impl Authorization {
     
     /// Get the content hash
     pub fn content_hash(&self) -> Result<ContentHash, AuthorizationError> {
-        if let Some(hash) = &self.content_hash {
-            Ok(hash.clone())
-        } else {
-            self.compute_content_hash()
-        }
+        self.compute_content_hash()
     }
     
     /// Verify this authorization
     pub fn verify(&self) -> Result<bool, AuthorizationError> {
         // In a real implementation, verify the signature or other proof mechanism
         // For now, just check that the proof is not empty
-        Ok(!self.proof.is_empty())
+        Ok(!self.constraints.is_empty())
     }
 }
 
@@ -139,8 +162,9 @@ impl Authorization {
 struct AuthorizationContentView {
     agent_id: AgentId,
     operation_id: OperationId,
-    capabilities: Vec<Capability>,
-    proof: Vec<u8>,
+    capabilities: Vec<Capability<dyn Resource>>,
+    constraints: Vec<AuthorizationConstraint>,
+    expires_at: Option<u64>,
     metadata: HashMap<String, String>,
 }
 
@@ -233,13 +257,14 @@ impl CapabilityVerifier {
             agent.agent_id().clone(),
             operation.id().clone(),
             valid_capabilities,
-            proof,
-            Some(metadata),
+            vec![],
+            None,
+            metadata,
         )
     }
     
     /// Check if an agent has a specific capability
-    fn has_capability<A: Agent>(&self, agent: &A, capability: &Capability) -> bool {
+    fn has_capability<A: Agent>(&self, agent: &A, capability: &Capability<dyn Resource>) -> bool {
         agent.capabilities().iter().any(|c| c.id() == capability.id())
     }
 }
@@ -300,9 +325,9 @@ impl CapabilityRegistry {
     /// Validate capabilities for a specific resource
     pub fn validate_capabilities(
         &self,
-        capabilities: Vec<Capability>,
+        capabilities: Vec<Capability<dyn Resource>>,
         resource_id: &ResourceId,
-    ) -> Result<Vec<Capability>, AuthorizationError> {
+    ) -> Result<Vec<Capability<dyn Resource>>, AuthorizationError> {
         // Filter out capabilities that are not valid for this resource
         let valid_capabilities = capabilities.into_iter()
             .filter(|capability| {

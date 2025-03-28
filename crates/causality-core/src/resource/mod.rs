@@ -21,7 +21,6 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 
 // Use proper imports from causality_crypto and causality_types
 use causality_crypto::ContentHash;
@@ -51,17 +50,6 @@ pub use protocol::{
     DomainResourceAdapter,
     BasicCrossDomainResourceProtocol,
     create_cross_domain_protocol,
-};
-
-// Re-export query system
-pub use query::{
-    ResourceQuery, QueryEngine, QueryResult, QueryOptions, QueryExecution,
-    Filter, FilterExpression, FilterCondition, FilterOperator,
-    Sort, SortDirection, SortOptions,
-    Pagination, PaginationOptions, PaginationResult,
-    ResourceIndex, IndexKey, IndexType, IndexEntry,
-    QueryBuilder, FilterBuilder, SortBuilder,
-    QueryError
 };
 
 // Re-export agent system

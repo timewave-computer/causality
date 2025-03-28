@@ -15,10 +15,12 @@ use crate::resource_types::ResourceType;
 use crate::capability::{Capability, Right};
 use super::{
     ResourceQuery, FilterExpression, FilterCondition, FilterOperator,
-    QueryError, QueryResult,
+    QueryError,
     Sort, SortDirection, Pagination, PaginationResult,
     ResourceIndex, InMemoryResourceIndex
 };
+// Direct import of QueryResult from the module where it's defined
+use crate::resource::query::QueryResult;
 
 /// Options for query execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,7 +113,7 @@ pub trait QueryEngine: Send + Sync + Debug {
     async fn query<R: Resource + Send + Sync + 'static>(
         &self,
         query: &ResourceQuery,
-        capability: Option<&Capability>,
+        capability: Option<&Capability<dyn Resource>>,
         options: Option<QueryOptions>,
     ) -> QueryResult<QueryExecution<R>>;
     
@@ -119,21 +121,21 @@ pub trait QueryEngine: Send + Sync + Debug {
     async fn get_resource<R: Resource + Send + Sync + 'static>(
         &self,
         resource_id: &ContentId,
-        capability: Option<&Capability>,
+        capability: Option<&Capability<dyn Resource>>,
     ) -> QueryResult<Option<R>>;
     
     /// Count resources matching a query
     async fn count(
         &self,
         query: &ResourceQuery,
-        capability: Option<&Capability>,
+        capability: Option<&Capability<dyn Resource>>,
     ) -> QueryResult<usize>;
     
     /// Check if any resources match the query
     async fn exists(
         &self,
         query: &ResourceQuery,
-        capability: Option<&Capability>,
+        capability: Option<&Capability<dyn Resource>>,
     ) -> QueryResult<bool>;
 }
 
@@ -173,7 +175,7 @@ impl BasicQueryEngine {
     fn can_read_resource(
         &self,
         resource_id: &ContentId,
-        capability: Option<&Capability>,
+        capability: Option<&Capability<dyn Resource>>,
     ) -> bool {
         match capability {
             Some(cap) => {
@@ -189,7 +191,7 @@ impl BasicQueryEngine {
     fn filter_by_capability(
         &self,
         resource_ids: Vec<ContentId>,
-        capability: Option<&Capability>,
+        capability: Option<&Capability<dyn Resource>>,
     ) -> Vec<ContentId> {
         match capability {
             Some(cap) => {
@@ -284,7 +286,7 @@ impl QueryEngine for BasicQueryEngine {
     async fn query<R: Resource + Send + Sync + 'static>(
         &self,
         query: &ResourceQuery,
-        capability: Option<&Capability>,
+        capability: Option<&Capability<dyn Resource>>,
         options: Option<QueryOptions>,
     ) -> QueryResult<QueryExecution<R>> {
         let options = options.unwrap_or_default();
@@ -375,7 +377,7 @@ impl QueryEngine for BasicQueryEngine {
     async fn get_resource<R: Resource + Send + Sync + 'static>(
         &self,
         resource_id: &ContentId,
-        capability: Option<&Capability>,
+        capability: Option<&Capability<dyn Resource>>,
     ) -> QueryResult<Option<R>> {
         // Check if the capability grants access
         if let Some(cap) = capability {
@@ -399,7 +401,7 @@ impl QueryEngine for BasicQueryEngine {
     async fn count(
         &self,
         query: &ResourceQuery,
-        capability: Option<&Capability>,
+        capability: Option<&Capability<dyn Resource>>,
     ) -> QueryResult<usize> {
         let options = QueryOptions {
             include_total: true,
@@ -415,7 +417,7 @@ impl QueryEngine for BasicQueryEngine {
     async fn exists(
         &self,
         query: &ResourceQuery,
-        capability: Option<&Capability>,
+        capability: Option<&Capability<dyn Resource>>,
     ) -> QueryResult<bool> {
         let mut options = QueryOptions::default();
         options.max_resources = Some(1);

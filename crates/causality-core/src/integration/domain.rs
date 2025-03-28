@@ -16,6 +16,7 @@ use crate::resource::{
     VerificationLevel, ResourceReference, ResourceTransferOperation,
     CrossDomainResourceProtocol, DomainResourceAdapter,
     CrossDomainProtocolError, CrossDomainProtocolResult,
+    Resource,
 };
 use crate::effect::{
     Effect, EffectContext, EffectOutcome, EffectResult, EffectError,
@@ -120,13 +121,13 @@ pub struct GenericDomainAdapter {
     supported_resource_types: Vec<ResourceTypeId>,
     
     /// Required capabilities for operations
-    required_capabilities: HashMap<String, Vec<Capability>>,
+    required_capabilities: HashMap<String, Vec<Capability<dyn Resource>>>,
     
     /// Parameter validators
     parameter_validators: Vec<Arc<dyn DomainParameterValidator>>,
     
     /// Domain capability mappings
-    capability_mappings: HashMap<DomainId, DomainCapabilityMapping>,
+    capability_mappings: HashMap<DomainId, LocalDomainCapabilityMapping>,
 }
 
 impl GenericDomainAdapter {
@@ -151,7 +152,7 @@ impl GenericDomainAdapter {
     pub fn add_required_capability(
         &mut self, 
         operation: impl Into<String>, 
-        capability: Capability,
+        capability: Capability<dyn Resource>,
     ) -> &mut Self {
         let op = operation.into();
         self.required_capabilities
@@ -173,9 +174,9 @@ impl GenericDomainAdapter {
     /// Add capability mapping
     pub fn add_capability_mapping(
         &mut self, 
-        mapping: DomainCapabilityMapping,
+        mapping: LocalDomainCapabilityMapping,
     ) -> &mut Self {
-        self.capability_mappings.insert(mapping.source_domain.clone(), mapping);
+        self.capability_mappings.insert(mapping.domain_id.clone(), mapping);
         self
     }
     
@@ -202,7 +203,7 @@ impl GenericDomainAdapter {
     pub fn validate_capabilities(
         &self,
         operation: &str,
-        provided: &[Capability],
+        provided: &[Capability<dyn Resource>],
     ) -> DomainIntegrationResult<()> {
         if let Some(required) = self.required_capabilities.get(operation) {
             DomainValidation::validate_capabilities(required, provided)
@@ -447,4 +448,14 @@ pub fn create_domain_integration_layer(
     ));
     
     (effect_router, resource_router, adapter_factory)
+}
+
+/// Domain capability mapping
+#[derive(Debug, Clone)]
+pub struct LocalDomainCapabilityMapping {
+    /// The domain ID
+    pub domain_id: DomainId,
+    
+    /// Required capabilities for different operations
+    pub required_capabilities: HashMap<String, Vec<Capability<dyn Resource>>>,
 } 

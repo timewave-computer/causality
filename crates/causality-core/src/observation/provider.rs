@@ -1,438 +1,264 @@
-// Observation provider functionality
+// Provider module
 //
-// This module provides data provider functionality for observations.
+// This module provides data providers for external observation sources.
 
+use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock, Mutex};
-use std::time::Duration;
-
 use thiserror::Error;
-use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
+use async_trait::async_trait;
 
-use crate::observation::{ExtractedFact};
+use crate::log::{LogStorage, LogStorageError};
 
+/// Error type for provider operations
 #[derive(Error, Debug)]
 pub enum ProviderError {
     #[error("Internal error: {0}")]
     Internal(String),
     
-    #[error("Configuration error: {0}")]
-    Configuration(String),
-    
-    #[error("Network error: {0}")]
-    Network(String),
+    #[error("Connection error: {0}")]
+    Connection(String),
     
     #[error("Data error: {0}")]
     Data(String),
     
-    #[error("Provider not running")]
-    NotRunning,
+    #[error("Configuration error: {0}")]
+    Configuration(String),
     
-    #[error("Provider already running")]
-    AlreadyRunning,
+    #[error("Storage error: {0}")]
+    Storage(#[from] LogStorageError),
 }
 
-/// Configuration for a data provider
+/// Type alias for provider results
+pub type Result<T> = std::result::Result<T, ProviderError>;
+
+/// Configuration for an observation provider
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
-    /// Unique identifier for the provider
-    pub id: String,
-    /// Provider type
+    /// Provider type (e.g., "http", "websocket", etc.)
     pub provider_type: String,
-    /// Provider-specific configuration
-    pub config: serde_json::Value,
+    
+    /// Unique provider ID
+    pub provider_id: String,
+    
+    /// Provider URL
+    pub url: String,
+    
+    /// Authentication configuration (optional)
+    pub auth: Option<ProviderAuth>,
+    
+    /// Polling interval in seconds (for poll-based providers)
+    pub polling_interval: Option<u64>,
+    
+    /// Whether to validate data
+    pub validate_data: bool,
+    
+    /// Additional configuration options
+    pub options: HashMap<String, String>,
 }
 
-/// A fact provided by an external data source
+/// Authentication details for providers
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProvidedData {
-    /// Unique identifier for the data
-    pub id: String,
-    /// The provider ID that produced this data
+pub struct ProviderAuth {
+    /// Authentication type (e.g., "basic", "oauth", "apikey", etc.)
+    pub auth_type: String,
+    
+    /// API key (for API key authentication)
+    pub api_key: Option<String>,
+    
+    /// Username (for basic authentication)
+    pub username: Option<String>,
+    
+    /// Password (for basic authentication)
+    pub password: Option<String>,
+    
+    /// Authentication token (for token-based authentication)
+    pub token: Option<String>,
+}
+
+/// Status of a provider
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderStatus {
+    /// Provider ID
     pub provider_id: String,
-    /// The type of data
-    pub data_type: String,
+    
+    /// Whether the provider is connected
+    pub is_connected: bool,
+    
+    /// Connection time
+    pub connected_since: Option<u64>,
+    
+    /// Last error
+    pub last_error: Option<String>,
+    
+    /// Number of successful requests
+    pub successful_requests: u64,
+    
+    /// Number of failed requests
+    pub failed_requests: u64,
+    
+    /// Last update timestamp
+    pub last_updated: u64,
+}
+
+/// Data returned from a provider
+#[derive(Debug, Clone)]
+pub struct ProviderData {
+    /// The provider ID
+    pub provider_id: String,
+    /// The timestamp
+    pub timestamp: u64,
+    /// The data format
+    pub format: String,
     /// The data content
     pub content: serde_json::Value,
-    /// Metadata associated with the data
+    /// The data metadata
     pub metadata: HashMap<String, String>,
-    /// Timestamp when the data was provided
-    pub timestamp: u64,
 }
 
-/// Factory for creating data providers
-pub struct ProviderRegistry {
-    /// Registered provider types
-    provider_types: RwLock<HashMap<String, Box<dyn ProviderCreator>>>,
-}
-
-impl ProviderRegistry {
-    /// Create a new provider factory
-    pub fn new() -> Self {
-        ProviderRegistry {
-            provider_types: RwLock::new(HashMap::new()),
-        }
-    }
-    
-    /// Register a provider creator
-    pub fn register_provider<C>(&self, provider_type: &str, creator: C) -> Result<(), ProviderError>
-    where
-        C: ProviderCreator + 'static,
-    {
-        let mut types = self.provider_types.write().map_err(|e| 
-            ProviderError::Internal(format!("Failed to lock provider types: {}", e)))?;
-            
-        types.insert(provider_type.to_string(), Box::new(creator));
-        
-        Ok(())
-    }
-    
-    /// Create a provider from configuration
-    pub fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>, ProviderError> {
-        let types = self.provider_types.read().map_err(|e| 
-            ProviderError::Internal(format!("Failed to lock provider types: {}", e)))?;
-            
-        let creator = types.get(&config.provider_type)
-            .ok_or_else(|| ProviderError::Configuration(
-                format!("Unknown provider type: {}", config.provider_type)
-            ))?;
-            
-        creator.create_provider(config)
-    }
-}
-
-/// An interface for creating data providers
-pub trait ProviderCreator: Send + Sync {
-    /// Create a provider from configuration
-    fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>, ProviderError>;
-}
-
-/// An interface for data providers
+/// Trait for data providers
 #[async_trait]
 pub trait DataProvider: Send + Sync {
     /// Get the provider ID
     fn get_id(&self) -> &str;
     
     /// Initialize the provider
-    fn initialize(&self) -> Result<(), ProviderError>;
+    fn initialize(&self) -> Result<()>;
     
     /// Start providing data
-    fn start(&self) -> Result<(), ProviderError>;
+    fn start(&self) -> Result<()>;
     
     /// Stop providing data
-    fn stop(&self) -> Result<(), ProviderError>;
+    fn stop(&self) -> Result<()>;
     
     /// Get provider status
-    fn get_status(&self) -> Result<ProviderStatus, ProviderError>;
+    fn get_status(&self) -> Result<ProviderStatus>;
     
     /// Set the target log
-    fn set_target_log(&self, log: Arc<dyn LogStorage>) -> Result<(), ProviderError>;
+    fn set_target_log(&self, log: Arc<dyn LogStorage>) -> Result<()>;
+    
+    /// Retrieve data from the provider
+    async fn retrieve_data(&self, query: &str) -> Result<ProviderData>;
 }
 
-/// Status of a data provider
-#[derive(Debug, Clone)]
-pub struct ProviderStatus {
-    /// The provider ID
-    pub id: String,
-    /// Whether the provider is running
-    pub running: bool,
-    /// The number of items provided
-    pub items_provided: u64,
-    /// The latest timestamp
-    pub latest_timestamp: Option<u64>,
+/// Trait for provider factories
+pub trait ProviderFactory: Send + Sync {
+    /// Create a provider from configuration
+    fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>>;
 }
 
-/// A basic HTTP data provider
-pub struct HttpProvider {
-    /// Provider ID
-    id: String,
-    /// Configuration
-    config: HttpProviderConfig,
-    /// Target log for storing provided data
-    target_log: RwLock<Option<Arc<dyn LogStorage>>>,
-    /// Provider status
-    status: RwLock<ProviderStatus>,
-    /// HTTP client
-    client: reqwest::Client,
-}
-
-/// Configuration for an HTTP provider
+/// Configuration for the observation provider
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HttpProviderConfig {
-    /// Base URL for the API
-    pub base_url: String,
-    /// Endpoint path
-    pub endpoint: String,
-    /// HTTP method
-    pub method: String,
-    /// Headers to include
-    pub headers: HashMap<String, String>,
-    /// Query parameters
-    pub query_params: HashMap<String, String>,
-    /// How often to poll (in seconds)
-    pub poll_interval_secs: u64,
-    /// Data type to assign to provided items
-    pub data_type: String,
+pub struct ObservationProviderConfig {
+    /// Providers to use
+    pub providers: Vec<ProviderConfig>,
 }
 
-impl HttpProvider {
-    /// Create a new HTTP provider
-    pub fn new(id: String, config: HttpProviderConfig) -> Result<Self> {
-        // Initialize status
-        let status = ProviderStatus {
-            id: id.clone(),
-            running: false,
-            items_provided: 0,
-            latest_timestamp: None,
-        };
-        
-        // Create HTTP client
-        let client = reqwest::Client::new();
-        
-        Ok(HttpProvider {
-            id,
+/// The main observation provider that manages multiple data providers
+pub struct ObservationProvider {
+    /// Configuration
+    config: ObservationProviderConfig,
+    
+    /// Provider factory
+    factory: Arc<dyn ProviderFactory>,
+    
+    /// Active providers
+    providers: RwLock<HashMap<String, Arc<dyn DataProvider>>>,
+    
+    /// Log storage
+    log: Option<Arc<dyn LogStorage>>,
+}
+
+impl ObservationProvider {
+    /// Create a new observation provider
+    pub fn new(config: ObservationProviderConfig, factory: Arc<dyn ProviderFactory>) -> Self {
+        ObservationProvider {
             config,
-            target_log: RwLock::new(None),
-            status: RwLock::new(status),
-            client,
-        })
-    }
-    
-    /// Start the polling loop
-    fn start_polling(self: Arc<Self>) -> Result<()> {
-        let poll_interval = std::time::Duration::from_secs(self.config.poll_interval_secs);
-        
-        // Update status
-        {
-            let mut status = self.status.write().map_err(|_| 
-                ProviderError::Internal("Failed to lock status".to_string()))?;
-                
-            status.running = true;
+            factory,
+            providers: RwLock::new(HashMap::new()),
+            log: None,
         }
-        
-        // Start polling task
-        tokio::spawn(async move {
-            loop {
-                // Check if still running
-                let running = {
-                    let status = self.status.read().expect("Failed to lock status");
-                    status.running
-                };
-                
-                if !running {
-                    break;
-                }
-                
-                // Poll for data
-                match self.poll_data().await {
-                    Ok(items) => {
-                        // Process items
-                        for item in items {
-                            if let Err(e) = self.process_item(item).await {
-                                log::error!("Error processing item: {}", e);
-                            }
-                        }
-                    },
-                    Err(e) => {
-                        log::error!("Error polling for data: {}", e);
-                    }
-                }
-                
-                // Wait before polling again
-                tokio::time::sleep(poll_interval).await;
-            }
-        });
-        
-        Ok(())
-    }
-    
-    /// Poll for data
-    async fn poll_data(&self) -> Result<Vec<ProvidedData>, ProviderError> {
-        // Build URL
-        let url = format!("{}{}", self.config.base_url, self.config.endpoint);
-        
-        // Build request
-        let mut request = match self.config.method.to_uppercase().as_str() {
-            "GET" => self.client.get(&url),
-            "POST" => self.client.post(&url),
-            method => return Err(ProviderError::Configuration(format!("Unsupported HTTP method: {}", method))),
-        };
-        
-        // Add headers
-        for (key, value) in &self.config.headers {
-            request = request.header(key, value);
-        }
-        
-        // Add query parameters
-        for (key, value) in &self.config.query_params {
-            request = request.query(&[(key, value)]);
-        }
-        
-        // Send request
-        let response = request.send().await.map_err(|e| 
-            ProviderError::Network(format!("HTTP request failed: {}", e)))?;
-            
-        // Check status
-        if !response.status().is_success() {
-            return Err(ProviderError::Network(format!(
-                "HTTP request failed with status: {}", response.status()
-            )));
-        }
-        
-        // Parse response
-        let json = response.json::<serde_json::Value>().await.map_err(|e| 
-            ProviderError::Serialization(format!("Failed to parse response: {}", e)))?;
-            
-        // Convert to provided data
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-            
-        let item = ProvidedData {
-            id: format!("{}:{}", self.id, timestamp),
-            provider_id: self.id.clone(),
-            data_type: self.config.data_type.clone(),
-            content: json,
-            metadata: HashMap::new(),
-            timestamp,
-        };
-        
-        Ok(vec![item])
-    }
-    
-    /// Process a provided data item
-    async fn process_item(&self, item: ProvidedData) -> Result<(), ProviderError> {
-        // Get target log
-        let target_log = {
-            let log = self.target_log.read().map_err(|e| 
-                ProviderError::Internal(format!("Failed to lock target log: {}", e)))?;
-                
-            log.clone().ok_or_else(|| 
-                ProviderError::Configuration("No target log configured".to_string())
-            )?
-        };
-        
-        // Create log entry
-        let entry = LogEntry {
-            log_id: format!("provider:{}", self.id),
-            sequence: 0, // Will be assigned by storage
-            timestamp: item.timestamp,
-            data: serde_json::to_value(item.clone()).map_err(|e| 
-                ProviderError::Serialization(format!("Failed to serialize item: {}", e)))?,
-            metadata: item.metadata.clone(),
-        };
-        
-        // Append to log
-        target_log.append(entry).map_err(|e| 
-            ProviderError::Storage(format!("Failed to append to log: {}", e)))?;
-            
-        // Update status
-        {
-            let mut status = self.status.write().map_err(|e| 
-                ProviderError::Internal(format!("Failed to lock status: {}", e)))?;
-                
-            status.items_provided += 1;
-            status.latest_timestamp = Some(item.timestamp);
-        }
-        
-        Ok(())
-    }
-}
-
-impl DataProvider for HttpProvider {
-    /// Get the provider ID
-    fn get_id(&self) -> &str {
-        &self.id
     }
     
     /// Initialize the provider
-    fn initialize(&self) -> Result<(), ProviderError> {
-        // Nothing to do for HTTP provider
-        Ok(())
-    }
-    
-    /// Start providing data
-    fn start(&self) -> Result<(), ProviderError> {
-        // Start polling
-        let provider = Arc::new(self.clone());
-        provider.start_polling()?;
+    pub fn initialize(&mut self) -> Result<()> {
+        // Set up providers
+        let mut providers = HashMap::new();
         
-        Ok(())
-    }
-    
-    /// Stop providing data
-    fn stop(&self) -> Result<(), ProviderError> {
-        // Update status
-        let mut status = self.status.write().map_err(|e| 
-            ProviderError::Internal(format!("Failed to lock status: {}", e)))?;
+        for provider_config in &self.config.providers {
+            let provider = self.factory.create_provider(provider_config.clone())?;
             
-        status.running = false;
-        
-        Ok(())
-    }
-    
-    /// Get provider status
-    fn get_status(&self) -> Result<ProviderStatus, ProviderError> {
-        let status = self.status.read().map_err(|e| 
-            ProviderError::Internal(format!("Failed to lock status: {}", e)))?;
+            // Initialize the provider
+            provider.initialize()?;
             
-        Ok(status.clone())
-    }
-    
-    /// Set the target log
-    fn set_target_log(&self, log: Arc<dyn LogStorage>) -> Result<(), ProviderError> {
-        let mut target = self.target_log.write().map_err(|e| 
-            ProviderError::Internal(format!("Failed to lock target log: {}", e)))?;
+            // Set log storage if available
+            if let Some(log) = &self.log {
+                provider.set_target_log(log.clone())?;
+            }
             
-        *target = Some(log);
-        
-        Ok(())
-    }
-}
-
-impl Clone for HttpProvider {
-    fn clone(&self) -> Self {
-        // Create a new client for the clone
-        let client = reqwest::Client::new();
-        
-        // Clone the status
-        let status = {
-            let status = self.status.read().expect("Failed to lock status");
-            status.clone()
-        };
-        
-        HttpProvider {
-            id: self.id.clone(),
-            config: self.config.clone(),
-            target_log: RwLock::new(None),
-            status: RwLock::new(status),
-            client,
+            providers.insert(provider_config.provider_id.clone(), provider);
         }
-    }
-}
-
-/// Creator for HTTP providers
-pub struct HttpProviderCreator;
-
-impl ProviderCreator for HttpProviderCreator {
-    fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>, ProviderError> {
-        // Parse HTTP-specific config
-        let http_config: HttpProviderConfig = serde_json::from_value(config.config.clone())
-            .map_err(|e| ProviderError::Configuration(format!(
-                "Invalid HTTP provider configuration: {}", e
-            )))?;
-            
-        // Create provider
-        let provider = HttpProvider::new(config.id, http_config)?;
         
-        Ok(Arc::new(provider))
+        // Store providers
+        let mut providers_lock = self.providers.write().map_err(|e| 
+            ProviderError::Internal(format!("Failed to lock providers: {}", e)))?;
+            
+        *providers_lock = providers;
+        
+        Ok(())
     }
-}
-
-/// Create a factory for a provider type
-pub trait ProviderFactory: Send + Sync {
-    /// Create a new provider
-    fn create_provider(&self, config: ProviderConfig) -> Result<Arc<dyn DataProvider>, ProviderError>;
+    
+    /// Start all providers
+    pub fn start(&self) -> Result<()> {
+        let providers = self.providers.read().map_err(|e| 
+            ProviderError::Internal(format!("Failed to lock providers: {}", e)))?;
+            
+        for provider in providers.values() {
+            provider.start()?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Stop all providers
+    pub fn stop(&self) -> Result<()> {
+        let providers = self.providers.read().map_err(|e| 
+            ProviderError::Internal(format!("Failed to lock providers: {}", e)))?;
+            
+        for provider in providers.values() {
+            provider.stop()?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Set the log storage
+    pub fn set_log_storage(&mut self, log: Arc<dyn LogStorage>) -> Result<()> {
+        self.log = Some(log.clone());
+        
+        let providers = self.providers.read().map_err(|e| 
+            ProviderError::Internal(format!("Failed to lock providers: {}", e)))?;
+            
+        for provider in providers.values() {
+            provider.set_target_log(log.clone())?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Get a provider by ID
+    pub fn get_provider(&self, provider_id: &str) -> Result<Arc<dyn DataProvider>> {
+        let providers = self.providers.read().map_err(|e| 
+            ProviderError::Internal(format!("Failed to lock providers: {}", e)))?;
+            
+        providers.get(provider_id)
+            .cloned()
+            .ok_or_else(|| ProviderError::Data(format!("Provider not found: {}", provider_id)))
+    }
+    
+    /// Get data from a provider
+    pub async fn get_data(&self, provider_id: &str, query: &str) -> Result<ProviderData> {
+        let provider = self.get_provider(provider_id)?;
+        provider.retrieve_data(query).await
+    }
 } 

@@ -18,17 +18,17 @@ pub use causality_types::{
 // Time Management
 // Provides abstractions for temporal operations, logical time tracking,
 // clock synchronization, and timestamp validation
-pub mod time;
+// pub mod time;
 
 // Concurrency Primitives
 // Thread-safe data structures, task scheduling abstractions,
 // and event notification systems
-pub mod concurrency;
+// pub mod concurrency;
 
 // Verification Framework
 // Common verification interfaces, proof validation utilities,
 // verification context management, and pluggable verification strategies
-pub mod verification;
+// pub mod verification;
 
 // Resource System
 // Content-addressed resources, state management, capability-based access control,
@@ -45,6 +45,10 @@ pub mod effect;
 // and log reconstruction primitives
 pub mod observation;
 
+// Log System
+// Storage and retrieval of log entries
+pub mod log;
+
 // Error Handling
 // Unified error types, error context tracking, and result extension utilities
 pub mod error;
@@ -58,7 +62,7 @@ pub mod serialization;
 pub mod capability;
 
 // SMT module
-pub mod smt;
+// pub mod smt;
 
 // Integration Module
 // Integration components for connecting different parts of the system

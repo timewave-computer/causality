@@ -22,7 +22,8 @@ use crate::effect::{
 };
 use crate::resource::ResourceId;
 use super::{ClockTime, Timestamp, TimeDelta, Timer, TimeObserver, Duration as TimeDuration};
-use super::map::{DomainPosition, TimeMap};
+use super::map::TimeMap;
+use super::types::DomainPosition;
 use crate::crypto::Signature;
 use crate::crypto::PublicKey;
 use crate::types::FactId;

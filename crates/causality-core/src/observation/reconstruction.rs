@@ -7,10 +7,26 @@ use std::sync::{Arc, Mutex, RwLock};
 use serde::{Serialize, Deserialize};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use thiserror::Error;
 
-use causality_types::{Error, Result};
 use crate::observation::extraction::ExtractedFact;
 use crate::log::{LogEntry, LogStorage};
+
+/// Error type for reconstruction operations
+#[derive(Error, Debug)]
+pub enum ReconstructionError {
+    #[error("Internal error: {0}")]
+    Internal(String),
+    
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+    
+    #[error("Storage error: {0}")]
+    Storage(String),
+    
+    #[error("Validation error: {0}")]
+    Validation(String),
+}
 
 /// Configuration for a log reconstructor
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,13 +76,13 @@ pub struct ReconstructionStatus {
 /// An interface for reconstructing logs from facts
 pub trait LogReconstructor: Send + Sync {
     /// Process a fact for reconstruction
-    fn process_fact(&self, fact: &ExtractedFact) -> Result<(), ReconstructionError>;
+    fn process_fact(&self, fact: &ExtractedFact) -> std::result::Result<(), ReconstructionError>;
     
     /// Get the current status of reconstruction
-    fn get_status(&self) -> Result<ReconstructionStatus, ReconstructionError>;
+    fn get_status(&self) -> std::result::Result<ReconstructionStatus, ReconstructionError>;
     
     /// Get the log storage
-    fn get_log(&self) -> Result<Arc<dyn LogStorage>, ReconstructionError>;
+    fn get_log(&self) -> std::result::Result<Arc<dyn LogStorage>, ReconstructionError>;
 }
 
 /// Factory for creating log reconstructors
@@ -87,12 +103,12 @@ impl ReconstructorFactory {
     pub fn create_reconstructor(
         &self,
         config: ReconstructionConfig,
-    ) -> Result<Arc<BasicReconstructor>> {
+    ) -> std::result::Result<Arc<BasicReconstructor>, ReconstructionError> {
         // Get or create the log storage
         let log_id = config.log_id.clone();
         let log_storage = {
-            let mut storages = self.log_storage.write().map_err(|_| 
-                Error::Internal("Failed to lock log storage".to_string()))?;
+            let mut storages = self.log_storage.write().map_err(|e| 
+                ReconstructionError::Internal(format!("Failed to lock log storage: {}", e)))?;
                 
             if let Some(storage) = storages.get(&log_id) {
                 storage.clone()
@@ -150,7 +166,7 @@ impl BasicReconstructor {
     pub fn start_processing(
         self: Arc<Self>,
         mut fact_receiver: mpsc::Receiver<ExtractedFact>,
-    ) -> JoinHandle<Result<()>> {
+    ) -> JoinHandle<std::result::Result<(), ReconstructionError>> {
         tokio::spawn(async move {
             while let Some(fact) = fact_receiver.recv().await {
                 if let Err(e) = self.process_fact(&fact) {
@@ -163,9 +179,9 @@ impl BasicReconstructor {
     }
     
     /// Process facts in the buffer
-    fn process_buffer(&self) -> Result<()> {
-        let mut buffer = self.fact_buffer.lock().map_err(|_| 
-            Error::Internal("Failed to lock fact buffer".to_string()))?;
+    fn process_buffer(&self) -> std::result::Result<(), ReconstructionError> {
+        let mut buffer = self.fact_buffer.lock().map_err(|e| 
+            ReconstructionError::Internal(format!("Failed to lock fact buffer: {}", e)))?;
             
         // Sort facts by timestamp or height
         buffer.make_contiguous().sort_by(|a, b| {
@@ -190,8 +206,8 @@ impl BasicReconstructor {
                 
                 // Update status
                 {
-                    let mut status = self.status.lock().map_err(|_| 
-                        Error::Internal("Failed to lock status".to_string()))?;
+                    let mut status = self.status.lock().map_err(|e| 
+                        ReconstructionError::Internal(format!("Failed to lock status: {}", e)))?;
                         
                     status.facts_processed += 1;
                     status.entries_reconstructed += entries_reconstructed;
@@ -210,7 +226,7 @@ impl BasicReconstructor {
     }
     
     /// Reconstruct a log entry from a fact
-    fn reconstruct_entry(&self, fact: &ExtractedFact) -> Result<LogEntry> {
+    fn reconstruct_entry(&self, fact: &ExtractedFact) -> std::result::Result<LogEntry, ReconstructionError> {
         // Create a log entry from the fact
         let entry = LogEntry {
             log_id: self.config.log_id.clone(),
@@ -220,7 +236,7 @@ impl BasicReconstructor {
                 .unwrap_or_default()
                 .as_secs(),
             data: serde_json::to_value(fact).map_err(|e| 
-                Error::Serialization(format!("Failed to serialize fact: {}", e)))?,
+                ReconstructionError::Serialization(format!("Failed to serialize fact: {}", e)))?,
             metadata: fact.metadata.clone(),
         };
         
@@ -230,7 +246,7 @@ impl BasicReconstructor {
 
 impl LogReconstructor for BasicReconstructor {
     /// Process a fact for reconstruction
-    fn process_fact(&self, fact: &ExtractedFact) -> Result<(), ReconstructionError> {
+    fn process_fact(&self, fact: &ExtractedFact) -> std::result::Result<(), ReconstructionError> {
         // Check if this fact type is relevant
         if !self.config.fact_types.is_empty() && 
            !self.config.fact_types.contains(&fact.fact_type) {
@@ -239,8 +255,8 @@ impl LogReconstructor for BasicReconstructor {
         
         // Add to buffer
         {
-            let mut buffer = self.fact_buffer.lock().map_err(|_| 
-                Error::Internal("Failed to lock fact buffer".to_string()))?;
+            let mut buffer = self.fact_buffer.lock().map_err(|e| 
+                ReconstructionError::Internal(format!("Failed to lock fact buffer: {}", e)))?;
                 
             buffer.push_back(fact.clone());
             
@@ -255,15 +271,15 @@ impl LogReconstructor for BasicReconstructor {
     }
     
     /// Get the current status of reconstruction
-    fn get_status(&self) -> Result<ReconstructionStatus, ReconstructionError> {
-        let status = self.status.lock().map_err(|_| 
-            Error::Internal("Failed to lock status".to_string()))?;
+    fn get_status(&self) -> std::result::Result<ReconstructionStatus, ReconstructionError> {
+        let status = self.status.lock().map_err(|e| 
+            ReconstructionError::Internal(format!("Failed to lock status: {}", e)))?;
             
         Ok(status.clone())
     }
     
     /// Get the log storage
-    fn get_log(&self) -> Result<Arc<dyn LogStorage>, ReconstructionError> {
+    fn get_log(&self) -> std::result::Result<Arc<dyn LogStorage>, ReconstructionError> {
         Ok(self.log_storage.clone())
     }
 } 

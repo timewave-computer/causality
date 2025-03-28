@@ -10,8 +10,8 @@ use std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use thiserror::Error;
 
-use super::{Effect, EffectContext, EffectOutcome, EffectResult};
-use super::domain::{DomainEffect, DomainEffectHandler, DomainEffectRegistry, DomainId};
+use super::{Effect, EffectContext, EffectOutcome, EffectResult, EffectError};
+use super::domain::{DomainEffect, DomainEffectHandler, DomainEffectRegistry, DomainId, DomainEffectOutcome};
 use super::types::{EffectId, EffectTypeId, ExecutionBoundary};
 
 /// Error that can occur during effect registry operations
@@ -57,25 +57,36 @@ pub trait EffectHandler: Send + Sync + Debug {
     async fn handle(&self, effect: &dyn Effect, context: &dyn EffectContext) -> EffectResult<EffectOutcome>;
 }
 
-/// Registry for effect handlers
+/// Main trait for effect registry
 pub trait EffectRegistry: Send + Sync + Debug {
+    /// Get a reference to the async registry operations
+    fn registry_ops(&self) -> &dyn AsyncEffectRegistry;
+    
     /// Register an effect handler
-    fn register_handler(&mut self, handler: Arc<dyn EffectHandler>) -> EffectRegistryResult<()>;
+    fn register_handler<H>(&mut self, handler: H) -> Result<(), EffectError>
+    where
+        H: EffectHandler + 'static;
+        
+    /// Register a domain effect handler
+    fn register_domain_handler<H>(&mut self, handler: H) -> Result<(), EffectError>
+    where
+        H: DomainEffectHandler + 'static;
     
-    /// Get a handler for the given effect type
-    fn get_handler(&self, effect_type_id: &EffectTypeId) -> EffectRegistryResult<Arc<dyn EffectHandler>>;
+    /// Check if an effect type is registered
+    fn has_handler(&self, effect_type_id: &EffectTypeId) -> bool;
     
+    /// Check if a domain effect type is registered
+    fn has_domain_handler(&self, domain_id: &DomainId, effect_type_id: &EffectTypeId) -> bool;
+}
+
+/// Async operations for effect registry
+#[async_trait]
+pub trait AsyncEffectRegistry: Send + Sync {
     /// Execute an effect
     async fn execute_effect(&self, effect: &dyn Effect, context: &dyn EffectContext) -> EffectResult<EffectOutcome>;
     
-    /// Register a domain effect handler
-    fn register_domain_handler(&mut self, handler: Arc<dyn DomainEffectHandler>) -> EffectRegistryResult<()>;
-    
     /// Execute a domain effect
-    async fn execute_domain_effect(&self, effect: &dyn DomainEffect, context: &dyn EffectContext) -> EffectResult<EffectOutcome>;
-    
-    /// Clone the registry
-    fn clone_registry(&self) -> Arc<dyn EffectRegistry>;
+    async fn execute_domain_effect(&self, effect: &dyn DomainEffect, context: &dyn EffectContext) -> EffectResult<DomainEffectOutcome>;
 }
 
 /// Basic effect registry implementation
@@ -109,12 +120,19 @@ impl BasicEffectRegistry {
 }
 
 impl EffectRegistry for BasicEffectRegistry {
+    /// Get a reference to the async registry operations
+    fn registry_ops(&self) -> &dyn AsyncEffectRegistry {
+        self
+    }
+    
     /// Register an effect handler
-    fn register_handler(&mut self, handler: Arc<dyn EffectHandler>) -> EffectRegistryResult<()> {
+    fn register_handler<H>(&mut self, handler: H) -> Result<(), EffectError>
+    where
+        H: EffectHandler + 'static {
         let type_id = handler.effect_type_id();
         
         if self.handlers.contains_key(&type_id) {
-            return Err(EffectRegistryError::DuplicateRegistration(
+            return Err(EffectError::DuplicateRegistration(
                 format!("Handler already registered for effect type: {}", type_id)
             ));
         }
@@ -123,53 +141,22 @@ impl EffectRegistry for BasicEffectRegistry {
         Ok(())
     }
     
-    /// Get a handler for the given effect type
-    fn get_handler(&self, effect_type_id: &EffectTypeId) -> EffectRegistryResult<Arc<dyn EffectHandler>> {
-        self.handlers.get(effect_type_id)
-            .cloned()
-            .ok_or_else(|| EffectRegistryError::NotFound(
-                format!("No handler found for effect type: {}", effect_type_id)
-            ))
-    }
-    
-    /// Execute an effect
-    async fn execute_effect(&self, effect: &dyn Effect, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        // Check for domain effect first
-        if let Some(domain_effect) = effect.as_any().downcast_ref::<dyn DomainEffect>() {
-            return self.execute_domain_effect(domain_effect, context).await;
-        }
-        
-        let handler = self.get_handler(&effect.type_id())
-            .map_err(|e| super::EffectError::ExecutionError(
-                format!("Handler lookup error: {}", e)
-            ))?;
-        
-        handler.handle(effect, context).await
-    }
-    
     /// Register a domain effect handler
-    fn register_domain_handler(&mut self, handler: Arc<dyn DomainEffectHandler>) -> EffectRegistryResult<()> {
+    fn register_domain_handler<H>(&mut self, handler: H) -> Result<(), EffectError>
+    where
+        H: DomainEffectHandler + 'static {
         self.domain_registry.register_handler(handler);
         Ok(())
     }
     
-    /// Execute a domain effect
-    async fn execute_domain_effect(&self, effect: &dyn DomainEffect, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        self.domain_registry.execute_domain_effect(effect, context).await
+    /// Check if an effect type is registered
+    fn has_handler(&self, effect_type_id: &EffectTypeId) -> bool {
+        self.handlers.contains_key(effect_type_id)
     }
     
-    /// Clone the registry
-    fn clone_registry(&self) -> Arc<dyn EffectRegistry> {
-        let mut new_registry = BasicEffectRegistry::new();
-        
-        // Clone handlers
-        for (type_id, handler) in &self.handlers {
-            new_registry.handlers.insert(type_id.clone(), handler.clone());
-        }
-        
-        // TODO: Clone domain registry handlers once they support cloning
-        
-        Arc::new(new_registry)
+    /// Check if a domain effect type is registered
+    fn has_domain_handler(&self, domain_id: &DomainId, effect_type_id: &EffectTypeId) -> bool {
+        self.domain_registry.has_handler(domain_id, effect_type_id)
     }
 }
 
@@ -219,55 +206,33 @@ impl ThreadSafeEffectRegistry {
 }
 
 impl EffectRegistry for ThreadSafeEffectRegistry {
+    /// Get a reference to the async registry operations
+    fn registry_ops(&self) -> &dyn AsyncEffectRegistry {
+        self
+    }
+    
     /// Register an effect handler
-    fn register_handler(&mut self, handler: Arc<dyn EffectHandler>) -> EffectRegistryResult<()> {
+    fn register_handler<H>(&mut self, handler: H) -> Result<(), EffectError>
+    where
+        H: EffectHandler + 'static {
         self.write_registry()?.register_handler(handler)
     }
     
-    /// Get a handler for the given effect type
-    fn get_handler(&self, effect_type_id: &EffectTypeId) -> EffectRegistryResult<Arc<dyn EffectHandler>> {
-        self.read_registry()?.get_handler(effect_type_id)
-    }
-    
-    /// Execute an effect
-    async fn execute_effect(&self, effect: &dyn Effect, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        // For async execution, we need to get a clone of the handler to avoid holding the lock
-        let handler = if let Some(domain_effect) = effect.as_any().downcast_ref::<dyn DomainEffect>() {
-            return self.execute_domain_effect(domain_effect, context).await;
-        } else {
-            self.get_handler(&effect.type_id())
-                .map_err(|e| super::EffectError::ExecutionError(
-                    format!("Handler lookup error: {}", e)
-                ))?
-        };
-        
-        handler.handle(effect, context).await
-    }
-    
     /// Register a domain effect handler
-    fn register_domain_handler(&mut self, handler: Arc<dyn DomainEffectHandler>) -> EffectRegistryResult<()> {
+    fn register_domain_handler<H>(&mut self, handler: H) -> Result<(), EffectError>
+    where
+        H: DomainEffectHandler + 'static {
         self.write_registry()?.register_domain_handler(handler)
     }
     
-    /// Execute a domain effect
-    async fn execute_domain_effect(&self, effect: &dyn DomainEffect, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        let registry = self.read_registry()?;
-        registry.execute_domain_effect(effect, context).await
+    /// Check if an effect type is registered
+    fn has_handler(&self, effect_type_id: &EffectTypeId) -> bool {
+        self.read_registry()?.has_handler(effect_type_id)
     }
     
-    /// Clone the registry
-    fn clone_registry(&self) -> Arc<dyn EffectRegistry> {
-        let registry_guard = self.read_registry()
-            .expect("Failed to acquire read lock for cloning");
-        
-        let cloned_basic = registry_guard.clone_registry();
-        if let Some(basic) = cloned_basic.as_any().downcast_ref::<BasicEffectRegistry>() {
-            let cloned = basic.clone();
-            Arc::new(ThreadSafeEffectRegistry::from_basic(cloned))
-        } else {
-            // Fallback to creating a new empty registry
-            Arc::new(ThreadSafeEffectRegistry::new())
-        }
+    /// Check if a domain effect type is registered
+    fn has_domain_handler(&self, domain_id: &DomainId, effect_type_id: &EffectTypeId) -> bool {
+        self.read_registry()?.has_domain_handler(domain_id, effect_type_id)
     }
 }
 
@@ -323,5 +288,56 @@ pub trait AsAny {
 impl<T: std::any::Any> AsAny for T {
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+#[async_trait]
+impl AsyncEffectRegistry for BasicEffectRegistry {
+    /// Execute an effect
+    async fn execute_effect(&self, effect: &dyn Effect, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
+        // Check for domain effect first
+        if let Some(domain_effect) = effect.as_any().downcast_ref::<dyn DomainEffect>() {
+            return self.execute_domain_effect(domain_effect, context).await;
+        }
+        
+        let handler = self.handlers.get(&effect.type_id())
+            .ok_or_else(|| EffectError::ExecutionError(
+                format!("No handler found for effect type: {}", effect.type_id())
+            ))?;
+        
+        handler.handle(effect, context).await
+    }
+    
+    /// Execute a domain effect
+    async fn execute_domain_effect(&self, effect: &dyn DomainEffect, context: &dyn EffectContext) -> EffectResult<DomainEffectOutcome> {
+        self.domain_registry.execute_domain_effect(effect, context).await
+    }
+}
+
+#[async_trait]
+impl AsyncEffectRegistry for ThreadSafeEffectRegistry {
+    /// Execute an effect
+    async fn execute_effect(&self, effect: &dyn Effect, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
+        // For async execution, we need to get a clone of the handler to avoid holding the lock
+        if let Some(domain_effect) = effect.as_any().downcast_ref::<dyn DomainEffect>() {
+            return self.execute_domain_effect(domain_effect, context).await;
+        }
+        
+        let handler = {
+            let registry = self.read_registry()?;
+            registry.handlers.get(&effect.type_id())
+                .cloned()
+                .ok_or_else(|| EffectError::ExecutionError(
+                    format!("No handler found for effect type: {}", effect.type_id())
+                ))?
+        };
+        
+        handler.handle(effect, context).await
+    }
+    
+    /// Execute a domain effect
+    async fn execute_domain_effect(&self, effect: &dyn DomainEffect, context: &dyn EffectContext) -> EffectResult<DomainEffectOutcome> {
+        let registry = self.read_registry()?;
+        registry.domain_registry.execute_domain_effect(effect, context).await
     }
 } 
