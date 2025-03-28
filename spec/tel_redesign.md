@@ -1530,4 +1530,1063 @@ TEL's effect system draws inspiration from both Eff and Koka:
 8. What specialized effects should be built into the language vs. library?
 9. How should we handle time zone awareness in temporal effects?
 10. What temporal guarantees should the language provide?
+11. How can we effectively test temporal properties in TEL programs?
+
+## Integrated Query System
+
+TEL integrates powerful query capabilities directly into the language. This allows developers to naturally express queries over resources, events, facts, and causal execution graphs.
+
+### Query Expression Syntax
+
+Query expressions are first-class citizens in TEL:
+
+```tel
+-- Basic query expression 
+let active_accounts = query
+  from accounts
+  where account.balance > 0
+  select account.address
+  
+-- Query with temporal constraints
+let recent_transfers = query
+  from transfers
+  where transfer.timestamp > now() - 24h
+  select { from: transfer.from, to: transfer.to, amount: transfer.amount }
+  
+-- Query with ordering and limits
+let top_accounts = query
+  from accounts
+  order_by account.balance desc
+  limit 10
+  select account
+```
+
+### Querying Different Data Sources
+
+Queries can be performed on different types of data:
+
+```tel
+-- Query over resources
+let available_tokens = query
+  from tokens
+  where token.status == Available
+  select token
+  
+-- Query over events
+let user_actions = query
+  from events
+  where event.type == "UserAction" && event.user == current_user
+  within last 7d
+  select event
+  
+-- Query over facts (assertions in the system)
+let valid_assertions = query
+  from facts
+  where fact.status == Valid && fact.relates_to == entity_id
+  select fact.assertion
+```
+
+### Querying Execution History and Causal Graphs
+
+TEL provides unique capabilities to query execution flow and causal relationships:
+
+```tel
+-- Query the execution history
+let previous_states = query
+  from execution_history
+  where execution.program == self()
+  select execution.states
+  
+-- Query causal relationships
+let dependent_operations = query
+  from causal_graph
+  where operation.id == target_id
+  traverse outgoing edges
+  depth 3
+  select operation
+  
+-- Query execution path
+let critical_path = query
+  from execution_paths
+  where path.end == current_state
+  order_by path.duration asc
+  limit 1
+  select path.operations
+```
+
+### Temporal and Spatial Query Operators
+
+Query expressions include operators specifically designed for temporal and spatial queries:
+
+```tel
+-- Temporal operators
+let overlapping_events = query
+  from events as e1, events as e2
+  where e1.id != e2.id && e1 overlaps e2
+  select { event1: e1, event2: e2 }
+  
+-- Sequential patterns
+let suspicious_sequence = query
+  from events
+  match sequence(
+    event(type == "Login", user: user),
+    event(type == "PermissionChange", target: "Admin"),
+    event(type == "SensitiveAccess")
+  ) within 5m
+  select { user: user }
+```
+
+### Aggregations and Transformations
+
+Queries can include aggregations and transformations:
+
+```tel
+-- Aggregation query
+let token_stats = query
+  from transfers
+  where transfer.token == token_id
+  group_by transfer.date
+  select {
+    date: transfer.date,
+    volume: sum(transfer.amount),
+    count: count(),
+    avg_amount: avg(transfer.amount)
+  }
+  
+-- Query with transformations
+let normalized_values = query
+  from metrics
+  select {
+    metric: metric.name,
+    value: normalize(metric.value, metric.min, metric.max)
+  }
+```
+
+### Reactive Queries
+
+Queries can be reactive, automatically updating when underlying data changes:
+
+```tel
+-- Reactive query that maintains an up-to-date view
+let active_users = reactive query
+  from sessions
+  where session.status == Active
+  select session.user
+  
+-- Query that triggers effects when results change
+reactive query
+  from balance_changes
+  where balance_change.account == watched_account
+  on_change do
+    effect notify_balance_change
+      account: watched_account
+      new_balance: balance_change.new_balance
+```
+
+### Integration with Effect System
+
+Queries seamlessly integrate with TEL's effect system:
+
+```tel
+-- Query that produces effects
+let transfer_result = perform query_with_effects
+  from transfer_requests
+  where request.status == Pending
+  select effect process_transfer
+    from: request.from
+    to: request.to
+    amount: request.amount
+    
+-- Query that is handled by effect handlers
+handler query_limiter
+  effect expensive_query params ->
+    if within_rate_limits then
+      result <- execute_query(params)
+      resume result
+    else
+      resume empty_result
+```
+
+### Causal Querying and Temporal Logic
+
+TEL's query system includes powerful temporal logic capabilities:
+
+```tel
+-- Query using temporal logic operators
+let correctness_check = query
+  from execution_trace
+  where eventually(state == Completed) 
+    && always(balance >= 0)
+    && never(unauthorized_access)
+  select execution_trace.id
+  
+-- Complex causality query
+let root_causes = query
+  from causal_graph
+  where effect.id == failure_id
+  traverse incoming until(operation.type == "UserAction")
+  select distinct operation
+```
+
+### Graph Traversal Queries
+
+TEL includes specialized syntax for graph traversal:
+
+```tel
+-- Resource dependency graph query
+let dependencies = query
+  from resource_graph
+  start_at resource_id
+  traverse outgoing
+  where edge.type == "Depends"
+  collect nodes
+  limit depth 5
+  select node
+  
+-- State transition graph analysis
+let cycles = query
+  from state_graph
+  detect cycles
+  where cycle.length < 5
+  select cycle
+```
+
+### Provenance and Data Lineage
+
+Queries can track data provenance and lineage:
+
+```tel
+-- Track data lineage
+let data_origins = query
+  from data_lineage
+  where data.id == target_data_id
+  traverse incoming
+  until node.type == "Source"
+  select node
+  
+-- Provenance query
+let transaction_provenance = query
+  from provenance_graph
+  where entity.id == transaction_id
+  select {
+    initiator: first(incoming(entity).where(type == "Initiator")),
+    approvers: collect(incoming(entity).where(type == "Approver")),
+    timestamp: entity.creation_time
+  }
+```
+
+### Cross-Flow Analysis
+
+Queries can analyze patterns across multiple workflows:
+
+```tel
+-- Detect patterns across different flows
+let common_patterns = query
+  from execution_flows as f1, execution_flows as f2
+  where f1.id != f2.id
+    && similar_sequence(f1.operations, f2.operations) > 0.8
+  select {
+    flow1: f1.id,
+    flow2: f2.id,
+    similarity: similarity_score(f1.operations, f2.operations)
+  }
+  
+-- Find flows affecting the same resources
+let resource_conflicts = query
+  from flows
+  where any(flow.resources).intersects(target_resources)
+  select flow
+```
+
+### Query Composition
+
+Queries can be composed and reused:
+
+```tel
+-- Define a reusable query component
+let active_status = query_fragment
+  where status == Active
+  
+-- Reference in another query
+let active_items = query
+  from items
+  include active_status
+  select item
+  
+-- Query composition
+let complex_report = query
+  with user_summaries as (
+    from users
+    select { id: user.id, activity: count(user.actions) }
+  ),
+  active_resources as (
+    from resources
+    where resource.status == Active
+    select resource
+  )
+  from user_summaries, active_resources
+  where user_summaries.id == active_resources.owner
+  select { user: user_summaries, resources: collect(active_resources) }
+```
+
+## Expanded Query Domains
+
+The integrated query system extends beyond basic resources and events to encompass the full range of system aspects:
+
+### Blockchain and Consensus Data
+
+```tel
+-- Query blockchain data
+let recent_blocks = query
+  from blocks
+  where block.height > current_height - 100
+  order_by block.height desc
+  select { 
+    height: block.height,
+    hash: block.hash,
+    timestamp: block.timestamp,
+    tx_count: count(block.transactions)
+  }
+  
+-- Query transaction inclusion
+let tx_status = query
+  from blocks
+  where contains(block.transactions, tx_hash)
+  select {
+    height: block.height,
+    confirmations: current_height - block.height,
+    block_time: block.timestamp
+  }
+
+-- Consensus state queries
+let validator_set = query
+  from validators
+  where validator.active == true
+  order_by validator.voting_power desc
+  select validator
+```
+
+### System Metadata and Registry
+
+```tel
+-- Query available contract interfaces
+let swap_interfaces = query
+  from contract_registry
+  where implements(contract, "SwapInterface")
+  select { 
+    address: contract.address, 
+    version: contract.version,
+    methods: contract.methods.where(visibility == Public)
+  }
+  
+-- Query system component versions
+let component_versions = query
+  from system_registry
+  select {
+    component: component.name,
+    version: component.version,
+    status: component.status
+  }
+  
+-- Query capability permissions
+let user_capabilities = query
+  from capabilities
+  where capability.owner == user_id
+  select capability
+```
+
+### Cryptographic Proofs and Verification
+
+```tel
+-- Query and verify zero-knowledge proofs
+let valid_proofs = query
+  from proofs
+  where proof.status == Unverified && verify_proof(proof)
+  select proof
+  
+-- Query merkle inclusion proofs
+let inclusion_proof = query
+  from merkle_tree
+  where merkle_tree.root == root_hash
+  select generate_proof(merkle_tree, leaf_data)
+  
+-- Query signature validations
+let valid_signatures = query
+  from signatures
+  where verify_signature(signature, message, public_key)
+  select {
+    signer: public_key_to_address(public_key),
+    timestamp: signature.timestamp
+  }
+```
+
+### Network Topology and Routing
+
+```tel
+-- Query network structure
+let network_paths = query
+  from network_graph
+  where shortest_path(source_node, target_node)
+  select {
+    path: path_nodes,
+    hops: count(path_nodes) - 1,
+    estimated_latency: sum(path_edges.latency)
+  }
+  
+-- Query node connectivity
+let peer_connections = query
+  from network_nodes
+  where node.status == Online
+  traverse outgoing edges
+  where edge.type == "Peer"
+  select {
+    node: node.id,
+    peers: count(edges),
+    regions: distinct(connected_nodes.region)
+  }
+```
+
+### Resource Pricing and Cost Estimation
+
+```tel
+-- Query resource pricing
+let operation_costs = query
+  from cost_model
+  where operation in ["Transfer", "Swap", "Mint"]
+  select {
+    operation: operation,
+    base_cost: cost_model.base_fee,
+    unit_cost: cost_model.unit_fee,
+    estimated_total: estimate_cost(operation, params)
+  }
+  
+-- Query historical price data
+let token_price_history = query
+  from price_feed
+  where price_feed.token == token_id
+  during last 7d
+  group_by day(price_feed.timestamp)
+  select {
+    date: day(price_feed.timestamp),
+    open: first(price_feed.price),
+    close: last(price_feed.price),
+    high: max(price_feed.price),
+    low: min(price_feed.price),
+    volume: sum(price_feed.volume)
+  }
+```
+
+### Governance and Protocol Parameters
+
+```tel
+-- Query governance proposals
+let active_proposals = query
+  from proposals
+  where proposal.status == Active
+  select {
+    id: proposal.id,
+    title: proposal.title,
+    proposer: proposal.creator,
+    votes_yes: sum(proposal.votes.where(type == Yes).power),
+    votes_no: sum(proposal.votes.where(type == No).power),
+    ends_at: proposal.voting_ends_at
+  }
+  
+-- Query protocol parameters
+let current_params = query
+  from protocol_parameters
+  where parameter.active == true
+  select {
+    name: parameter.name,
+    value: parameter.value,
+    last_updated: parameter.update_time,
+    min_value: parameter.constraints.min,
+    max_value: parameter.constraints.max
+  }
+```
+
+### Cross-Chain and Bridge Data
+
+```tel
+-- Query cross-chain transfers
+let pending_transfers = query
+  from cross_chain_transfers
+  where transfer.status == Pending && transfer.destination_chain == "Ethereum"
+  select transfer
+  
+-- Query token mappings across chains
+let token_mappings = query
+  from token_registry
+  join bridge_mappings on token_registry.id == bridge_mappings.native_token
+  select {
+    native_token: token_registry.symbol,
+    external_chain: bridge_mappings.chain,
+    external_address: bridge_mappings.address,
+    mapping_type: bridge_mappings.type
+  }
+```
+
+### Simulation and Hypothetical Execution
+
+```tel
+-- Query simulation results
+let simulated_swaps = query
+  from simulation_results
+  where simulation.operation == "Swap" && 
+        simulation.params.token_in == token_a &&
+        simulation.params.token_out == token_b
+  order_by simulation.params.amount_in
+  select {
+    amount_in: simulation.params.amount_in,
+    amount_out: simulation.result.amount_out,
+    price_impact: simulation.result.price_impact,
+    route: simulation.result.route
+  }
+  
+-- Query state transition simulations
+let possible_outcomes = query
+  from state_simulations
+  where simulation.start_state == current_state
+  traverse outgoing transitions
+  depth 3
+  select {
+    path: path_transitions,
+    end_state: path.end,
+    probability: calculate_probability(path),
+    value: calculate_value(path.end)
+  }
+```
+
+### Temporal and Spatial Indexing
+
+```tel
+-- Geospatial queries
+let nearby_validators = query
+  from validator_nodes
+  where geo_distance(validator_nodes.location, user_location) < 1000km
+  order_by geo_distance(validator_nodes.location, user_location)
+  select validator_nodes
+  
+-- Combined temporal and spatial queries
+let regional_activity = query
+  from transactions
+  where transaction.timestamp within last 24h
+  group_by transaction.region, hour(transaction.timestamp)
+  select {
+    region: transaction.region,
+    hour: hour(transaction.timestamp),
+    tx_count: count(),
+    volume: sum(transaction.amount)
+  }
+```
+
+### Storage and State Queries
+
+```tel
+-- Query state history
+let account_history = query
+  from state_history
+  where state_history.key == account_key
+  order_by state_history.block_height desc
+  limit 10
+  select {
+    height: state_history.block_height,
+    value: state_history.value,
+    changed_by: state_history.transaction_hash
+  }
+  
+-- Query storage tiers
+let tiered_storage = query
+  from storage_allocation
+  group_by storage_allocation.tier
+  select {
+    tier: storage_allocation.tier,
+    used_space: sum(storage_allocation.size),
+    item_count: count(),
+    cost_per_byte: storage_allocation.tier_cost
+  }
+```
+
+### Machine Learning and Analytics
+
+```tel
+-- Query prediction models
+let price_prediction = query
+  from ml_models
+  where ml_models.type == "PricePrediction" && ml_models.token == token_id
+  select predict(ml_models, {
+    window: 7d,
+    features: ["volume", "volatility", "market_trend"]
+  })
+  
+-- Query anomaly detection
+let anomalies = query
+  from transaction_patterns
+  where detect_anomaly(transaction_patterns, 
+    { sensitivity: 0.8, baseline_period: 30d })
+  select {
+    pattern: transaction_patterns,
+    anomaly_score: anomaly_score(transaction_patterns),
+    similar_patterns: find_similar(transaction_patterns, 3)
+  }
+```
+
+### Integration with External Data Sources
+
+```tel
+-- Query oracle data
+let asset_prices = query
+  from oracles
+  where oracle.feed_type == "Price" && oracle.assets.contains(requested_assets)
+  select {
+    asset: oracle.asset,
+    price: oracle.latest_value,
+    timestamp: oracle.latest_update,
+    confidence: oracle.confidence_score
+  }
+  
+-- Query external API data
+let weather_data = query
+  from external_apis
+  where external_apis.provider == "WeatherService" && 
+        external_apis.location == user_location
+  select external_apis.latest_data
+```
+
+## Unified Query Composition
+
+These specialized domain queries can be combined and composed with the core query capabilities:
+
+```tel
+-- Complex cross-domain query
+let liquid_staking_analysis = query
+  -- Start with governance parameters
+  with staking_params as (
+    from protocol_parameters
+    where parameter.category == "Staking"
+    select parameter
+  ),
+  -- Include validator data
+  active_validators as (
+    from validators
+    where validator.active == true
+    select validator
+  ),
+  -- Include price data
+  token_price as (
+    from price_feed
+    where price_feed.token == staking_token_id
+    order_by price_feed.timestamp desc
+    limit 1
+    select price_feed
+  ),
+  -- Include user positions
+  user_positions as (
+    from staking_positions
+    where position.owner == user_id
+    select position
+  )
+  -- Join and analyze
+  from staking_params, active_validators, token_price, user_positions
+  select {
+    apy: calculate_apy(staking_params, active_validators),
+    total_staked: sum(active_validators.staked_amount),
+    user_stake: sum(user_positions.amount),
+    value_usd: sum(user_positions.amount) * token_price.price,
+    reward_frequency: staking_params.where(name == "reward_frequency").value
+  }
+```
+
+The query capabilities shown across these domains demonstrate how TEL can provide a unified query interface across the entire system, eliminating the need for separate query languages while maintaining type safety, effect tracking, and integration with the core language features.
+
+## Integration with Time-Based Features
+
+TEL's query system integrates seamlessly with its temporal features:
+
+```tel
+-- Query events within a time window
+time_window trading_hours = between 9:00 and 17:00
+
+let trading_activity = query
+  from transactions
+  during trading_hours
+  select transaction
+  
+-- Query that respects temporal barriers
+let validated_operations = query
+  from operations
+  where operation.status == Completed
+    && operation.completion_time before time_barrier
+  select operation
+  
+-- Temporal slicing of data
+let hourly_stats = query
+  from event_stream
+  slice by hours
+  select {
+    hour: slice.start,
+    count: count(events),
+    volume: sum(event.amount)
+  }
+```
+
+### Benefits of Integrated Query Capabilities
+
+1. **Unified Programming Model** - No context switching between query and execution languages
+2. **Type Safety** - Queries are statically typed and checked like any other TEL code
+3. **Effect Integration** - Queries can produce and be controlled by effects
+4. **Temporal Awareness** - Native understanding of time in queries
+5. **Causal Reasoning** - Direct access to execution causality and dependencies
+6. **Performance** - Query optimization built into the language runtime
+7. **Composability** - Queries compose with other language features
+8. **Safety** - Controlled access to resources through effect system
+
+## Read-Write Query Operations
+
+The TEL query system supports not only reading data but also modifying it through a unified syntax, merging query and data manipulation capabilities into a single language construct:
+
+### Data Modification Operations
+
+```tel
+-- Insert new data
+effect insert into accounts
+  values: {
+    id: generate_id(),
+    owner: user_id,
+    balance: initial_amount,
+    created_at: now()
+  }
+  returning account_id
+
+-- Update existing data
+effect update accounts
+  where account.owner == user_id
+  set {
+    balance: account.balance + amount,
+    last_modified: now()
+  }
+  returning account.balance
+
+-- Delete data
+effect delete from inactive_sessions
+  where session.last_active < now() - 7d
+  returning count()
+```
+
+### Transactional Query Operations
+
+Queries can be executed within transactions, maintaining ACID properties:
+
+```tel
+-- Transactional query operations
+effect transaction do
+  -- Read current balance
+  source_balance <- query
+    from accounts
+    where account.id == source_id
+    select account.balance
+    
+  -- Ensure sufficient balance
+  if source_balance < amount then
+    abort "Insufficient balance"
+    
+  -- Update source account
+  effect update accounts
+    where account.id == source_id
+    set balance: account.balance - amount
+    
+  -- Update destination account  
+  effect update accounts
+    where account.id == destination_id
+    set balance: account.balance + amount
+```
+
+### Conditional Data Modifications
+
+```tel
+-- Conditional update with complex logic
+effect update orders
+  where order.id == order_id
+  when order.status == Pending
+  set {
+    status: Confirmed,
+    confirmation_time: now()
+  }
+  else when order.status == Processing
+  set {
+    status: Completed,
+    completion_time: now()
+  }
+  else
+  fail "Invalid state transition"
+```
+
+### Bulk Operations
+
+```tel
+-- Batch update with aggregation
+effect update user_statistics
+  join (
+    from transactions
+    where transaction.user == user_id
+    group_by transaction.type
+    select {
+      type: transaction.type, 
+      count: count(),
+      volume: sum(transaction.amount)
+    }
+  ) as stats on user_statistics.type == stats.type
+  set {
+    transaction_count: user_statistics.transaction_count + stats.count,
+    transaction_volume: user_statistics.transaction_volume + stats.volume,
+    last_updated: now()
+  }
+```
+
+### Effect Integration for Writes
+
+Write operations are treated as effects, providing the same safety guarantees and tracking as other effects in TEL:
+
+```tel
+-- Explicit effect handling for data modification
+handler storage_handler
+  effect insert into collection values ->
+    validate_schema(collection, values)
+    if has_permission(current_user, collection, "write") then
+      result <- perform_insert(collection, values)
+      resume result
+    else
+      perform permission_denied
+      resume failure "Permission denied"
+      
+  effect update collection where predicate set values ->
+    if has_permission(current_user, collection, "write") then
+      result <- perform_update(collection, predicate, values)
+      resume result
+    else
+      perform permission_denied
+      resume failure "Permission denied"
+```
+
+### Temporal Data Management
+
+Write operations can be temporally aware:
+
+```tel
+-- Temporal data versioning
+effect insert into accounts
+  values: new_account
+  valid_from: now()
+  valid_until: indefinite
+  
+-- Time travel updates
+effect update historical_prices
+  where price.asset == asset_id && price.timestamp == timestamp
+  set value: corrected_value
+  record_correction: true
+  
+-- Scheduled modifications
+effect update parameters
+  set interest_rate: new_rate
+  effective_from: tomorrow_at_midnight
+```
+
+### Query-Driven State Transitions
+
+State transitions can be triggered by query results:
+
+```tel
+-- Query-based state transition
+effect query_transition
+  from accounts
+  where account.balance < min_balance && account.status == Active
+  select account
+  transition account.status to Frozen
+  notify account.owner
+  
+-- Complex state update based on aggregation
+effect aggregate_transition
+  from transactions
+  group_by transactions.account
+  having sum(transaction.amount) > suspicious_threshold
+  select account_id
+  transition account_status to UnderReview
+```
+
+### Write Operations with Temporal Causality
+
+```tel
+-- Causal writes with dependency tracking
+effect causal_update accounts
+  where account.id == target_id
+  depends_on [tx1, tx2, tx3]
+  set balance: calculate_balance(account.balance, [tx1, tx2, tx3])
+  
+-- Concurrent conflict resolution
+effect concurrent_update resource
+  where resource.id == resource_id
+  set value: new_value
+  on_conflict (current_value, attempting_value) ->
+    resolve_with: merge_strategy(current_value, attempting_value)
+```
+
+### Multi-System Atomic Writes
+
+```tel
+-- Cross-system atomic operations
+effect atomic_cross_system
+  -- Update local database
+  update local_accounts
+    where account.id == account_id
+    set balance: account.balance - amount
+    
+  -- Update external system via API
+  external update_ledger
+    account: account_id
+    amount: -amount
+    
+  -- Ensure atomicity across both systems
+  atomicity: all_or_nothing
+  compensation: revert_all
+```
+
+### Write Queries with Access Control
+
+```tel
+-- Write operations with capability-based access control
+with capability <- acquire_capability "write:accounts" do
+  effect update accounts
+    where account.id == account_id
+    set balance: account.balance + amount
+    
+-- Role-based write protection
+effect update sensitive_data
+  where data.id == data_id
+  set content: new_content
+  requires role: "admin"
+```
+
+### Integration with Other TEL Features
+
+Write queries seamlessly integrate with other language features:
+
+```tel
+-- Algebraic effects for data modification
+handler transactional_handler
+  effect begin_transaction ->
+    tx_id <- create_transaction()
+    resume tx_id
+    
+  effect commit_transaction tx_id ->
+    success <- commit(tx_id)
+    resume success
+    
+  effect rollback_transaction tx_id ->
+    perform_rollback(tx_id)
+    resume unit
+    
+-- Combining with temporal effects
+time_window maintenance_window = between 01:00 and 03:00
+  
+flow perform_maintenance = do
+  during maintenance_window do
+    effect update system_state
+      set status: Maintenance
+      
+    effect delete from temp_data
+      where data.created_at < now() - 30d
+      
+    effect update system_state
+      set status: Active
+```
+
+## Benefits of Integrated Read-Write Queries
+
+1. **Unified Data Interface** - Single language construct for both reading and modifying data
+2. **Type Safety** - Strong typing for both queries and modifications
+3. **Transactional Safety** - Built-in transaction support with rollback capabilities
+4. **Effect Tracking** - Write operations are tracked like any other effect
+5. **Temporal Awareness** - Time-based modifications and scheduling
+6. **Causality Tracking** - Dependencies and ordering of modifications
+7. **Composition** - Write operations compose with other language features
+8. **Access Control** - Fine-grained permission management for modifications
+
+## Migration from Current TEL
+
+For users familiar with the current TEL syntax, here's a comparison guide:
+
+| Current TEL | New TEL | Notes |
+|-------------|---------|-------|
+| `transfer(from, to, amount)` | `effect transfer from: from to: to amount: amount` | Effects are explicit with `effect` |
+| `if condition { ... }` | `if condition then ...` | No braces, whitespace significant |
+| No explicit states | `state initial S1 S2 final S3` | Explicit state machine |
+| Implicit control flow | `flow name = do ...` | Named, explicit flows with do notation |
+| No concurrency primitives | `concurrent do ...` | Explicit concurrency |
+| `let x = y` | `let x = y` for pure values, `x <- effect e` for effects | Different binding for effects vs pure |
+| `x.method()` | `x |> method` | Pipeline style for method chaining |
+| No effect handlers | `handler name effect op -> ...` | Algebraic effect handlers |
+| No effect types | `SomeFunc : A -> <effect1,effect2> B` | Effect typing |
+| No time windows | `time window = between t1 and t2` | Explicit time windows |
+| No scheduled flows | `flow name at time = do ...` | Time-triggered flows |
+| Implicit timeouts | `with_timeout duration do ...` | Explicit timeout handling |
+
+## Comparison with Eff and Koka
+
+TEL's effect system draws inspiration from both Eff and Koka:
+
+### Similarities with Eff
+
+- First-class algebraic effects and handlers
+- Explicit resumptions in handlers
+- Effect operations as typed interfaces
+- Support for effect polymorphism
+- Nesting and composition of handlers
+
+### Similarities with Koka
+
+- Row-based effect types
+- Effect inference
+- Structured concurrency model
+- Tracking effects in function types
+- Delimiting effect scope
+- Predictable resource handling
+
+### TEL-Specific Extensions
+
+- Integration with explicit state machine model
+- Domain-specific handler optimizations
+- Built-in concurrency with automatic dependency tracking
+- Specialized handlers for TEL domains (cryptography, finance, etc.)
+- Automatic effect isolation based on capability model
+- Explicit modeling of time and temporal effects
+- Time windows as first-class values
+- Time-triggered flows and handlers
+- Built-in tempo-spatial reasoning
+
+## Next Steps for Consideration
+
+1. **Effect Typing** - More granular typing of effects for better error handling
+2. **Formal Verification** - Tools to verify correctness of state transitions
+3. **Visual Representation** - Generate diagrams from TEL code
+4. **IDE Tooling** - Syntax highlighting, code completion, error checking
+5. **Test Harness** - Framework for unit testing TEL programs
+6. **Effect Analyzer** - Static analysis for effect usage and handlers
+7. **Optimized Compilation** - Specialized compilation for effect handlers
+8. **Visualizing Effect Flow** - Tools to visualize effect propagation
+9. **Temporal Verification** - Formal methods for verifying temporal properties
+10. **Real-Time Guarantees** - Analysis for real-time execution bounds
+11. **Temporal Debugging** - Tools for debugging temporal issues
+
+## Questions for Workshop Discussion
+
+1. Is the syntax intuitive enough for new developers?
+2. Are there edge cases in the concurrency model that need addressing?
+3. Should we add more syntactic sugar for common patterns?
+4. How should we handle versioning and upgrades of TEL programs?
+5. What additional safety guarantees could we provide?
+6. Are the algebraic effect handlers expressive enough for our use cases?
+7. How can we balance simplicity with the power of algebraic effects?
+8. What specialized effects should be built into the language vs. library?
+9. How should we handle time zone awareness in temporal effects?
+10. What temporal guarantees should the language provide?
 11. How can we effectively test temporal properties in TEL programs? 
