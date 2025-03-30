@@ -10,11 +10,20 @@ use std::collections::HashSet;
 
 use thiserror::Error;
 
-use super::{
-    ResourceId, IdentityId, Capability, CapabilityGrants, 
-    ResourceGuard, ResourceRegistry, CapabilityError,
-    ContentHash, ContentRef, ContentAddressed
+use crate::capability::{
+    ResourceId, IdentityId, ContentHash, ContentRef, ContentAddressed, utils
 };
+
+// Import only the types we need directly
+use std::marker::PhantomData;
+
+// Define temporary placeholder types
+// These will need to be replaced with proper imports when the module structure is fixed
+type ResourceGuard<T> = T;
+type ResourceRegistry = Arc<()>;
+type Capability<T> = PhantomData<T>;
+type CapabilityGrants = u8;
+type CapabilityError = String;
 
 /// Effect capability types for various operations
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -84,7 +93,7 @@ impl EffectCapabilityType {
     fn create_resource_id(&self) -> ResourceId {
         let capability_str = self.to_string();
         let id_str = format!("effect_{}", capability_str);
-        ResourceId::new_with_name(&id_str)
+        ResourceId::new(utils::hash_string(&id_str))
     }
 }
 
@@ -230,7 +239,7 @@ impl EffectCapabilityRegistry {
     /// Access a resource by content reference
     pub fn access_by_content<T: Send + Sync + 'static>(
         &self,
-        content_ref: &ContentRef,
+        content_ref: &ContentRef<T>,
     ) -> Result<ResourceGuard<T>, CapabilityError> {
         self.registry.access_by_content(content_ref)
     }

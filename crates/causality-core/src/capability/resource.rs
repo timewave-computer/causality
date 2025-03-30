@@ -156,7 +156,7 @@ impl ResourceCapabilityType {
     fn create_resource_id(&self) -> ResourceId {
         let capability_str = self.to_string();
         let id_str = format!("resource_{}", capability_str);
-        ResourceId::new_with_name(&id_str)
+        ResourceId::new(super::utils::hash_string(&id_str))
     }
 }
 
@@ -284,7 +284,7 @@ impl ResourceCapabilityRegistry {
     /// Access a resource by content reference
     pub fn access_by_content<T: Send + Sync + 'static>(
         &self,
-        content_ref: &ContentRef,
+        content_ref: &ContentRef<T>,
     ) -> Result<ResourceGuard<T>, CapabilityError> {
         self.registry.access_by_content(content_ref)
     }

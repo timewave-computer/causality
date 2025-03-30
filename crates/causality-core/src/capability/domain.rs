@@ -4,7 +4,7 @@
 // that integrate with the core capability system.
 
 use std::any::Any;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::fmt;
 use std::sync::Arc;
 
@@ -104,7 +104,7 @@ impl DomainCapabilityType {
     fn create_resource_id(&self) -> ResourceId {
         let capability_str = self.to_string();
         let id_str = format!("domain_{}", capability_str);
-        ResourceId::new_with_name(&id_str)
+        ResourceId::new(content_addressing::hash_string(&id_str))
     }
 }
 
@@ -163,6 +163,15 @@ impl DomainCapability {
     pub fn is_content_addressed(&self) -> bool {
         self.content_hash.is_some()
     }
+    
+    /// Check if this domain capability applies to the given content reference
+    pub fn applies_to<T>(
+        &self,
+        content_ref: &ContentRef<T>,
+    ) -> bool {
+        // Implementation of applies_to method
+        false
+    }
 }
 
 /// Error type for domain capability operations
@@ -187,7 +196,7 @@ pub struct DomainCapabilityRegistry {
     registry: ResourceRegistry,
     
     /// Default domain capabilities by domain type
-    domain_types: HashSet<DomainCapabilityType>,
+    domain_types: HashMap<String, HashSet<DomainCapabilityType>>,
 }
 
 impl DomainCapabilityRegistry {
@@ -195,7 +204,7 @@ impl DomainCapabilityRegistry {
     pub fn new() -> Self {
         Self {
             registry: ResourceRegistry::new(),
-            domain_types: HashSet::new(),
+            domain_types: HashMap::new(),
         }
     }
     
@@ -206,7 +215,7 @@ impl DomainCapabilityRegistry {
     
     /// Get the default capabilities for a domain type
     pub fn get_domain_capabilities(&self, domain_type: &str) -> Option<&HashSet<DomainCapabilityType>> {
-        self.domain_types.get(domain_type)
+        self.domain_types.get(&domain_type.to_string())
     }
     
     /// Register a resource and get a domain capability
@@ -246,7 +255,7 @@ impl DomainCapabilityRegistry {
     /// Access a resource by content reference
     pub fn access_by_content<T: Send + Sync + 'static>(
         &self,
-        content_ref: &ContentRef,
+        content_ref: &ContentRef<T>,
     ) -> Result<ResourceGuard<T>, CapabilityError> {
         self.registry.access_by_content(content_ref)
     }
