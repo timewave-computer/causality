@@ -8,11 +8,11 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use async_trait::async_trait;
 
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::context::Context;
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::error::{EffectError, EffectResult};
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::core::handler::EffectHandler;
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::types::{Effect, EffectTypeId};
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::runtime::{
+use causality_core::effect::runtime::context::Context;
+use causality_core::effect::runtime::error::{EffectError, EffectResult};
+use causality_core::effect::runtime::core::handler::EffectHandler;
+use causality_core::effect::runtime::types::{Effect, EffectTypeId};
+use causality_core::effect::runtime::runtime::{
     EffectRuntime,
     CapabilityVerifier as EffectsCapabilityVerifier,
     EffectRuntimeFactory,
@@ -263,8 +263,8 @@ impl fmt::Debug for EngineEffectRuntimeFactory {
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::context::Context;
-    use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::types::id::EffectTypeId;
+    use causality_core::effect::runtime::context::Context;
+    use causality_core::effect::runtime::types::id::EffectTypeId;
     use async_trait::async_trait;
     
     // A simple test effect

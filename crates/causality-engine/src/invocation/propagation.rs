@@ -11,9 +11,12 @@ use std::collections::HashMap;
 use borsh::{BorshSerialize, BorshDeserialize};
 use chrono::Utc;
 use rand;
-use crate::crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
-use causality_types::{Error, Result};
+use std::fmt;
+use serde::{Serialize, Deserialize};
+
+use causality_error::{Error, Result, EngineError};
 use causality_types::TraceId;
+use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 use causality_domain::map::TimeMap;
 use super::InvocationContext;
 
@@ -73,7 +76,7 @@ impl ContextStorage {
         let arc_context = Arc::new(RwLock::new(context));
         
         let mut contexts = self.contexts.write().map_err(|_| 
-            Error::InternalError("Failed to acquire write lock on contexts".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire write lock on contexts".to_string()))?;
         
         contexts.insert(context_id, arc_context.clone());
         
@@ -83,7 +86,7 @@ impl ContextStorage {
     /// Retrieve a context by ID
     pub fn get(&self, invocation_id: &str) -> Result<Option<Arc<RwLock<InvocationContext>>>> {
         let contexts = self.contexts.read().map_err(|_| 
-            Error::InternalError("Failed to acquire read lock on contexts".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire read lock on contexts".to_string()))?;
         
         let context = contexts.get(invocation_id).cloned();
         
@@ -93,7 +96,7 @@ impl ContextStorage {
     /// Remove a context
     pub fn remove(&self, invocation_id: &str) -> Result<Option<Arc<RwLock<InvocationContext>>>> {
         let mut contexts = self.contexts.write().map_err(|_| 
-            Error::InternalError("Failed to acquire write lock on contexts".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire write lock on contexts".to_string()))?;
         
         let context = contexts.remove(invocation_id);
         
@@ -103,7 +106,7 @@ impl ContextStorage {
     /// Get all contexts for a trace
     pub fn get_by_trace(&self, trace_id: &TraceId) -> Result<Vec<Arc<RwLock<InvocationContext>>>> {
         let contexts = self.contexts.read().map_err(|_| 
-            Error::InternalError("Failed to acquire read lock on contexts".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire read lock on contexts".to_string()))?;
         
         let trace_contexts = contexts.values()
             .filter(|ctx| {
@@ -122,7 +125,7 @@ impl ContextStorage {
     /// Count active contexts
     pub fn count(&self) -> Result<usize> {
         let contexts = self.contexts.read().map_err(|_| 
-            Error::InternalError("Failed to acquire read lock on contexts".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire read lock on contexts".to_string()))?;
         
         Ok(contexts.len())
     }
@@ -130,7 +133,7 @@ impl ContextStorage {
     /// Clear all contexts
     pub fn clear(&self) -> Result<()> {
         let mut contexts = self.contexts.write().map_err(|_| 
-            Error::InternalError("Failed to acquire write lock on contexts".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire write lock on contexts".to_string()))?;
         
         contexts.clear();
         
@@ -183,7 +186,7 @@ impl ContextPropagator {
         
         // Set parent ID if provided
         if let Some(parent) = parent_id {
-            context.parent_id = Some(parent);
+            context.parent_id = Some(parent.clone());
             
             // Also add this as a child to the parent
             if let Some(parent_ctx) = self.storage.get(&parent)? {
@@ -208,7 +211,7 @@ impl ContextPropagator {
         
         // Create invocation data for generating content ID
         let parent_guard = parent_ctx.read().map_err(|_| 
-            Error::InternalError("Failed to acquire read lock on parent context".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire read lock on parent context".to_string()))?;
         
         let invocation_data = InvocationData {
             timestamp: Utc::now().timestamp(),
@@ -226,7 +229,7 @@ impl ContextPropagator {
         // Add this as a child to the parent
         {
             let mut parent_guard = parent_ctx.write().map_err(|_| 
-                Error::InternalError("Failed to acquire write lock on parent context".to_string()))?;
+                EngineError::LockAcquisitionError("Failed to acquire write lock on parent context".to_string()))?;
             
             parent_guard.add_child(&child_context.invocation_id)?;
         }
@@ -241,7 +244,7 @@ impl ContextPropagator {
             .ok_or_else(|| Error::NotFound(format!("Context not found: {}", invocation_id)))?;
         
         let mut ctx_guard = context.write().map_err(|_| 
-            Error::InternalError("Failed to acquire write lock on context".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire write lock on context".to_string()))?;
         
         ctx_guard.start()
     }
@@ -252,7 +255,7 @@ impl ContextPropagator {
             .ok_or_else(|| Error::NotFound(format!("Context not found: {}", invocation_id)))?;
         
         let mut ctx_guard = context.write().map_err(|_| 
-            Error::InternalError("Failed to acquire write lock on context".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire write lock on context".to_string()))?;
         
         ctx_guard.complete()
     }
@@ -263,18 +266,18 @@ impl ContextPropagator {
             .ok_or_else(|| Error::NotFound(format!("Context not found: {}", invocation_id)))?;
         
         let mut ctx_guard = context.write().map_err(|_| 
-            Error::InternalError("Failed to acquire write lock on context".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire write lock on context".to_string()))?;
         
         ctx_guard.fail(reason)
     }
     
     /// Wait for a resource
-    pub fn wait_for_resource(&self, invocation_id: &str, resource_id: causality_types::ContentId) -> Result<()> {
+    pub fn wait_for_resource(&self, invocation_id: &str, resource_id: ContentId) -> Result<()> {
         let context = self.storage.get(invocation_id)?
             .ok_or_else(|| Error::NotFound(format!("Context not found: {}", invocation_id)))?;
         
         let mut ctx_guard = context.write().map_err(|_| 
-            Error::InternalError("Failed to acquire write lock on context".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire write lock on context".to_string()))?;
         
         ctx_guard.wait_for_resource(resource_id)
     }
@@ -285,7 +288,7 @@ impl ContextPropagator {
             .ok_or_else(|| Error::NotFound(format!("Context not found: {}", invocation_id)))?;
         
         let mut ctx_guard = context.write().map_err(|_| 
-            Error::InternalError("Failed to acquire write lock on context".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire write lock on context".to_string()))?;
         
         ctx_guard.wait_for_fact(fact_id)
     }
@@ -296,27 +299,30 @@ impl ContextPropagator {
             .ok_or_else(|| Error::NotFound(format!("Context not found: {}", invocation_id)))?;
         
         let mut ctx_guard = context.write().map_err(|_| 
-            Error::InternalError("Failed to acquire write lock on context".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire write lock on context".to_string()))?;
         
         ctx_guard.resume()
     }
     
-    /// Get all active contexts in a trace
+    /// Get all contexts for a trace
     pub fn get_trace_contexts(&self, trace_id: &TraceId) -> Result<Vec<Arc<RwLock<InvocationContext>>>> {
         self.storage.get_by_trace(trace_id)
     }
     
-    /// Check if all contexts in a trace are final
+    /// Check if a trace is completely done (all invocations are in a final state)
     pub fn is_trace_complete(&self, trace_id: &TraceId) -> Result<bool> {
+        // Get all contexts for this trace
         let contexts = self.storage.get_by_trace(trace_id)?;
         
+        // If there are no contexts, consider it complete
         if contexts.is_empty() {
-            return Ok(false);
+            return Ok(true);
         }
         
+        // Check if all contexts are in a final state
         for ctx in &contexts {
             let guard = ctx.read().map_err(|_| 
-                Error::InternalError("Failed to acquire read lock on context".to_string()))?;
+                EngineError::LockAcquisitionError("Failed to acquire read lock on context".to_string()))?;
             
             if !guard.is_final() {
                 return Ok(false);
@@ -325,18 +331,114 @@ impl ContextPropagator {
         
         Ok(true)
     }
+
+    /// Export a context for transfer to another process
+    pub fn export_context(&self, invocation_id: &str) -> Result<SerializedContext> {
+        let context = self.storage.get(invocation_id)?
+            .ok_or_else(|| Error::NotFound(format!("Context not found: {}", invocation_id)))?;
+        
+        let guard = context.read().map_err(|_| 
+            EngineError::LockAcquisitionError("Failed to acquire read lock on context".to_string()))?;
+        
+        // Serialize the time map
+        let time_map_bytes = bincode::serialize(&guard.time_map)
+            .map_err(|e| Error::SerializationError(format!("Failed to serialize time map: {}", e)))?;
+        
+        // Serialize facts to JSON
+        let facts_json = serde_json::to_string(&guard.observed_facts)
+            .map_err(|e| Error::SerializationError(format!("Failed to serialize facts: {}", e)))?;
+        
+        // Serialize metadata
+        let metadata = serde_json::to_string(&guard.metadata)
+            .map_err(|e| Error::SerializationError(format!("Failed to serialize metadata: {}", e)))?;
+        
+        Ok(SerializedContext {
+            invocation_id: guard.invocation_id.clone(),
+            trace_id: guard.trace_id.to_string(),
+            parent_id: guard.parent_id.clone(),
+            state: format!("{:?}", guard.state),
+            time_map_bytes,
+            created_at: guard.created_at.timestamp(),
+            started_at: guard.started_at.map(|t| t.timestamp()),
+            completed_at: guard.completed_at.map(|t| t.timestamp()),
+            facts_json,
+            metadata,
+        })
+    }
+    
+    /// Import a context from another process
+    pub fn import_context(&self, serialized: SerializedContext) -> Result<Arc<RwLock<InvocationContext>>> {
+        // Deserialize the time map
+        let time_map = bincode::deserialize(&serialized.time_map_bytes)
+            .map_err(|e| Error::DeserializationError(format!("Failed to deserialize time map: {}", e)))?;
+        
+        // Create a new context
+        let mut context = InvocationContext::new(
+            serialized.invocation_id,
+            TraceId::from_string(&serialized.trace_id)
+                .map_err(|_| Error::DeserializationError("Invalid trace ID".to_string()))?,
+            time_map,
+        );
+        
+        // Set parent ID
+        context.parent_id = serialized.parent_id;
+        
+        // Set timestamps
+        context.created_at = chrono::DateTime::from_timestamp(serialized.created_at, 0)
+            .ok_or_else(|| Error::DeserializationError("Invalid created_at timestamp".to_string()))?;
+        
+        if let Some(started_at) = serialized.started_at {
+            context.started_at = chrono::DateTime::from_timestamp(started_at, 0);
+        }
+        
+        if let Some(completed_at) = serialized.completed_at {
+            context.completed_at = chrono::DateTime::from_timestamp(completed_at, 0);
+        }
+        
+        // Deserialize facts
+        let facts = serde_json::from_str(&serialized.facts_json)
+            .map_err(|e| Error::DeserializationError(format!("Failed to deserialize facts: {}", e)))?;
+        context.observed_facts = facts;
+        
+        // Deserialize metadata
+        let metadata = serde_json::from_str(&serialized.metadata)
+            .map_err(|e| Error::DeserializationError(format!("Failed to deserialize metadata: {}", e)))?;
+        context.metadata = metadata;
+        
+        // Store the imported context
+        self.storage.store(context)
+    }
+
+    /// Execute an action with a context from another process
+    pub fn with_imported_context<F, R>(&self, serialized: SerializedContext, f: F) -> Result<R>
+    where
+        F: FnOnce(&Arc<RwLock<InvocationContext>>) -> Result<R>,
+    {
+        let context = self.import_context(serialized)?;
+        let result = f(&context);
+        
+        // Export the context back after execution if needed
+        // (This would be used to send the updated context back to the original process)
+        
+        result
+    }
+    
+    /// Clone the storage
+    pub fn clone_storage(&self) -> Arc<ContextStorage> {
+        self.storage.clone()
+    }
 }
 
-/// Thread-local context for the current invocation
+// Thread-local storage of the current context ID
 thread_local! {
     static CURRENT_CONTEXT: Mutex<Option<String>> = Mutex::new(None);
 }
 
-/// Set the current invocation context for this thread
+/// Set the current context for this thread
 pub fn set_current_context(invocation_id: Option<String>) -> Result<()> {
-    CURRENT_CONTEXT.with(|current| {
-        let mut current = current.lock().map_err(|_| 
-            Error::InternalError("Failed to acquire lock on thread-local context".to_string()))?;
+    CURRENT_CONTEXT.with(|ctx| {
+        let mut current = ctx.lock().map_err(|_| 
+            EngineError::LockAcquisitionError("Failed to acquire lock on current context".to_string()))?;
         
         *current = invocation_id;
         
@@ -344,17 +446,17 @@ pub fn set_current_context(invocation_id: Option<String>) -> Result<()> {
     })
 }
 
-/// Get the current invocation context for this thread
+/// Get the current context for this thread
 pub fn get_current_context() -> Result<Option<String>> {
-    CURRENT_CONTEXT.with(|current| {
-        let current = current.lock().map_err(|_| 
-            Error::InternalError("Failed to acquire lock on thread-local context".to_string()))?;
+    CURRENT_CONTEXT.with(|ctx| {
+        let current = ctx.lock().map_err(|_| 
+            EngineError::LockAcquisitionError("Failed to acquire lock on current context".to_string()))?;
         
         Ok(current.clone())
     })
 }
 
-/// Run a function with a specific invocation context
+/// Execute a function within the scope of a context
 pub fn with_context<F, R>(
     propagator: &ContextPropagator,
     invocation_id: &str,
@@ -364,25 +466,171 @@ where
     F: FnOnce() -> Result<R>,
 {
     // Save the previous context
-    let previous_context = get_current_context()?;
+    let previous = get_current_context()?;
     
     // Set the new context
     set_current_context(Some(invocation_id.to_string()))?;
     
-    // Run the function
+    // Start the context if it's not already running
+    let maybe_start = {
+        let context = propagator.storage.get(invocation_id)?
+            .ok_or_else(|| Error::NotFound(format!("Context not found: {}", invocation_id)))?;
+        
+        let guard = context.read().map_err(|_| 
+            EngineError::LockAcquisitionError("Failed to acquire read lock on context".to_string()))?;
+        
+        !guard.is_active()
+    };
+    
+    if maybe_start {
+        propagator.start_context(invocation_id)?;
+    }
+    
+    // Execute the function
     let result = f();
     
+    // Complete the context if we started it and it was successful
+    if maybe_start && result.is_ok() {
+        let _ = propagator.complete_context(invocation_id);
+    } else if maybe_start && result.is_err() {
+        if let Err(err) = &result {
+            let _ = propagator.fail_context(invocation_id, &format!("{}", err));
+        }
+    }
+    
     // Restore the previous context
-    set_current_context(previous_context)?;
+    set_current_context(previous)?;
     
     result
+}
+
+/// Context serialization format for cross-process propagation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializedContext {
+    /// The invocation ID
+    pub invocation_id: String,
+    /// The trace ID
+    pub trace_id: String,
+    /// Parent invocation ID if any
+    pub parent_id: Option<String>,
+    /// Current state of the invocation
+    pub state: String,
+    /// Time map serialized to bytes
+    pub time_map_bytes: Vec<u8>,
+    /// Creation timestamp
+    pub created_at: i64,
+    /// Start timestamp if started
+    pub started_at: Option<i64>,
+    /// Completion timestamp if completed
+    pub completed_at: Option<i64>,
+    /// Observed facts serialized to JSON
+    pub facts_json: String,
+    /// Metadata serialized to JSON
+    pub metadata: String,
+}
+
+/// Remote context connector for cross-process propagation
+pub struct RemoteContextConnector {
+    /// Local propagator
+    propagator: ContextPropagator,
+    /// Remote endpoints to connect to
+    endpoints: Vec<String>,
+    /// Authentication token for remote endpoints
+    auth_token: Option<String>,
+}
+
+impl RemoteContextConnector {
+    /// Create a new remote context connector
+    pub fn new(propagator: ContextPropagator, endpoints: Vec<String>) -> Self {
+        RemoteContextConnector {
+            propagator,
+            endpoints,
+            auth_token: None,
+        }
+    }
+    
+    /// Set the authentication token
+    pub fn with_auth_token(mut self, token: impl Into<String>) -> Self {
+        self.auth_token = Some(token.into());
+        self
+    }
+    
+    /// Send a context to a remote endpoint
+    pub async fn send_context(&self, invocation_id: &str, endpoint_index: usize) -> Result<()> {
+        // Get the endpoint
+        let endpoint = self.endpoints.get(endpoint_index)
+            .ok_or_else(|| Error::InvalidArgument(format!("Invalid endpoint index: {}", endpoint_index)))?;
+        
+        // Export the context
+        let serialized = self.propagator.export_context(invocation_id)?;
+        
+        // Convert to JSON
+        let json = serde_json::to_string(&serialized)
+            .map_err(|e| Error::SerializationError(format!("Failed to serialize context: {}", e)))?;
+        
+        // Create HTTP client
+        let client = reqwest::Client::new();
+        let mut request = client.post(endpoint)
+            .header("Content-Type", "application/json");
+        
+        // Add auth token if available
+        if let Some(token) = &self.auth_token {
+            request = request.header("Authorization", format!("Bearer {}", token));
+        }
+        
+        // Send the request
+        let response = request.body(json).send().await
+            .map_err(|e| Error::NetworkError(format!("Failed to send context: {}", e)))?;
+        
+        // Check the response
+        if !response.status().is_success() {
+            return Err(Error::NetworkError(format!(
+                "Failed to send context: HTTP {}", response.status()
+            )));
+        }
+        
+        Ok(())
+    }
+    
+    /// Receive a context from a remote endpoint
+    pub async fn receive_context(&self, endpoint_index: usize) -> Result<Arc<RwLock<InvocationContext>>> {
+        // Get the endpoint
+        let endpoint = self.endpoints.get(endpoint_index)
+            .ok_or_else(|| Error::InvalidArgument(format!("Invalid endpoint index: {}", endpoint_index)))?;
+        
+        // Create HTTP client
+        let client = reqwest::Client::new();
+        let mut request = client.get(endpoint);
+        
+        // Add auth token if available
+        if let Some(token) = &self.auth_token {
+            request = request.header("Authorization", format!("Bearer {}", token));
+        }
+        
+        // Send the request
+        let response = request.send().await
+            .map_err(|e| Error::NetworkError(format!("Failed to receive context: {}", e)))?;
+        
+        // Check the response
+        if !response.status().is_success() {
+            return Err(Error::NetworkError(format!(
+                "Failed to receive context: HTTP {}", response.status()
+            )));
+        }
+        
+        // Parse the response
+        let serialized: SerializedContext = response.json().await
+            .map_err(|e| Error::DeserializationError(format!("Failed to parse response: {}", e)))?;
+        
+        // Import the context
+        self.propagator.import_context(serialized)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_types::{*};
-use causality_crypto::ContentId;;
+    use std::thread;
     
     fn create_time_map() -> TimeMap {
         TimeMap::new()
@@ -391,36 +639,35 @@ use causality_crypto::ContentId;;
     #[test]
     fn test_context_storage() -> Result<()> {
         let storage = ContextStorage::new();
-        let time_map = create_time_map();
-        let trace_id = TraceId::new();
-        let invocation_id = "test_invocation".to_string();
         
-        // Create a context
+        // Create a test context
+        let trace_id = TraceId::new();
+        let time_map = create_time_map();
         let context = InvocationContext::new(
-            invocation_id.clone(),
+            "test-invocation-1".to_string(),
             trace_id.clone(),
             time_map,
         );
         
-        // Store the context
-        let arc_context = storage.store(context)?;
-        
-        // Count should be 1
+        // Store it
+        let stored = storage.store(context)?;
         assert_eq!(storage.count()?, 1);
         
-        // Retrieve by ID
-        let retrieved = storage.get(&invocation_id)?;
+        // Retrieve it
+        let retrieved = storage.get("test-invocation-1")?;
         assert!(retrieved.is_some());
         
-        // Retrieve by trace
+        // Get by trace
         let trace_contexts = storage.get_by_trace(&trace_id)?;
         assert_eq!(trace_contexts.len(), 1);
         
-        // Remove the context
-        let removed = storage.remove(&invocation_id)?;
+        // Remove it
+        let removed = storage.remove("test-invocation-1")?;
         assert!(removed.is_some());
+        assert_eq!(storage.count()?, 0);
         
-        // Count should be 0
+        // Clear should work on empty storage
+        storage.clear()?;
         assert_eq!(storage.count()?, 0);
         
         Ok(())
@@ -430,60 +677,84 @@ use causality_crypto::ContentId;;
     fn test_context_propagator() -> Result<()> {
         let storage = Arc::new(ContextStorage::new());
         let propagator = ContextPropagator::new(storage.clone());
-        let time_map = create_time_map();
-        let trace_id = TraceId::new();
         
-        // Create a root context
-        let root_context = propagator.create_context(
+        // Create a new root context
+        let trace_id = TraceId::new();
+        let time_map = create_time_map();
+        let root_ctx = propagator.create_context(
             Some(trace_id.clone()),
             None,
             time_map.clone(),
         )?;
         
         let root_id = {
-            let root_guard = root_context.read().map_err(|_| 
-                Error::InternalError("Failed to acquire read lock on root context".to_string()))?;
-            
-            root_guard.invocation_id.clone()
+            let guard = root_ctx.read().map_err(|_| 
+                EngineError::LockAcquisitionError("Failed to acquire read lock".to_string()))?;
+            guard.invocation_id.clone()
         };
         
-        // Start the root context
+        // Start the context
         propagator.start_context(&root_id)?;
         
+        {
+            let guard = root_ctx.read().map_err(|_| 
+                EngineError::LockAcquisitionError("Failed to acquire read lock".to_string()))?;
+            assert!(guard.is_active());
+        }
+        
         // Create a child context
-        let child_context = propagator.create_child_context(&root_id)?;
+        let child_ctx = propagator.create_child_context(&root_id)?;
         
         let child_id = {
-            let child_guard = child_context.read().map_err(|_| 
-                Error::InternalError("Failed to acquire read lock on child context".to_string()))?;
-            
-            child_guard.invocation_id.clone()
+            let guard = child_ctx.read().map_err(|_| 
+                EngineError::LockAcquisitionError("Failed to acquire read lock".to_string()))?;
+            guard.invocation_id.clone()
         };
         
-        // Check parent-child relationship
-        {
-            let child_guard = child_context.read().map_err(|_| 
-                Error::InternalError("Failed to acquire read lock on child context".to_string()))?;
-            
-            assert_eq!(child_guard.parent_id, Some(root_id.clone()));
-            assert_eq!(child_guard.trace_id, trace_id);
-        }
-        
-        {
-            let root_guard = root_context.read().map_err(|_| 
-                Error::InternalError("Failed to acquire read lock on root context".to_string()))?;
-            
-            assert!(root_guard.children.contains(&child_id));
-        }
-        
-        // Start and complete the child
+        // Start the child
         propagator.start_context(&child_id)?;
+        
+        // Make the child wait for a resource
+        let resource_id = ContentId::new();
+        propagator.wait_for_resource(&child_id, resource_id.clone())?;
+        
+        {
+            let guard = child_ctx.read().map_err(|_| 
+                EngineError::LockAcquisitionError("Failed to acquire read lock".to_string()))?;
+            match guard.state {
+                super::InvocationState::Waiting(id) => assert_eq!(id, resource_id),
+                _ => panic!("Expected Waiting state"),
+            }
+        }
+        
+        // Resume the child
+        propagator.resume_context(&child_id)?;
+        
+        {
+            let guard = child_ctx.read().map_err(|_| 
+                EngineError::LockAcquisitionError("Failed to acquire read lock".to_string()))?;
+            assert_eq!(guard.state, super::InvocationState::Running);
+        }
+        
+        // Complete the child
         propagator.complete_context(&child_id)?;
+        
+        {
+            let guard = child_ctx.read().map_err(|_| 
+                EngineError::LockAcquisitionError("Failed to acquire read lock".to_string()))?;
+            assert!(guard.is_final());
+        }
         
         // Fail the root context
         propagator.fail_context(&root_id, "Test failure")?;
         
-        // Check if trace is complete
+        {
+            let guard = root_ctx.read().map_err(|_| 
+                EngineError::LockAcquisitionError("Failed to acquire read lock".to_string()))?;
+            assert!(guard.is_final());
+        }
+        
+        // Check trace completion
         assert!(propagator.is_trace_complete(&trace_id)?);
         
         Ok(())
@@ -491,16 +762,19 @@ use causality_crypto::ContentId;;
     
     #[test]
     fn test_thread_local_context() -> Result<()> {
-        // No context initially
-        assert_eq!(get_current_context()?, None);
+        // Set the current context
+        set_current_context(Some("test-thread-context".to_string()))?;
         
-        // Set a context
-        set_current_context(Some("test_context".to_string()))?;
-        assert_eq!(get_current_context()?, Some("test_context".to_string()));
+        // Get it back
+        let current = get_current_context()?;
+        assert_eq!(current, Some("test-thread-context".to_string()));
         
-        // Clear the context
+        // Clear it
         set_current_context(None)?;
-        assert_eq!(get_current_context()?, None);
+        
+        // Should be None now
+        let current = get_current_context()?;
+        assert_eq!(current, None);
         
         Ok(())
     }
@@ -509,37 +783,37 @@ use causality_crypto::ContentId;;
     fn test_with_context() -> Result<()> {
         let storage = Arc::new(ContextStorage::new());
         let propagator = ContextPropagator::new(storage.clone());
-        let time_map = create_time_map();
         
         // Create a context
-        let context = propagator.create_context(
-            None,
-            None,
-            time_map.clone(),
-        )?;
+        let time_map = create_time_map();
+        let ctx = propagator.create_context(None, None, time_map)?;
         
-        let invocation_id = {
-            let guard = context.read().map_err(|_| 
-                Error::InternalError("Failed to acquire read lock on context".to_string()))?;
-            
+        let id = {
+            let guard = ctx.read().map_err(|_| 
+                EngineError::LockAcquisitionError("Failed to acquire read lock".to_string()))?;
             guard.invocation_id.clone()
         };
         
-        // Run with the context
-        let result = with_context(&propagator, &invocation_id, || {
+        // Run a function with this context
+        let result = with_context(&propagator, &id, || {
             // Get the current context
             let current = get_current_context()?;
+            assert_eq!(current, Some(id.clone()));
             
-            // Should match the invocation ID
-            assert_eq!(current, Some(invocation_id.clone()));
-            
-            Ok("success")
+            // Return a value
+            Ok::<_, Error>(42)
         })?;
         
-        assert_eq!(result, "success");
+        assert_eq!(result, 42);
         
-        // After the function, there should be no current context
-        assert_eq!(get_current_context()?, None);
+        // Check the context state
+        let context = propagator.storage.get(&id)?
+            .ok_or_else(|| Error::NotFound(format!("Context not found: {}", id)))?;
+        
+        let guard = context.read().map_err(|_| 
+            EngineError::LockAcquisitionError("Failed to acquire read lock".to_string()))?;
+        
+        assert!(guard.is_final());
         
         Ok(())
     }

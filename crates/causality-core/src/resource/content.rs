@@ -3,12 +3,13 @@
 // This file defines types and functions for content addressing of resources.
 
 use std::collections::HashMap;
+use crate::utils::content_addressing;
 use std::fmt::{self, Display};
 use serde::{Serialize, Deserialize};
 use borsh::{BorshSerialize, BorshDeserialize};
 use sha2::{Sha256, Digest};
 
-use crate::capability::ContentHash;
+use causality_types::ContentHash;
 use super::types::{ResourceId, ResourceType};
 use super::state::ResourceStateData;
 
@@ -75,7 +76,7 @@ impl BasicResource {
     pub fn new(resource_type: ResourceType) -> Self {
         // Create a resource with empty data
         let mut resource = Self {
-            id: ResourceId::new(ContentHash::default()),
+            id: ResourceId::new(content_addressing::default_content_hash()),
             resource_type,
             data: HashMap::new(),
             metadata: HashMap::new(),

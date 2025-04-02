@@ -11,9 +11,9 @@ use std::sync::Arc;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 use chrono::Utc;
-use crate::crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
-use causality_types::{*};
-use causality_crypto::ContentId;;
+use causality_types::{ContentAddressed, ContentId, HashOutput};
+use causality_crypto::{HashFactory, HashError};
+use causality_types::*;
 use crate::verification::{
     Verifiable,
     VerificationContext,

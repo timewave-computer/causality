@@ -7,32 +7,32 @@
 // callback-based, continuation-based, promise-based, and streaming invocation.
 // All patterns use content addressing for tracking and identification.
 
-use std::sync::{Arc, RwLock};
-use std::pin::Pin;
-use std::future::Future;
+use std::sync::Arc;
 use async_trait::async_trait;
-use tokio::sync::{oneshot, mpsc};
+use tokio::sync::mpsc;
 use serde::{Serialize, Deserialize};
-use blake3::Hasher;
-use hex;
+use sha2::{Sha256, Digest};
+use std::fmt::Debug;
+use std::string::String;
 
-use causality_types::{Error, Result};
-use causality_types::{TraceId, ContentId, ContentHash};
-use causality_domain::map::TimeMap;
-use causality_engine::context::{
-    InvocationContext,
-    propagation::{ContextPropagator, ContextStorage},
-};
-use causality_engine::registry::{
+use causality_error::{Result, Error};
+use causality_types::ContentId;
+use causality_core::time::TimeMap;
+
+use super::context::InvocationContext;
+use super::context::propagation::ContextPropagator;
+
+use super::registry::{
     EffectRegistry, 
     EffectHandler, 
     HandlerInput, 
     HandlerOutput,
 };
+use causality_types::crypto_primitives::ContentHash;
 
-/// Common interface for all invocation patterns
+// Common interface for all invocation patterns
 #[async_trait]
-pub trait InvocationPattern: Send + Sync {
+pub trait InvocationPatternTrait: Send + Sync {
     /// Get a unique content identifier for this invocation pattern
     fn get_content_id(&self) -> ContentId;
     
@@ -50,72 +50,56 @@ pub trait InvocationPattern: Send + Sync {
     fn get_metadata(&self) -> serde_json::Value;
 }
 
+/// Represents different invocation patterns for operation handling
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum InvocationPatternEnum {
+    /// Direct synchronous invocation
+    Direct(DirectInvocation),
+    /// Callback-based invocation
+    Callback(CallbackInvocation),
+    /// Continuation-based invocation
+    Continuation(ContinuationInvocation),
+    /// Promise-based invocation
+    Promise(PromiseInvocation),
+    /// Streaming invocation pattern
+    Streaming(StreamingInvocation),
+    /// Batch processing invocation
+    Batch(BatchInvocation),
+}
+
 //----------------------------------------------------------
 // Direct Invocation Pattern
 //----------------------------------------------------------
 
-/// Direct invocation - simple synchronous request-response pattern
+/// Direct synchronous invocation pattern
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DirectInvocation {
-    /// Handler ID to invoke
-    pub handler_id: String,
-    /// Action to perform
-    pub action: String,
-    /// Input parameters
-    pub params: serde_json::Value,
-    /// Trace ID for tracking related invocations
-    pub trace_id: Option<TraceId>,
-    /// Parent invocation ID if this is a child invocation
-    pub parent_id: Option<String>,
-    /// Content hash of the inputs (for content addressing)
-    pub content_hash: ContentHash,
+    /// Target service ID
+    pub target_service: String,
+    /// Operation to invoke
+    pub operation: String,
 }
 
 impl DirectInvocation {
     /// Create a new direct invocation
     pub fn new(
-        handler_id: impl Into<String>,
-        action: impl Into<String>,
-        params: serde_json::Value,
+        target_service: impl Into<String>,
+        operation: impl Into<String>,
     ) -> Self {
-        let handler_id = handler_id.into();
-        let action = action.into();
-        
-        // Generate a content hash for this invocation
-        let mut hasher = Hasher::new();
-        hasher.update(handler_id.as_bytes());
-        hasher.update(action.as_bytes());
-        hasher.update(params.to_string().as_bytes());
-        let hash = hasher.finalize();
-        let content_hash = ContentHash(hex::encode(hash.as_bytes()));
+        let target_service = target_service.into();
+        let operation = operation.into();
         
         DirectInvocation {
-            handler_id,
-            action,
-            params,
-            trace_id: None,
-            parent_id: None,
-            content_hash,
+            target_service,
+            operation,
         }
-    }
-    
-    /// Set the trace ID for this invocation
-    pub fn with_trace(mut self, trace_id: TraceId) -> Self {
-        self.trace_id = Some(trace_id);
-        self
-    }
-    
-    /// Set the parent ID for this invocation
-    pub fn with_parent(mut self, parent_id: impl Into<String>) -> Self {
-        self.parent_id = Some(parent_id.into());
-        self
     }
 }
 
 #[async_trait]
-impl InvocationPattern for DirectInvocation {
+impl InvocationPatternTrait for DirectInvocation {
     fn get_content_id(&self) -> ContentId {
-        ContentId::new(format!("direct-invocation:{}", self.content_hash.0))
+        ContentId::from_bytes(self.target_service.as_bytes())
     }
     
     async fn execute(
@@ -124,60 +108,63 @@ impl InvocationPattern for DirectInvocation {
         propagator: &ContextPropagator,
     ) -> Result<HandlerOutput> {
         // Get the handler
-        let handler = registry.get_handler(&self.handler_id)?
-            .ok_or_else(|| Error::NotFound(format!("Handler not found: {}", self.handler_id)))?;
+        let handler = registry.get_handler(&self.target_service)?
+            .ok_or_else(|| Error::NotFound(format!("Handler not found: {}", self.target_service)))?;
         
         // Create a time map
         let time_map = TimeMap::new();
         
         // Create an invocation context
         let context = propagator.create_context(
-            self.trace_id.clone(),
-            self.parent_id.clone(),
+            None,
+            None,
             time_map,
         )?;
         
-        // Get the invocation ID
-        let invocation_id = {
-            let guard = context.read().map_err(|_| 
-                Error::InternalError("Failed to acquire read lock on context".to_string()))?;
-            
-            guard.invocation_id.clone()
-        };
-        
-        // Start the context
-        propagator.start_context(&invocation_id)?;
-        
         // Create the handler input
         let input = HandlerInput {
-            action: self.action.clone(),
-            params: self.params.clone(),
-            context: context.clone(),
+            action: self.operation.clone(),
+            params: serde_json::json!({}),
+            context_id: context.id().to_string(),
         };
         
         // Handle the invocation
         let result = handler.handle(input).await;
         
-        // Complete or fail the context based on the result
-        match &result {
-            Ok(_) => propagator.complete_context(&invocation_id)?,
-            Err(e) => propagator.fail_context(&invocation_id, &e.to_string())?,
-        }
-        
         result
     }
     
     fn get_description(&self) -> String {
-        format!("Direct invocation of {} / {}", self.handler_id, self.action)
+        format!("Direct invocation of {} / {}", self.target_service, self.operation)
     }
     
     fn get_metadata(&self) -> serde_json::Value {
         serde_json::json!({
             "pattern_type": "direct",
-            "handler_id": self.handler_id,
-            "action": self.action,
-            "content_hash": self.content_hash.0,
+            "target_service": self.target_service,
+            "operation": self.operation,
         })
+    }
+}
+
+/// Type for future returned from streaming invocation
+pub type InvocationStreamFuture = std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>;
+
+/// Streaming invocation future
+pub struct StreamingInvocationFuture {
+    /// The future that completes when the stream is done
+    future: InvocationStreamFuture,
+}
+
+impl StreamingInvocationFuture {
+    /// Create a new streaming invocation future
+    pub fn new(future: InvocationStreamFuture) -> Self {
+        Self { future }
+    }
+    
+    /// Wait for the stream to complete
+    pub async fn await_completion(self) -> Result<()> {
+        self.future.await
     }
 }
 
@@ -185,35 +172,40 @@ impl InvocationPattern for DirectInvocation {
 // Callback-based Invocation Pattern
 //----------------------------------------------------------
 
-/// Type for invocation callbacks
-pub type InvocationCallback = Box<dyn FnOnce(Result<HandlerOutput>) + Send + 'static>;
-
-/// Callback-based invocation - invokes a handler and calls back when complete
-#[derive(Debug)]
+/// Callback-based invocation pattern
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CallbackInvocation {
-    /// The direct invocation to perform
-    pub invocation: DirectInvocation,
-    /// The callback function to call with the result
-    pub callback: Option<InvocationCallback>,
+    /// Target service ID
+    pub target_service: String,
+    /// Operation to invoke
+    pub operation: String,
+    /// Callback endpoint
+    pub callback_url: String,
 }
 
 impl CallbackInvocation {
     /// Create a new callback invocation
     pub fn new(
-        invocation: DirectInvocation,
-        callback: impl FnOnce(Result<HandlerOutput>) + Send + 'static,
+        target_service: impl Into<String>,
+        operation: impl Into<String>,
+        callback_url: impl Into<String>,
     ) -> Self {
+        let target_service = target_service.into();
+        let operation = operation.into();
+        let callback_url = callback_url.into();
+        
         CallbackInvocation {
-            invocation,
-            callback: Some(Box::new(callback)),
+            target_service,
+            operation,
+            callback_url,
         }
     }
 }
 
 #[async_trait]
-impl InvocationPattern for CallbackInvocation {
+impl InvocationPatternTrait for CallbackInvocation {
     fn get_content_id(&self) -> ContentId {
-        ContentId::new(format!("callback-invocation:{}", self.invocation.content_hash.0))
+        ContentId::from_bytes(self.target_service.as_bytes())
     }
     
     async fn execute(
@@ -221,30 +213,22 @@ impl InvocationPattern for CallbackInvocation {
         registry: &EffectRegistry,
         propagator: &ContextPropagator,
     ) -> Result<HandlerOutput> {
-        let result = self.invocation.execute(registry, propagator).await;
-        
-        // Execute the callback with the result if present
-        if let Some(callback) = &self.callback {
-            let callback = std::mem::replace(&mut self.callback.clone().unwrap(), Box::new(|_| {}));
-            callback(result.clone());
-        }
+        let result = self.execute(registry, propagator).await?;
         
         result
     }
     
     fn get_description(&self) -> String {
-        format!("Callback invocation of {}", self.invocation.get_description())
+        format!("Callback invocation of {} / {}", self.target_service, self.operation)
     }
     
     fn get_metadata(&self) -> serde_json::Value {
-        let mut metadata = self.invocation.get_metadata();
-        
-        if let serde_json::Value::Object(ref mut map) = metadata {
-            map.insert("pattern_type".to_string(), serde_json::Value::String("callback".to_string()));
-            map.insert("has_callback".to_string(), serde_json::Value::Bool(self.callback.is_some()));
-        }
-        
-        metadata
+        serde_json::json!({
+            "pattern_type": "callback",
+            "target_service": self.target_service,
+            "operation": self.operation,
+            "callback_url": self.callback_url,
+        })
     }
 }
 
@@ -252,64 +236,40 @@ impl InvocationPattern for CallbackInvocation {
 // Continuation-based Invocation Pattern
 //----------------------------------------------------------
 
-/// Continuation function type for processing invocation results
-pub type InvocationContinuation<T> = Box<dyn FnOnce(Result<HandlerOutput>) -> Result<T> + Send + 'static>;
-
-/// Continuation-based invocation - chains multiple invocations together
-#[derive(Debug)]
-pub struct ContinuationInvocation<T: Send + 'static> {
-    /// The direct invocation to perform
-    pub invocation: DirectInvocation,
-    /// The continuation function to process the result
-    pub continuation: Option<InvocationContinuation<T>>,
-    /// Content hash for the continuation (derived from invocation + continuation type)
-    pub content_hash: ContentHash,
+/// Continuation-based invocation pattern
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContinuationInvocation {
+    /// Target service ID
+    pub target_service: String,
+    /// Operation to invoke
+    pub operation: String,
+    /// Continuation ID for resuming execution
+    pub continuation_id: String,
 }
 
-impl<T: Send + 'static> ContinuationInvocation<T> {
+impl ContinuationInvocation {
     /// Create a new continuation invocation
     pub fn new(
-        invocation: DirectInvocation,
-        continuation: impl FnOnce(Result<HandlerOutput>) -> Result<T> + Send + 'static,
+        target_service: impl Into<String>,
+        operation: impl Into<String>,
+        continuation_id: impl Into<String>,
     ) -> Self {
-        // Add the type name to the content hash for the continuation
-        let type_name = std::any::type_name::<T>();
+        let target_service = target_service.into();
+        let operation = operation.into();
+        let continuation_id = continuation_id.into();
         
-        let mut hasher = Hasher::new();
-        hasher.update(invocation.content_hash.0.as_bytes());
-        hasher.update(type_name.as_bytes());
-        let hash = hasher.finalize();
-        let content_hash = ContentHash(hex::encode(hash.as_bytes()));
-        
-        Self {
-            invocation,
-            continuation: Some(Box::new(continuation)),
-            content_hash,
-        }
-    }
-    
-    /// Execute the invocation and apply the continuation
-    pub async fn execute_with_continuation(
-        &self,
-        registry: &EffectRegistry,
-        propagator: &ContextPropagator,
-    ) -> Result<T> {
-        let result = self.invocation.execute(registry, propagator).await;
-        
-        // Apply the continuation to the result if present
-        if let Some(continuation) = &self.continuation {
-            let continuation = std::mem::replace(&mut self.continuation.clone().unwrap(), Box::new(|_| panic!("Continuation called twice")));
-            continuation(result)
-        } else {
-            Err(Error::InternalError("No continuation available".to_string()))
+        ContinuationInvocation {
+            target_service,
+            operation,
+            continuation_id,
         }
     }
 }
 
 #[async_trait]
-impl<T: Send + Sync + 'static> InvocationPattern for ContinuationInvocation<T> {
+impl InvocationPatternTrait for ContinuationInvocation {
     fn get_content_id(&self) -> ContentId {
-        ContentId::new(format!("continuation-invocation:{}", self.content_hash.0))
+        ContentId::from_bytes(self.target_service.as_bytes())
     }
     
     async fn execute(
@@ -317,25 +277,22 @@ impl<T: Send + Sync + 'static> InvocationPattern for ContinuationInvocation<T> {
         registry: &EffectRegistry,
         propagator: &ContextPropagator,
     ) -> Result<HandlerOutput> {
-        // For the InvocationPattern trait, we can't return T directly,
-        // so we'll just execute the invocation part and return that.
-        self.invocation.execute(registry, propagator).await
+        let result = self.execute(registry, propagator).await?;
+        
+        result
     }
     
     fn get_description(&self) -> String {
-        format!("Continuation invocation of {}", self.invocation.get_description())
+        format!("Continuation invocation of {} / {}", self.target_service, self.operation)
     }
     
     fn get_metadata(&self) -> serde_json::Value {
-        let mut metadata = self.invocation.get_metadata();
-        
-        if let serde_json::Value::Object(ref mut map) = metadata {
-            map.insert("pattern_type".to_string(), serde_json::Value::String("continuation".to_string()));
-            map.insert("continuation_type".to_string(), serde_json::Value::String(std::any::type_name::<T>().to_string()));
-            map.insert("content_hash".to_string(), serde_json::Value::String(self.content_hash.0.clone()));
-        }
-        
-        metadata
+        serde_json::json!({
+            "pattern_type": "continuation",
+            "target_service": self.target_service,
+            "operation": self.operation,
+            "continuation_id": self.continuation_id,
+        })
     }
 }
 
@@ -343,41 +300,39 @@ impl<T: Send + Sync + 'static> InvocationPattern for ContinuationInvocation<T> {
 // Promise-based Invocation Pattern
 //----------------------------------------------------------
 
-/// Future type for promise-based invocations
-pub type InvocationFuture = Pin<Box<dyn Future<Output = Result<HandlerOutput>> + Send>>;
-
-/// Promise-based invocation - returns a future that resolves with the result
-#[derive(Debug)]
+/// Promise-based invocation pattern
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromiseInvocation {
-    /// The direct invocation to perform
-    pub invocation: DirectInvocation,
+    /// Target service ID
+    pub target_service: String,
+    /// Operation to invoke
+    pub operation: String,
+    /// Time until promise expiration
+    pub timeout_ms: u64,
 }
 
 impl PromiseInvocation {
     /// Create a new promise invocation
-    pub fn new(invocation: DirectInvocation) -> Self {
+    pub fn new(
+        target_service: impl Into<String>,
+        operation: impl Into<String>,
+        timeout_ms: u64,
+    ) -> Self {
+        let target_service = target_service.into();
+        let operation = operation.into();
+        
         PromiseInvocation {
-            invocation,
+            target_service,
+            operation,
+            timeout_ms,
         }
-    }
-    
-    /// Execute the invocation and return a future that resolves with the result
-    pub fn execute_async(
-        self,
-        registry: Arc<EffectRegistry>,
-        propagator: Arc<ContextPropagator>,
-    ) -> InvocationFuture {
-        // Create a future that performs the invocation
-        Box::pin(async move {
-            self.invocation.execute(&registry, &propagator).await
-        })
     }
 }
 
 #[async_trait]
-impl InvocationPattern for PromiseInvocation {
+impl InvocationPatternTrait for PromiseInvocation {
     fn get_content_id(&self) -> ContentId {
-        ContentId::new(format!("promise-invocation:{}", self.invocation.content_hash.0))
+        ContentId::from_bytes(self.target_service.as_bytes())
     }
     
     async fn execute(
@@ -385,21 +340,22 @@ impl InvocationPattern for PromiseInvocation {
         registry: &EffectRegistry,
         propagator: &ContextPropagator,
     ) -> Result<HandlerOutput> {
-        self.invocation.execute(registry, propagator).await
+        let result = self.execute(registry, propagator).await?;
+        
+        result
     }
     
     fn get_description(&self) -> String {
-        format!("Promise invocation of {}", self.invocation.get_description())
+        format!("Promise invocation of {} / {}", self.target_service, self.operation)
     }
     
     fn get_metadata(&self) -> serde_json::Value {
-        let mut metadata = self.invocation.get_metadata();
-        
-        if let serde_json::Value::Object(ref mut map) = metadata {
-            map.insert("pattern_type".to_string(), serde_json::Value::String("promise".to_string()));
-        }
-        
-        metadata
+        serde_json::json!({
+            "pattern_type": "promise",
+            "target_service": self.target_service,
+            "operation": self.operation,
+            "timeout_ms": self.timeout_ms,
+        })
     }
 }
 
@@ -407,22 +363,40 @@ impl InvocationPattern for PromiseInvocation {
 // Streaming Invocation Pattern
 //----------------------------------------------------------
 
-/// Streaming invocation - streams results as they become available
-#[derive(Debug)]
+/// Streaming invocation pattern
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamingInvocation {
-    /// The direct invocation to perform
-    pub invocation: DirectInvocation,
-    /// Channel capacity for the stream
-    pub channel_capacity: usize,
+    /// Target service ID
+    pub target_service: String,
+    /// Operation to invoke
+    pub operation: String,
+    /// Stream ID
+    pub stream_id: String,
 }
 
 impl StreamingInvocation {
     /// Create a new streaming invocation
-    pub fn new(invocation: DirectInvocation, channel_capacity: usize) -> Self {
+    pub fn new(
+        target_service: impl Into<String>,
+        operation: impl Into<String>,
+        stream_id: impl Into<String>,
+    ) -> Self {
+        let target_service = target_service.into();
+        let operation = operation.into();
+        let stream_id = stream_id.into();
+        
         StreamingInvocation {
-            invocation,
-            channel_capacity,
+            target_service,
+            operation,
+            stream_id,
         }
+    }
+}
+
+#[async_trait]
+impl InvocationPatternTrait for StreamingInvocation {
+    fn get_content_id(&self) -> ContentId {
+        ContentId::from_bytes(self.target_service.as_bytes())
     }
     
     /// Execute the invocation and return a stream of results
@@ -430,7 +404,7 @@ impl StreamingInvocation {
         self,
         registry: Arc<EffectRegistry>,
         propagator: Arc<ContextPropagator>,
-    ) -> (mpsc::Receiver<Result<HandlerOutput>>, InvocationFuture) {
+    ) -> (mpsc::Receiver<Result<HandlerOutput>>, InvocationStreamFuture) {
         // Create a channel for streaming results
         let (tx, rx) = mpsc::channel(self.channel_capacity);
         
@@ -449,9 +423,9 @@ impl StreamingInvocation {
 }
 
 #[async_trait]
-impl InvocationPattern for StreamingInvocation {
+impl InvocationPatternTrait for StreamingInvocation {
     fn get_content_id(&self) -> ContentId {
-        ContentId::new(format!("streaming-invocation:{}", self.invocation.content_hash.0))
+        ContentId::from_bytes(self.invocation.content_hash.as_bytes())
     }
     
     async fn execute(
@@ -496,15 +470,14 @@ pub struct BatchInvocation {
 impl BatchInvocation {
     /// Create a new batch invocation
     pub fn new(invocations: Vec<DirectInvocation>, parallel: bool) -> Self {
-        // Generate a content hash for the batch
-        let mut hasher = Hasher::new();
-        
-        for invocation in &invocations {
-            hasher.update(invocation.content_hash.0.as_bytes());
+        // Generate a content hash for this batch
+        let mut hasher = Sha256::new();
+        for inv in &invocations {
+            hasher.update(inv.content_hash.to_hex().as_bytes());
         }
-        hasher.update(if parallel { b"parallel" } else { b"sequential" });
-        let hash = hasher.finalize();
-        let content_hash = ContentHash(hex::encode(hash.as_bytes()));
+        hasher.update(&[parallel as u8]);
+        let hash_bytes = hasher.finalize().to_vec();
+        let content_hash = ContentHash::new("sha256", hash_bytes);
         
         BatchInvocation {
             invocations,
@@ -543,9 +516,9 @@ impl BatchInvocation {
 }
 
 #[async_trait]
-impl InvocationPattern for BatchInvocation {
+impl InvocationPatternTrait for BatchInvocation {
     fn get_content_id(&self) -> ContentId {
-        ContentId::new(format!("batch-invocation:{}", self.content_hash.0))
+        ContentId::from_bytes(self.content_hash.as_bytes())
     }
     
     async fn execute(
@@ -584,7 +557,7 @@ impl InvocationPattern for BatchInvocation {
             "pattern_type": "batch",
             "invocation_count": self.invocations.len(),
             "parallel": self.parallel,
-            "content_hash": self.content_hash.0,
+            "content_hash": self.content_hash.to_hex(),
         })
     }
 }
@@ -593,16 +566,16 @@ impl InvocationPattern for BatchInvocation {
 mod tests {
     use super::*;
     use std::time::Duration;
-    use causality_engine::{AccessLevel, HandlerRegistration};
     use crate::domain::DomainId;
-    use causality_crypto::ContentId;
     
     struct TestHandler {
         registration: HandlerRegistration,
     }
     
     impl TestHandler {
-        fn new(id: &str, domain: DomainId) -> Self {
+        fn new(id: &str) -> Self {
+            let domain = DomainId::new("test-domain");
+            
             TestHandler {
                 registration: HandlerRegistration::new(
                     id,
@@ -632,8 +605,7 @@ mod tests {
         let propagator = Arc::new(ContextPropagator::new(storage));
         
         // Register a test handler
-        let domain = DomainId::new();
-        let handler = Arc::new(TestHandler::new("test_handler", domain));
+        let handler = Arc::new(TestHandler::new("test_handler"));
         registry.register_handler(handler).unwrap();
         
         (registry, propagator)
@@ -856,7 +828,7 @@ mod tests {
         );
         
         // Content hashes should be the same
-        assert_eq!(invocation1.content_hash.0, invocation2.content_hash.0);
+        assert_eq!(invocation1.content_hash.to_hex(), invocation2.content_hash.to_hex());
         
         // Content IDs should be the same
         assert_eq!(invocation1.get_content_id(), invocation2.get_content_id());
@@ -869,7 +841,7 @@ mod tests {
         );
         
         // Content hash should be different
-        assert_ne!(invocation1.content_hash.0, invocation3.content_hash.0);
+        assert_ne!(invocation1.content_hash.to_hex(), invocation3.content_hash.to_hex());
         
         // Content ID should be different
         assert_ne!(invocation1.get_content_id(), invocation3.get_content_id());

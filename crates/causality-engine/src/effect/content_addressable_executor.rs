@@ -4,6 +4,7 @@
 //! comprehensive tracing, sandboxing, and security features.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -11,15 +12,15 @@ use async_trait::async_trait;
 use borsh::{BorshSerialize, BorshDeserialize};
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
+use serde_json::Value;
 
-use causality_types::{Error, Result};
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::types::effect::Effect;
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::error::EffectOutcome;
-use causality_crypto::ContentId;
+use causality_error::{EngineResult as Result, EngineError as Error};
+use causality_types::ContentId;
+use causality_core::effect::{Effect, EffectOutcome};
 
 /// Value type for the execution environment
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Value {
+pub enum ExecutionValue {
     /// Null value
     Null,
     /// Boolean value
@@ -33,20 +34,20 @@ pub enum Value {
     /// Binary data
     Bytes(Vec<u8>),
     /// List of values
-    Array(Vec<Value>),
+    Array(Vec<ExecutionValue>),
     /// Map of string keys to values
-    Map(HashMap<String, Value>),
+    Map(HashMap<String, ExecutionValue>),
     /// Reference to another value by ID
     Ref(String),
     /// Content-addressed code reference
     CodeRef(ContentId),
 }
 
-impl Value {
+impl ExecutionValue {
     /// Convert a value to a boolean
     pub fn as_bool(&self) -> Option<bool> {
         match self {
-            Value::Bool(b) => Some(*b),
+            ExecutionValue::Bool(b) => Some(*b),
             _ => None,
         }
     }
@@ -54,8 +55,8 @@ impl Value {
     /// Convert a value to an integer
     pub fn as_int(&self) -> Option<i64> {
         match self {
-            Value::Int(i) => Some(*i),
-            Value::Float(f) => Some(*f as i64),
+            ExecutionValue::Int(i) => Some(*i),
+            ExecutionValue::Float(f) => Some(*f as i64),
             _ => None,
         }
     }
@@ -63,8 +64,8 @@ impl Value {
     /// Convert a value to a float
     pub fn as_float(&self) -> Option<f64> {
         match self {
-            Value::Int(i) => Some(*i as f64),
-            Value::Float(f) => Some(*f),
+            ExecutionValue::Int(i) => Some(*i as f64),
+            ExecutionValue::Float(f) => Some(*f),
             _ => None,
         }
     }
@@ -72,7 +73,7 @@ impl Value {
     /// Convert a value to a string
     pub fn as_string(&self) -> Option<&str> {
         match self {
-            Value::String(s) => Some(s),
+            ExecutionValue::String(s) => Some(s),
             _ => None,
         }
     }
@@ -80,30 +81,30 @@ impl Value {
     /// Convert a value to bytes
     pub fn as_bytes(&self) -> Option<&[u8]> {
         match self {
-            Value::Bytes(b) => Some(b),
+            ExecutionValue::Bytes(b) => Some(b),
             _ => None,
         }
     }
     
     /// Convert a value to an array
-    pub fn as_array(&self) -> Option<&[Value]> {
+    pub fn as_array(&self) -> Option<&[ExecutionValue]> {
         match self {
-            Value::Array(a) => Some(a),
+            ExecutionValue::Array(a) => Some(a),
             _ => None,
         }
     }
     
     /// Convert a value to a map
-    pub fn as_map(&self) -> Option<&HashMap<String, Value>> {
+    pub fn as_map(&self) -> Option<&HashMap<String, ExecutionValue>> {
         match self {
-            Value::Map(m) => Some(m),
+            ExecutionValue::Map(m) => Some(m),
             _ => None,
         }
     }
     
     /// Check if the value is null
     pub fn is_null(&self) -> bool {
-        matches!(self, Value::Null)
+        matches!(self, ExecutionValue::Null)
     }
 }
 
@@ -123,7 +124,8 @@ pub struct ContextIdContentData {
 impl ContentAddressed for ContextIdContentData {
     fn content_hash(&self) -> Result<ContentId> {
         let bytes = self.to_bytes()?;
-        Ok(ContentId::from_bytes(&bytes)?)
+        ContentId::from_bytes(&bytes)
+            .map_err(|e| Error::SerializationFailed(format!("Failed to create ContentId: {}", e)))
     }
     
     fn verify(&self, content_id: &ContentId) -> Result<bool> {
@@ -133,13 +135,13 @@ impl ContentAddressed for ContextIdContentData {
     
     fn to_bytes(&self) -> Result<Vec<u8>> {
         let bytes = borsh::to_vec(self)
-            .map_err(|e| Error::Serialization(format!("Failed to serialize ContextIdContentData: {}", e)))?;
+            .map_err(|e| Error::SerializationFailed(format!("Failed to serialize ContextIdContentData: {}", e)))?;
         Ok(bytes)
     }
     
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        borsh::from_slice(bytes)
-            .map_err(|e| Error::Deserialization(format!("Failed to deserialize ContextIdContentData: {}", e)))
+        borsh::BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e| Error::DeserializationFailed(format!("Failed to deserialize ContextIdContentData: {}", e)))
     }
 }
 
@@ -211,7 +213,7 @@ pub enum ExecutionEvent {
         /// Function name
         name: Option<String>,
         /// Arguments
-        args: Vec<Value>,
+        args: Vec<ExecutionValue>,
         /// Call timestamp
         timestamp: chrono::DateTime<chrono::Utc>,
     },
@@ -220,7 +222,7 @@ pub enum ExecutionEvent {
         /// Context ID
         context_id: ContextId,
         /// Return value
-        result: Value,
+        result: ExecutionValue,
         /// Execution time in milliseconds
         duration_ms: u64,
         /// Call timestamp
@@ -233,7 +235,7 @@ pub enum ExecutionEvent {
         /// Variable name
         name: String,
         /// Variable value
-        value: Value,
+        value: ExecutionValue,
         /// Assignment timestamp
         timestamp: chrono::DateTime<chrono::Utc>,
     },
@@ -244,7 +246,7 @@ pub enum ExecutionEvent {
         /// Effect name
         name: String,
         /// Effect parameters
-        params: HashMap<String, Value>,
+        params: HashMap<String, ExecutionValue>,
         /// Effect result
         result: EffectOutcome,
         /// Execution time in milliseconds
@@ -280,7 +282,7 @@ pub enum ExecutionEvent {
 /// in the content-addressable executor.
 pub trait SecuritySandbox: Send + Sync {
     /// Check if the given operation is allowed
-    fn check_operation(&self, operation: &str, args: &[Value]) -> Result<()>;
+    fn check_operation(&self, operation: &str, args: &[ExecutionValue]) -> Result<()>;
     
     /// Check if access to a resource is allowed
     fn check_resource_access(&self, resource_id: &ContentId, access_type: &str) -> Result<()>;
@@ -319,7 +321,7 @@ impl DefaultSecuritySandbox {
 }
 
 impl SecuritySandbox for DefaultSecuritySandbox {
-    fn check_operation(&self, _operation: &str, _args: &[Value]) -> Result<()> {
+    fn check_operation(&self, _operation: &str, _args: &[ExecutionValue]) -> Result<()> {
         // By default, allow all operations
         Ok(())
     }
@@ -343,7 +345,7 @@ pub struct ExecutionContext {
     /// Unique identifier for this context
     pub id: ContextId,
     /// Variables in the current scope
-    variables: HashMap<String, Value>,
+    variables: HashMap<String, ExecutionValue>,
     /// Call stack
     call_stack: Vec<CallFrame>,
     /// Start time
@@ -361,7 +363,7 @@ pub struct CallFrame {
     /// Function name
     pub name: Option<String>,
     /// Arguments
-    pub args: Vec<Value>,
+    pub args: Vec<ExecutionValue>,
     /// Start time
     pub start_time: Instant,
 }
@@ -395,12 +397,12 @@ impl ExecutionContext {
     }
     
     /// Get a variable from the context
-    pub fn get_variable(&self, name: &str) -> Option<&Value> {
+    pub fn get_variable(&self, name: &str) -> Option<&ExecutionValue> {
         self.variables.get(name)
     }
     
     /// Set a variable in the context
-    pub fn set_variable(&mut self, name: &str, value: Value) {
+    pub fn set_variable(&mut self, name: &str, value: ExecutionValue) {
         self.variables.insert(name.to_string(), value.clone());
         
         // Emit an assignment event
@@ -413,7 +415,7 @@ impl ExecutionContext {
     }
     
     /// Push a call frame onto the stack
-    pub fn push_call(&mut self, code_hash: ContentId, name: Option<String>, args: Vec<Value>) {
+    pub fn push_call(&mut self, code_hash: ContentId, name: Option<String>, args: Vec<ExecutionValue>) {
         let frame = CallFrame {
             code_hash: code_hash.clone(),
             name: name.clone(),
@@ -433,7 +435,7 @@ impl ExecutionContext {
     }
     
     /// Pop a call frame from the stack
-    pub fn pop_call(&mut self, result: Value) -> Duration {
+    pub fn pop_call(&mut self, result: ExecutionValue) -> Duration {
         if let Some(frame) = self.call_stack.pop() {
             let duration = frame.start_time.elapsed();
             
@@ -468,7 +470,7 @@ impl ExecutionContext {
     }
     
     /// Check if an operation is allowed
-    pub fn check_operation(&self, operation: &str, args: &[Value]) -> Result<()> {
+    pub fn check_operation(&self, operation: &str, args: &[ExecutionValue]) -> Result<()> {
         self.security.check_operation(operation, args)
     }
     
@@ -488,8 +490,8 @@ pub trait CodeRepository: Send + Sync {
     async fn store_code(&self, code: &[u8]) -> Result<ContentId>;
 }
 
-/// Code entry representing executable content
-#[derive(Debug, Clone)]
+/// Code entry stored in the repository
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeEntry {
     /// Content hash
     pub hash: ContentId,
@@ -497,6 +499,14 @@ pub struct CodeEntry {
     pub content: Vec<u8>,
     /// Entry metadata
     pub metadata: HashMap<String, String>,
+}
+
+impl CodeEntry {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        // Use serde_json as a fallback since we don't have BorshDeserialize
+        serde_json::from_slice(bytes)
+            .map_err(|e| Error::DeserializationFailed(format!("Failed to deserialize CodeEntry: {}", e)))
+    }
 }
 
 /// Content-addressed trait for objects with content identity
@@ -530,7 +540,7 @@ impl<R: CodeRepository> ContentAddressableExecutor<R> {
     }
     
     /// Execute code by its content hash
-    pub async fn execute(&self, code_hash: &ContentId, args: Vec<Value>) -> Result<Value> {
+    pub async fn execute(&self, code_hash: &ContentId, args: Vec<ExecutionValue>) -> Result<ExecutionValue> {
         // Create an execution context
         let mut context = ExecutionContext::new(self.security.clone());
         
@@ -558,8 +568,22 @@ impl<R: CodeRepository> ContentAddressableExecutor<R> {
         // 2. Execute it in the sandbox
         // 3. Convert the result back to an EffectOutcome
         
-        // Here we're just returning a placeholder value
-        let outcome = EffectOutcome::new_success(Box::new(()));
+        // Import necessary types from causality_core
+        use causality_core::effect::outcome::{EffectOutcome, EffectStatus, ResultData};
+        use causality_core::effect::EffectId;
+        
+        // Create a simple successful outcome with default values
+        let outcome = EffectOutcome {
+            effect_id: Some(EffectId(effect.effect_type().to_string())),
+            status: EffectStatus::Success,
+            data: HashMap::new(),
+            result: ResultData::None,
+            error_message: None,
+            affected_resources: Vec::new(),
+            child_outcomes: Vec::new(),
+            content_hash: None,
+        };
+        
         Ok(outcome)
     }
     
@@ -567,13 +591,13 @@ impl<R: CodeRepository> ContentAddressableExecutor<R> {
     async fn execute_code(
         &self,
         _code_entry: &CodeEntry,
-        _args: Vec<Value>,
+        _args: Vec<ExecutionValue>,
         _context: &mut ExecutionContext,
-    ) -> Result<Value> {
+    ) -> Result<ExecutionValue> {
         // This is a placeholder for the actual code execution logic
         // In a real implementation, this would interpret or JIT-compile the code
         
         // For now, just return a placeholder value
-        Ok(Value::String("Code execution not implemented".to_string()))
+        Ok(ExecutionValue::String("Code execution not implemented".to_string()))
     }
 }

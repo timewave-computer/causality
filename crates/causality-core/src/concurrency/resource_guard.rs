@@ -10,9 +10,11 @@ use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use causality_types::{Error, Result};
+use anyhow::Result;
+use causality_types::Error;
 use causality_crypto::ContentId;
-use :ResourceRegister:causality_core::resource::Resource::ResourceRegister;
+// FIXME: Add the proper import for ResourceRegister when it's implemented
+// use crate::resource::ResourceRegister;
 
 // Forward declarations for ResourceManager
 use super::ResourceManager;
@@ -176,76 +178,12 @@ impl WeakResourceRef {
 /// 
 /// This provides convenient access to ResourceRegister operations
 /// while maintaining the safety guarantees of ResourceGuard.
-pub type ResourceRegisterGuard = ResourceGuard<ResourceRegister>;
-
-impl ResourceRegisterGuard {
-    /// Create a new ResourceRegisterGuard from a ResourceRegister
-    pub fn from_resource_register(
-        id: ContentId,
-        manager: Arc<ResourceManager>,
-        owner: String,
-        register: ResourceRegister,
-    ) -> Self {
-        ResourceGuard::new(id, manager, owner, register)
-    }
-    
-    /// Backward compatibility function
-    #[deprecated(since = "0.8.0", note = "Use from_resource_register instead")]
-    pub fn from_register(
-        id: ContentId,
-        manager: Arc<ResourceManager>,
-        owner: String,
-        register: ResourceRegister,
-    ) -> Self {
-        Self::from_resource_register(id, manager, owner, register)
-    }
-    
-    /// Lock the underlying ResourceRegister
-    pub fn lock(&mut self) -> Result<()> {
-        self.resource.lock()?;
-        Ok(())
-    }
-    
-    /// Unlock the underlying ResourceRegister
-    pub fn unlock(&mut self) -> Result<()> {
-        self.resource.unlock()?;
-        Ok(())
-    }
-    
-    /// Consume the underlying ResourceRegister
-    pub fn consume(mut self) -> Result<()> {
-        self.resource.consume()?;
-        self.release().map(|_| ())
-    }
-    
-    /// Freeze the underlying ResourceRegister
-    pub fn freeze(&mut self) -> Result<()> {
-        self.resource.freeze()?;
-        Ok(())
-    }
-    
-    /// Unfreeze the underlying ResourceRegister
-    pub fn unfreeze(&mut self) -> Result<()> {
-        self.resource.unfreeze()?;
-        Ok(())
-    }
-    
-    /// Archive the underlying ResourceRegister
-    pub fn archive(&mut self) -> Result<()> {
-        self.resource.archive()?;
-        Ok(())
-    }
-    
-    /// Check if the ResourceRegister is active
-    pub fn is_active(&self) -> bool {
-        self.resource.is_active()
-    }
-    
-    /// Check if the ResourceRegister is consumed
-    pub fn is_consumed(&self) -> bool {
-        self.resource.is_consumed()
-    }
-}
+// FIXME: Uncomment when ResourceRegister is properly defined
+// pub type ResourceRegisterGuard = ResourceGuard<ResourceRegister>;
+// 
+// impl ResourceRegisterGuard {
+//     // Implementation
+// }
 
 #[cfg(test)]
 mod tests {

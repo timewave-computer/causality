@@ -1,10 +1,28 @@
-use std::sync::Arc;
-use async_trait::async_trait;
-use anyhow::Result;
+// Time Effect Handler implementations
+//
+// This module provides implementations of effect handlers for different
+// types of time effects.
 
-use crate::effect::{Effect, EffectContext, EffectError, EffectHandler, EffectOutcome};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::fmt::Debug;
+use async_trait::async_trait;
+
+use crate::effect::{
+    Effect, EffectContext, EffectError, EffectOutcome, EffectResult,
+    handler::EffectHandler, // Add explicit import for EffectHandler trait
+};
+
+use super::{
+    TimeProvider, TimeObserver, TimeError,
+    effect::{TimeEffect, TimeEffectType, CausalTimeEffect, ClockTimeEffect},
+    clock::ClockTime,
+    duration::TimeDelta,
+};
+
+use causality_types::*;
+
 use crate::types::DomainId;
-use crate::time::effect::{CausalTimeEffect, ClockTimeEffect, TimeError, TemporalQueryEffect};
 use crate::time::service::{CausalTimeService, ClockTimeService, FactTimeStore, TimeAttestationStore};
 
 /// Handler for causal time effects

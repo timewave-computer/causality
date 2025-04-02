@@ -9,12 +9,13 @@
 use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 
-use causality_types::{Error, Result};
+use causality_error::{EngineResult, EngineError, CausalityError, Result as CausalityResult};
 use causality_types::DomainId;
-use causality_patterns::Capability;
+use causality_core::effect::context::Capability;
+use causality_types::ContentId;
 
 /// Trait for operation execution contexts
-pub trait ExecutionContext: Clone + Debug + Serialize + Deserialize + Send + Sync + 'static {
+pub trait ExecutionContext: Clone + Debug + Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static {
     /// The environment this context operates in
     fn environment(&self) -> ExecutionEnvironment;
     
@@ -34,7 +35,7 @@ pub trait ExecutionContext: Clone + Debug + Serialize + Deserialize + Send + Syn
     fn default_environment() -> ExecutionEnvironment where Self: Sized;
     
     /// Create this context from a previous context
-    fn from_previous_context(previous: &dyn ExecutionContext) -> Result<Self> where Self: Sized;
+    fn from_previous_context(previous: &dyn ExecutionContext) -> EngineResult<Self> where Self: Sized;
 }
 
 /// Execution phases for operations
@@ -139,7 +140,7 @@ impl ExecutionContext for AbstractContext {
         ExecutionEnvironment::Abstract
     }
     
-    fn from_previous_context(previous: &dyn ExecutionContext) -> Result<Self> {
+    fn from_previous_context(previous: &dyn ExecutionContext) -> EngineResult<Self> {
         Ok(AbstractContext {
             phase: previous.phase(),
             proof_required: previous.requires_proof(),
@@ -213,7 +214,7 @@ impl ExecutionContext for RegisterContext {
         ExecutionEnvironment::Register
     }
     
-    fn from_previous_context(previous: &dyn ExecutionContext) -> Result<Self> {
+    fn from_previous_context(previous: &dyn ExecutionContext) -> EngineResult<Self> {
         Ok(RegisterContext {
             phase: previous.phase(),
             proof_required: previous.requires_proof(),
@@ -289,12 +290,12 @@ impl ExecutionContext for PhysicalContext {
         ExecutionEnvironment::OnChain(DomainId::from("default"))
     }
     
-    fn from_previous_context(previous: &dyn ExecutionContext) -> Result<Self> {
+    fn from_previous_context(previous: &dyn ExecutionContext) -> EngineResult<Self> {
         // For physical context, we need a domain ID
         let domain_id = if let Some(domain) = previous.domain() {
             domain
         } else {
-            return Err(Error::InvalidArgument("Domain ID required for physical context".to_string()));
+            return Err(EngineError::InvalidArgument("Domain ID required for physical context".to_string()));
         };
         
         Ok(PhysicalContext {
@@ -371,7 +372,7 @@ impl ExecutionContext for ZkContext {
         ExecutionEnvironment::ZkVm
     }
     
-    fn from_previous_context(previous: &dyn ExecutionContext) -> Result<Self> {
+    fn from_previous_context(previous: &dyn ExecutionContext) -> EngineResult<Self> {
         Ok(ZkContext {
             phase: previous.phase(),
             domain_id: previous.domain(),
@@ -384,11 +385,16 @@ impl ExecutionContext for ZkContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_patterns::{Right, CapabilityType};
+    use causality_core::effect::types::Right;
+    use causality_types::ContentId;
     
     #[test]
     fn test_abstract_context() {
-        let capability = Capability::new(CapabilityType::Resource, "resource_id", Right::Read);
+        // Create a ContentId for the resource
+        let resource_id = ContentId::random();
+        
+        // Create a capability with the resource_id and Right
+        let capability = Capability::new(resource_id, Right::Read);
         
         let context = AbstractContext::new(ExecutionPhase::Planning)
             .with_proof_required(true)
@@ -403,7 +409,11 @@ mod tests {
     
     #[test]
     fn test_register_context() {
-        let capability = Capability::new(CapabilityType::Resource, "resource_id", Right::Read);
+        // Create a ContentId for the resource
+        let resource_id = ContentId::random();
+        
+        // Create a capability with the resource_id and Right
+        let capability = Capability::new(resource_id, Right::Read);
         
         let context = RegisterContext::new(ExecutionPhase::Execution, "test_namespace")
             .with_proof_required(true)
@@ -419,7 +429,12 @@ mod tests {
     #[test]
     fn test_physical_context() {
         let domain_id = DomainId::new("test_domain");
-        let capability = Capability::new(CapabilityType::Resource, "resource_id", Right::Read);
+        
+        // Create a ContentId for the resource
+        let resource_id = ContentId::random();
+        
+        // Create a capability with the resource_id and Right
+        let capability = Capability::new(resource_id, Right::Read);
         
         let context = PhysicalContext::new(ExecutionPhase::Execution, domain_id.clone())
             .with_proof_required(true)

@@ -8,8 +8,7 @@
 use std::fmt;
 use serde::{Serialize, Deserialize};
 
-use causality_types::{*};
-use causality_crypto::ContentId;;
+use causality_types::{ContentId, DomainId};
 
 /// The severity level of an event
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

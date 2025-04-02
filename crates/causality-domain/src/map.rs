@@ -7,17 +7,85 @@
 // and causal consistency tracking across domains to ensure causal consistency 
 // between different domains.
 
-pub mod map;
-pub mod sync;
+// Import submodules
 pub mod types;
+pub mod sync;
+
+// The time map implementation is in time_map.rs and map_impl.rs
+mod time_map;
+mod map_impl;
 
 // Re-export key types and components
-pub use map::{TimeMap, TimeMapEntry, TimeMapHistory, TimeMapNotifier, SharedTimeMap};
-pub use types::{TimePoint, TimeRange};
-pub use sync::{TimeSyncConfig, SyncStatus, SyncResult, TimeSource, SyncStrategy, VerificationStatus, TimeCommitment};
+pub use map_impl::TimeMapImpl;
 
-// Export additional components from sync
-pub use sync::{TimeSyncManager, TimeVerificationService, ConsensusVerificationManager};
+// Simple TimeMapEntry structure 
+#[derive(Debug, Clone)]
+pub struct TimeMapEntry {
+    /// Domain ID
+    pub domain_id: crate::selection::DomainId,
+    /// Time point
+    pub time_point: types::TimePoint,
+    /// Confidence value (0.0 to 1.0)
+    pub confidence: f64,
+    /// Verification status
+    pub verified: bool,
+    /// Additional metadata
+    pub metadata: std::collections::HashMap<String, String>,
+}
+
+/// Time map for tracking time points across domains
+pub trait TimeMap: Send + Sync {
+    /// Add an entry to the time map
+    fn add_entry(&self, entry: TimeMapEntry) -> crate::error::Result<()>;
+    
+    /// Get an entry by domain ID and time point
+    fn get_entry(&self, domain_id: &crate::selection::DomainId, time_point: &types::TimePoint) -> crate::error::Result<Option<TimeMapEntry>>;
+    
+    /// Get entries for a specific domain
+    fn get_entries_for_domain(&self, domain_id: &crate::selection::DomainId) -> crate::error::Result<Vec<TimeMapEntry>>;
+    
+    /// Remove an entry
+    fn remove_entry(&self, domain_id: &crate::selection::DomainId, time_point: &types::TimePoint) -> crate::error::Result<bool>;
+    
+    /// Clear all entries for a domain
+    fn clear_domain(&self, domain_id: &crate::selection::DomainId) -> crate::error::Result<()>;
+    
+    /// Clear all entries
+    fn clear_all(&self) -> crate::error::Result<()>;
+    
+    /// Get all domain IDs
+    fn get_domain_ids(&self) -> crate::error::Result<Vec<crate::selection::DomainId>>;
+}
+
+/// Time map that keeps a history of changes
+pub trait TimeMapHistory: TimeMap {
+    /// Get the history of changes for a specific entry
+    fn get_entry_history(&self, domain_id: &crate::selection::DomainId, time_point: &types::TimePoint) -> crate::error::Result<Vec<TimeMapEntry>>;
+    
+    /// Clear history for a domain
+    fn clear_history_for_domain(&self, domain_id: &crate::selection::DomainId) -> crate::error::Result<()>;
+}
+
+/// Notification callback for time map changes
+pub type TimeMapCallback = Box<dyn Fn(&TimeMapEntry) + Send + Sync>;
+
+/// Time map that can notify on changes
+pub trait TimeMapNotifier: TimeMap {
+    /// Register a callback for when entries are added
+    fn on_entry_added(&self, callback: TimeMapCallback) -> crate::error::Result<()>;
+    
+    /// Register a callback for when entries are updated
+    fn on_entry_updated(&self, callback: TimeMapCallback) -> crate::error::Result<()>;
+    
+    /// Register a callback for when entries are removed
+    fn on_entry_removed(&self, callback: TimeMapCallback) -> crate::error::Result<()>;
+}
+
+/// Shared time map implementation
+pub struct SharedTimeMap {
+    /// Inner implementation
+    inner: std::sync::Arc<map_impl::TimeMapImpl>,
+}
 
 // Domain Map
 //
@@ -28,8 +96,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use causality_types::{DomainId, BlockHeight, BlockHash, Timestamp};
-use causality_types::{Error, Result};
-use causality_domain::TimeMapEntry;
+use crate::error::{Result, system_error, domain_not_found, time_map_error};
+
+use crate::adapter::TimeMapEntry;
 
 /// Domain map for tracking time synchronization across domains
 pub struct DomainMap {
@@ -47,7 +116,7 @@ impl DomainMap {
     
     /// Add a time map entry
     pub fn add_entry(&self, domain_id: &DomainId, entry: TimeMapEntry) -> Result<()> {
-        let mut entries = self.entries.write().map_err(|_| Error::SystemError("Failed to acquire write lock on domain map".to_string()))?;
+        let mut entries = self.entries.write().map_err(|_| system_error("Failed to acquire write lock on domain map"))?;
         
         let domain_entries = entries.entry(domain_id.clone()).or_insert_with(HashMap::new);
         domain_entries.insert(entry.height.clone(), entry);
@@ -57,35 +126,35 @@ impl DomainMap {
     
     /// Get a time map entry for a specific domain and block height
     pub fn get_entry(&self, domain_id: &DomainId, height: &BlockHeight) -> Result<TimeMapEntry> {
-        let entries = self.entries.read().map_err(|_| Error::SystemError("Failed to acquire read lock on domain map".to_string()))?;
+        let entries = self.entries.read().map_err(|_| system_error("Failed to acquire read lock on domain map"))?;
         
         let domain_entries = entries.get(domain_id)
-            .ok_or_else(|| Error::DomainNotFound(domain_id.clone()))?;
+            .ok_or_else(|| domain_not_found(domain_id.clone()))?;
             
         domain_entries.get(height)
             .cloned()
-            .ok_or_else(|| Error::TimeMapError(format!("No entry for domain {} at height {}", domain_id, height)))
+            .ok_or_else(|| time_map_error(format!("No entry for domain {} at height {}", domain_id, height)))
     }
     
     /// Get all entries for a specific domain
     pub fn get_domain_entries(&self, domain_id: &DomainId) -> Result<Vec<TimeMapEntry>> {
-        let entries = self.entries.read().map_err(|_| Error::SystemError("Failed to acquire read lock on domain map".to_string()))?;
+        let entries = self.entries.read().map_err(|_| system_error("Failed to acquire read lock on domain map"))?;
         
         let domain_entries = entries.get(domain_id)
-            .ok_or_else(|| Error::DomainNotFound(domain_id.clone()))?;
+            .ok_or_else(|| domain_not_found(domain_id.clone()))?;
             
         Ok(domain_entries.values().cloned().collect())
     }
     
     /// Get the closest entry for a given timestamp
     pub fn get_entry_by_time(&self, domain_id: &DomainId, timestamp: &Timestamp) -> Result<TimeMapEntry> {
-        let entries = self.entries.read().map_err(|_| Error::SystemError("Failed to acquire read lock on domain map".to_string()))?;
+        let entries = self.entries.read().map_err(|_| system_error("Failed to acquire read lock on domain map"))?;
         
         let domain_entries = entries.get(domain_id)
-            .ok_or_else(|| Error::DomainNotFound(domain_id.clone()))?;
+            .ok_or_else(|| domain_not_found(domain_id.clone()))?;
             
         if domain_entries.is_empty() {
-            return Err(Error::TimeMapError(format!("No entries for domain {}", domain_id)));
+            return Err(time_map_error(format!("No entries for domain {}", domain_id)));
         }
         
         // Find the entry with the closest timestamp
@@ -107,12 +176,12 @@ impl DomainMap {
         
         closest_entry
             .cloned()
-            .ok_or_else(|| Error::TimeMapError(format!("Failed to find closest entry for domain {} at time {}", domain_id, timestamp)))
+            .ok_or_else(|| time_map_error(format!("Failed to find closest entry for domain {} at time {}", domain_id, timestamp)))
     }
     
     /// Clear all entries for a specific domain
     pub fn clear_domain(&self, domain_id: &DomainId) -> Result<()> {
-        let mut entries = self.entries.write().map_err(|_| Error::SystemError("Failed to acquire write lock on domain map".to_string()))?;
+        let mut entries = self.entries.write().map_err(|_| system_error("Failed to acquire write lock on domain map"))?;
         
         entries.remove(domain_id);
         
@@ -121,7 +190,7 @@ impl DomainMap {
     
     /// Clear all entries
     pub fn clear_all(&self) -> Result<()> {
-        let mut entries = self.entries.write().map_err(|_| Error::SystemError("Failed to acquire write lock on domain map".to_string()))?;
+        let mut entries = self.entries.write().map_err(|_| system_error("Failed to acquire write lock on domain map"))?;
         
         entries.clear();
         
@@ -130,7 +199,7 @@ impl DomainMap {
     
     /// Get all domain IDs
     pub fn get_domain_ids(&self) -> Result<Vec<DomainId>> {
-        let entries = self.entries.read().map_err(|_| Error::SystemError("Failed to acquire read lock on domain map".to_string()))?;
+        let entries = self.entries.read().map_err(|_| system_error("Failed to acquire read lock on domain map"))?;
         
         Ok(entries.keys().cloned().collect())
     }

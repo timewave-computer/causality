@@ -12,6 +12,9 @@ use std::fmt::{Debug, Display};
 use std::error::Error;
 use std::sync::Arc;
 
+// Re-export the database interface types
+pub use causality_db::*;
+
 /// Database error types
 #[derive(Debug)]
 pub enum DbError {
@@ -27,6 +30,8 @@ pub enum DbError {
     NotFound,
     /// Generic database error
     GenericError(String),
+    /// Other error
+    Other(String),
 }
 
 impl Display for DbError {
@@ -38,6 +43,7 @@ impl Display for DbError {
             Self::DeleteError(msg) => write!(f, "Database delete error: {}", msg),
             Self::NotFound => write!(f, "Key not found"),
             Self::GenericError(msg) => write!(f, "Database error: {}", msg),
+            Self::Other(msg) => write!(f, "Other error: {}", msg),
         }
     }
 }
@@ -140,8 +146,6 @@ pub trait Database: Send + Sync {
     fn close(&self) -> Result<(), DbError>;
 }
 
-// Database implementations are now provided by the causality-db crate
-
 /// Database factory for creating database instances
 pub struct DbFactory;
 
@@ -149,20 +153,125 @@ impl DbFactory {
     /// Create an in-memory database (for testing)
     #[cfg(feature = "memory")]
     pub fn create_memory_db() -> Result<Box<dyn Database>, DbError> {
-        use causality_db::memory::MemoryDb;
-        Ok(Box::new(MemoryDb::open(DbConfig::new("in_memory"))?))
+        causality_db::DbFactory::create_memory_db()
     }
     
     /// Create a RocksDB database (when feature is enabled)
     #[cfg(feature = "rocks")]
     pub fn create_rocksdb(path: &str) -> Result<Box<dyn Database>, DbError> {
-        use causality_db::rocks::RocksDb;
-        Ok(Box::new(RocksDb::open(DbConfig::new(path))?))
+        causality_db::DbFactory::create_rocksdb(path)
     }
     
     /// Create a default database based on available implementations
     pub fn create_default_db(path: &str) -> Result<Box<dyn Database>, DbError> {
-        // Forward to the factory in causality-db crate
-        causality_db::DbFactory::create_default_db(path)
+        // Create the causality_db database
+        let db = causality_db::DbFactory::create_default_db(path)?;
+        
+        // Create an adapter that wraps the causality_db database
+        let adapter = DbAdapter { inner: db };
+        
+        Ok(Box::new(adapter))
+    }
+}
+
+/// Database adapter to convert between causality_db::Database and storage::Database
+struct DbAdapter {
+    inner: Box<dyn causality_db::Database>,
+}
+
+impl Database for DbAdapter {
+    fn open(config: DbConfig) -> Result<Self, DbError> where Self: Sized {
+        // Convert the config
+        let db_config = causality_db::DbConfig::new(&config.path)
+            .create_if_missing(config.create_if_missing)
+            .read_only(config.read_only);
+            
+        // Open the database using the causality_db interface
+        let inner = causality_db::DbFactory::create_default_db(&config.path)?;
+        
+        Ok(Self { inner })
+    }
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, DbError> {
+        self.inner.get(key).map_err(Into::into)
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), DbError> {
+        self.inner.put(key, value).map_err(Into::into)
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), DbError> {
+        self.inner.delete(key).map_err(Into::into)
+    }
+
+    fn contains(&self, key: &[u8]) -> Result<bool, DbError> {
+        self.inner.contains(key).map_err(Into::into)
+    }
+
+    fn write_batch(&self, ops: &[BatchOp]) -> Result<(), DbError> {
+        // Convert the BatchOp enum
+        let converted_ops: Vec<causality_db::BatchOp> = ops.iter().map(|op| {
+            match op {
+                BatchOp::Put(k, v) => causality_db::BatchOp::Put(k.clone(), v.clone()),
+                BatchOp::Delete(k) => causality_db::BatchOp::Delete(k.clone()),
+            }
+        }).collect();
+        
+        self.inner.write_batch(&converted_ops).map_err(Into::into)
+    }
+
+    fn flush(&self) -> Result<(), DbError> {
+        self.inner.flush().map_err(Into::into)
+    }
+
+    fn close(&self) -> Result<(), DbError> {
+        self.inner.close().map_err(Into::into)
+    }
+
+    fn iterator(&self) -> Result<Box<dyn DbIterator>, DbError> {
+        let inner_iter = self.inner.iterator()?;
+        Ok(Box::new(DbIteratorAdapter { inner: inner_iter }))
+    }
+
+    fn prefix_iterator(&self, prefix: &[u8]) -> Result<Box<dyn DbIterator>, DbError> {
+        let inner_iter = self.inner.prefix_iterator(prefix)?;
+        Ok(Box::new(DbIteratorAdapter { inner: inner_iter }))
+    }
+}
+
+/// Iterator adapter to convert between causality_db::DbIterator and storage::DbIterator
+struct DbIteratorAdapter {
+    inner: Box<dyn causality_db::DbIterator>,
+}
+
+impl DbIterator for DbIteratorAdapter {
+    fn next(&mut self) -> Option<Result<(Vec<u8>, Vec<u8>), DbError>> {
+        self.inner.next().map(|result| result.map_err(Into::into))
+    }
+
+    fn seek(&mut self, key: &[u8]) -> Result<(), DbError> {
+        self.inner.seek(key).map_err(Into::into)
+    }
+
+    fn seek_to_first(&mut self) -> Result<(), DbError> {
+        self.inner.seek_to_first().map_err(Into::into)
+    }
+
+    fn seek_to_last(&mut self) -> Result<(), DbError> {
+        self.inner.seek_to_last().map_err(Into::into)
+    }
+}
+
+// Add a From implementation to convert causality_db::DbError to our DbError
+impl From<causality_db::DbError> for DbError {
+    fn from(err: causality_db::DbError) -> Self {
+        match err {
+            causality_db::DbError::NotFound => DbError::NotFound,
+            causality_db::DbError::OpenError(msg) => DbError::GenericError(format!("Open Error: {}", msg)),
+            causality_db::DbError::ReadError(msg) => DbError::GenericError(format!("Read Error: {}", msg)),
+            causality_db::DbError::WriteError(msg) => DbError::GenericError(format!("Write Error: {}", msg)),
+            causality_db::DbError::DeleteError(msg) => DbError::GenericError(format!("Delete Error: {}", msg)),
+            causality_db::DbError::GenericError(msg) => DbError::GenericError(msg),
+        }
     }
 } 

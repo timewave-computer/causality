@@ -5,10 +5,68 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::fmt;
+use serde::{Serialize, Deserialize};
 
 use super::timestamp::Timestamp;
-use super::duration::Duration;
+use super::duration::TimeDelta;
+
+/// A type representing wall clock time
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct ClockTime {
+    /// The timestamp in milliseconds since the epoch
+    timestamp_ms: u64,
+}
+
+impl ClockTime {
+    /// Create a new clock time from milliseconds
+    pub fn from_millis(millis: u64) -> Self {
+        Self { timestamp_ms: millis }
+    }
+    
+    /// Create a new clock time from seconds
+    pub fn from_secs(secs: u64) -> Self {
+        Self { timestamp_ms: secs * 1_000 }
+    }
+    
+    /// Create a new clock time from Unix timestamp (seconds since epoch)
+    pub fn from_unix_timestamp(timestamp: i64) -> Self {
+        let millis = if timestamp >= 0 {
+            timestamp as u64 * 1_000
+        } else {
+            // Handle negative timestamps (before epoch) if needed
+            // Default to 0 for simplicity
+            0
+        };
+        Self { timestamp_ms: millis }
+    }
+    
+    /// Get the timestamp in milliseconds
+    pub fn as_millis(&self) -> u64 {
+        self.timestamp_ms
+    }
+    
+    /// Get the timestamp in seconds
+    pub fn as_secs(&self) -> u64 {
+        self.timestamp_ms / 1_000
+    }
+    
+    /// Get the current system time
+    pub fn now() -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_else(|_| std::time::Duration::from_secs(0));
+        
+        Self::from_millis(now.as_millis() as u64)
+    }
+}
+
+impl fmt::Display for ClockTime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}ms", self.timestamp_ms)
+    }
+}
 
 /// A trait for sources of time
 pub trait ClockSource {
@@ -16,7 +74,7 @@ pub trait ClockSource {
     fn now(&self) -> Timestamp;
     
     /// Get the resolution of this clock source
-    fn resolution(&self) -> Duration;
+    fn resolution(&self) -> TimeDelta;
     
     /// Check if this clock source is deterministic
     fn is_deterministic(&self) -> bool;
@@ -25,7 +83,7 @@ pub trait ClockSource {
 /// A trait representing a clock that provides timestamps
 pub trait Clock: ClockSource {
     /// Advance the clock by the specified duration (for deterministic clocks)
-    fn advance(&mut self, duration: Duration) -> Timestamp;
+    fn advance(&mut self, duration: TimeDelta) -> Timestamp;
     
     /// Set the clock to a specific timestamp (for deterministic clocks)
     fn set(&mut self, timestamp: Timestamp);
@@ -59,9 +117,9 @@ impl ClockSource for SystemClock {
         SystemClock::now()
     }
     
-    fn resolution(&self) -> Duration {
+    fn resolution(&self) -> TimeDelta {
         // Typical system clock resolution is around 1 microsecond
-        Duration::from_micros(1)
+        TimeDelta::from_micros(1)
     }
     
     fn is_deterministic(&self) -> bool {
@@ -70,7 +128,7 @@ impl ClockSource for SystemClock {
 }
 
 impl Clock for SystemClock {
-    fn advance(&mut self, _duration: Duration) -> Timestamp {
+    fn advance(&mut self, _duration: TimeDelta) -> Timestamp {
         // Cannot advance system clock, just return current time
         self.now()
     }
@@ -116,9 +174,9 @@ impl ClockSource for ManualClock {
         self.current
     }
     
-    fn resolution(&self) -> Duration {
+    fn resolution(&self) -> TimeDelta {
         // Manual clock has perfect resolution
-        Duration::from_nanos(1)
+        TimeDelta::from_nanos(1)
     }
     
     fn is_deterministic(&self) -> bool {
@@ -127,7 +185,7 @@ impl ClockSource for ManualClock {
 }
 
 impl Clock for ManualClock {
-    fn advance(&mut self, duration: Duration) -> Timestamp {
+    fn advance(&mut self, duration: TimeDelta) -> Timestamp {
         self.current = self.current + duration;
         self.current
     }
@@ -158,8 +216,8 @@ pub struct IncrementingClock {
 }
 
 impl IncrementingClock {
-    /// Create a new incrementing clock
-    pub fn new(initial: Timestamp, increment: Duration) -> Self {
+    /// Create a new incrementing clock with the specified initial timestamp and increment
+    pub fn new(initial: Timestamp, increment: TimeDelta) -> Self {
         Self {
             current: AtomicU64::new(initial.as_nanos()),
             increment: increment.as_nanos(),
@@ -168,28 +226,28 @@ impl IncrementingClock {
     
     /// Create a new incrementing clock that increments by 1 nanosecond
     pub fn nano_step() -> Self {
-        Self::new(Timestamp::zero(), Duration::from_nanos(1))
+        Self::new(Timestamp::zero(), TimeDelta::from_nanos(1))
     }
     
     /// Create a new incrementing clock that increments by 1 microsecond
     pub fn micro_step() -> Self {
-        Self::new(Timestamp::zero(), Duration::from_micros(1))
+        Self::new(Timestamp::zero(), TimeDelta::from_micros(1))
     }
     
     /// Create a new incrementing clock that increments by 1 millisecond
     pub fn milli_step() -> Self {
-        Self::new(Timestamp::zero(), Duration::from_millis(1))
+        Self::new(Timestamp::zero(), TimeDelta::from_millis(1))
     }
 }
 
 impl ClockSource for IncrementingClock {
     fn now(&self) -> Timestamp {
-        let current = self.current.fetch_add(self.increment, Ordering::SeqCst);
-        Timestamp::from_nanos(current)
+        let nanos = self.current.fetch_add(self.increment, Ordering::SeqCst);
+        Timestamp::from_nanos(nanos)
     }
     
-    fn resolution(&self) -> Duration {
-        Duration::from_nanos(self.increment)
+    fn resolution(&self) -> TimeDelta {
+        TimeDelta::from_nanos(self.increment as i64)
     }
     
     fn is_deterministic(&self) -> bool {
@@ -198,7 +256,7 @@ impl ClockSource for IncrementingClock {
 }
 
 impl Clock for IncrementingClock {
-    fn advance(&mut self, duration: Duration) -> Timestamp {
+    fn advance(&mut self, duration: TimeDelta) -> Timestamp {
         let nanos = duration.as_nanos();
         let current = self.current.fetch_add(nanos, Ordering::SeqCst);
         Timestamp::from_nanos(current + nanos)
@@ -257,7 +315,7 @@ impl<C: Clock + ?Sized> ClockSource for SharedClock<C> {
         self.inner.now()
     }
     
-    fn resolution(&self) -> Duration {
+    fn resolution(&self) -> TimeDelta {
         self.inner.resolution()
     }
     
@@ -284,7 +342,7 @@ pub mod helpers {
     }
     
     /// Create a new incrementing clock
-    pub fn incrementing_clock(increment: Duration) -> IncrementingClock {
+    pub fn incrementing_clock(increment: TimeDelta) -> IncrementingClock {
         IncrementingClock::new(Timestamp::zero(), increment)
     }
     
@@ -321,7 +379,7 @@ mod tests {
         
         assert_eq!(clock.now(), Timestamp::zero());
         
-        clock.advance(Duration::from_secs(1));
+        clock.advance(TimeDelta::from_secs(1));
         assert_eq!(clock.now(), Timestamp::from_secs(1));
         
         clock.set(Timestamp::from_secs(10));
@@ -335,7 +393,7 @@ mod tests {
     
     #[test]
     fn test_incrementing_clock() {
-        let mut clock = IncrementingClock::new(Timestamp::zero(), Duration::from_secs(1));
+        let mut clock = IncrementingClock::new(Timestamp::zero(), TimeDelta::from_secs(1));
         
         // First call returns the initial value
         assert_eq!(clock.now(), Timestamp::zero());
@@ -347,7 +405,7 @@ mod tests {
         clock.set(Timestamp::from_secs(10));
         assert_eq!(clock.now(), Timestamp::from_secs(10));
         
-        clock.advance(Duration::from_secs(5));
+        clock.advance(TimeDelta::from_secs(5));
         assert_eq!(clock.now(), Timestamp::from_secs(16));
         
         assert!(clock.is_deterministic());
@@ -369,7 +427,7 @@ mod tests {
         let mut inner_ref = inner.clone();
         let shared_inner = SharedClock::new(inner);
         
-        inner_ref.advance(Duration::from_secs(1));
+        inner_ref.advance(TimeDelta::from_secs(1));
         // This would assert_eq!(shared_inner.now(), Timestamp::from_secs(1));
         // but it fails because the inner clock is cloned, not shared
         

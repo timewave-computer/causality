@@ -22,22 +22,28 @@ pub enum ExtractionError {
     Validation(String),
 }
 
-/// A fact extracted from chain data
+/// Extracted fact from a blockchain
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractedFact {
-    /// The block height where this fact was extracted
+    /// Block height
     pub block_height: u64,
-    /// The type of the fact
+    
+    /// Fact type
     pub fact_type: String,
-    /// Metadata about the fact
+    
+    /// Metadata associated with the fact
     pub metadata: serde_json::Value,
-    /// The source chain ID
+    
+    /// Chain ID
     pub chain_id: String,
-    /// The block hash
-    pub block_hash: String,
-    /// The transaction hash (if applicable)
+    
+    /// Block hash
+    pub block_hash: Option<String>,
+    
+    /// Transaction hash
     pub tx_hash: Option<String>,
-    /// The fact data
+    
+    /// Fact data
     pub data: serde_json::Value,
 }
 
@@ -136,27 +142,28 @@ pub struct TransactionData {
 /// Basic implementation of a fact extractor
 pub struct BasicExtractor {
     /// Chain ID this extractor is for
-    chain_id: String,
+    _chain_id: String,
     /// Rule engine for extraction
-    rule_engine: Arc<RuleEngine>,
+    _rule_engine: Arc<RuleEngine>,
 }
 
 impl BasicExtractor {
     /// Create a new basic extractor
     pub fn new(chain_id: String, rule_engine: Arc<RuleEngine>) -> Self {
         BasicExtractor {
-            chain_id,
-            rule_engine,
+            _chain_id: chain_id,
+            _rule_engine: rule_engine,
         }
     }
 }
 
 #[async_trait::async_trait]
 impl FactExtractor for BasicExtractor {
-    async fn extract_facts(&self, block_data: &BlockData) -> std::result::Result<Vec<ExtractedFact>, ExtractionError> {
-        // A simple implementation that just returns an empty list for now
-        // In a real implementation, we would apply rules to the block data
-        
+    async fn extract_facts(
+        &self, _block_data: &BlockData
+    ) -> std::result::Result<Vec<ExtractedFact>, ExtractionError> {
+        // Simple implementation that just returns an empty list of facts
+        // In a real implementation, this would apply extraction rules to the block data
         Ok(Vec::new())
     }
 } 

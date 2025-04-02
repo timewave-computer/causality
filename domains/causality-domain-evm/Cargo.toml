@@ -11,11 +11,13 @@ serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+chrono = { workspace = true }
 
-# Internal dependencies
-causality-types = { workspace = true }
-causality-core = { workspace = true }
-causality-domain = { workspace = true }
+# Note: Internal dependencies are intentionally commented out
+# until the core crates are stabilized
+# causality-types = { workspace = true }
+# causality-core = { workspace = true }
+# causality-domain = { workspace = true }
 
 # DEPRECATED: Dependencies on legacy crates have been removed
 # All functionality is now available through causality-core

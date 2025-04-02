@@ -7,16 +7,14 @@
 // working with facts in the Causality system.
 
 // Sub-modules
-mod types;
-mod verification;
-mod verifiers;
-mod observer;
-mod zkproof_observer;
+pub mod observer;
+pub mod types;
+pub mod verification;
+pub mod verifiers;
+// zkproof module for verification of zero-knowledge proofs
+pub mod zkproof;
 
 // Re-exports
-pub use verification::{VerificationResult};
-pub use types::{FactType, RegisterFact, ZKProofFact};
-pub use verifiers::{
-    MerkleProofVerifier, SignatureVerifier, ConsensusVerifier,
-    VerifierRegistry
-};
+pub use verification::{FactVerifier, VerificationResult as FactVerification};
+pub use observer::FactObserver;
+pub use types::FactQuery;

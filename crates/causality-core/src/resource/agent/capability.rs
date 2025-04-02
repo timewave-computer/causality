@@ -4,14 +4,15 @@
 // that can be assigned to agents based on roles or needed access patterns.
 
 use crate::resource_types::{ResourceId, ResourceType};
-use crate::resource::agent::types::{AgentId, AgentError};
+use crate::resource::agent::types::{AgentId, AgentType, AgentError};
 use crate::resource::capabilities::{Capability, CapabilityId};
-use crate::crypto::ContentHash;
+use causality_types::ContentHash;
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
+use blake3;
 
 /// Errors that can occur when working with capability bundles
 #[derive(Error, Debug)]
@@ -164,7 +165,7 @@ impl CapabilityBundle {
         
         // Generate ID from name and scope
         let id_str = format!("{}:{:?}", name, scope);
-        let bundle_id = CapabilityBundleId::from_content_hash(ContentHash::calculate(id_str.as_bytes()));
+        let bundle_id = CapabilityBundleId::from_content_hash(ContentHash::from_bytes(id_str.as_bytes()));
         
         Self {
             id: bundle_id,
@@ -820,15 +821,20 @@ pub enum StandardBundleType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     
-    /// Create a test agent ID
+    /// Helper function to create an agent ID
     fn create_test_agent_id(name: &str) -> AgentId {
-        AgentId::from_content_hash(ContentHash::calculate(name.as_bytes()).as_bytes(), AgentType::User)
+        AgentId::from_content_hash(
+            blake3::hash(name.as_bytes()).as_bytes(),
+            AgentType::User
+        )
     }
     
-    /// Create a test resource ID
+    /// Helper function to create a resource ID
     fn create_test_resource_id(name: &str) -> ResourceId {
-        ResourceId::new(ContentHash::calculate(name.as_bytes()))
+        let hash_bytes = blake3::hash(name.as_bytes()).as_bytes().to_vec();
+        ResourceId::new(ContentHash::new("blake3", hash_bytes))
     }
     
     #[test]

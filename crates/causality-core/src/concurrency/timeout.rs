@@ -13,23 +13,21 @@ use std::time::Duration;
 use futures::future::FutureExt;
 use tokio::time::sleep;
 
-use causality_types::{Error, Result};
 use crate::effect::EffectContext;
-use crate::error::Error;
-use std::result::Result;
+use causality_error::Error;
 
 /// Run a future with a timeout
 ///
 /// If the future completes within the timeout, its result is returned.
 /// Otherwise, an error is returned.
-pub async fn timeout<F, T>(duration: Duration, future: F) -> Result<T, Error>
+pub async fn timeout<F, T>(duration: Duration, future: F) -> std::result::Result<T, Error>
 where
     F: Future<Output = T> + Send + 'static,
     T: Send + 'static,
 {
     match tokio::time::timeout(duration, future).await {
         Ok(result) => Ok(result),
-        Err(_) => Err(Error::Timeout(format!("Operation timed out after {:?}", duration))),
+        Err(_) => Err(Error::time(format!("Operation timed out after {:?}", duration))),
     }
 }
 
@@ -38,7 +36,7 @@ where
 /// If the future completes successfully within the timeout, its result is returned.
 /// If the future fails, its error is returned.
 /// If the future times out, a timeout error is returned.
-pub async fn timeout_result<F, T, E>(duration: Duration, future: F) -> Result<T, Error>
+pub async fn timeout_result<F, T, E>(duration: Duration, future: F) -> std::result::Result<T, Error>
 where
     F: Future<Output = std::result::Result<T, E>> + Send + 'static,
     T: Send + 'static,
@@ -47,7 +45,7 @@ where
     match tokio::time::timeout(duration, future).await {
         Ok(Ok(result)) => Ok(result),
         Ok(Err(err)) => Err(err.into()),
-        Err(_) => Err(Error::Timeout(format!("Operation timed out after {:?}", duration))),
+        Err(_) => Err(Error::time(format!("Operation timed out after {:?}", duration))),
     }
 }
 
@@ -81,8 +79,9 @@ where
 impl<F, T> Future for WithTimeout<F, T>
 where
     F: Future<Output = T> + Unpin,
+    T: Unpin,
 {
-    type Output = Result<T, Error>;
+    type Output = std::result::Result<T, Error>;
     
     fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
         let this = self.get_mut();
@@ -101,7 +100,7 @@ where
                 match timer.as_mut().poll(cx) {
                     std::task::Poll::Ready(_) => {
                         // Timer completed first
-                        return std::task::Poll::Ready(Err(Error::Timeout(
+                        return std::task::Poll::Ready(Err(Error::time(
                             format!("Operation timed out after {:?}", this.timeout)
                         )));
                     }
@@ -135,7 +134,7 @@ pub async fn timeout_with_retry<F, Fut, T, E>(
     timeout: Duration,
     max_retries: usize,
     retry_delay: Duration,
-) -> Result<T, Error>
+) -> std::result::Result<T, Error>
 where
     F: Fn() -> Fut + Send + Sync + 'static,
     Fut: Future<Output = std::result::Result<T, E>> + Send + 'static,
@@ -169,7 +168,7 @@ where
     }
     
     // If we get here, all retries failed
-    Err(last_error.unwrap_or_else(|| Error::OperationFailed("All retries failed".to_string())))
+    Err(last_error.unwrap_or_else(|| Error::concurrency("All retries failed".to_string())))
 }
 
 /// Calculate the delay for a retry, with exponential backoff and jitter
@@ -228,7 +227,7 @@ mod tests {
         assert!(result.is_err());
         if let Err(err) = result {
             match err {
-                Error::Timeout(_) => {}, // Expected
+                Error::time(_) => {}, // Expected
                 _ => panic!("Unexpected error: {:?}", err),
             }
         }
@@ -297,7 +296,7 @@ mod tests {
         assert!(result.is_err());
         if let Err(err) = result {
             match err {
-                Error::Timeout(_) => {}, // Expected
+                Error::time(_) => {}, // Expected
                 _ => panic!("Unexpected error: {:?}", err),
             }
         }

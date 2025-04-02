@@ -7,8 +7,11 @@
 
 use serde::{Serialize, Deserialize};
 
-use causality_types::{*};
-use causality_crypto::ContentId;;
+use causality_types::{ContentId, DomainId};
+// Define placeholder types for testing until we have the real implementations
+type BlockHeight = u64;
+type BlockHash = String;
+type Timestamp = i64;
 
 /// An entry representing an observed fact
 #[derive(Debug, Clone, Serialize, Deserialize)]

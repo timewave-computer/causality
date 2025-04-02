@@ -11,6 +11,12 @@ use thiserror::Error;
 
 use crate::observation::extraction::ExtractedFact;
 use crate::log::{LogEntry, LogStorage};
+use crate::id_utils::FactId;
+use crate::observation::persistence::{FactLog, FactLogEntry, FactStore};
+use super::extraction::FactSchema;
+
+// Import tracing for logging
+use tracing::{debug, error, info, trace, warn};
 
 /// Error type for reconstruction operations
 #[derive(Error, Debug)]
@@ -154,10 +160,12 @@ impl BasicReconstructor {
             latest_processed_time: None,
         };
         
+        let max_buffer_size = config.max_buffer_size;
+        
         BasicReconstructor {
             config,
             log_storage,
-            fact_buffer: Mutex::new(VecDeque::with_capacity(config.max_buffer_size)),
+            fact_buffer: Mutex::new(VecDeque::with_capacity(max_buffer_size)),
             status: Mutex::new(status),
         }
     }
@@ -170,7 +178,7 @@ impl BasicReconstructor {
         tokio::spawn(async move {
             while let Some(fact) = fact_receiver.recv().await {
                 if let Err(e) = self.process_fact(&fact) {
-                    log::error!("Error processing fact: {}", e);
+                    error!("Error processing fact: {}", e);
                 }
             }
             
@@ -198,7 +206,7 @@ impl BasicReconstructor {
                 if let Ok(entry) = self.reconstruct_entry(&fact) {
                     // Append to log
                     if let Err(e) = self.log_storage.append(entry.clone()) {
-                        log::error!("Failed to append log entry: {}", e);
+                        error!("Failed to append log entry: {}", e);
                     } else {
                         entries_reconstructed += 1;
                     }
@@ -227,6 +235,18 @@ impl BasicReconstructor {
     
     /// Reconstruct a log entry from a fact
     fn reconstruct_entry(&self, fact: &ExtractedFact) -> std::result::Result<LogEntry, ReconstructionError> {
+        // Convert metadata to HashMap<String, String>
+        let metadata = if let serde_json::Value::Object(map) = &fact.metadata {
+            let mut result = HashMap::new();
+            for (k, v) in map {
+                result.insert(k.clone(), v.to_string());
+            }
+            result
+        } else {
+            // If it's not an object, create an empty map
+            HashMap::new()
+        };
+        
         // Create a log entry from the fact
         let entry = LogEntry {
             log_id: self.config.log_id.clone(),
@@ -237,7 +257,7 @@ impl BasicReconstructor {
                 .as_secs(),
             data: serde_json::to_value(fact).map_err(|e| 
                 ReconstructionError::Serialization(format!("Failed to serialize fact: {}", e)))?,
-            metadata: fact.metadata.clone(),
+            metadata,
         };
         
         Ok(entry)

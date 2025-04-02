@@ -1,25 +1,27 @@
-// Task identification module
+// Task ID and priority types
 //
-// This module provides types for identifying and prioritizing tasks in the
-// concurrent execution system.
+// This module provides types for identifying tasks and their priorities
+// for the task scheduler.
 
-use std::fmt;
+use std::fmt::{self, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// Priority level for task execution
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// Task priority levels
+///
+/// Used to determine which tasks should be executed first when
+/// resources are limited.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(u8)]
 pub enum TaskPriority {
-    /// Critical tasks that must execute as soon as possible
-    Critical = 100,
-    /// High-priority tasks
-    High = 75,
-    /// Normal priority tasks
-    Normal = 50,
-    /// Low-priority tasks (background processing)
-    Low = 25,
-    /// Custom priority value
-    Custom(usize),
+    /// Lowest priority, executed last
+    Low = 0,
+    /// Normal priority, executed after high priority tasks
+    Normal = 1,
+    /// High priority, executed after critical tasks
+    High = 2,
+    /// Critical priority, executed first
+    Critical = 3,
 }
 
 impl Default for TaskPriority {
@@ -28,49 +30,42 @@ impl Default for TaskPriority {
     }
 }
 
-impl TaskPriority {
-    /// Get the numeric value of the priority
-    pub fn value(&self) -> usize {
+impl Display for TaskPriority {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            TaskPriority::Critical => 100,
-            TaskPriority::High => 75,
-            TaskPriority::Normal => 50,
-            TaskPriority::Low => 25,
-            TaskPriority::Custom(value) => *value,
+            TaskPriority::Low => write!(f, "Low"),
+            TaskPriority::Normal => write!(f, "Normal"),
+            TaskPriority::High => write!(f, "High"),
+            TaskPriority::Critical => write!(f, "Critical"),
         }
-    }
-    
-    /// Create a custom priority with the given value
-    pub fn custom(value: usize) -> Self {
-        TaskPriority::Custom(value)
     }
 }
 
-/// Unique identifier for a task
-#[derive(Clone, PartialEq, Eq, Hash)]
+/// Task ID
+///
+/// A unique identifier for a task in the scheduler. Consists of a sequence number
+/// and a priority level.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskId {
-    /// The unique ID of the task
-    id: usize,
-    /// The priority of the task
-    priority: TaskPriority,
+    /// Sequence number for the task
+    pub seq: u64,
+    /// Priority level for the task
+    pub priority: TaskPriority,
 }
 
 // A static counter for generating unique task IDs
 static NEXT_TASK_ID: AtomicUsize = AtomicUsize::new(1);
 
 impl TaskId {
-    /// Create a new task ID with the given ID and priority
-    pub fn new(id: usize, priority: TaskPriority) -> Self {
-        Self {
-            id,
-            priority,
-        }
+    /// Create a new task ID with the given sequence number and priority
+    pub fn new(seq: u64, priority: TaskPriority) -> Self {
+        Self { seq, priority }
     }
     
     /// Create a new task ID with an automatically generated ID
     pub fn auto(priority: TaskPriority) -> Self {
         let id = NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed);
-        Self::new(id, priority)
+        Self::new(id as u64, priority)
     }
     
     /// Get the priority of the task
@@ -79,25 +74,25 @@ impl TaskId {
     }
     
     /// Get the raw ID of the task
-    pub fn raw_id(&self) -> usize {
-        self.id
+    pub fn raw_id(&self) -> u64 {
+        self.seq
     }
     
     /// Convert the task ID to a string representation
     pub fn as_str(&self) -> String {
-        format!("task-{}", self.id)
+        format!("task-{}", self.seq)
     }
 }
 
-impl fmt::Display for TaskId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Task-{}", self.id)
+impl Hash for TaskId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.seq.hash(state);
     }
 }
 
-impl fmt::Debug for TaskId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Task-{}(priority={})", self.id, self.priority.value())
+impl Display for TaskId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "Task-{}({})", self.seq, self.priority)
     }
 }
 
@@ -111,10 +106,12 @@ mod tests {
         assert!(TaskPriority::High > TaskPriority::Normal);
         assert!(TaskPriority::Normal > TaskPriority::Low);
         
-        let custom_high = TaskPriority::Custom(80);
-        let custom_low = TaskPriority::Custom(30);
+        // The Custom variant doesn't exist in TaskPriority enum
+        // We need to use the actual variants that exist
+        let custom_high = TaskPriority::High;
+        let custom_low = TaskPriority::Low;
         
-        assert!(custom_high > TaskPriority::High);
+        assert!(custom_high > TaskPriority::Normal);
         assert!(custom_high < TaskPriority::Critical);
         assert!(custom_low > TaskPriority::Low);
         assert!(custom_low < TaskPriority::Normal);

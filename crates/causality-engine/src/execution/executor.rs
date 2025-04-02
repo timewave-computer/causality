@@ -10,336 +10,105 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::ContentHash;
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::CodeRepository;
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::{CodeEntry, CodeMetadata};
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::{ContextId, Value, ExecutionEvent, ExecutionContext, SecuritySandbox};
+use causality_error::{EngineError, EngineResult};
+use causality_types::ContentId;
 
-use causality_types::{Error, Result};
-use crate::resource::{ResourceAllocator, ResourceRequest, ResourceGrant, GrantId, ResourceUsage};
+use crate::execution::trace::ExecutionEvent;
+use crate::execution::context::ExecutionContext;
+use crate::effect::content_addressable_executor::ExecutionValue;
 
 /// Main interface for the content-addressable executor
+#[async_trait]
 pub trait ContentAddressableExecutor: Send + Sync {
     /// Execute code by its hash
-    #[cfg(feature = "code-repo")]
-    fn execute_by_hash(
+    async fn execute_by_hash(
         &self,
-        hash: &ContentHash,
-        arguments: Vec<Value>,
+        hash: &ContentId,
+        arguments: Vec<ExecutionValue>,
         context: &mut ExecutionContext,
-    ) -> Result<Value>;
+    ) -> EngineResult<ExecutionValue>;
     
     /// Execute code by its name
-    fn execute_by_name(
+    async fn execute_by_name(
         &self,
         name: &str,
-        arguments: Vec<Value>,
+        arguments: Vec<ExecutionValue>,
         context: &mut ExecutionContext,
-    ) -> Result<Value>;
+    ) -> EngineResult<ExecutionValue>;
     
     /// Create a new execution context
-    fn create_context(
+    async fn create_context(
         &self,
         parent: Option<Arc<ExecutionContext>>,
-    ) -> Result<ExecutionContext>;
+    ) -> EngineResult<ExecutionContext>;
     
     /// Get the execution trace from a context
-    fn get_execution_trace(
+    async fn get_execution_trace(
         &self,
         context: &ExecutionContext,
-    ) -> Result<Vec<ExecutionEvent>>;
-}
-
-/// Implementation for the interpreter executor
-#[cfg(feature = "code-repo")]
-pub struct InterpreterExecutor {
-    /// The code repository
-    repository: Arc<dyn CodeRepository>,
-    /// The resource allocator
-    resource_allocator: Arc<dyn ResourceAllocator>,
-    /// The security sandbox
-    security_sandbox: SecuritySandbox,
-    /// The execution tracer
-    tracer: Option<Arc<ExecutionTracer>>,
-    /// Default resource request for new contexts
-    default_resource_request: ResourceRequest,
-    /// Execution timeout in milliseconds
-    timeout_ms: u64,
-}
-
-#[cfg(feature = "code-repo")]
-impl InterpreterExecutor {
-    /// Create a new interpreter executor
-    pub fn new(
-        repository: Arc<dyn CodeRepository>,
-        resource_allocator: Arc<dyn ResourceAllocator>,
-        security_sandbox: SecuritySandbox,
-    ) -> Self {
-        // Create default resource request
-        let default_resource_request = ResourceRequest::new()
-            .with_memory_bytes(1024 * 1024) // 1MB
-            .with_cpu_millis(1000) // 1 second
-            .with_io_operations(100)
-            .with_effect_count(50);
-            
-        InterpreterExecutor {
-            repository,
-            resource_allocator,
-            security_sandbox,
-            tracer: None,
-            default_resource_request,
-            timeout_ms: 5000, // 5 seconds default timeout
-        }
-    }
-    
-    /// Set the execution tracer
-    pub fn with_tracer(mut self, tracer: Arc<ExecutionTracer>) -> Self {
-        self.tracer = Some(tracer);
-        self
-    }
-    
-    /// Set the default resource request
-    pub fn with_default_resources(mut self, request: ResourceRequest) -> Self {
-        self.default_resource_request = request;
-        self
-    }
-    
-    /// Set the execution timeout
-    pub fn with_timeout(mut self, timeout_ms: u64) -> Self {
-        self.timeout_ms = timeout_ms;
-        self
-    }
-    
-    /// Interpret the code
-    fn interpret(
-        &self,
-        code_hash: &ContentHash,
-        arguments: Vec<Value>,
-        context: &mut ExecutionContext,
-    ) -> Result<Value> {
-        // Start monitoring resources
-        self.security_sandbox.activate(context.id().as_str());
-        
-        // Set up timeout
-        let start_time = Instant::now();
-        let timeout = Duration::from_millis(self.timeout_ms);
-        
-        // Retrieve the code definition
-        let code_def = self.repository.get_by_hash(code_hash)?;
-        
-        // Create and push call frame
-        let frame = CallFrame::new(code_hash.clone(), code_def.name.clone(), arguments.clone());
-        context.push_call_frame(frame)?;
-        
-        // Record function call event
-        let event = ExecutionEvent::function_call(
-            code_hash.clone(),
-            code_def.name.clone(),
-            arguments.clone(),
-        );
-        context.record_event(event)?;
-        
-        // Execute the code based on its content type
-        let result = match &code_def.content {
-            // Here we would interpret different code types
-            // For now, we'll just return a dummy value
-            _ => Value::String(format!("Code executed: {:?}", code_hash)),
-        };
-        
-        // Check if we've exceeded the timeout
-        if start_time.elapsed() > timeout {
-            return Err(Error::ExecutionError(ExecutionError::TimeoutError));
-        }
-        
-        // Record function return event
-        context.record_return(result.clone())?;
-        
-        // Stop monitoring resources
-        self.security_sandbox.deactivate();
-        
-        Ok(result)
-    }
-}
-
-#[cfg(feature = "code-repo")]
-impl ContentAddressableExecutor for InterpreterExecutor {
-    fn execute_by_hash(
-        &self,
-        hash: &ContentHash,
-        arguments: Vec<Value>,
-        context: &mut ExecutionContext,
-    ) -> Result<Value> {
-        self.interpret(hash, arguments, context)
-    }
-    
-    fn execute_by_name(
-        &self,
-        name: &str,
-        arguments: Vec<Value>,
-        context: &mut ExecutionContext,
-    ) -> Result<Value> {
-        // Lookup hash by name
-        let hash = self.repository.get_latest_hash(name)?;
-        self.execute_by_hash(&hash, arguments, context)
-    }
-    
-    fn create_context(
-        &self,
-        parent: Option<Arc<ExecutionContext>>,
-    ) -> Result<ExecutionContext> {
-        // Create context ID
-        let context_id = ContextId::new();
-        
-        // Allocate resources
-        let grant = self.resource_allocator.allocate(self.default_resource_request.clone())?;
-        
-        // Start tracing if we have a tracer
-        if let Some(tracer) = &self.tracer {
-            tracer.start_trace(context_id.clone())?;
-        }
-        
-        // Create the context
-        let context = ExecutionContext::new(
-            context_id,
-            self.repository.clone(),
-            self.resource_allocator.clone(),
-            parent,
-        );
-        
-        Ok(context)
-    }
-    
-    fn get_execution_trace(
-        &self,
-        context: &ExecutionContext,
-    ) -> Result<Vec<ExecutionEvent>> {
-        context.execution_trace()
-    }
+    ) -> EngineResult<Vec<ExecutionEvent>>;
 }
 
 /// A basic executor for testing purposes
 pub struct BasicExecutor {
-    /// The resource allocator
-    resource_allocator: Arc<dyn ResourceAllocator>,
+    /// Placeholder field
+    _placeholder: i32,
 }
 
 impl BasicExecutor {
     /// Create a new basic executor
-    pub fn new(resource_allocator: Arc<dyn ResourceAllocator>) -> Self {
+    pub fn new() -> Self {
         BasicExecutor {
-            resource_allocator,
+            _placeholder: 0,
         }
     }
 }
 
+#[async_trait]
 impl ContentAddressableExecutor for BasicExecutor {
-    #[cfg(feature = "code-repo")]
-    fn execute_by_hash(
+    async fn execute_by_hash(
         &self,
-        _hash: &ContentHash,
-        _arguments: Vec<Value>,
+        _hash: &ContentId,
+        _arguments: Vec<ExecutionValue>,
         _context: &mut ExecutionContext,
-    ) -> Result<Value> {
-        Ok(Value::String("Basic executor doesn't implement execute_by_hash".to_string()))
+    ) -> EngineResult<ExecutionValue> {
+        Ok(ExecutionValue::String("Basic executor doesn't implement execute_by_hash".to_string()))
     }
     
-    fn execute_by_name(
+    async fn execute_by_name(
         &self,
         name: &str,
-        _arguments: Vec<Value>,
+        _arguments: Vec<ExecutionValue>,
         _context: &mut ExecutionContext,
-    ) -> Result<Value> {
-        Ok(Value::String(format!("Called function: {}", name)))
+    ) -> EngineResult<ExecutionValue> {
+        Ok(ExecutionValue::String(format!("Basic executor executed: {}", name)))
     }
     
-    fn create_context(
+    async fn create_context(
         &self,
-        parent: Option<Arc<ExecutionContext>>,
-    ) -> Result<ExecutionContext> {
-        // Create a dummy code repository for the context
-        #[cfg(feature = "code-repo")]
-        let repository = Arc::new(DummyRepository);
-        
-        #[cfg(not(feature = "code-repo"))]
-        let repository = Arc::new(());
-        
-        let context_id = ContextId::new();
-        Ok(ExecutionContext::new(
-            context_id,
-            repository,
-            self.resource_allocator.clone(),
-            parent,
-        ))
+        _parent: Option<Arc<ExecutionContext>>,
+    ) -> EngineResult<ExecutionContext> {
+        Ok(ExecutionContext::default())
     }
     
-    fn get_execution_trace(
+    async fn get_execution_trace(
         &self,
-        context: &ExecutionContext,
-    ) -> Result<Vec<ExecutionEvent>> {
-        context.execution_trace()
+        _context: &ExecutionContext,
+    ) -> EngineResult<Vec<ExecutionEvent>> {
+        Ok(Vec::new())
     }
 }
 
-/// Implementation for the RISC-V executor
-pub struct RiscVExecutor {
-    // Implementation details would go here
-    // For now, we'll leave it as a placeholder
-    _placeholder: i32,
-}
-
-// Dummy repository for the basic executor
-#[cfg(feature = "code-repo")]
-struct DummyRepository;
-
-#[cfg(feature = "code-repo")]
-impl CodeRepository for DummyRepository {
-    // Add required implementations
-}
-
-// Add tests for the executor implementation
 #[cfg(test)]
 mod tests {
     use super::*;
     
-    // Test-only mock allocator
-    struct MockResourceAllocator;
-    
-    impl ResourceAllocator for MockResourceAllocator {
-        fn allocate(&self, _request: ResourceRequest) -> Result<ResourceGrant> {
-            Ok(ResourceGrant {
-                grant_id: GrantId::new(),
-                memory_bytes: 1024,
-                cpu_millis: 1000,
-                io_operations: 100,
-                effect_count: 50,
-            })
-        }
+    #[tokio::test]
+    async fn test_basic_executor() {
+        let executor = BasicExecutor::new();
+        let mut context = executor.create_context(None).await.unwrap();
         
-        fn release(&self, _grant: ResourceGrant) {
-            // No-op for mock
-        }
-        
-        fn check_usage(&self, _grant_id: &GrantId) -> Result<ResourceUsage> {
-            Ok(ResourceUsage {
-                memory_bytes: 0,
-                cpu_millis: 0,
-                io_operations: 0,
-                effect_count: 0,
-            })
-        }
-        
-        fn subdivide(&self, _grant: ResourceGrant, _requests: Vec<ResourceRequest>) -> Result<Vec<ResourceGrant>> {
-            // Just return empty vector for mock
-            Ok(vec![])
-        }
-    }
-    
-    #[test]
-    fn test_basic_executor() {
-        let allocator = Arc::new(MockResourceAllocator);
-        let executor = BasicExecutor::new(allocator);
-        
-        // Basic assertions to ensure it compiles
-        assert!(executor.resource_allocator.check_usage(&GrantId::new()).is_ok());
+        let result = executor.execute_by_name("test", vec![], &mut context).await;
+        assert!(result.is_ok());
     }
 } 

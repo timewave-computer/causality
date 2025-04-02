@@ -27,32 +27,44 @@ use causality_types::ContentId;
 use crate::resource::Resource;
 use crate::resource_types::ResourceType;
 
-/// Error types for resource query operations
-#[derive(Error, Debug)]
+/// Error that can occur during a query operation
+#[derive(Debug, Error)]
 pub enum QueryError {
     #[error("Invalid query: {0}")]
     InvalidQuery(String),
     
-    #[error("Field not found: {0}")]
-    FieldNotFound(String),
+    #[error("Invalid filter: {0}")]
+    InvalidFilter(String),
     
-    #[error("Type mismatch: expected {expected} but got {actual}")]
+    #[error("Invalid sort: {0}")]
+    InvalidSort(String),
+    
+    #[error("Invalid pagination: {0}")]
+    InvalidPagination(String),
+    
+    #[error("Resource type mismatch: expected {expected}, got {actual}")]
     TypeMismatch {
         expected: String,
         actual: String,
     },
     
-    #[error("Index error: {0}")]
-    IndexError(String),
+    #[error("Invalid argument: {0}")]
+    InvalidArgument(String),
     
-    #[error("Execution error: {0}")]
-    ExecutionError(String),
+    #[error("Conversion error: {0}")]
+    ConversionError(String),
+    
+    #[error("Storage error: {0}")]
+    StorageError(String),
+    
+    #[error("Field not found: {0}")]
+    FieldNotFound(String),
     
     #[error("Serialization error: {0}")]
     SerializationError(String),
     
-    #[error("Permission denied: {0}")]
-    PermissionDenied(String),
+    #[error("Index error: {0}")]
+    IndexError(String),
 }
 
 /// Result type for query operations

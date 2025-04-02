@@ -1,17 +1,17 @@
-// Time system factory
+// Time Effect Factory
 //
-// This module provides factory functions for creating and configuring the time system components.
+// This module provides factory functions for creating and configuring the time effect system.
 
 use std::sync::Arc;
+use std::collections::HashMap;
 
-use crate::effects::EffectRegistry;
-use crate::time::{
-    TimeProvider, TimeProviderFactory, TimeEffectHandlerImpl, 
-    AttestationStore, InMemoryAttestationStore,
-};
+use crate::effect::EffectRegistry;
+use super::effect_handler::{TimeEffectHandlerImpl, AttestationStore, InMemoryAttestationStore};
+use super::provider::{TimeProvider, TimeProviderFactory};
+use super::effect::{TimeEffectHandler, BasicTimeEffectHandler};
 
 /// Configure the time effect system with default components
-pub fn configure_time_effect_system(registry: &mut EffectRegistry) {
+pub fn configure_time_effect_system<T: EffectRegistry>(registry: &mut T) {
     let provider = TimeProviderFactory::create_real_time_provider();
     let attestation_store = Arc::new(InMemoryAttestationStore::new());
     
@@ -20,8 +20,8 @@ pub fn configure_time_effect_system(registry: &mut EffectRegistry) {
 }
 
 /// Configure the time effect system with custom components
-pub fn configure_time_effect_system_with_components(
-    registry: &mut EffectRegistry,
+pub fn configure_time_effect_system_with_components<T: EffectRegistry>(
+    registry: &mut T,
     provider: Arc<dyn TimeProvider>,
     attestation_store: Arc<dyn AttestationStore>,
 ) {
@@ -30,8 +30,8 @@ pub fn configure_time_effect_system_with_components(
 }
 
 /// Create a simulation time system for testing
-pub fn create_simulation_time_system(
-    registry: &mut EffectRegistry,
+pub fn create_simulation_time_system<T: EffectRegistry>(
+    registry: &mut T,
     initial_time: Option<crate::time::Timestamp>,
     time_scale: Option<f64>,
 ) {
@@ -43,6 +43,6 @@ pub fn create_simulation_time_system(
 }
 
 /// Create an in-memory time system for testing or simple applications
-pub fn create_in_memory_time_system(registry: &mut EffectRegistry) {
+pub fn create_in_memory_time_system<T: EffectRegistry>(registry: &mut T) {
     configure_time_effect_system(registry);
 } 

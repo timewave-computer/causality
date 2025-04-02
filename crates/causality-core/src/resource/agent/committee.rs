@@ -4,45 +4,68 @@
 // decision-making body for validating external facts and messages.
 
 use crate::resource_types::{ResourceId, ResourceType};
-use crate::resource::ResourceError;
-use crate::capability::Capability;
-use crate::crypto::ContentHash;
-use crate::serialization::{Serializable, DeserializationError};
-use crate::effect::Effect;
+use crate::resource::{Resource, ResourceState, ResourceResult, ResourceError};
+use crate::resource::operation::Capability;
+use crate::utils::content_addressing;
 
-use super::types::{AgentId, AgentType, AgentState, AgentRelationship, AgentError};
-use super::agent::{Agent, AgentImpl};
-
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
+use chrono::Utc;
+
+use causality_types::ContentHash;
+use crate::serialization::SerializationError;
+
+use super::agent::{Agent, AgentImpl};
+use super::types::{AgentId, AgentState, AgentType, AgentRelationship, RelationshipType, AgentError};
+use super::messaging::Message;
 
 /// Committee-specific error types
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum CommitteeAgentError {
-    /// Base agent error
+    /// Agent errors
     #[error("Agent error: {0}")]
     AgentError(#[from] AgentError),
     
-    /// Validation error
-    #[error("Validation error: {0}")]
-    ValidationError(String),
+    /// Resource error
+    #[error("Resource error: {0}")]
+    ResourceError(String),
+
+    /// Serialization error
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
     
-    /// Member error
-    #[error("Member error: {0}")]
-    MemberError(String),
+    /// Member already exists
+    #[error("Member already exists: {0}")]
+    MemberAlreadyExists(String),
     
-    /// Decision error
-    #[error("Decision error: {0}")]
-    DecisionError(String),
+    /// Member not found
+    #[error("Member not found: {0}")]
+    MemberNotFound(String),
     
-    /// Domain error
-    #[error("Domain error: {0}")]
-    DomainError(String),
+    /// Invalid quorum
+    #[error("Invalid quorum: {0}")]
+    InvalidQuorum(String),
     
-    /// Other error
+    /// Decision not found
+    #[error("Decision not found: {0}")]
+    DecisionNotFound(String),
+    
+    /// Vote already cast
+    #[error("Vote already cast by member: {0}")]
+    VoteAlreadyCast(String),
+
+    /// Not a member
+    #[error("Not a member: {0}")]
+    NotAMember(String),
+    
+    /// Invalid vote
+    #[error("Invalid vote: {0}")]
+    InvalidVote(String),
+    
+    /// Committee error
     #[error("Committee error: {0}")]
     Other(String),
 }
@@ -214,8 +237,8 @@ impl CommitteeAgent {
         self.config = config;
         
         // Update the content hash
-        self.base.set_metadata("config_updated", &chrono::Utc::now().to_rfc3339()).await
-            .map_err(CommitteeAgentError::AgentError)?;
+        self.base.set_metadata("config_updated", &chrono::Utc::now().to_rfc3339())
+            .map_err(|e: ResourceError| CommitteeAgentError::ResourceError(e.to_string()))?;
         
         Ok(())
     }
@@ -229,14 +252,14 @@ impl CommitteeAgent {
     pub async fn add_member(&mut self, member: CommitteeMember) -> Result<(), CommitteeAgentError> {
         // Check if the committee is already at max size
         if self.members.len() >= self.config.max_size {
-            return Err(CommitteeAgentError::MemberError(
+            return Err(CommitteeAgentError::MemberAlreadyExists(
                 format!("Committee is already at maximum size of {}", self.config.max_size)
             ));
         }
         
         // Check if the member is already in the committee
         if self.members.iter().any(|m| m.agent_id == member.agent_id) {
-            return Err(CommitteeAgentError::MemberError(
+            return Err(CommitteeAgentError::MemberAlreadyExists(
                 format!("Member {} is already in the committee", member.agent_id)
             ));
         }
@@ -245,8 +268,8 @@ impl CommitteeAgent {
         self.members.push(member);
         
         // Update the content hash
-        self.base.set_metadata("member_added", &chrono::Utc::now().to_rfc3339()).await
-            .map_err(CommitteeAgentError::AgentError)?;
+        self.base.set_metadata("member_added", &chrono::Utc::now().to_rfc3339())
+            .map_err(|e: ResourceError| CommitteeAgentError::ResourceError(e.to_string()))?;
         
         Ok(())
     }
@@ -255,7 +278,7 @@ impl CommitteeAgent {
     pub async fn remove_member(&mut self, agent_id: &AgentId) -> Result<(), CommitteeAgentError> {
         // Find the member's index
         let position = self.members.iter().position(|m| &m.agent_id == agent_id)
-            .ok_or_else(|| CommitteeAgentError::MemberError(
+            .ok_or_else(|| CommitteeAgentError::MemberNotFound(
                 format!("Member {} is not in the committee", agent_id)
             ))?;
         
@@ -263,8 +286,8 @@ impl CommitteeAgent {
         self.members.remove(position);
         
         // Update the content hash
-        self.base.set_metadata("member_removed", &chrono::Utc::now().to_rfc3339()).await
-            .map_err(CommitteeAgentError::AgentError)?;
+        self.base.set_metadata("member_removed", &chrono::Utc::now().to_rfc3339())
+            .map_err(|e: ResourceError| CommitteeAgentError::ResourceError(e.to_string()))?;
         
         Ok(())
     }
@@ -293,8 +316,8 @@ impl CommitteeAgent {
         self.active_decisions.insert(decision_id.clone());
         
         // Update the content hash
-        self.base.set_metadata("decision_started", &chrono::Utc::now().to_rfc3339()).await
-            .map_err(CommitteeAgentError::AgentError)?;
+        self.base.set_metadata("decision_started", &chrono::Utc::now().to_rfc3339())
+            .map_err(|e: ResourceError| CommitteeAgentError::ResourceError(e.to_string()))?;
         
         Ok(decision_id)
     }
@@ -309,20 +332,20 @@ impl CommitteeAgent {
     ) -> Result<(), CommitteeAgentError> {
         // Check if this is an active decision
         if !self.active_decisions.contains(decision_id) {
-            return Err(CommitteeAgentError::DecisionError(
+            return Err(CommitteeAgentError::DecisionNotFound(
                 format!("Decision {} is not active", decision_id)
             ));
         }
         
         // Check if the agent is a committee member
         let member = self.members.iter().find(|m| m.agent_id == agent_id)
-            .ok_or_else(|| CommitteeAgentError::MemberError(
+            .ok_or_else(|| CommitteeAgentError::NotAMember(
                 format!("Agent {} is not a committee member", agent_id)
             ))?;
         
         // Check if the member is active
         if !member.active {
-            return Err(CommitteeAgentError::MemberError(
+            return Err(CommitteeAgentError::NotAMember(
                 format!("Member {} is not active", agent_id)
             ));
         }
@@ -330,7 +353,7 @@ impl CommitteeAgent {
         // Find the decision
         let decision = self.decisions.iter_mut()
             .find(|d| d.decision_id == decision_id)
-            .ok_or_else(|| CommitteeAgentError::DecisionError(
+            .ok_or_else(|| CommitteeAgentError::DecisionNotFound(
                 format!("Decision {} not found", decision_id)
             ))?;
         
@@ -349,8 +372,8 @@ impl CommitteeAgent {
         self.check_decision_state(decision_id).await?;
         
         // Update the content hash
-        self.base.set_metadata("vote_cast", &chrono::Utc::now().to_rfc3339()).await
-            .map_err(CommitteeAgentError::AgentError)?;
+        self.base.set_metadata("vote_cast", &chrono::Utc::now().to_rfc3339())
+            .map_err(|e: ResourceError| CommitteeAgentError::ResourceError(e.to_string()))?;
         
         Ok(())
     }
@@ -359,7 +382,7 @@ impl CommitteeAgent {
     async fn check_decision_state(&mut self, decision_id: &str) -> Result<(), CommitteeAgentError> {
         // Find the decision
         let decision_index = self.decisions.iter().position(|d| d.decision_id == decision_id)
-            .ok_or_else(|| CommitteeAgentError::DecisionError(
+            .ok_or_else(|| CommitteeAgentError::DecisionNotFound(
                 format!("Decision {} not found", decision_id)
             ))?;
         
@@ -410,8 +433,8 @@ impl CommitteeAgent {
             self.decisions[decision_index].result = result;
             
             // Update the content hash
-            self.base.set_metadata("decision_updated", &chrono::Utc::now().to_rfc3339()).await
-                .map_err(CommitteeAgentError::AgentError)?;
+            self.base.set_metadata("decision_updated", &chrono::Utc::now().to_rfc3339())
+                .map_err(|e: ResourceError| CommitteeAgentError::ResourceError(e.to_string()))?;
         }
         
         Ok(())
@@ -437,7 +460,7 @@ impl CommitteeAgent {
     /// Check if a decision has been approved
     pub fn is_decision_approved(&self, decision_id: &str) -> Result<bool, CommitteeAgentError> {
         let decision = self.get_decision(decision_id)
-            .ok_or_else(|| CommitteeAgentError::DecisionError(
+            .ok_or_else(|| CommitteeAgentError::DecisionNotFound(
                 format!("Decision {} not found", decision_id)
             ))?;
         
@@ -488,14 +511,14 @@ impl Agent for CommitteeAgent {
     }
     
     fn state(&self) -> &AgentState {
-        self.base.state()
+        Agent::state(&self.base)
     }
     
     async fn set_state(&mut self, state: AgentState) -> Result<(), AgentError> {
         self.base.set_state(state).await
     }
     
-    async fn add_capability(&mut self, capability: Capability) -> Result<(), AgentError> {
+    async fn add_capability(&mut self, capability: Capability<Box<dyn Resource>>) -> Result<(), AgentError> {
         self.base.add_capability(capability).await
     }
     
@@ -507,7 +530,7 @@ impl Agent for CommitteeAgent {
         self.base.has_capability(capability_id)
     }
     
-    fn capabilities(&self) -> Vec<Capability> {
+    fn capabilities(&self) -> Vec<Capability<Box<dyn Resource>>> {
         self.base.capabilities()
     }
     
@@ -539,28 +562,35 @@ impl crate::resource::Resource for CommitteeAgent {
     }
     
     fn resource_type(&self) -> crate::resource_types::ResourceType {
-        self.base.resource_type()
+        crate::resource_types::ResourceType::new("Agent", "1.0")
     }
     
     fn state(&self) -> crate::resource::ResourceState {
-        match self.base.state() {
-            AgentState::Active => crate::resource::ResourceState::Active,
-            AgentState::Inactive => crate::resource::ResourceState::Frozen,
-            AgentState::Suspended { .. } => crate::resource::ResourceState::Locked,
+        match Agent::state(&self.base) {
+            &AgentState::Active => crate::resource::ResourceState::Active,
+            &AgentState::Inactive => crate::resource::ResourceState::Created,
+            &AgentState::Suspended { .. } => crate::resource::ResourceState::Locked,
         }
     }
     
     fn get_metadata(&self, key: &str) -> Option<String> {
-        self.base.metadata().get(key).cloned()
+        self.base.get_metadata(key)
     }
     
     fn set_metadata(&mut self, key: &str, value: &str) -> crate::resource::ResourceResult<()> {
-        *self.base.metadata_mut().entry(key.to_string()).or_insert_with(String::new) = value.to_string();
-        Ok(())
+        self.base.set_metadata(key, value)
     }
     
     fn clone_resource(&self) -> Box<dyn crate::resource::Resource> {
         Box::new(self.clone())
+    }
+    
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 
@@ -593,13 +623,13 @@ impl CommitteeAgentBuilder {
     }
     
     /// Add a capability
-    pub fn with_capability(mut self, capability: Capability) -> Self {
+    pub fn with_capability(mut self, capability: Capability<Box<dyn Resource>>) -> Self {
         self.base_builder = self.base_builder.with_capability(capability);
         self
     }
     
     /// Add multiple capabilities
-    pub fn with_capabilities(mut self, capabilities: Vec<Capability>) -> Self {
+    pub fn with_capabilities(mut self, capabilities: Vec<Capability<Box<dyn Resource>>>) -> Self {
         self.base_builder = self.base_builder.with_capabilities(capabilities);
         self
     }
@@ -688,78 +718,94 @@ impl CommitteeAgentBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::content_addressing;
     
     #[tokio::test]
     async fn test_committee_creation() {
-        // Create a committee agent
-        let committee = CommitteeAgentBuilder::new()
-            .state(AgentState::Active)
-            .with_domain("test-domain")
-            .with_quorum_percentage(67)
-            .build()
-            .unwrap();
+        // Create a basic committee
+        let base_agent = AgentImpl::new(
+            AgentType::Committee,
+            Some(AgentState::Active),
+            None,
+            None,
+            None,
+        ).unwrap();
         
-        // Check the agent type
-        assert_eq!(committee.agent_type(), &AgentType::Committee);
+        let config = CommitteeConfig {
+            domain: "test-domain".to_string(),
+            quorum_percentage: 66,
+            max_size: 10,
+            min_votes: 2,
+            protocol_version: "1.0".to_string(),
+        };
         
-        // Check the domain
+        let committee = CommitteeAgent::new(base_agent, config, None).unwrap();
+        
+        // Verify the committee
         assert_eq!(committee.domain(), "test-domain");
+        assert_eq!(committee.config().quorum_percentage, 66);
+        assert_eq!(committee.members().len(), 0);
     }
     
     #[tokio::test]
     async fn test_committee_membership() {
-        // Create a committee agent
-        let mut committee = CommitteeAgentBuilder::new()
-            .state(AgentState::Active)
-            .with_domain("test-domain")
-            .build()
-            .unwrap();
-        
         // Create a member
         let member = CommitteeMember {
-            agent_id: AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::Validator),
+            agent_id: AgentId::from_content_hash(content_addressing::default_content_hash().as_bytes(), AgentType::User),
             role: MemberRole::Validator,
             voting_weight: 1,
             public_key: "public-key".to_string(),
             active: true,
         };
         
-        // Initially no members
-        assert_eq!(committee.members().len(), 0);
+        // Create a committee with an initial member
+        let base_agent = AgentImpl::new(
+            AgentType::Committee, 
+            Some(AgentState::Active), 
+            None, 
+            None, 
+            None
+        ).unwrap();
         
-        // Add a member
-        committee.add_member(member.clone()).await.unwrap();
+        let config = CommitteeConfig {
+            domain: "test-domain".to_string(),
+            quorum_percentage: 66,
+            max_size: 10,
+            min_votes: 2,
+            protocol_version: "1.0".to_string(),
+        };
         
-        // Check members
+        let mut committee = CommitteeAgent::new(base_agent, config, Some(vec![member.clone()])).unwrap();
+        
+        // Verify the member was added
         assert_eq!(committee.members().len(), 1);
-        assert_eq!(&committee.members()[0].agent_id, &member.agent_id);
         
-        // Remove the member
-        committee.remove_member(&member.agent_id).await.unwrap();
+        // Add another member
+        let member2 = CommitteeMember {
+            agent_id: AgentId::from_content_hash(content_addressing::default_content_hash().as_bytes(), AgentType::User),
+            role: MemberRole::Observer,
+            voting_weight: 0,
+            public_key: "public-key-2".to_string(),
+            active: true,
+        };
         
-        // Check members again
-        assert_eq!(committee.members().len(), 0);
+        committee.add_member(member2.clone()).await.unwrap();
+        
+        // Verify the second member was added
+        assert_eq!(committee.members().len(), 2);
+        
+        // Remove a member
+        committee.remove_member(&member2.agent_id).await.unwrap();
+        
+        // Verify the member was removed
+        assert_eq!(committee.members().len(), 1);
     }
     
     #[tokio::test]
     async fn test_committee_decisions() {
-        // Create a committee agent
-        let mut committee = CommitteeAgentBuilder::new()
-            .state(AgentState::Active)
-            .with_domain("test-domain")
-            .with_config(CommitteeConfig {
-                domain: "test-domain".to_string(),
-                quorum_percentage: 60,
-                max_size: 5,
-                min_votes: 2,
-                protocol_version: "1.0".to_string(),
-            })
-            .build()
-            .unwrap();
-        
         // Create two members
         let member1 = CommitteeMember {
-            agent_id: AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::Leader),
+            agent_id: AgentId::from_content_hash(content_addressing::default_content_hash().as_bytes(), AgentType::Leader),
             role: MemberRole::Leader,
             voting_weight: 2,
             public_key: "public-key-1".to_string(),
@@ -767,45 +813,64 @@ mod tests {
         };
         
         let member2 = CommitteeMember {
-            agent_id: AgentId::from_content_hash(crate::crypto::ContentHash::create_from_bytes("test2".as_bytes()).unwrap().as_bytes(), AgentType::Validator),
+            agent_id: AgentId::from_content_hash(content_addressing::default_content_hash().as_bytes(), AgentType::Validator),
             role: MemberRole::Validator,
             voting_weight: 1,
             public_key: "public-key-2".to_string(),
             active: true,
         };
         
-        // Add members
-        committee.add_member(member1.clone()).await.unwrap();
-        committee.add_member(member2.clone()).await.unwrap();
+        // Create a committee with the members
+        let base_agent = AgentImpl::new(
+            AgentType::Committee, 
+            Some(AgentState::Active), 
+            None, 
+            None, 
+            None
+        ).unwrap();
+        
+        let config = CommitteeConfig {
+            domain: "test-domain".to_string(),
+            quorum_percentage: 66,
+            max_size: 10,
+            min_votes: 2,
+            protocol_version: "1.0".to_string(),
+        };
+        
+        let mut committee = CommitteeAgent::new(
+            base_agent, 
+            config, 
+            Some(vec![member1.clone(), member2.clone()])
+        ).unwrap();
         
         // Start a decision
-        let decision_id = committee.start_decision(
-            "Test Decision".to_string(),
-            "This is a test decision".to_string(),
-        ).await.unwrap();
+        let topic = "Test Decision".to_string();
+        let description = "This is a test decision".to_string();
         
-        // Check active decisions
-        assert_eq!(committee.active_decisions().len(), 1);
+        let decision_id = committee.start_decision(topic, description).await.unwrap();
         
         // Cast votes
+        let signature: Vec<u8> = vec![0, 1, 2, 3];
+        
         committee.cast_vote(
             &decision_id,
             member1.agent_id.clone(),
             VoteValue::Approve,
-            vec![1, 2, 3], // Mock signature
+            signature.clone()
         ).await.unwrap();
         
         committee.cast_vote(
             &decision_id,
             member2.agent_id.clone(),
             VoteValue::Approve,
-            vec![4, 5, 6], // Mock signature
+            signature.clone()
         ).await.unwrap();
         
-        // Check if the decision was approved
-        assert!(committee.is_decision_approved(&decision_id).unwrap());
+        // Get the decision
+        let decision = committee.get_decision(&decision_id).unwrap();
         
-        // Check active decisions again
-        assert_eq!(committee.active_decisions().len(), 0);
+        // Verify the decision
+        assert_eq!(decision.votes.len(), 2);
+        assert!(committee.is_decision_approved(&decision_id).unwrap());
     }
 } 

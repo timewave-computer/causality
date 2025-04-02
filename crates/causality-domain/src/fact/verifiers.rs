@@ -1,207 +1,183 @@
-// Fact verifier implementations
+// Fact verifiers for domains
 // Original file: src/domain/fact/verifiers.rs
 
 // Fact Verifiers Module for Causality
 //
-// This module provides implementations of verifiers for facts.
+// This module defines the verifiers used for fact verification in Causality.
 
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::Arc;
-use async_trait::async_trait;
 
-use causality_types::Result;
-use causality_engine_types::FactType;
-use super::verification::{FactVerifier, VerificationResult};
+use crate::error::Error;
+use crate::fact::types::FactType;
+use crate::fact::verification::{FactVerification, FactVerifier};
 
-/// Merkle proof verifier
+/// A basic verifier that always succeeds
 #[derive(Debug)]
-pub struct MerkleProofVerifier {
-    /// Verifier name
-    pub name: String,
+pub struct AlwaysSuccessVerifier {
+    name: String,
 }
 
-#[async_trait]
-impl FactVerifier for MerkleProofVerifier {
-    fn can_verify(&self, fact: &FactType) -> bool {
-        match fact {
-            FactType::BlockFact => true,
-            FactType::TransactionFact => true,
-            _ => false,
+impl AlwaysSuccessVerifier {
+    /// Create a new always-success verifier
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
         }
     }
-    
-    async fn verify(&self, _fact: &FactType) -> Result<VerificationResult> {
-        // Implementation would verify the Merkle proof
-        Ok(VerificationResult {
-            verified: true,
-            method: "merkle_proof".to_string(),
-            confidence: 0.99,
-            error: None,
-        })
+}
+
+impl Default for AlwaysSuccessVerifier {
+    fn default() -> Self {
+        Self::new("always-success")
     }
 }
 
-/// Signature verifier
+impl FactVerifier for AlwaysSuccessVerifier {
+    /// Get the verifier name
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    /// Verify a fact - always succeeds
+    fn verify(&self, _fact: &FactType) -> Result<FactVerification, Error> {
+        let mut metadata = HashMap::new();
+        metadata.insert("verifier".to_string(), self.name.clone());
+        metadata.insert("method".to_string(), "always-success".to_string());
+        
+        Ok(FactVerification::success().with_metadata("result", "success"))
+    }
+}
+
+/// A basic verifier that always fails
 #[derive(Debug)]
-pub struct SignatureVerifier {
-    /// Verifier name
-    pub name: String,
+pub struct AlwaysFailVerifier {
+    name: String,
+    error_message: String,
 }
 
-#[async_trait]
-impl FactVerifier for SignatureVerifier {
-    fn can_verify(&self, fact: &FactType) -> bool {
-        match fact {
-            FactType::OracleFact => true,
-            _ => false,
+impl AlwaysFailVerifier {
+    /// Create a new always-fail verifier
+    pub fn new(name: impl Into<String>, error_message: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            error_message: error_message.into(),
         }
     }
-    
-    async fn verify(&self, _fact: &FactType) -> Result<VerificationResult> {
-        // Implementation would verify the signature
-        Ok(VerificationResult {
-            verified: true,
-            method: "signature".to_string(),
-            confidence: 0.95,
-            error: None,
-        })
+}
+
+impl Default for AlwaysFailVerifier {
+    fn default() -> Self {
+        Self::new("always-fail", "Verification failed by design")
     }
 }
 
-/// Consensus verifier
+impl FactVerifier for AlwaysFailVerifier {
+    /// Get the verifier name
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    /// Verify a fact - always fails
+    fn verify(&self, _fact: &FactType) -> Result<FactVerification, Error> {
+        let mut metadata = HashMap::new();
+        metadata.insert("verifier".to_string(), self.name.clone());
+        metadata.insert("method".to_string(), "always-fail".to_string());
+        
+        Ok(FactVerification::failure(&self.error_message))
+    }
+}
+
+/// A composite verifier that combines multiple verifiers
 #[derive(Debug)]
-pub struct ConsensusVerifier {
-    /// Verifier name
-    pub name: String,
-    /// Minimum consensus threshold
-    pub threshold: f64,
-    /// Child verifiers
-    verifiers: Vec<Arc<dyn FactVerifier>>,
+pub struct CompositeVerifier {
+    name: String,
+    verifiers: Vec<Box<dyn FactVerifier>>,
+    require_all: bool,
 }
 
-#[async_trait]
-impl FactVerifier for ConsensusVerifier {
-    fn can_verify(&self, fact: &FactType) -> bool {
-        for verifier in &self.verifiers {
-            if verifier.can_verify(fact) {
-                return true;
-            }
-        }
-        
-        false
-    }
-    
-    async fn verify(&self, fact: &FactType) -> Result<VerificationResult> {
-        let mut verified_count = 0;
-        let mut total_confidence = 0.0;
-        let total_verifiers = self.verifiers.len();
-        
-        for verifier in &self.verifiers {
-            if verifier.can_verify(fact) {
-                let result = verifier.verify(fact).await?;
-                if result.verified {
-                    verified_count += 1;
-                    total_confidence += result.confidence;
-                }
-            }
-        }
-        
-        let consensus_ratio = if total_verifiers > 0 {
-            verified_count as f64 / total_verifiers as f64
-        } else {
-            0.0
-        };
-        
-        let avg_confidence = if verified_count > 0 {
-            total_confidence / verified_count as f64
-        } else {
-            0.0
-        };
-        
-        let verified = consensus_ratio >= self.threshold;
-        
-        Ok(VerificationResult {
-            verified,
-            method: "consensus".to_string(),
-            confidence: avg_confidence * consensus_ratio,
-            error: if !verified {
-                Some(format!("Consensus threshold not met: {}/{} verifiers", 
-                    verified_count, total_verifiers))
-            } else {
-                None
-            },
-        })
-    }
-}
-
-impl ConsensusVerifier {
-    /// Create a new consensus verifier
-    pub fn new(name: &str, threshold: f64) -> Self {
-        ConsensusVerifier {
-            name: name.to_string(),
-            threshold,
-            verifiers: Vec::new(),
+impl CompositeVerifier {
+    /// Create a new composite verifier
+    pub fn new(name: impl Into<String>, verifiers: Vec<Box<dyn FactVerifier>>, require_all: bool) -> Self {
+        Self {
+            name: name.into(),
+            verifiers,
+            require_all,
         }
     }
     
-    /// Add a verifier
-    pub fn add_verifier(&mut self, verifier: Arc<dyn FactVerifier>) {
+    /// Add a verifier to the composite
+    pub fn add_verifier(&mut self, verifier: Box<dyn FactVerifier>) {
         self.verifiers.push(verifier);
     }
 }
 
-/// Registry of verifiers
-#[derive(Debug, Default)]
-pub struct VerifierRegistry {
-    /// Verifiers by ID
-    verifiers: HashMap<String, Arc<dyn FactVerifier>>,
-    /// Default verifier ID
-    default_verifier: Option<String>,
-}
-
-impl VerifierRegistry {
-    /// Create a new verifier registry
-    pub fn new() -> Self {
-        VerifierRegistry {
-            verifiers: HashMap::new(),
-            default_verifier: None,
+impl FactVerifier for CompositeVerifier {
+    /// Get the verifier name
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    /// Verify a fact using all contained verifiers
+    fn verify(&self, fact: &FactType) -> Result<FactVerification, Error> {
+        let mut results = Vec::new();
+        let mut all_verified = true;
+        let mut any_verified = false;
+        
+        for verifier in &self.verifiers {
+            match verifier.verify(fact) {
+                Ok(result) => {
+                    if result.is_valid() {
+                        any_verified = true;
+                    } else {
+                        all_verified = false;
+                    }
+                    results.push(result);
+                },
+                Err(e) => {
+                    return Err(Error::FactVerification(format!(
+                        "Verifier '{}' failed: {}", 
+                        verifier.name(), 
+                        e
+                    )));
+                }
+            }
+        }
+        
+        let verified = if self.require_all { all_verified } else { any_verified };
+        let mut metadata = HashMap::new();
+        metadata.insert("verifier".to_string(), self.name.clone());
+        metadata.insert("method".to_string(), "composite".to_string());
+        metadata.insert("require_all".to_string(), self.require_all.to_string());
+        metadata.insert("verifier_count".to_string(), self.verifiers.len().to_string());
+        
+        if verified {
+            Ok(FactVerification {
+                verified: true,
+                metadata,
+                error: None,
+            })
+        } else {
+            let error_msg = if self.require_all {
+                "Not all verifiers succeeded"
+            } else {
+                "No verifiers succeeded"
+            };
+            
+            Ok(FactVerification {
+                verified: false,
+                metadata,
+                error: Some(error_msg.to_string()),
+            })
         }
     }
     
-    /// Register a verifier
-    pub fn register_verifier(&mut self, verifier: Arc<dyn FactVerifier>) {
-        let name = match verifier.as_ref() {
-            verifier => format!("{:?}", verifier),
-        };
-        
-        self.verifiers.insert(name.clone(), verifier);
-        
-        if self.default_verifier.is_none() {
-            self.default_verifier = Some(name);
-        }
-    }
-    
-    /// Set the default verifier
-    pub fn set_default_verifier(&mut self, id: &str) -> Result<()> {
-        if !self.verifiers.contains_key(id) {
-            return Err(causality_types::Error::InvalidArgument(
-                format!("Verifier not found: {}", id)
-            ));
-        }
-        
-        self.default_verifier = Some(id.to_string());
-        
-        Ok(())
-    }
-    
-    /// Get a verifier by ID
-    pub fn get_verifier(&self, id: &str) -> Option<Arc<dyn FactVerifier>> {
-        self.verifiers.get(id).cloned()
-    }
-    
-    /// Get the default verifier
-    pub fn get_default_verifier(&self) -> Option<Arc<dyn FactVerifier>> {
-        self.default_verifier.as_ref().and_then(|id| self.verifiers.get(id).cloned())
+    /// Get the verifier metadata
+    fn metadata(&self) -> HashMap<String, String> {
+        let mut metadata = HashMap::new();
+        metadata.insert("type".to_string(), "composite".to_string());
+        metadata.insert("verifier_count".to_string(), self.verifiers.len().to_string());
+        metadata.insert("require_all".to_string(), self.require_all.to_string());
+        metadata
     }
 }

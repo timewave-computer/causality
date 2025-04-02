@@ -4,14 +4,17 @@
 // following the design outlined in ADR-032.
 
 use crate::resource::{ResourceId, ResourceError, ResourceType};
-use crate::error::Error as CoreError;
-use crate::capability::{Capability, ContentAddressingError, IdentityId};
+use causality_error::Error as CoreError;
+use crate::resource::operation::Capability;
+use crate::resource::agent::operation::IdentityId;
 use causality_types::ContentId;
+use causality_types::ContentHash;
 use std::fmt;
 use std::str::FromStr;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use std::collections::HashMap;
+use hex;
 
 /// Unique identifier for an agent
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -44,9 +47,11 @@ impl AgentId {
     
     /// Create an agent ID from a content hash
     pub fn from_content_hash(hash: &[u8], agent_type: AgentType) -> Self {
-        let content_id = ContentId::from_bytes(hash)
-            .expect("Failed to create ContentId from hash bytes");
-        let resource_id = ResourceId::from(content_id);
+        // Create ContentId from bytes
+        let content_id = ContentId::from_bytes(hash);
+        let resource_id = ResourceId::from_content_id(&content_id)
+            .unwrap_or_else(|_| panic!("Failed to create ResourceId from ContentId"));
+        
         AgentId {
             resource_id,
             agent_type,
@@ -146,7 +151,7 @@ impl Default for AgentState {
 }
 
 /// A relationship between an agent and another resource
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AgentRelationship {
     /// The type of relationship
     relationship_type: RelationshipType,
@@ -154,8 +159,8 @@ pub struct AgentRelationship {
     /// The target resource ID
     target_resource_id: ResourceId,
     
-    /// Capabilities granted by this relationship
-    capabilities: Vec<Capability<dyn std::any::Any + Send + Sync>>,
+    /// Capabilities granted by this relationship (stored as strings)
+    capability_ids: Vec<String>,
     
     /// Additional metadata about the relationship
     metadata: HashMap<String, String>,
@@ -166,13 +171,13 @@ impl AgentRelationship {
     pub fn new(
         relationship_type: RelationshipType,
         target_resource_id: ResourceId,
-        capabilities: Vec<Capability<dyn std::any::Any + Send + Sync>>,
+        capability_ids: Vec<String>,
         metadata: HashMap<String, String>,
     ) -> Self {
         Self {
             relationship_type,
             target_resource_id,
-            capabilities,
+            capability_ids,
             metadata,
         }
     }
@@ -187,9 +192,9 @@ impl AgentRelationship {
         &self.target_resource_id
     }
     
-    /// Get the capabilities
-    pub fn capabilities(&self) -> &[Capability<dyn std::any::Any + Send + Sync>] {
-        &self.capabilities
+    /// Get the capability IDs
+    pub fn capability_ids(&self) -> &[String] {
+        &self.capability_ids
     }
     
     /// Get the metadata
@@ -332,23 +337,95 @@ pub struct AgentCapabilities {
     capabilities: Vec<Capability<dyn std::any::Any + Send + Sync>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableAgentRelationship {
+    /// The type of relationship
+    pub relationship_type: RelationshipType,
+    
+    /// The target resource ID
+    pub target_resource_id: ResourceId,
+    
+    /// Capabilities granted by this relationship (stored as strings)
+    pub capability_ids: Vec<String>,
+    
+    /// Additional metadata about the relationship
+    pub metadata: HashMap<String, String>,
+}
+
+impl SerializableAgentRelationship {
+    /// Get the relationship type
+    pub fn relationship_type(&self) -> &RelationshipType {
+        &self.relationship_type
+    }
+    
+    /// Get the target resource ID
+    pub fn target_resource_id(&self) -> &ResourceId {
+        &self.target_resource_id
+    }
+    
+    /// Get the capability IDs
+    pub fn capability_ids(&self) -> &[String] {
+        &self.capability_ids
+    }
+    
+    /// Get the metadata
+    pub fn metadata(&self) -> &HashMap<String, String> {
+        &self.metadata
+    }
+}
+
+impl From<AgentRelationship> for SerializableAgentRelationship {
+    fn from(r: AgentRelationship) -> Self {
+        Self {
+            relationship_type: r.relationship_type,
+            target_resource_id: r.target_resource_id,
+            capability_ids: r.capability_ids,
+            metadata: r.metadata,
+        }
+    }
+}
+
+impl From<SerializableAgentRelationship> for AgentRelationship {
+    fn from(s: SerializableAgentRelationship) -> Self {
+        Self {
+            relationship_type: s.relationship_type,
+            target_resource_id: s.target_resource_id,
+            capability_ids: s.capability_ids,
+            metadata: s.metadata,
+        }
+    }
+}
+
+impl From<&SerializableAgentRelationship> for AgentRelationship {
+    fn from(s: &SerializableAgentRelationship) -> Self {
+        Self {
+            relationship_type: s.relationship_type.clone(),
+            target_resource_id: s.target_resource_id.clone(),
+            capability_ids: s.capability_ids.clone(),
+            metadata: s.metadata.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::content_addressing;
     
     #[test]
     fn test_agent_id_display_and_parse() {
-        let content_id = ContentId::generate();
-        let resource_id = ResourceId::from(content_id);
-        let agent_type = AgentType::User;
-        let agent_id = AgentId::new(resource_id.clone(), agent_type);
+        // Create a content ID for testing
+        let content_id = ContentId::new("test-content-id");
+        let resource_id = ResourceId::from_content_id(&content_id).unwrap();
+        let agent_id = AgentId::new(resource_id, AgentType::User);
         
-        let agent_id_str = agent_id.to_string();
-        let parsed_agent_id = AgentId::from_str(&agent_id_str).unwrap();
+        // Test display
+        let display_str = format!("{}", agent_id);
         
-        assert_eq!(agent_id, parsed_agent_id);
-        assert_eq!(parsed_agent_id.resource_id(), &resource_id);
-        assert_eq!(parsed_agent_id.agent_type(), &AgentType::User);
+        // Test parsing
+        let parsed = AgentId::from_str(&display_str).unwrap();
+        assert_eq!(parsed.agent_type(), &AgentType::User);
+        assert_eq!(parsed.resource_id(), agent_id.resource_id());
     }
     
     #[test]

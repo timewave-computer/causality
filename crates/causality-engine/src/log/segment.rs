@@ -14,8 +14,9 @@ use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
-use causality_types::{Error, Result};
+use causality_error::{EngineResult as Result, EngineError as Error};
 use crate::log::LogEntry;
+use crate::log::storage::StorageConfig;
 
 /// Information about a log segment
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -205,18 +206,19 @@ impl LogSegment {
         self.modified = false;
     }
     
-    /// Check if the segment is full according to the storage config
-    pub fn is_full(&self, config: &causality_engine::StorageConfig) -> bool {
-        // Check if the segment has too many entries
-        if config.max_segment_entries > 0 && self.entries.len() >= config.max_segment_entries {
-            return true;
+    /// Check if this segment is full according to configured limits
+    pub fn is_full(&self, config: &StorageConfig) -> bool {
+        // Check if the entry count exceeds the maximum
+        if let Some(max_entries) = config.max_entries_per_segment {
+            if self.entries.len() >= max_entries {
+                return true;
+            }
         }
         
-        // Check if the segment is too large in bytes
-        if config.max_segment_size > 0 {
-            // Estimate size - this is approximate but good enough for limit checks
-            let estimated_size = self.entries.len() * 256; // Assume average 256 bytes per entry
-            if estimated_size >= config.max_segment_size as usize {
+        // Check if the time span exceeds the maximum
+        if let (Some(max_segment_hours), Some(end_time)) = (config.max_segment_hours, self.info.end_time) {
+            let duration = end_time.signed_duration_since(self.info.start_time);
+            if duration.num_hours() >= max_segment_hours as i64 {
                 return true;
             }
         }

@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
+use std::any::Any;
 
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
@@ -13,7 +14,7 @@ use serde_json::Value;
 
 use causality_core::effect::{
     Effect, EffectContext, EffectId, EffectOutcome, EffectResult, EffectError,
-    DomainEffect, ResourceEffect, ResourceOperation, EffectTypeId
+    DomainEffect, ResourceEffect, ResourceOperation, EffectTypeId, EffectType
 };
 use causality_core::resource::ContentId;
 
@@ -144,87 +145,62 @@ impl fmt::Debug for CosmWasmInstantiateEffect {
     }
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 impl Effect for CosmWasmInstantiateEffect {
-    fn id(&self) -> &EffectId {
-        &self.id
-    }
-    
-    fn type_id(&self) -> EffectTypeId {
-        EffectTypeId::new("cosmwasm.instantiate")
-    }
-    
-    fn display_name(&self) -> String {
-        "CosmWasm Contract Instantiate".to_string()
+    fn effect_type(&self) -> EffectType {
+        EffectType::Custom("cosmwasm.instantiate".to_string())
     }
     
     fn description(&self) -> String {
-        format!(
-            "Instantiate contract from code ID {} with label '{}' on chain {} with sender {}",
-            self.params.code_id,
-            self.params.label,
-            self.params.chain_id,
-            self.params.sender
-        )
+        format!("CosmWasm Instantiate: Code {} on {}", 
+                self.params.code_id, 
+                self.params.chain_id)
     }
     
-    fn display_parameters(&self) -> HashMap<String, String> {
-        let mut params = HashMap::new();
-        params.insert("chain_id".to_string(), self.params.chain_id.clone());
-        params.insert("code_id".to_string(), self.params.code_id.to_string());
-        params.insert("label".to_string(), self.params.label.clone());
-        params.insert("sender".to_string(), self.params.sender.clone());
-        
-        if let Some(admin) = &self.params.admin {
-            params.insert("admin".to_string(), admin.clone());
-        }
-        
-        // Add funds information
-        if !self.params.funds.is_empty() {
-            let funds_str = self.params.funds
-                .iter()
-                .map(|c| format!("{}{}", c.amount, c.denom))
-                .collect::<Vec<_>>()
-                .join(", ");
-            
-            params.insert("funds".to_string(), funds_str);
-        }
-        
-        params
-    }
-    
-    async fn execute(&self, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        // In a real implementation, this would call out to the CosmWasm chain
-        // For now, we'll just return a success outcome
-        
-        // Check capabilities
-        if !context.has_capability(&self.code_resource_id, &causality_core::capability::Right::Create) {
-            return Err(EffectError::CapabilityError(
-                format!("Missing create capability for code resource: {}", self.code_resource_id)
+    async fn execute(&self, context: &dyn EffectContext) -> EffectResult {
+        // Verify capability for code access
+        if !context.has_capability(&format!("cosmwasm.code.{}", self.params.code_id)) {
+            return Err(EffectError::PermissionDenied(
+                format!("Missing capability to use code: {}", self.params.code_id)
             ));
         }
         
-        if !context.has_capability(&self.account_resource_id, &causality_core::capability::Right::Write) {
-            return Err(EffectError::CapabilityError(
-                format!("Missing write capability for account resource: {}", self.account_resource_id)
+        // Verify capability for account access
+        if !context.has_capability(&format!("cosmwasm.account.{}", self.params.admin)) {
+            return Err(EffectError::PermissionDenied(
+                format!("Missing capability to use account: {}", self.params.admin)
             ));
         }
         
-        // Create outcome data
+        // Prepare outcome data
         let mut outcome_data = HashMap::new();
         outcome_data.insert("chain_id".to_string(), self.params.chain_id.clone());
         outcome_data.insert("code_id".to_string(), self.params.code_id.to_string());
+        outcome_data.insert("admin".to_string(), self.params.admin.clone());
         outcome_data.insert("label".to_string(), self.params.label.clone());
-        outcome_data.insert("sender".to_string(), self.params.sender.clone());
+        outcome_data.insert("msg".to_string(), self.params.msg.to_string());
         
-        // Add mock contract address
-        let mock_contract_address = format!("cosmos1mock{}", self.params.code_id);
-        outcome_data.insert("contract_address".to_string(), mock_contract_address);
+        // Add funds information
+        if !self.params.funds.is_empty() {
+            let funds_str = self.params.funds.iter()
+                .map(|c| format!("{}{}", c.amount, c.denom))
+                .collect::<Vec<String>>()
+                .join(",");
+            outcome_data.insert("funds".to_string(), funds_str);
+        }
         
-        // Return success outcome
-        Ok(EffectOutcome::success(outcome_data)
-            .with_affected_resource(self.code_resource_id.clone())
-            .with_affected_resource(self.account_resource_id.clone()))
+        // In a real implementation, we would execute the instantiate here
+        // For now, we'll just return a simulated result with a contract address
+        outcome_data.insert("contract_address".to_string(), "cosmos14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s4hmalr".to_string());
+        
+        Ok(EffectOutcome::Success {
+            result: Some("contract_instantiated".to_string()),
+            data: outcome_data,
+        })
+    }
+    
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

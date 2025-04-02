@@ -1,20 +1,38 @@
-// Common concurrency patterns
-// Original file: src/concurrency/patterns.rs
-
-// Concurrency patterns
+// Concurrency patterns (placeholder)
 //
-// This module provides higher-level concurrency patterns that build on the
-// primitives provided by the primitives module.
+// This module defines reusable concurrency patterns for the Causality system.
+// This is currently a placeholder and will be implemented in a future sprint.
 
-// Import and re-export submodules
-mod fork;
-pub use fork::{fork, fork_join, fork_try_join, fork_each};
+use std::fmt::Debug;
 
-mod race;
-pub use race::{race, race_ok, race_result, race_until};
+/// Placeholder for concurrency patterns module 
+/// 
+/// This module will provide common concurrency patterns like:
+/// - Fork/join
+/// - Race conditions
+/// - Barriers
+/// - Timeouts
+/// 
+/// To be implemented in future sprints.
+#[derive(Debug)]
+pub struct ConcurrencyPatterns {
+    // Implementation details will be added later
+}
 
-mod barrier;
-pub use barrier::{Barrier, SharedBarrier, barrier, resource_barrier, timeout_barrier, wait_for_resources};
+impl ConcurrencyPatterns {
+    /// Create a new instance of concurrency patterns
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
-mod timeout;
-pub use timeout::{timeout, timeout_result, with_timeout, WithTimeout, timeout_with_retry}; 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_placeholder() {
+        let _patterns = ConcurrencyPatterns::new();
+        // Tests will be added when implementation is complete
+    }
+} 

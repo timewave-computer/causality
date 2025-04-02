@@ -1,23 +1,45 @@
-// Core engine functionality for the Causality system
-// Original file: src/engine/mod.rs
-// Last updated: 23.03.27
+// Causality Engine library
+//
+// This crate provides the execution engine for the Causality platform,
+// including operation execution, context management, and effect handling.
 
-// Re-export modules
-pub mod execution;
-pub mod invocation;
+// Core modules
 pub mod log;
+pub mod invocation;
+pub mod execution;
 pub mod operation;
 pub mod effect;
+pub mod resource;
+pub mod domain;
+pub mod repository;
 
-// Re-export the effect runtime
-pub use effect::runtime::{
-    EngineEffectRuntime,
-    EngineCapabilityVerifier,
-    EngineEffectRuntimeFactory,
-    get_effect_runtime,
+// Re-exports
+pub use log::{
+    LogEntry, EntryType, EntryData,
+    FactId, FactSnapshot, FactDependency, FactDependencyType
 };
+pub use operation::Operation;
+pub use execution::context::ExecutionContext;
 
-/// Version of the library
+// Re-export key types for public API
+pub use invocation::InvocationSystem;
+pub use log::fact::{FactType};
+pub use repository::CodeRepository;
+pub use resource::ResourceAllocator;
+
+// Re-export error handling
+pub use causality_error::{Result, Error, EngineError};
+
+// Re-export content types from causality-types
+pub use causality_types::{ContentId, TraceId, Timestamp};
+
+// Re-export domain types
+pub use domain::DomainId;
+
+// Import and re-export TimeMap from causality-core
+pub use causality_core::time::map::TimeMap;
+
+// Version of the library
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(test)]

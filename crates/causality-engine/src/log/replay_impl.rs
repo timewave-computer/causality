@@ -6,15 +6,15 @@
 // This module provides functionality for replaying log entries to
 // reconstruct system state.
 
-mod engine;
-mod filter;
-mod callback;
-mod state;
+use crate::log::replay::engine;
+use crate::log::replay::filter;
+use crate::log::replay::callback;
+use crate::log::replay::state;
 
-pub use engine::ReplayEngine;
-pub use filter::ReplayFilter;
-pub use callback::{ReplayCallback, NoopReplayCallback};
-pub use state::{ReplayState, ResourceState, DomainState};
+pub use crate::log::replay::engine::ReplayEngine;
+pub use crate::log::replay::filter::ReplayFilter;
+pub use crate::log::replay::callback::{ReplayCallback, NoopReplayCallback};
+pub use crate::log::replay::state::{ReplayState, ResourceState, DomainState};
 
 use std::fmt;
 use chrono::{DateTime, Utc};
@@ -75,7 +75,7 @@ pub struct ReplayOptions {
     /// The domains to include
     pub domains: Option<std::collections::HashSet<causality_types::DomainId>>,
     /// The entry types to include
-    pub entry_types: Option<std::collections::HashSet<causality_engine::EntryType>>,
+    pub entry_types: Option<std::collections::HashSet<crate::log::EntryType>>,
     /// The maximum number of entries to process
     pub max_entries: Option<usize>,
 }
@@ -131,7 +131,7 @@ impl ReplayOptions {
     }
     
     /// Set the entry types to include
-    pub fn with_entry_types(mut self, entry_types: std::collections::HashSet<causality_engine::EntryType>) -> Self {
+    pub fn with_entry_types(mut self, entry_types: std::collections::HashSet<crate::log::EntryType>) -> Self {
         self.entry_types = Some(entry_types);
         self
     }

@@ -1,17 +1,21 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use async_trait::async_trait;
+use std::fmt::Debug;
+
+use super::{
+    EffectError, EffectId, EffectOutcome, EffectResult, 
+    context::EffectContext,
+    registry::EffectRegistry,
+};
 
 use crate::effect::{
-    Effect, EffectError, EffectId, EffectOutcome, EffectResult, 
-    context::EffectContext,
     domain::{DomainEffect, DomainId, DomainEffectOutcome, EnhancedDomainContextAdapter},
-    registry::{EffectHandler, EffectRegistry},
     resource::ResourceEffect,
 };
 
 /// Orchestrated effect execution status
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OrchestrationStatus {
     /// Pending execution
     Pending,

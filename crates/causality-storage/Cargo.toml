@@ -7,8 +7,8 @@ license = "MIT OR Apache-2.0"
 
 [features]
 default = []
-memory = []
-rocks = []
+memory = ["causality-db/memory"]
+rocks = ["causality-db/rocks"]
 all-db = ["memory", "rocks"]
 
 [dependencies]
@@ -22,6 +22,5 @@ tracing = { workspace = true }
 causality-types = { workspace = true }
 causality-core = { workspace = true }
 
-# DEPRECATED: Using causality-db creates a circular dependency
-# This functionality has been consolidated into causality-core
-# causality-db = { workspace = true, optional = true }
+# Database dependency
+causality-db = { workspace = true }

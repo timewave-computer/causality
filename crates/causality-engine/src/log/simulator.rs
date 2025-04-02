@@ -8,12 +8,11 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use causality_types::{*};
-use causality_crypto::ContentId;;
-use causality_types::{Error, Result};
-use crate::log::{FactLogger, FactMetadata, FactEntry, LogStorage};
-use causality_engine_types::{FactType, RegisterFact, ZKProofFact};
-use causality_engine_snapshot::{FactId, FactSnapshot, RegisterObservation};
+use causality_types::{DomainId, Timestamp, TraceId, ContentId};
+use causality_error::{EngineError, EngineResult as Result};
+use crate::log::{FactLogger, FactMetadata, LogStorage};
+use crate::log::entry::FactEntry;
+use crate::log::fact::{FactType, RegisterFact, ZKProofFact, FactId, FactSnapshot, RegisterObservation};
 
 /// Configuration for fact simulation
 #[derive(Debug, Clone)]
@@ -359,10 +358,14 @@ impl FactSimulator {
         &mut self,
         fact_ids: &[FactId],
     ) -> FactSnapshot {
-        let mut snapshot = FactSnapshot::new(&self.config.observer_name);
+        let snapshot_id = format!("sim-snapshot-{}", self.next_fact_id);
+        let timestamp = Timestamp::now();
+        let observer = self.config.observer_name.clone();
+        
+        let mut snapshot = FactSnapshot::new(snapshot_id, timestamp, observer);
         
         for fact_id in fact_ids {
-            snapshot.add_fact(fact_id.clone(), self.config.domain_id.clone());
+            snapshot.add_fact_hash(fact_id.clone(), format!("simulated-hash-{}", fact_id));
         }
         
         snapshot

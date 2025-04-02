@@ -1,34 +1,40 @@
-// Concurrency module
-//
-// This module provides various concurrency utilities and primitives.
+// Concurrency primitives and patterns for the Causality system
+// 
+// This module provides a unified interface for concurrency primitives and patterns used
+// throughout the Causality codebase.
 
-// Core modules
-pub mod atomic;     // Atomic operations and primitives
-pub mod lock;       // Locking mechanisms
-pub mod pool;       // Resource pool implementation
-pub mod wait_queue; // Deterministic wait queue for resource management
-pub mod resource_guard;   // Resource guard for safe resource access
-pub mod resource_manager; // Resource management utilities
-pub mod task_scheduler;   // Task scheduling
-pub mod task_id;          // Task identifiers
+pub mod error;
+pub mod lock;
+pub mod pool;
+pub mod wait_queue;
+pub mod task_scheduler;
+pub mod patterns;
+pub mod task_id;
+pub mod atomic;
 
-// Pattern modules
-pub mod patterns;   // High-level concurrency patterns
-pub mod barrier;    // Barrier synchronization
-pub mod fork;       // Fork-join parallelism
-pub mod race;       // Racing between tasks
-pub mod timeout;    // Timeout handling
+// Resource management modules (disabled until dependencies are resolved)
+// pub mod resource_guard;
+// pub mod resource_manager;
 
-// Re-exporting core types for easier access
-use resource_manager::{ResourceManager, SharedResourceManager};
-use wait_queue::{WaitQueue, SharedWaitQueue};
+// Import necessary std components
+use std::sync::Arc;
 
-// Re-exporting common concurrency patterns
-pub use fork::{fork, join};
-pub use race::{race, select};
-pub use barrier::Barrier;
-pub use barrier::SharedBarrier;
-pub use timeout::{with_timeout, TimeoutError};
+// Export core error types
+pub use error::WaitQueueError;
+pub use error::TaskSchedulerError;
+
+// Export core concurrency primitives
+pub use tokio::sync::Barrier;
+pub use lock::{SharedMutex, DeterministicMutex, DeterministicRwLock};
+pub use wait_queue::{WaitQueue, WaitQueue as WaitQueueEntry};
+pub use patterns::ConcurrencyPatterns;
+pub use task_id::{TaskId, TaskPriority};
+pub use task_scheduler::{TaskScheduler, TaskInfo as Task, TaskState as TaskStatus};
+
+// Re-export core async/await functionality
+pub use tokio::spawn;
+pub use tokio::time::sleep;
+pub use tokio::task::yield_now;
 
 // Re-exports for public API
 pub use atomic::{
@@ -38,9 +44,9 @@ pub use atomic::{
 
 pub use lock::{
     Cell, 
-    DeterministicMutex, DeterministicMutexGuard,
-    DeterministicRwLock, DeterministicReadGuard, DeterministicWriteGuard,
-    SharedMutex, SharedRwLock,
+    DeterministicMutexGuard,
+    DeterministicReadGuard, DeterministicWriteGuard,
+    SharedRwLock,
 };
 
 pub use pool::{
@@ -48,23 +54,7 @@ pub use pool::{
 };
 
 pub use wait_queue::{
-    WaitQueue, SharedWaitQueue, WaitFuture,
-};
-
-pub use resource_guard::{
-    ResourceGuard, WeakResourceRef, ResourceRegisterGuard,
-};
-
-pub use resource_manager::{
-    ResourceManager as ResourceMgr, SharedResourceManager as SharedResourceMgr,
-};
-
-pub use task_scheduler::{
-    TaskScheduler, TaskInfo, TaskState, TaskSchedulerMetrics,
-};
-
-pub use task_id::{
-    TaskId, TaskPriority,
+    WaitFuture,
 };
 
 // Helper functions for creating common concurrency primitives
@@ -77,8 +67,8 @@ where
 }
 
 /// Create a new shared wait queue
-pub fn shared_wait_queue() -> SharedWaitQueue {
-    wait_queue::shared()
+pub fn shared_wait_queue() -> Arc<WaitQueue> {
+    Arc::new(WaitQueue::new())
 }
 
 /// Create a new resource manager (non-shared version)
@@ -94,17 +84,32 @@ pub fn new_wait_queue() -> WaitQueue {
     WaitQueue::new()
 }
 
-// Mark legacy modules as deprecated
-#[deprecated(since = "0.9.0", note = "Use the new direct imports instead")]
-pub mod primitives {
-    //! Legacy module, use direct imports instead
-    #[deprecated(since = "0.9.0", note = "Use new modules directly")]
-    pub use super::*;
+/// Create a new shared mutex
+pub fn shared_mutex<T>(value: T) -> SharedMutex<T> 
+where 
+    T: Send + 'static,
+{
+    SharedMutex::new(value)
 }
 
-#[deprecated(since = "0.9.0", note = "Use patterns module directly")]
+// Mark legacy modules as deprecated
+#[deprecated(since = "0.9.0", note = "Use task_scheduler module directly")]
 pub mod scheduler {
     //! Legacy module, use task_scheduler module directly
     #[deprecated(since = "0.9.0", note = "Use task_scheduler module directly")]
     pub use super::task_scheduler::*;
-} 
+}
+
+// Define error and result types that were missing
+/// General error type for the concurrency subsystem
+pub type Error = std::io::Error;
+
+/// Result type for concurrency operations
+pub type Result<T> = std::result::Result<T, Error>;
+
+// Define the TaskResult type since it's missing from pool
+/// Result of a task execution
+pub type TaskResult<T> = std::result::Result<T, Error>;
+
+/// Thread pool type
+pub type ThreadPool = tokio::runtime::Runtime; 

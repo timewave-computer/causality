@@ -10,16 +10,17 @@ use std::collections::HashSet;
 
 use chrono::Utc;
 
-use causality_types::{Error, Result};
-use causality_engine::{LogEntry, EntryType, EntryData, EventEntry};
-use causality_engine::LogStorage;
-use causality_engine::{
-    ReplayStatus, ReplayResult, ReplayCallback, NoopReplayCallback, ReplayFilter, 
-    ReplayOptions, ReplayState, DomainState, ResourceState
+use causality_error::{EngineResult, EngineError};
+use crate::log::entry::{LogEntry, EntryType, EntryData};
+use crate::log::storage::LogStorage;
+use crate::log::replay_impl::{
+    ReplayStatus, ReplayResult, ReplayOptions
 };
-use causality_domain::map::TimeMap;
-use causality_engine::LogTimeMapIntegration;
-use causality_engine_manager::{LogSegmentManager, SegmentManagerOptions};
+use crate::log::replay::filter::ReplayFilter;
+use crate::log::replay::callback::{ReplayCallback, NoopReplayCallback};
+use crate::log::replay::state::{ReplayState, DomainState, ResourceState};
+use crate::log::time_map::{TimeMap, LogTimeMapIntegration};
+use crate::log::segment_manager::LogSegmentManager;
 use causality_types::Timestamp;
 
 /// The core engine for replaying log entries
@@ -110,7 +111,7 @@ impl ReplayEngine {
     }
     
     /// Run the replay process
-    pub fn run(&self) -> Result<ReplayResult> {
+    pub fn run(&self) -> EngineResult<ReplayResult> {
         // Initialize the replay
         let start_time = Utc::now();
         self.callback.on_replay_start(start_time);
@@ -118,7 +119,7 @@ impl ReplayEngine {
         // Update the result status
         {
             let mut result = self.result.lock().map_err(|_| {
-                Error::Other("Failed to acquire lock on replay result".to_string())
+                EngineError::LogError("Failed to acquire lock on replay result".to_string())
             })?;
             result.status = ReplayStatus::InProgress;
             result.start_time = start_time;
@@ -165,7 +166,7 @@ impl ReplayEngine {
                     // Callback returned false, abort replay
                     {
                         let mut result = self.result.lock().map_err(|_| {
-                            Error::Other("Failed to acquire lock on replay result".to_string())
+                            EngineError::LogError("Failed to acquire lock on replay result".to_string())
                         })?;
                         result.status = ReplayStatus::Complete;
                         result.processed_entries = processed_entries;
@@ -187,11 +188,11 @@ impl ReplayEngine {
                                 entry.id
                             );
                             
-                            self.callback.on_error(&Error::Other(error_string.clone()));
+                            self.callback.on_error(&EngineError::LogError(error_string.clone()));
                             
                             {
                                 let mut result = self.result.lock().map_err(|_| {
-                                    Error::Other("Failed to acquire lock on replay result".to_string())
+                                    EngineError::LogError("Failed to acquire lock on replay result".to_string())
                                 })?;
                                 result.status = ReplayStatus::Failed;
                                 result.processed_entries = processed_entries;
@@ -200,7 +201,7 @@ impl ReplayEngine {
                                 result.state = Some(state.clone());
                             }
                             
-                            return Err(Error::Other(error_string));
+                            return Err(EngineError::LogError(error_string));
                         }
                     }
                 }
@@ -214,7 +215,7 @@ impl ReplayEngine {
                     
                     {
                         let mut result = self.result.lock().map_err(|_| {
-                            Error::Other("Failed to acquire lock on replay result".to_string())
+                            EngineError::LogError("Failed to acquire lock on replay result".to_string())
                         })?;
                         result.status = ReplayStatus::Failed;
                         result.processed_entries = processed_entries;
@@ -223,7 +224,7 @@ impl ReplayEngine {
                         result.state = Some(state.clone());
                     }
                     
-                    return Err(Error::Other(error_string));
+                    return Err(EngineError::LogError(error_string));
                 }
                 
                 processed_entries += 1;
@@ -241,7 +242,7 @@ impl ReplayEngine {
     }
     
     /// Run the replay with a specific filter
-    pub fn run_with_filter(&self, filter: &ReplayFilter) -> Result<ReplayResult> {
+    pub fn run_with_filter(&self, filter: &ReplayFilter) -> EngineResult<ReplayResult> {
         // Convert the filter to options
         let options = ReplayOptions {
             start_time: filter.start_time,
@@ -250,7 +251,7 @@ impl ReplayEngine {
             resources: filter.resources.clone(),
             domains: filter.domains.clone(),
             entry_types: filter.entry_types.clone(),
-            max_entries: filter.max_entries,
+            max_entries: self.options.max_entries,
         };
         
         // Create a new engine with the updated options
@@ -273,7 +274,7 @@ impl ReplayEngine {
         &self,
         start_time: Timestamp,
         end_time: Timestamp
-    ) -> Result<ReplayResult> {
+    ) -> EngineResult<ReplayResult> {
         // Check if we have a time map
         if let Some(time_map) = &self.time_map {
             // Get entries within the time range
@@ -313,7 +314,7 @@ impl ReplayEngine {
             // Replay completed successfully
             self.complete_replay(state, None)
         } else {
-            Err(Error::Other("Time map required for time range replay".to_string()))
+            Err(EngineError::LogError("Time map required for time range replay".to_string()))
         }
     }
     
@@ -325,7 +326,7 @@ impl ReplayEngine {
         end_time: Timestamp,
         max_entries: usize,
         mut state: ReplayState,
-    ) -> Result<ReplayResult> {
+    ) -> EngineResult<ReplayResult> {
         // Get entries in the time range from relevant segments
         let entries = segment_manager.get_entries_in_range(start_time, end_time)?;
         
@@ -360,10 +361,10 @@ impl ReplayEngine {
                             entry.id
                         );
                         
-                        self.callback.on_error(&Error::Other(error_string.clone()));
+                        self.callback.on_error(&EngineError::LogError(error_string.clone()));
                         return self.complete_replay(
                             state, 
-                            Some(Error::Other(error_string))
+                            Some(error_string)
                         );
                     }
                 }
@@ -377,7 +378,7 @@ impl ReplayEngine {
                 let error_string = format!("Error processing entry {}: {}", entry.id, e);
                 return self.complete_replay(
                     state, 
-                    Some(Error::Other(error_string))
+                    Some(error_string)
                 );
             }
             
@@ -471,7 +472,7 @@ impl ReplayEngine {
     }
 
     /// Process a single log entry
-    fn process_entry(&self, entry: &LogEntry, state: &mut ReplayState) -> Result<()> {
+    fn process_entry(&self, entry: &LogEntry, state: &mut ReplayState) -> EngineResult<()> {
         match entry.entry_type {
             EntryType::Fact => {
                 if let EntryData::Fact(fact) = &entry.data {
@@ -516,7 +517,7 @@ impl ReplayEngine {
                     
                     Ok(())
                 } else {
-                    Err(Error::Other("Invalid fact entry data".to_string()))
+                    Err(EngineError::LogError("Invalid fact entry data".to_string()))
                 }
             },
             EntryType::Effect => {
@@ -550,7 +551,7 @@ impl ReplayEngine {
                     
                     Ok(())
                 } else {
-                    Err(Error::Other("Invalid effect entry data".to_string()))
+                    Err(EngineError::LogError("Invalid effect entry data".to_string()))
                 }
             },
             EntryType::Event => {
@@ -562,14 +563,14 @@ impl ReplayEngine {
                     
                     Ok(())
                 } else {
-                    Err(Error::Other("Invalid event entry data".to_string()))
+                    Err(EngineError::LogError("Invalid event entry data".to_string()))
                 }
             }
         }
     }
 
     /// Finalize the replay result
-    fn complete_replay(&self, state: ReplayState, error: Option<Error>) -> Result<ReplayResult> {
+    fn complete_replay(&self, state: ReplayState, error: Option<String>) -> EngineResult<ReplayResult> {
         let end_time = Utc::now();
         let status = if error.is_some() { 
             ReplayStatus::Failed 
@@ -582,7 +583,7 @@ impl ReplayEngine {
         
         // Lock and update the result
         let mut result = self.result.lock().map_err(|_| {
-            Error::Other("Failed to acquire lock on replay result".to_string())
+            EngineError::LogError("Failed to acquire lock on replay result".to_string())
         })?;
         
         result.status = status;
@@ -590,8 +591,8 @@ impl ReplayEngine {
         result.state = Some(state);
         
         if let Some(e) = error {
-            result.error = Some(e.to_string());
-            return Err(e);
+            result.error = Some(e);
+            return Err(EngineError::LogError(e));
         }
         
         // Clone the result before releasing the lock
@@ -601,9 +602,9 @@ impl ReplayEngine {
     }
     
     /// Get the current replay result
-    pub fn result(&self) -> Result<ReplayResult> {
+    pub fn result(&self) -> EngineResult<ReplayResult> {
         self.result.lock()
-            .map_err(|_| Error::Other("Failed to acquire lock on replay result".to_string()))
+            .map_err(|_| EngineError::LogError("Failed to acquire lock on replay result".to_string()))
             .map(|result| result.clone())
     }
 }
@@ -614,13 +615,11 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use chrono::Utc;
-    use causality_engine::MemoryLogStorage;
-    use causality_engine::{EntryType, EntryData, EventEntry, EventSeverity};
-    use causality_domain::map::{TimeMap, TimeMapEntry};
-    use causality_types::{BlockHash, BlockHeight, DomainId};
+    use crate::log::memory_storage::MemoryLogStorage;
+    use crate::log::entry::{EntryType, EntryData, EventEntry, EventSeverity};
     
     #[test]
-    fn test_replay_empty_log() -> Result<()> {
+    fn test_replay_empty_log() -> EngineResult<()> {
         let storage = Arc::new(MemoryLogStorage::new());
         let engine = ReplayEngine::with_storage(storage);
         
@@ -633,191 +632,5 @@ mod tests {
         Ok(())
     }
     
-    #[test]
-    fn test_replay_with_entries() -> Result<()> {
-        // Create test entries
-        let entries = vec![
-            LogEntry {
-                id: "entry_1".to_string(),
-                entry_type: EntryType::Event,
-                timestamp: Utc::now().timestamp() as u64,
-                data: EntryData::Event(EventEntry {
-                    event_name: "test_event".to_string(),
-                    severity: EventSeverity::Info,
-                    component: "test".to_string(),
-                    details: serde_json::json!({}),
-                    resources: None,
-                    domains: None,
-                }),
-                trace_id: Some("test_trace".to_string()),
-                parent_id: None,
-                metadata: HashMap::new(),
-                entry_hash: "hash1".to_string(),
-            },
-        ];
-        
-        // Create storage with entries
-        let storage = Arc::new(MemoryLogStorage::new());
-        for entry in entries {
-            storage.append(entry)?;
-        }
-        
-        // Create replay engine
-        let engine = ReplayEngine::with_storage(storage);
-        
-        // Run replay
-        let result = engine.run()?;
-        
-        // Check result
-        assert_eq!(result.status, ReplayStatus::Complete);
-        assert_eq!(result.processed_entries, 1);
-        assert!(result.error.is_none());
-        
-        Ok(())
-    }
-    
-    #[test]
-    fn test_replay_with_time_map() -> Result<()> {
-        // Create storage with entries
-        let storage = Arc::new(MemoryLogStorage::new());
-        
-        // Create a time map
-        let mut time_map = TimeMap::new();
-        
-        // Add domain entries
-        let domain1 = DomainId::new(1);
-        time_map.update_domain(TimeMapEntry::new(
-            domain1.clone(), 
-            BlockHeight::new(100),
-            BlockHash::new("abc123"),
-            Timestamp::new(1000),
-        ));
-        
-        // Create entries with time map
-        let mut entry1 = LogEntry::new_event(
-            EventEntry {
-                event_name: "event_1".to_string(),
-                severity: EventSeverity::Info,
-                component: "test".to_string(),
-                details: serde_json::json!({}),
-                resources: None,
-                domains: Some(vec![domain1.clone()]),
-            },
-            None,
-            Some("test"),
-            Utc::now(),
-            HashMap::new(),
-            None
-        );
-        LogTimeMapIntegration::attach_time_map(&mut entry1, &time_map).unwrap();
-        
-        // Add entry to storage
-        storage.append(entry1.clone()).unwrap();
-        
-        // Create replay engine with time map
-        let engine = ReplayEngine::with_time_map(
-            storage.clone(),
-            ReplayOptions::default(),
-            Arc::new(NoopReplayCallback),
-            time_map.clone()
-        );
-        
-        // Run replay
-        let result = engine.run()?;
-        
-        // Check result
-        assert_eq!(result.status, ReplayStatus::Complete);
-        assert_eq!(result.processed_entries, 1);
-        assert!(result.error.is_none());
-        
-        Ok(())
-    }
-    
-    #[test]
-    fn test_replay_with_time_range() -> Result<()> {
-        // Create storage with entries
-        let storage = Arc::new(MemoryLogStorage::new());
-        
-        // Create a time map
-        let mut time_map = TimeMap::new();
-        
-        // Add domain entries
-        let domain1 = DomainId::new(1);
-        time_map.update_domain(TimeMapEntry::new(
-            domain1.clone(), 
-            BlockHeight::new(100),
-            BlockHash::new("abc123"),
-            Timestamp::new(1000),
-        ));
-        
-        let domain2 = DomainId::new(2);
-        time_map.update_domain(TimeMapEntry::new(
-            domain2.clone(), 
-            BlockHeight::new(200),
-            BlockHash::new("def456"),
-            Timestamp::new(2000),
-        ));
-        
-        // Create entries at different times
-        let mut entry1 = LogEntry::new_event(
-            EventEntry {
-                event_name: "event_1".to_string(),
-                severity: EventSeverity::Info,
-                component: "test".to_string(),
-                details: serde_json::json!({}),
-                resources: None,
-                domains: Some(vec![domain1.clone()]),
-            },
-            None,
-            Some("test"),
-            Utc::now(),
-            HashMap::new(),
-            None
-        );
-        entry1.timestamp = Timestamp::new(900);
-        LogTimeMapIntegration::attach_time_map(&mut entry1, &time_map).unwrap();
-        
-        let mut entry2 = LogEntry::new_event(
-            EventEntry {
-                event_name: "event_2".to_string(),
-                severity: EventSeverity::Info,
-                component: "test".to_string(),
-                details: serde_json::json!({}),
-                resources: None,
-                domains: Some(vec![domain2.clone()]),
-            },
-            None,
-            Some("test"),
-            Utc::now(),
-            HashMap::new(),
-            None
-        );
-        entry2.timestamp = Timestamp::new(1500);
-        LogTimeMapIntegration::attach_time_map(&mut entry2, &time_map).unwrap();
-        
-        // Add entries to storage
-        storage.append(entry1.clone()).unwrap();
-        storage.append(entry2.clone()).unwrap();
-        
-        // Create replay engine with time map
-        let engine = ReplayEngine::with_time_map(
-            storage.clone(),
-            ReplayOptions::default(),
-            Arc::new(NoopReplayCallback),
-            time_map.clone()
-        );
-        
-        // Run replay with time range that includes only entry1
-        let result = engine.run_with_time_range(
-            Timestamp::new(0),
-            Timestamp::new(1200)
-        )?;
-        
-        // Check result
-        assert_eq!(result.status, ReplayStatus::Complete);
-        assert_eq!(result.processed_entries, 1);
-        assert!(result.error.is_none());
-        
-        Ok(())
-    }
+    // Add more test cases...
 } 

@@ -11,27 +11,70 @@ use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
 use causality_types::{*};
-use causality_crypto::ContentId;;
+use causality_types::content::ContentId;
 
-/// Represents a CosmWasm contract address
+/// CosmWasm adapter configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CosmWasmAdapterConfig {
+    /// Chain ID
+    pub chain_id: String,
+    
+    /// RPC endpoint URL
+    pub rpc_url: String,
+    
+    /// REST API endpoint URL (optional)
+    pub rest_url: Option<String>,
+    
+    /// WebSocket endpoint URL (optional)
+    pub ws_url: Option<String>,
+    
+    /// Additional parameters
+    pub params: HashMap<String, String>,
+}
+
+/// Coin representation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Coin {
+    /// Denomination (token symbol)
+    pub denom: String,
+    
+    /// Amount as a string (to handle large numbers)
+    pub amount: String,
+}
+
+/// Helper function to create a coin
+pub fn coin(amount: &str, denom: &str) -> Coin {
+    Coin {
+        amount: amount.to_string(),
+        denom: denom.to_string(),
+    }
+}
+
+/// CosmWasm address wrapper
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CosmWasmAddress(pub String);
 
-impl fmt::Display for CosmWasmAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+impl CosmWasmAddress {
+    /// Create a new CosmWasm address
+    pub fn new(address: impl Into<String>) -> Self {
+        Self(address.into())
+    }
+    
+    /// Get the address as a string
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
 impl From<String> for CosmWasmAddress {
-    fn from(s: String) -> Self {
-        CosmWasmAddress(s)
+    fn from(address: String) -> Self {
+        Self(address)
     }
 }
 
 impl From<&str> for CosmWasmAddress {
-    fn from(s: &str) -> Self {
-        CosmWasmAddress(s.to_string())
+    fn from(address: &str) -> Self {
+        Self(address.to_string())
     }
 }
 
@@ -63,25 +106,6 @@ pub enum CosmWasmMessageType {
     Instantiate,
     /// Migrate a contract to a new code ID
     Migrate,
-}
-
-/// Represents a coin amount
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Coin {
-    /// Denomination
-    pub denom: String,
-    /// Amount (as string to preserve precision)
-    pub amount: String,
-}
-
-impl Coin {
-    /// Create a new coin
-    pub fn new(denom: String, amount: impl ToString) -> Self {
-        Self {
-            denom,
-            amount: amount.to_string(),
-        }
-    }
 }
 
 /// Result of a CosmWasm query
@@ -142,12 +166,4 @@ pub struct CosmWasmCode {
     pub block_height: u64,
     /// Additional metadata
     pub metadata: HashMap<String, String>,
-}
-
-/// Helper function to create a coin
-pub fn coin(amount: impl ToString, denom: impl ToString) -> Coin {
-    Coin {
-        denom: denom.to_string(),
-        amount: amount.to_string(),
-    }
 } 

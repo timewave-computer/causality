@@ -7,9 +7,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Arc, RwLock};
 
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::error::{EffectError, EffectResult};
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::core::handler::EffectHandler;
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::types::id::EffectTypeId;
+use causality_core::effect::runtime::error::{EffectError, EffectResult};
+use causality_core::effect::runtime::core::handler::EffectHandler;
+use causality_core::effect::runtime::types::id::EffectTypeId;
 
 /// Registry for effect handlers
 ///
@@ -49,9 +49,7 @@ impl EffectRegistry {
         effect_type: &EffectTypeId,
     ) -> EffectResult<Arc<dyn EffectHandler>> {
         let handlers = self.handlers.read().unwrap();
-        handlers.get(effect_type).cloned().ok_or_else(|| EffectError::UnknownEffectType {
-            effect_type: effect_type.clone(),
-        })
+        handlers.get(effect_type).cloned().ok_or_else(|| EffectError::HandlerNotFound(effect_type.to_string()))
     }
     
     /// Check if a handler is registered for a specific effect type
@@ -96,11 +94,10 @@ impl fmt::Debug for EffectRegistry {
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::context::Context;
-    use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::core::handler::EffectHandler;
-    use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::types::id::EffectTypeId;
+    use causality_core::effect::runtime::context::Context;
+    use causality_core::effect::runtime::core::handler::EffectHandler;
+    use causality_core::effect::runtime::types::id::EffectTypeId;
     use async_trait::async_trait;
-    
     #[derive(Debug)]
     struct TestHandler;
     
@@ -114,7 +111,7 @@ mod tests {
             &self,
             _effect_type: &EffectTypeId,
             _param: Box<dyn std::any::Any + Send>,
-            _context: &Context,
+            _context: &dyn causality_core::effect::runtime::context::Context,
         ) -> Result<Box<dyn std::any::Any + Send>, EffectError> {
             Ok(Box::new("test_result".to_string()))
         }

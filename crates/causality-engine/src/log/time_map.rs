@@ -12,6 +12,10 @@ use std::sync::{Arc, Mutex};
 #[cfg(not(feature = "domain"))]
 use crate::log::{LogStorage, EntryType, LogEntry};
 
+// Re-export TimeMap from causality_core
+#[cfg(not(feature = "domain"))]
+pub use causality_core::time::map::TimeMap;
+
 /// Integration between log storage and time map
 /// This is a placeholder implementation when domain feature is not enabled
 #[cfg(not(feature = "domain"))]
@@ -25,25 +29,25 @@ impl LogTimeMapIntegration {
     }
     
     /// Index log entries up to the current point
-    pub fn index_up_to_current(&mut self) -> causality_types::Result<()> {
+    pub fn index_up_to_current(&mut self) -> causality_error::EngineResult<()> {
         // No-op in minimal build
         Ok(())
     }
     
     /// Create a time indexed entry from a log entry
-    pub fn time_indexed_entry_from_log_entry(&self, _entry: &LogEntry) -> causality_types::Result<()> {
+    pub fn time_indexed_entry_from_log_entry(&self, _entry: &LogEntry) -> causality_error::EngineResult<()> {
         // No-op in minimal build
         Ok(())
     }
     
     /// Add time map information to a log entry (stub for minimal build)
-    pub fn attach_time_map(_entry: &mut LogEntry, _time_map: &TimeMap) -> causality_types::Result<()> {
+    pub fn attach_time_map(_entry: &mut LogEntry, _time_map: &TimeMap) -> causality_error::EngineResult<()> {
         // No-op in minimal build
         Ok(())
     }
     
     /// Calculate a hash of the time map (stub for minimal build)
-    pub fn calculate_time_map_hash(_time_map: &TimeMap) -> causality_types::Result<String> {
+    pub fn calculate_time_map_hash(_time_map: &TimeMap) -> causality_error::EngineResult<String> {
         // No-op in minimal build
         Ok("".to_string())
     }
@@ -52,9 +56,9 @@ impl LogTimeMapIntegration {
     pub fn query_time_range(
         _time_map: &TimeMap,
         _storage: &dyn LogStorage,
-        _start_time: Timestamp,
-        _end_time: Timestamp
-    ) -> causality_types::Result<Vec<LogEntry>> {
+        _start_time: causality_types::Timestamp,
+        _end_time: causality_types::Timestamp
+    ) -> causality_error::EngineResult<Vec<LogEntry>> {
         // No-op in minimal build
         Ok(Vec::new())
     }
@@ -66,7 +70,7 @@ impl LogTimeMapIntegration {
     }
     
     /// Verify that a log entry's time map hash matches a given time map (stub for minimal build)
-    pub fn verify_time_map(_entry: &LogEntry, _time_map: &TimeMap) -> causality_types::Result<bool> {
+    pub fn verify_time_map(_entry: &LogEntry, _time_map: &TimeMap) -> causality_error::EngineResult<bool> {
         // No-op in minimal build
         Ok(false)
     }
@@ -85,9 +89,6 @@ pub struct TimeIndexedEntry {
     /// The resource ID, if any
     pub resource_id: Option<u64>,
 }
-
-#[cfg(not(feature = "domain"))]
-pub struct TimeMap {}
 
 #[cfg(not(feature = "domain"))]
 pub struct Timestamp {
@@ -110,13 +111,11 @@ mod domain_implementation {
     use chrono::Utc;
     
     use crate::log::{EntryType, LogEntry, LogStorage};
-    // Import TimeMap directly from domain if it's at the top level
-    use causality_domain::map::{TimeMap, TimeMapEntry};
+    // Import TimeMap directly from causality_core
+    use causality_core::time::map::{TimeMap, TimeMapEntry};
     use causality_types::{DomainId, BlockHeight, Timestamp, Hash as BlockHash, TraceId};
-    use crate::effect::EffectType;
-    use causality_types::{Error, Result};
-    use crate::crypto::{HashFactory, HashAlgorithm, HashFunction};
-
+    use causality_error::{EngineResult, EngineError};
+    
     /// Represents a log entry in a time-indexed structure
     #[derive(Debug, Clone)]
     pub struct TimeIndexedEntry {
@@ -155,55 +154,55 @@ mod domain_implementation {
         }
         
         /// Index log entries up to the current point
-        pub fn index_up_to_current(&mut self) -> Result<()> {
+        pub fn index_up_to_current(&mut self) -> EngineResult<()> {
             // Implementation would go here
             Ok(())
         }
         
         /// Create a time indexed entry from a log entry
-        pub fn time_indexed_entry_from_log_entry(&self, _entry: &LogEntry) -> Result<()> {
+        pub fn time_indexed_entry_from_log_entry(&self, _entry: &LogEntry) -> EngineResult<()> {
             // Implementation would go here
             Ok(())
         }
         
         /// Build the complete index
-        pub fn build_index(&mut self) -> Result<()> {
+        pub fn build_index(&mut self) -> EngineResult<()> {
             // Implementation would go here
             Ok(())
         }
         
         /// Query entries in a time range
-        pub fn query_time_range_indexed(&self, start_time: u64, end_time: u64) -> Result<Vec<TimeIndexedEntry>> {
+        pub fn query_time_range_indexed(&self, start_time: u64, end_time: u64) -> EngineResult<Vec<TimeIndexedEntry>> {
             // Implementation would go here
             Ok(Vec::new())
         }
         
         /// Query entries by trace ID
-        pub fn query_by_trace(&self, trace_id: &[u8], start_time: Option<u64>, end_time: Option<u64>) -> Result<Vec<TimeIndexedEntry>> {
+        pub fn query_by_trace(&self, trace_id: &[u8], start_time: Option<u64>, end_time: Option<u64>) -> EngineResult<Vec<TimeIndexedEntry>> {
             // Implementation would go here
             Ok(Vec::new())
         }
         
         /// Query entries by resource ID
-        pub fn query_by_resource(&self, resource_id: u64, start_time: Option<u64>, end_time: Option<u64>) -> Result<Vec<TimeIndexedEntry>> {
+        pub fn query_by_resource(&self, resource_id: u64, start_time: Option<u64>, end_time: Option<u64>) -> EngineResult<Vec<TimeIndexedEntry>> {
             // Implementation would go here
             Ok(Vec::new())
         }
         
         /// Query entries by type
-        pub fn query_by_type(&self, entry_type: EntryType, start_time: Option<u64>, end_time: Option<u64>) -> Result<Vec<TimeIndexedEntry>> {
+        pub fn query_by_type(&self, entry_type: EntryType, start_time: Option<u64>, end_time: Option<u64>) -> EngineResult<Vec<TimeIndexedEntry>> {
             // Implementation would go here
             Ok(Vec::new())
         }
         
         /// Resolve full entries from indexed entries
-        pub fn resolve_entries(&self, indexed_entries: &[TimeIndexedEntry]) -> Result<Vec<LogEntry>> {
+        pub fn resolve_entries(&self, indexed_entries: &[TimeIndexedEntry]) -> EngineResult<Vec<LogEntry>> {
             // Implementation would go here
             Ok(Vec::new())
         }
         
         /// Add time map information to a log entry
-        pub fn attach_time_map(entry: &mut LogEntry, time_map: &TimeMap) -> Result<()> {
+        pub fn attach_time_map(entry: &mut LogEntry, time_map: &TimeMap) -> EngineResult<()> {
             // Generate a hash of the time map
             let time_map_hash = Self::calculate_time_map_hash(time_map)?;
             
@@ -225,14 +224,14 @@ mod domain_implementation {
                 
                 // Add the time map created timestamp
                 entry.metadata.insert("time_map_created_at".to_string(), 
-                                    time_map.created_at.to_rfc3339());
+                                   time_map.created_at.to_rfc3339());
             }
             
             Ok(())
         }
         
         /// Calculate a hash of the time map
-        pub fn calculate_time_map_hash(time_map: &TimeMap) -> Result<String> {
+        pub fn calculate_time_map_hash(time_map: &TimeMap) -> EngineResult<String> {
             // Create a sorted representation for consistent hashing
             let mut domains: Vec<(&DomainId, &TimeMapEntry)> = time_map.entries.iter().collect();
             domains.sort_by_key(|(id, _)| *id);
@@ -242,24 +241,25 @@ mod domain_implementation {
             
             // Add the time map version and created_at
             hash_input.push_str(&format!("v:{},t:{},", 
-                                        time_map.version,
-                                        time_map.created_at.timestamp()));
+                                       time_map.version,
+                                       time_map.created_at.timestamp()));
             
             // Add domain entries in deterministic order
             for (domain_id, entry) in domains {
                 hash_input.push_str(&format!("{}:{}:{}:{};", 
-                                        domain_id,
-                                        entry.height,
-                                        entry.hash,
-                                        entry.timestamp));
+                                           domain_id,
+                                           entry.height,
+                                           hex::encode(&entry.hash),
+                                           entry.timestamp));
             }
             
-            // Calculate the hash
-            let hash_factory = HashFactory::default();
-            let hasher = hash_factory.create_hasher().unwrap();
-            let hash_output = hasher.hash(hash_input.as_bytes());
-            let hash = hash_output.to_hex();
-            Ok(hash)
+            // Calculate hash of this string
+            use sha2::{Sha256, Digest};
+            let mut hasher = Sha256::new();
+            hasher.update(hash_input.as_bytes());
+            let result = hasher.finalize();
+            
+            Ok(hex::encode(result))
         }
         
         /// Query log entries by time map time range
@@ -268,53 +268,28 @@ mod domain_implementation {
             storage: &dyn LogStorage,
             start_time: Timestamp,
             end_time: Timestamp
-        ) -> Result<Vec<LogEntry>> {
-            let mut result = Vec::new();
+        ) -> EngineResult<Vec<LogEntry>> {
+            // Find entries that match the time range
+            let all_entries = storage.get_all_entries()?;
+            let mut matching_entries = Vec::new();
             
-            // Read all entries from storage
-            let entries = storage.read(0, storage.entry_count()?)?;
-            
-            // Filter entries based on time map information
-            for entry in entries {
-                // Check if the entry has time map information
-                if let Some(time_map_hash) = entry.metadata.get("time_map_hash") {
-                    // For effects, we can use their time map information
+            // Filter entries by timestamp
+            for entry in all_entries {
+                if entry.timestamp >= start_time && entry.timestamp <= end_time {
+                    // For effects, check time map consistency
                     if entry.entry_type == EntryType::Effect {
-                        // Get the domains observed in this entry
-                        if let Some(domains_str) = entry.metadata.get("time_map_domains") {
-                            let domains: Vec<DomainId> = domains_str.split(',')
-                                .filter(|s| !s.is_empty())
-                                .map(|s| DomainId::new(s.parse::<u64>().unwrap_or(0)))
-                                .collect();
-                            
-                            // Check if any observed domain has a timestamp in our range
-                            let in_range = domains.iter().any(|domain_id| {
-                                if let Some(observed_time) = time_map.get_timestamp(domain_id) {
-                                    observed_time >= start_time && observed_time <= end_time
-                                } else {
-                                    false
-                                }
-                            });
-                            
-                            if in_range {
-                                result.push(entry);
-                            }
+                        // Only include effects with matching time maps
+                        if Self::verify_time_map(&entry, time_map)? {
+                            matching_entries.push(entry);
                         }
                     } else {
-                        // For facts and events, use their timestamp
-                        if entry.timestamp >= start_time && entry.timestamp <= end_time {
-                            result.push(entry);
-                        }
-                    }
-                } else {
-                    // Entries without time map information use only their timestamp
-                    if entry.timestamp >= start_time && entry.timestamp <= end_time {
-                        result.push(entry);
+                        // Include all non-effect entries in time range
+                        matching_entries.push(entry);
                     }
                 }
             }
             
-            Ok(result)
+            Ok(matching_entries)
         }
         
         /// Get the time map hash from a log entry
@@ -323,18 +298,23 @@ mod domain_implementation {
         }
         
         /// Verify that a log entry's time map hash matches a given time map
-        pub fn verify_time_map(entry: &LogEntry, time_map: &TimeMap) -> Result<bool> {
-            if let Some(entry_hash) = Self::get_time_map_hash(entry) {
-                let calculated_hash = Self::calculate_time_map_hash(time_map)?;
-                Ok(entry_hash == calculated_hash)
+        pub fn verify_time_map(entry: &LogEntry, time_map: &TimeMap) -> EngineResult<bool> {
+            // Generate hash of the current time map
+            let current_time_map_hash = Self::calculate_time_map_hash(time_map)?;
+            
+            // Get the hash from the entry (if any)
+            if let Some(entry_time_map_hash) = Self::get_time_map_hash(entry) {
+                // Compare the hashes
+                Ok(entry_time_map_hash == current_time_map_hash)
             } else {
-                // Entry doesn't have a time map hash
+                // No time map hash in the entry, can't verify
                 Ok(false)
             }
         }
     }
 }
 
+// Re-export from the appropriate implementation
 #[cfg(feature = "domain")]
 pub use domain_implementation::*;
 

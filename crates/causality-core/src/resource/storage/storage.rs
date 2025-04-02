@@ -4,17 +4,40 @@
 // using content addressing principles. It includes support for versioning,
 // indexing, and efficient retrieval.
 
-use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
+use std::collections::{HashMap, HashSet, BTreeMap};
 use std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
 use thiserror::Error;
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
+use serde_json::Value;
+use chrono::{DateTime, Utc};
+use futures::stream::StreamExt;
+use std::future::Future;
+use std::pin::Pin;
+use tokio::sync::{Mutex as TokioMutex, RwLock as TokioRwLock};
+use hex;
 
-use crate::content::{ContentId, ContentHash, ContentAddressed, ContentAddressingError};
 use crate::resource::{ResourceId, ResourceTypeId, ResourceSchema};
-use crate::storage::ContentAddressedStorage;
 use crate::serialization::{SerializationError, to_bytes, from_bytes};
+use crate::resource_types::ContentAddressedStorageError;
+use crate::utils::content_addressing::{content_hash_to_id};
+
+// Make consistent imports from causality_types
+use causality_types::ContentId;
+use causality_types::ContentAddressed;
+use causality_types::content_addressing::storage::{
+    ContentAddressedStorage, ContentAddressedStorageExt, StorageError
+};
+use causality_types::ContentHash;
+use causality_types::crypto_primitives::{HashOutput, HashAlgorithm};
+use causality_crypto::HashError;
+use crate::id_utils::{convert_to_types_content_id, convert_from_types_content_id};
+use crate::resource::types::ResourceId as ResourceIdType;
+// Alias TypesContentId for clarity
+use causality_types::ContentId as TypesContentId;
+use causality_types::crypto_primitives::ContentId as CryptoPrimitivesContentId;
+use causality_types::content_addressing::STANDARD_HASH_ALGORITHM;
 
 /// Errors that can occur during resource storage operations
 #[derive(Error, Debug)]
@@ -57,13 +80,13 @@ pub struct ResourceVersion {
     pub version: u64,
     
     /// Content hash of this version
-    pub content_hash: ContentHash,
+    pub content_hash: ContentId,
     
     /// When this version was created (timestamp)
     pub created_at: u64,
     
     /// Reference to previous version (if any)
-    pub previous_version: Option<ContentHash>,
+    pub previous_version: Option<u64>,
     
     /// Resource type ID
     pub resource_type: ResourceTypeId,
@@ -85,7 +108,7 @@ pub struct ResourceIndexEntry {
     pub current_version: u64,
     
     /// Content hash of the current version
-    pub current_hash: ContentHash,
+    pub current_hash: ContentId,
     
     /// Tags for this resource
     pub tags: HashSet<String>,
@@ -101,7 +124,7 @@ pub struct ResourceIndexEntry {
 #[async_trait]
 pub trait ResourceStorage: Send + Sync + Debug {
     /// Store a resource
-    async fn store_resource<T: ContentAddressed + Send + Sync>(
+    async fn store_resource<T: ContentAddressed + Send + Sync + serde::Serialize>(
         &self, 
         resource: T,
         resource_type: ResourceTypeId,
@@ -109,13 +132,13 @@ pub trait ResourceStorage: Send + Sync + Debug {
     ) -> ResourceStorageResult<ResourceId>;
     
     /// Get a resource by ID (latest version)
-    async fn get_resource<T: ContentAddressed + Send + Sync>(
+    async fn get_resource<T: ContentAddressed + Send + Sync + DeserializeOwned>(
         &self, 
         resource_id: &ResourceId
     ) -> ResourceStorageResult<T>;
     
     /// Get a specific version of a resource
-    async fn get_resource_version<T: ContentAddressed + Send + Sync>(
+    async fn get_resource_version<T: ContentAddressed + Send + Sync + DeserializeOwned>(
         &self, 
         resource_id: &ResourceId, 
         version: u64
@@ -125,7 +148,7 @@ pub trait ResourceStorage: Send + Sync + Debug {
     async fn has_resource(&self, resource_id: &ResourceId) -> ResourceStorageResult<bool>;
     
     /// Update a resource
-    async fn update_resource<T: ContentAddressed + Send + Sync>(
+    async fn update_resource<T: ContentAddressed + Send + Sync + Serialize>(
         &self, 
         resource_id: &ResourceId, 
         resource: T,
@@ -171,6 +194,11 @@ pub trait ResourceStorage: Send + Sync + Debug {
     ) -> ResourceStorageResult<HashMap<String, String>>;
 }
 
+/// Convert a HashOutput into ContentId
+fn hash_output_to_content_id(hash: &HashOutput) -> ContentId {
+    ContentId::from(*hash)
+}
+
 /// Content-addressed resource storage implementation
 #[derive(Debug)]
 pub struct ContentAddressedResourceStorage {
@@ -191,7 +219,7 @@ pub struct ContentAddressedResourceStorage {
 }
 
 impl ContentAddressedResourceStorage {
-    /// Create a new content-addressed resource storage
+    /// Create a new content-addressed resource storage with the given underlying storage
     pub fn new(storage: Arc<dyn ContentAddressedStorage>) -> Self {
         Self {
             storage,
@@ -272,23 +300,44 @@ impl ContentAddressedResourceStorage {
             .unwrap_or_default()
             .as_secs()
     }
+
+    // Replace with internal helper methods if needed
+    async fn get_bytes_internal(&self, content_id: &ContentId) -> ResourceStorageResult<Vec<u8>> {
+        // Convert ContentId for storage access
+        let crypto_content_id = convert_from_types_content_id(content_id);
+        self.storage.get_bytes(&crypto_content_id)
+            .map_err(|e| ResourceStorageError::StorageError(e.to_string()))
+    }
+
+    async fn contains_internal(&self, content_id: &ContentId) -> ResourceStorageResult<bool> {
+        // Convert ContentId for storage check
+        let crypto_content_id = convert_from_types_content_id(content_id);
+        Ok(self.storage.contains(&crypto_content_id))
+    }
 }
+
+/// Remove function that uses private ContentHash
+// fn content_hash_to_content_id(hash: &causality_types::content::ContentHash) -> ContentId {
+//     ContentId::from_content_hash(hash)
+// }
 
 #[async_trait]
 impl ResourceStorage for ContentAddressedResourceStorage {
-    async fn store_resource<T: ContentAddressed + Send + Sync>(
+    async fn store_resource<T: ContentAddressed + Send + Sync + serde::Serialize>(
         &self, 
         resource: T,
         resource_type: ResourceTypeId,
         metadata: Option<HashMap<String, String>>
     ) -> ResourceStorageResult<ResourceId> {
         // Generate content hash for the resource
-        let content_hash = resource.content_hash().map_err(|e| 
+        let hash_output = resource.content_hash().map_err(|e| 
             ResourceStorageError::SerializationError(e.to_string())
         )?;
         
-        // Create resource ID from content hash
-        let resource_id = ResourceId::from(content_hash.clone());
+        // Create resource ID directly from the HashOutput
+        let content_id = ContentId::from(hash_output);
+        let resource_id = ResourceId::from_content_id(&content_id)
+            .expect("Failed to create ResourceId from ContentId");
         
         // Check if resource already exists
         if self.has_resource(&resource_id).await? {
@@ -303,7 +352,7 @@ impl ResourceStorage for ContentAddressedResourceStorage {
         )?;
         
         // Store in content-addressed storage
-        self.storage.store(&resource_bytes, &content_hash).await.map_err(|e| 
+        let stored_content_id = self.storage.store_bytes(&resource_bytes).map_err(|e| 
             ResourceStorageError::StorageError(e.to_string())
         )?;
         
@@ -312,7 +361,7 @@ impl ResourceStorage for ContentAddressedResourceStorage {
         let version = ResourceVersion {
             resource_id: resource_id.clone(),
             version: 1, // First version
-            content_hash: content_hash.clone(),
+            content_hash: convert_to_types_content_id(&stored_content_id),
             created_at: timestamp,
             previous_version: None,
             resource_type: resource_type.clone(),
@@ -324,7 +373,7 @@ impl ResourceStorage for ContentAddressedResourceStorage {
             resource_id: resource_id.clone(),
             resource_type: resource_type.clone(),
             current_version: 1,
-            current_hash: content_hash,
+            current_hash: convert_to_types_content_id(&stored_content_id),
             tags: HashSet::new(),
             created_at: timestamp,
             updated_at: timestamp,
@@ -348,12 +397,12 @@ impl ResourceStorage for ContentAddressedResourceStorage {
         Ok(resource_id)
     }
     
-    async fn get_resource<T: ContentAddressed + Send + Sync>(
+    async fn get_resource<T: ContentAddressed + Send + Sync + DeserializeOwned>(
         &self, 
         resource_id: &ResourceId
     ) -> ResourceStorageResult<T> {
         // Get the current version from the index
-        let content_hash = {
+        let content_id = {
             let resource_index = self.resource_index.read().map_err(|e| 
                 ResourceStorageError::InternalError(format!("Failed to acquire resource index lock: {}", e))
             )?;
@@ -364,14 +413,16 @@ impl ResourceStorage for ContentAddressedResourceStorage {
                 .clone()
         };
         
-        // Retrieve from content-addressed storage
-        let resource_bytes = self.storage.get(&content_hash).await.map_err(|e| 
-            match e {
-                crate::content::ContentAddressingError::NotFound(_) => 
-                    ResourceStorageError::NotFound(format!("Resource data not found: {}", resource_id)),
-                _ => ResourceStorageError::StorageError(e.to_string()),
-            }
-        )?;
+        // Retrieve from content-addressed storage using the correct conversion function
+        let crypto_content_id = convert_from_types_content_id(&content_id);
+        let resource_bytes = self.storage.get_bytes(&crypto_content_id)
+            .map_err(|e| 
+                match e {
+                    StorageError::NotFound(_) => 
+                        ResourceStorageError::NotFound(format!("Resource data not found: {}", resource_id)),
+                    _ => ResourceStorageError::StorageError(e.to_string()),
+                }
+            )?;
         
         // Deserialize the resource
         from_bytes::<T>(&resource_bytes).map_err(|e| 
@@ -379,13 +430,13 @@ impl ResourceStorage for ContentAddressedResourceStorage {
         )
     }
     
-    async fn get_resource_version<T: ContentAddressed + Send + Sync>(
+    async fn get_resource_version<T: ContentAddressed + Send + Sync + DeserializeOwned>(
         &self, 
         resource_id: &ResourceId, 
         version: u64
     ) -> ResourceStorageResult<T> {
         // Get the version history
-        let content_hash = {
+        let content_id = {
             let version_history = self.version_history.read().map_err(|e| 
                 ResourceStorageError::InternalError(format!("Failed to acquire version history lock: {}", e))
             )?;
@@ -402,14 +453,16 @@ impl ResourceStorage for ContentAddressedResourceStorage {
             version_entry.content_hash.clone()
         };
         
-        // Retrieve from content-addressed storage
-        let resource_bytes = self.storage.get(&content_hash).await.map_err(|e| 
-            match e {
-                crate::content::ContentAddressingError::NotFound(_) => 
-                    ResourceStorageError::NotFound(format!("Resource data not found: {}", resource_id)),
-                _ => ResourceStorageError::StorageError(e.to_string()),
-            }
-        )?;
+        // Retrieve from content-addressed storage using the correct conversion function
+        let crypto_content_id = convert_from_types_content_id(&content_id);
+        let resource_bytes = self.storage.get_bytes(&crypto_content_id)
+            .map_err(|e| 
+                match e {
+                    StorageError::NotFound(_) => 
+                        ResourceStorageError::NotFound(format!("Resource data not found: {}", resource_id)),
+                    _ => ResourceStorageError::StorageError(e.to_string()),
+                }
+            )?;
         
         // Deserialize the resource
         from_bytes::<T>(&resource_bytes).map_err(|e| 
@@ -425,7 +478,7 @@ impl ResourceStorage for ContentAddressedResourceStorage {
         Ok(resource_index.contains_key(resource_id))
     }
     
-    async fn update_resource<T: ContentAddressed + Send + Sync>(
+    async fn update_resource<T: ContentAddressed + Send + Sync + Serialize>(
         &self, 
         resource_id: &ResourceId, 
         resource: T,
@@ -439,7 +492,7 @@ impl ResourceStorage for ContentAddressedResourceStorage {
         }
         
         // Get current version info
-        let (current_version, resource_type, previous_hash) = {
+        let (current_version, resource_type, previous_id) = {
             let resource_index = self.resource_index.read().map_err(|e| 
                 ResourceStorageError::InternalError(format!("Failed to acquire resource index lock: {}", e))
             )?;
@@ -451,13 +504,16 @@ impl ResourceStorage for ContentAddressedResourceStorage {
         };
         
         // Generate content hash for the new version
-        let content_hash = resource.content_hash().map_err(|e| 
+        let hash_output = resource.content_hash().map_err(|e| 
             ResourceStorageError::SerializationError(e.to_string())
         )?;
         
+        // Create ContentId from HashOutput
+        let content_id = hash_output_to_content_id(&hash_output);
+        
         // Skip update if content hasn't changed
-        if content_hash == previous_hash {
-            return Ok(current_version);
+        if content_id == previous_id {
+            return Ok(current_version); // No change, return current version
         }
         
         // Serialize the resource
@@ -466,21 +522,19 @@ impl ResourceStorage for ContentAddressedResourceStorage {
         )?;
         
         // Store in content-addressed storage
-        self.storage.store(&resource_bytes, &content_hash).await.map_err(|e| 
+        let stored_id = self.storage.store_bytes(&resource_bytes).map_err(|e| 
             ResourceStorageError::StorageError(e.to_string())
         )?;
         
-        // Increment version
-        let new_version = current_version + 1;
-        let timestamp = self.current_timestamp();
-        
         // Create metadata for this version
+        let timestamp = self.current_timestamp();
+        let new_version = current_version + 1;
         let version = ResourceVersion {
             resource_id: resource_id.clone(),
             version: new_version,
-            content_hash: content_hash.clone(),
+            content_hash: convert_to_types_content_id(&stored_id),
             created_at: timestamp,
-            previous_version: Some(previous_hash),
+            previous_version: Some(current_version),
             resource_type: resource_type.clone(),
             metadata: metadata.clone().unwrap_or_default(),
         };
@@ -491,11 +545,12 @@ impl ResourceStorage for ContentAddressedResourceStorage {
                 ResourceStorageError::InternalError(format!("Failed to acquire resource index lock: {}", e))
             )?;
             
-            if let Some(entry) = resource_index.get_mut(resource_id) {
-                entry.current_version = new_version;
-                entry.current_hash = content_hash;
-                entry.updated_at = timestamp;
-            }
+            let entry = resource_index.get_mut(resource_id)
+                .ok_or_else(|| ResourceStorageError::NotFound(format!("Resource not found: {}", resource_id)))?;
+                
+            entry.current_version = new_version;
+            entry.current_hash = convert_to_types_content_id(&stored_id);
+            entry.updated_at = timestamp;
         }
         
         // Add to version history
@@ -641,7 +696,7 @@ impl InMemoryResourceStorage {
 
 #[async_trait]
 impl ResourceStorage for InMemoryResourceStorage {
-    async fn store_resource<T: ContentAddressed + Send + Sync>(
+    async fn store_resource<T: ContentAddressed + Send + Sync + serde::Serialize>(
         &self, 
         resource: T,
         resource_type: ResourceTypeId,
@@ -650,14 +705,14 @@ impl ResourceStorage for InMemoryResourceStorage {
         self.storage.store_resource(resource, resource_type, metadata).await
     }
     
-    async fn get_resource<T: ContentAddressed + Send + Sync>(
+    async fn get_resource<T: ContentAddressed + Send + Sync + DeserializeOwned>(
         &self, 
         resource_id: &ResourceId
     ) -> ResourceStorageResult<T> {
         self.storage.get_resource(resource_id).await
     }
     
-    async fn get_resource_version<T: ContentAddressed + Send + Sync>(
+    async fn get_resource_version<T: ContentAddressed + Send + Sync + DeserializeOwned>(
         &self, 
         resource_id: &ResourceId, 
         version: u64
@@ -669,7 +724,7 @@ impl ResourceStorage for InMemoryResourceStorage {
         self.storage.has_resource(resource_id).await
     }
     
-    async fn update_resource<T: ContentAddressed + Send + Sync>(
+    async fn update_resource<T: ContentAddressed + Send + Sync + Serialize>(
         &self, 
         resource_id: &ResourceId, 
         resource: T,
@@ -754,17 +809,301 @@ impl Default for ResourceStorageConfig {
 pub fn create_resource_storage(
     storage: Arc<dyn ContentAddressedStorage>,
     config: ResourceStorageConfig,
-) -> Arc<dyn ResourceStorage> {
+) -> ResourceStorageEnum {
     // For now, just create the basic implementation
     // In the future, this could be extended to create different types
     // of storage based on the configuration
-    Arc::new(ContentAddressedResourceStorage::new(storage))
+    ResourceStorageEnum::ContentAddressed(ContentAddressedResourceStorage::new(storage))
+}
+
+/// Enum to hold different storage implementations
+#[derive(Debug)]
+pub enum ResourceStorageEnum {
+    /// Content addressed storage implementation
+    ContentAddressed(ContentAddressedResourceStorage),
+    /// In-memory storage implementation
+    InMemory(InMemoryResourceStorage),
+}
+
+#[async_trait]
+impl ResourceStorage for ResourceStorageEnum {
+    async fn store_resource<T: ContentAddressed + Send + Sync + serde::Serialize>(
+        &self, 
+        resource: T,
+        resource_type: ResourceTypeId,
+        metadata: Option<HashMap<String, String>>
+    ) -> ResourceStorageResult<ResourceId> {
+        match self {
+            Self::ContentAddressed(storage) => storage.store_resource(resource, resource_type, metadata).await,
+            Self::InMemory(storage) => storage.store_resource(resource, resource_type, metadata).await,
+        }
+    }
+    
+    async fn get_resource<T: ContentAddressed + Send + Sync + DeserializeOwned>(
+        &self, 
+        resource_id: &ResourceId
+    ) -> ResourceStorageResult<T> {
+        match self {
+            Self::ContentAddressed(storage) => storage.get_resource(resource_id).await,
+            Self::InMemory(storage) => storage.get_resource(resource_id).await,
+        }
+    }
+    
+    async fn get_resource_version<T: ContentAddressed + Send + Sync + DeserializeOwned>(
+        &self, 
+        resource_id: &ResourceId, 
+        version: u64
+    ) -> ResourceStorageResult<T> {
+        match self {
+            Self::ContentAddressed(storage) => storage.get_resource_version(resource_id, version).await,
+            Self::InMemory(storage) => storage.get_resource_version(resource_id, version).await,
+        }
+    }
+    
+    async fn has_resource(&self, resource_id: &ResourceId) -> ResourceStorageResult<bool> {
+        match self {
+            Self::ContentAddressed(storage) => storage.has_resource(resource_id).await,
+            Self::InMemory(storage) => storage.has_resource(resource_id).await,
+        }
+    }
+    
+    async fn update_resource<T: ContentAddressed + Send + Sync + Serialize>(
+        &self, 
+        resource_id: &ResourceId, 
+        resource: T,
+        metadata: Option<HashMap<String, String>>
+    ) -> ResourceStorageResult<u64> {
+        match self {
+            Self::ContentAddressed(storage) => storage.update_resource(resource_id, resource, metadata).await,
+            Self::InMemory(storage) => storage.update_resource(resource_id, resource, metadata).await,
+        }
+    }
+    
+    async fn add_tag(
+        &self, 
+        resource_id: &ResourceId, 
+        tag: &str
+    ) -> ResourceStorageResult<()> {
+        match self {
+            Self::ContentAddressed(storage) => storage.add_tag(resource_id, tag).await,
+            Self::InMemory(storage) => storage.add_tag(resource_id, tag).await,
+        }
+    }
+    
+    async fn remove_tag(
+        &self, 
+        resource_id: &ResourceId, 
+        tag: &str
+    ) -> ResourceStorageResult<()> {
+        match self {
+            Self::ContentAddressed(storage) => storage.remove_tag(resource_id, tag).await,
+            Self::InMemory(storage) => storage.remove_tag(resource_id, tag).await,
+        }
+    }
+    
+    async fn find_resources_by_type(
+        &self, 
+        resource_type: &ResourceTypeId
+    ) -> ResourceStorageResult<Vec<ResourceId>> {
+        match self {
+            Self::ContentAddressed(storage) => storage.find_resources_by_type(resource_type).await,
+            Self::InMemory(storage) => storage.find_resources_by_type(resource_type).await,
+        }
+    }
+    
+    async fn find_resources_by_tag(
+        &self, 
+        tag: &str
+    ) -> ResourceStorageResult<Vec<ResourceId>> {
+        match self {
+            Self::ContentAddressed(storage) => storage.find_resources_by_tag(tag).await,
+            Self::InMemory(storage) => storage.find_resources_by_tag(tag).await,
+        }
+    }
+    
+    async fn get_version_history(
+        &self, 
+        resource_id: &ResourceId
+    ) -> ResourceStorageResult<Vec<ResourceVersion>> {
+        match self {
+            Self::ContentAddressed(storage) => storage.get_version_history(resource_id).await,
+            Self::InMemory(storage) => storage.get_version_history(resource_id).await,
+        }
+    }
+    
+    async fn get_resource_metadata(
+        &self, 
+        resource_id: &ResourceId
+    ) -> ResourceStorageResult<HashMap<String, String>> {
+        match self {
+            Self::ContentAddressed(storage) => storage.get_resource_metadata(resource_id).await,
+            Self::InMemory(storage) => storage.get_resource_metadata(resource_id).await,
+        }
+    }
+}
+
+/// In-memory implementation of content-addressed storage
+#[derive(Debug)]
+pub struct InMemoryContentAddressedStorage {
+    objects: RwLock<HashMap<ContentId, Vec<u8>>>,
+}
+
+impl InMemoryContentAddressedStorage {
+    /// Create a new empty in-memory storage
+    pub fn new() -> Self {
+        Self {
+            objects: RwLock::new(HashMap::new()),
+        }
+    }
+    
+    /// Store binary data and return content ID
+    pub fn store_bytes(&self, bytes: &[u8]) -> ResourceStorageResult<ContentId> {
+        // Create a content hash from the bytes
+        let hash = hash_bytes(bytes);
+        let content_id = content_hash_to_id(&hash);
+        
+        // Store the bytes with the content ID as the key
+        let mut objects = self.objects.write().unwrap();
+        
+        // Skip if already exists
+        if objects.contains_key(&content_id) {
+            return Ok(content_id);
+        }
+        
+        // Store the bytes
+        objects.insert(content_id.clone(), bytes.to_vec());
+        
+        Ok(content_id)
+    }
+    
+    /// Store an object in the content-addressed storage
+    pub fn store_object<T: ContentAddressed + Send + Sync + serde::Serialize>(&self, object: &T) -> ResourceStorageResult<ContentId> {
+        // Serialize the object
+        let bytes = match object.to_bytes() {
+            Ok(bytes) => bytes,
+            Err(err) => return Err(ResourceStorageError::SerializationError(err.to_string())),
+        };
+        
+        // Store the bytes
+        self.store_bytes(&bytes)
+    }
+    
+    /// Check if an object exists in storage
+    pub fn contains(&self, id: &ContentId) -> bool {
+        let objects = self.objects.read().unwrap();
+        objects.contains_key(id)
+    }
+    
+    /// Retrieve binary data for an object
+    pub fn get_bytes(&self, id: &ContentId) -> ResourceStorageResult<Vec<u8>> {
+        let objects = self.objects.read().unwrap();
+        
+        objects.get(id)
+            .cloned()
+            .ok_or_else(|| ResourceStorageError::NotFound(
+                format!("Object not found: {}", id)
+            ))
+    }
+    
+    /// Retrieve an object from storage by its content ID
+    pub fn get_object<T: ContentAddressed + Send + Sync + DeserializeOwned>(&self, id: &ContentId) -> ResourceStorageResult<T> {
+        let bytes = self.get_bytes(id)?;
+        match T::from_bytes(&bytes) {
+            Ok(obj) => Ok(obj),
+            Err(err) => Err(ResourceStorageError::SerializationError(err.to_string())),
+        }
+    }
+    
+    /// Remove an object from storage
+    pub fn remove(&self, id: &ContentId) -> ResourceStorageResult<()> {
+        let mut objects = self.objects.write().unwrap();
+        
+        if objects.remove(id).is_none() {
+            return Err(ResourceStorageError::NotFound(
+                format!("Object not found: {}", id)
+            ));
+        }
+        
+        Ok(())
+    }
+    
+    /// Clear all objects from storage
+    pub fn clear(&self) {
+        let mut objects = self.objects.write().unwrap();
+        objects.clear();
+    }
+    
+    /// Get the number of objects in storage
+    pub fn len(&self) -> usize {
+        let objects = self.objects.read().unwrap();
+        objects.len()
+    }
+    
+    /// Check if storage is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+// Implement ContentAddressedStorage from causality-types
+impl causality_types::content_addressing::storage::ContentAddressedStorage for InMemoryContentAddressedStorage {
+    fn store_bytes(&self, bytes: &[u8]) -> Result<ContentId, causality_types::content_addressing::storage::StorageError> {
+        match self.store_bytes(bytes) {
+            Ok(id) => Ok(id),
+            Err(err) => Err(causality_types::content_addressing::storage::StorageError::IoError(err.to_string())),
+        }
+    }
+    
+    fn contains(&self, id: &ContentId) -> bool {
+        self.contains(id)
+    }
+    
+    fn get_bytes(&self, id: &ContentId) -> Result<Vec<u8>, causality_types::content_addressing::storage::StorageError> {
+        match self.get_bytes(id) {
+            Ok(bytes) => Ok(bytes),
+            Err(err) => match err {
+                ResourceStorageError::NotFound(msg) => 
+                    Err(causality_types::content_addressing::storage::StorageError::NotFound(msg)),
+                _ => Err(causality_types::content_addressing::storage::StorageError::IoError(err.to_string())),
+            }
+        }
+    }
+    
+    fn remove(&self, id: &ContentId) -> Result<(), causality_types::content_addressing::storage::StorageError> {
+        match self.remove(id) {
+            Ok(()) => Ok(()),
+            Err(err) => match err {
+                ResourceStorageError::NotFound(msg) => 
+                    Err(causality_types::content_addressing::storage::StorageError::NotFound(msg)),
+                _ => Err(causality_types::content_addressing::storage::StorageError::IoError(err.to_string())),
+            }
+        }
+    }
+    
+    fn clear(&self) {
+        self.clear()
+    }
+    
+    fn len(&self) -> usize {
+        self.len()
+    }
+}
+
+/// Create a ContentHash from bytes
+fn hash_bytes(bytes: &[u8]) -> ContentHash {
+    // Hash the bytes using blake3
+    let hash_result = blake3::hash(bytes);
+    let hash_bytes = hash_result.as_bytes().to_vec();
+    
+    // Create a properly formatted ContentHash using the string value of the algorithm
+    ContentHash::new("blake3", hash_bytes)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::InMemoryContentAddressedStorage;
+    use causality_types::content_addressing::storage::InMemoryStorage;
+    use causality_types::crypto_primitives::{HashOutput, HashAlgorithm, HashError};
     
     #[derive(Debug, Clone, Serialize, Deserialize)]
     struct TestResource {
@@ -773,18 +1112,30 @@ mod tests {
     }
     
     impl ContentAddressed for TestResource {
-        fn content_hash(&self) -> Result<ContentHash, ContentAddressingError> {
+        fn content_hash(&self) -> Result<HashOutput, HashError> {
             // Create a simple content hash for testing
             let data = format!("{}:{}", self.name, self.value);
             let hash = blake3::hash(data.as_bytes());
-            Ok(ContentHash::new(hash.as_bytes().to_vec()))
+            let mut hash_bytes = [0u8; 32];
+            hash_bytes.copy_from_slice(hash.as_bytes());
+            Ok(HashOutput::new(hash_bytes, HashAlgorithm::Blake3))
+        }
+        
+        fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+            serde_json::to_vec(self)
+                .map_err(|e| HashError::SerializationError(e.to_string()))
+        }
+        
+        fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+            serde_json::from_slice(bytes)
+                .map_err(|e| HashError::SerializationError(e.to_string()))
         }
     }
     
     #[tokio::test]
     async fn test_resource_storage_basic_operations() {
         // Create in-memory storage
-        let cas_storage = Arc::new(InMemoryContentAddressedStorage::new());
+        let cas_storage = Arc::new(InMemoryStorage::new());
         let storage = InMemoryResourceStorage::new(cas_storage);
         
         // Create a test resource

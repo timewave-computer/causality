@@ -12,14 +12,16 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
+use std::any::Any;
 
-use causality_types::{Error, Result};
-use causality_crypto::ContentId;
-use :ResourceRegister:causality_core::resource::Resource::{ResourceRegister, RegisterState};
+use anyhow::{Result, Error};
+// FIXME: Add the proper import for ContentId when it's implemented
+// use crate::crypto::ContentId;
 
 use super::{SharedWaitQueue, WaitQueue};
 use super::ResourceGuard;
-use super::resource_guard::ResourceRegisterGuard;
+// FIXME: Uncomment when ResourceRegister is properly defined
+// use super::resource_guard::ResourceRegisterGuard;
 
 /// A shared resource manager that can be cloned and shared between components
 pub type SharedResourceManager = Arc<ResourceManager>;
@@ -56,8 +58,6 @@ struct ResourceOwnership {
     /// Set of processes or tasks waiting for this resource
     waiters: HashSet<String>,
 }
-
-use std::any::Any;
 
 impl ResourceManager {
     /// Create a new resource manager

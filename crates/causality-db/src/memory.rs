@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use causality_storage::{
+use crate::types::{
     Database, DbError, DbConfig, BatchOp, DbIterator,
 };
 

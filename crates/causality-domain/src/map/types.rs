@@ -10,77 +10,92 @@ use std::fmt;
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
+use std::cmp::{PartialEq, PartialOrd, Ordering};
 
 use causality_types::{BlockHash, BlockHeight, Timestamp};
 use crate::domain::DomainId;
 
 /// A time point represents a specific observed moment in a domain's timeline
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TimePoint {
-    /// Block height associated with this time point
-    pub height: BlockHeight,
-    /// Block hash associated with this time point
-    pub hash: BlockHash,
-    /// Timestamp in seconds
-    pub timestamp: Timestamp,
-    /// Confidence level (0.0-1.0)
-    pub confidence: f64,
-    /// Whether this time point has been verified
-    pub verified: bool,
-    /// Source of this time point (e.g., "rpc", "peers", "consensus")
-    pub source: String,
+    /// Timestamp value (e.g., Unix timestamp)
+    pub timestamp: u64,
+    /// Block height (if applicable)
+    pub block_height: Option<u64>,
+    /// Block identifier (if applicable)
+    pub block_id: Option<String>,
+    /// Sequence number (if applicable)
+    pub sequence: Option<u64>,
 }
 
 impl TimePoint {
-    /// Create a new time point
-    pub fn new(
-        height: BlockHeight,
-        hash: BlockHash,
-        timestamp: Timestamp,
-    ) -> Self {
-        TimePoint {
-            height,
-            hash,
+    /// Create a new time point with just a timestamp
+    pub fn new(timestamp: u64) -> Self {
+        Self {
             timestamp,
-            confidence: 1.0,
-            verified: false,
-            source: "default".to_string(),
+            block_height: None,
+            block_id: None,
+            sequence: None,
         }
     }
     
-    /// Set the confidence level
-    pub fn with_confidence(mut self, confidence: f64) -> Self {
-        self.confidence = confidence.max(0.0).min(1.0);
-        self
-    }
-    
-    /// Set the verification status
-    pub fn with_verification(mut self, verified: bool) -> Self {
-        self.verified = verified;
-        self
-    }
-    
-    /// Set the source of this time point
-    pub fn with_source(mut self, source: &str) -> Self {
-        self.source = source.to_string();
-        self
-    }
-    
-    /// Create a time point from a generic source
-    pub fn from_source<T: ToString>(
-        height: BlockHeight,
-        hash: BlockHash,
-        timestamp: Timestamp,
-        source: T,
-        confidence: f64,
-    ) -> Self {
-        TimePoint {
-            height,
-            hash,
+    /// Create a new time point with a timestamp and block height
+    pub fn with_block(timestamp: u64, block_height: u64) -> Self {
+        Self {
             timestamp,
-            confidence: confidence.max(0.0).min(1.0),
-            verified: false,
-            source: source.to_string(),
+            block_height: Some(block_height),
+            block_id: None,
+            sequence: None,
+        }
+    }
+    
+    /// Create a new time point with timestamp, block height, and block ID
+    pub fn with_block_id(timestamp: u64, block_height: u64, block_id: impl Into<String>) -> Self {
+        Self {
+            timestamp,
+            block_height: Some(block_height),
+            block_id: Some(block_id.into()),
+            sequence: None,
+        }
+    }
+    
+    /// Create a new time point with a sequence number
+    pub fn with_sequence(timestamp: u64, sequence: u64) -> Self {
+        Self {
+            timestamp,
+            block_height: None,
+            block_id: None,
+            sequence: Some(sequence),
+        }
+    }
+}
+
+impl PartialOrd for TimePoint {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        // First compare by timestamp
+        match self.timestamp.cmp(&other.timestamp) {
+            Ordering::Equal => {
+                // If timestamps are equal, try comparing by block height
+                if let (Some(self_height), Some(other_height)) = (self.block_height, other.block_height) {
+                    match self_height.cmp(&other_height) {
+                        Ordering::Equal => {
+                            // If block heights are equal, try comparing by sequence
+                            if let (Some(self_seq), Some(other_seq)) = (self.sequence, other.sequence) {
+                                Some(self_seq.cmp(&other_seq))
+                            } else {
+                                Some(Ordering::Equal)
+                            }
+                        }
+                        ordering => Some(ordering),
+                    }
+                } else if let (Some(self_seq), Some(other_seq)) = (self.sequence, other.sequence) {
+                    // Compare by sequence if block heights aren't available
+                    Some(self_seq.cmp(&other_seq))
+                } else {
+                    Some(Ordering::Equal)
+                }
+            }
+            ordering => Some(ordering),
         }
     }
 }
@@ -89,8 +104,8 @@ impl fmt::Display for TimePoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f, 
-            "TimePoint(height={}, ts={}, conf={:.2}, src={})",
-            self.height, self.timestamp, self.confidence, self.source
+            "TimePoint(ts={}, bh={:?}, bid={:?}, seq={:?})",
+            self.timestamp, self.block_height, self.block_id, self.sequence
         )
     }
 }
@@ -98,155 +113,44 @@ impl fmt::Display for TimePoint {
 /// A time range between two time points
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeRange {
-    /// Starting time in seconds
-    pub start: Timestamp,
-    /// Ending time in seconds
-    pub end: Timestamp,
-    /// Whether this range is inclusive at the start
-    pub start_inclusive: bool,
-    /// Whether this range is inclusive at the end
-    pub end_inclusive: bool,
+    /// Start time point (inclusive)
+    pub start: TimePoint,
+    /// End time point (inclusive)
+    pub end: TimePoint,
 }
 
 impl TimeRange {
     /// Create a new time range
-    pub fn new(start: Timestamp, end: Timestamp) -> Self {
-        TimeRange {
-            start,
-            end,
-            start_inclusive: true,
-            end_inclusive: true,
+    pub fn new(start: TimePoint, end: TimePoint) -> Self {
+        Self { start, end }
+    }
+    
+    /// Create a time range from timestamps
+    pub fn from_timestamps(start: u64, end: u64) -> Self {
+        Self {
+            start: TimePoint::new(start),
+            end: TimePoint::new(end),
         }
     }
     
-    /// Create an exclusive time range
-    pub fn exclusive(start: Timestamp, end: Timestamp) -> Self {
-        TimeRange {
-            start,
-            end,
-            start_inclusive: false,
-            end_inclusive: false,
-        }
-    }
-    
-    /// Create a half-open range [start, end)
-    pub fn half_open(start: Timestamp, end: Timestamp) -> Self {
-        TimeRange {
-            start,
-            end,
-            start_inclusive: true,
-            end_inclusive: false,
-        }
-    }
-    
-    /// Check if a timestamp is within this range
-    pub fn contains(&self, timestamp: Timestamp) -> bool {
-        let start_check = if self.start_inclusive {
-            timestamp >= self.start
-        } else {
-            timestamp > self.start
-        };
-        
-        let end_check = if self.end_inclusive {
-            timestamp <= self.end
-        } else {
-            timestamp < self.end
-        };
-        
-        start_check && end_check
+    /// Check if a time point is contained in this range
+    pub fn contains(&self, point: &TimePoint) -> bool {
+        (point >= &self.start) && (point <= &self.end)
     }
     
     /// Get the duration of this range in seconds
     pub fn duration(&self) -> u64 {
-        self.end.saturating_sub(self.start)
-    }
-    
-    /// Check if this range overlaps with another
-    pub fn overlaps(&self, other: &TimeRange) -> bool {
-        // This range starts before other ends
-        let this_before_other_ends = if other.end_inclusive {
-            self.start <= other.end
+        if self.end.timestamp >= self.start.timestamp {
+            self.end.timestamp - self.start.timestamp
         } else {
-            self.start < other.end
-        };
-        
-        // This range ends after other starts
-        let this_ends_after_other_starts = if self.end_inclusive {
-            other.start <= self.end
-        } else {
-            other.start < self.end
-        };
-        
-        this_before_other_ends && this_ends_after_other_starts
-    }
-    
-    /// Create the intersection of this range with another
-    pub fn intersection(&self, other: &TimeRange) -> Option<TimeRange> {
-        if !self.overlaps(other) {
-            return None;
-        }
-        
-        let (start, start_inclusive) = if self.start < other.start {
-            (other.start, other.start_inclusive)
-        } else if self.start > other.start {
-            (self.start, self.start_inclusive)
-        } else {
-            // Equal starts, inclusive if both are inclusive
-            (self.start, self.start_inclusive && other.start_inclusive)
-        };
-        
-        let (end, end_inclusive) = if self.end < other.end {
-            (self.end, self.end_inclusive)
-        } else if self.end > other.end {
-            (other.end, other.end_inclusive)
-        } else {
-            // Equal ends, inclusive if both are inclusive
-            (self.end, self.end_inclusive && other.end_inclusive)
-        };
-        
-        Some(TimeRange {
-            start,
-            end,
-            start_inclusive,
-            end_inclusive,
-        })
-    }
-    
-    /// Create a new range that spans both this range and another
-    pub fn union(&self, other: &TimeRange) -> TimeRange {
-        let (start, start_inclusive) = if self.start < other.start {
-            (self.start, self.start_inclusive)
-        } else if self.start > other.start {
-            (other.start, other.start_inclusive)
-        } else {
-            // Equal starts, inclusive if either is inclusive
-            (self.start, self.start_inclusive || other.start_inclusive)
-        };
-        
-        let (end, end_inclusive) = if self.end > other.end {
-            (self.end, self.end_inclusive)
-        } else if self.end < other.end {
-            (other.end, other.end_inclusive)
-        } else {
-            // Equal ends, inclusive if either is inclusive
-            (self.end, self.end_inclusive || other.end_inclusive)
-        };
-        
-        TimeRange {
-            start,
-            end,
-            start_inclusive,
-            end_inclusive,
+            0
         }
     }
 }
 
 impl fmt::Display for TimeRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let start_bracket = if self.start_inclusive { '[' } else { '(' };
-        let end_bracket = if self.end_inclusive { ']' } else { ')' };
-        
-        write!(f, "{}{}, {}{}", start_bracket, self.start, self.end, end_bracket)
+        write!(f, "TimeRange(start={}, end={})", self.start, self.end)
     }
 }
 
@@ -306,7 +210,12 @@ impl TimeWindow {
     
     /// Check if a timestamp is within this window
     pub fn contains(&self, timestamp: Timestamp) -> bool {
-        self.range.contains(timestamp)
+        self.range.contains(&TimePoint {
+            timestamp: timestamp.timestamp,
+            block_height: Some(timestamp.block_height),
+            block_id: Some(timestamp.block_id.clone()),
+            sequence: Some(timestamp.sequence),
+        })
     }
     
     /// Check if this window is complete (has both start and end)
@@ -321,12 +230,27 @@ impl TimeWindow {
     
     /// Check if this window overlaps with another
     pub fn overlaps(&self, other: &TimeWindow) -> bool {
-        self.range.overlaps(&other.range)
+        self.range.contains(&other.range.start) || self.range.contains(&other.range.end)
     }
     
     /// Get the intersection of this window with another
     pub fn intersection(&self, other: &TimeWindow) -> Option<TimeRange> {
-        self.range.intersection(&other.range)
+        let mut intersection_points = Vec::new();
+        
+        if self.range.contains(&other.range.start) {
+            intersection_points.push(other.range.start);
+        }
+        if self.range.contains(&other.range.end) {
+            intersection_points.push(other.range.end);
+        }
+        
+        if intersection_points.is_empty() {
+            None
+        } else {
+            let start = intersection_points.iter().min().unwrap().clone();
+            let end = intersection_points.iter().max().unwrap().clone();
+            Some(TimeRange::new(start, end))
+        }
     }
 }
 
@@ -336,135 +260,47 @@ mod tests {
     
     #[test]
     fn test_time_point() {
-        let point = TimePoint::new(100, "block123".into(), 1000);
-        assert_eq!(point.height, 100);
+        let point = TimePoint::new(1000);
         assert_eq!(point.timestamp, 1000);
-        assert_eq!(point.confidence, 1.0);
-        assert_eq!(point.verified, false);
+        assert_eq!(point.block_height, None);
+        assert_eq!(point.block_id, None);
+        assert_eq!(point.sequence, None);
         
-        let point = point
-            .with_confidence(0.8)
-            .with_verification(true)
-            .with_source("rpc");
+        let point = TimePoint::with_block(1000, 100);
+        assert_eq!(point.timestamp, 1000);
+        assert_eq!(point.block_height, Some(100));
+        assert_eq!(point.block_id, None);
+        assert_eq!(point.sequence, None);
         
-        assert_eq!(point.confidence, 0.8);
-        assert_eq!(point.verified, true);
-        assert_eq!(point.source, "rpc");
+        let point = TimePoint::with_block_id(1000, 100, "block100");
+        assert_eq!(point.timestamp, 1000);
+        assert_eq!(point.block_height, Some(100));
+        assert_eq!(point.block_id, Some("block100"));
+        assert_eq!(point.sequence, None);
         
-        // Test confidence bounds
-        let point = TimePoint::new(100, "block123".into(), 1000)
-            .with_confidence(1.5);
-        assert_eq!(point.confidence, 1.0);
-        
-        let point = TimePoint::new(100, "block123".into(), 1000)
-            .with_confidence(-0.5);
-        assert_eq!(point.confidence, 0.0);
+        let point = TimePoint::with_sequence(1000, 1);
+        assert_eq!(point.timestamp, 1000);
+        assert_eq!(point.block_height, None);
+        assert_eq!(point.block_id, None);
+        assert_eq!(point.sequence, Some(1));
     }
     
     #[test]
     fn test_time_range() {
-        // Inclusive range
-        let range = TimeRange::new(1000, 2000);
-        assert!(range.contains(1000));
-        assert!(range.contains(1500));
-        assert!(range.contains(2000));
-        assert!(!range.contains(999));
-        assert!(!range.contains(2001));
+        let range = TimeRange::from_timestamps(1000, 2000);
+        assert!(range.contains(&TimePoint::new(1000)));
+        assert!(range.contains(&TimePoint::new(1500)));
+        assert!(range.contains(&TimePoint::new(2000)));
+        assert!(!range.contains(&TimePoint::new(999)));
+        assert!(!range.contains(&TimePoint::new(2001)));
         
-        // Exclusive range
-        let range = TimeRange::exclusive(1000, 2000);
-        assert!(!range.contains(1000));
-        assert!(range.contains(1500));
-        assert!(!range.contains(2000));
-        
-        // Half-open range
-        let range = TimeRange::half_open(1000, 2000);
-        assert!(range.contains(1000));
-        assert!(range.contains(1500));
-        assert!(!range.contains(2000));
-        
-        // Duration
         assert_eq!(range.duration(), 1000);
-    }
-    
-    #[test]
-    fn test_time_range_overlaps() {
-        let range1 = TimeRange::new(1000, 2000);
-        let range2 = TimeRange::new(1500, 2500);
-        let range3 = TimeRange::new(2500, 3000);
-        
-        assert!(range1.overlaps(&range2));
-        assert!(range2.overlaps(&range1));
-        assert!(!range1.overlaps(&range3));
-        assert!(!range3.overlaps(&range1));
-        assert!(range2.overlaps(&range3));
-        
-        // Edge cases
-        let range4 = TimeRange::new(2000, 3000);
-        assert!(range1.overlaps(&range4)); // They touch at 2000
-        
-        let range5 = TimeRange::exclusive(2000, 3000);
-        assert!(!range1.overlaps(&range5)); // They don't overlap because range5 excludes 2000
-    }
-    
-    #[test]
-    fn test_time_range_intersection() {
-        let range1 = TimeRange::new(1000, 2000);
-        let range2 = TimeRange::new(1500, 2500);
-        
-        let intersection = range1.intersection(&range2).unwrap();
-        assert_eq!(intersection.start, 1500);
-        assert_eq!(intersection.end, 2000);
-        assert!(intersection.start_inclusive);
-        assert!(intersection.end_inclusive);
-        
-        // No intersection
-        let range3 = TimeRange::new(3000, 4000);
-        assert!(range1.intersection(&range3).is_none());
-        
-        // Inclusive/exclusive combinations
-        let range4 = TimeRange::new(1000, 2000);
-        let range5 = TimeRange::exclusive(1000, 2000);
-        
-        let intersection = range4.intersection(&range5).unwrap();
-        assert_eq!(intersection.start, 1000);
-        assert_eq!(intersection.end, 2000);
-        assert!(!intersection.start_inclusive); // False because range5 is exclusive at start
-        assert!(!intersection.end_inclusive); // False because range5 is exclusive at end
-    }
-    
-    #[test]
-    fn test_time_range_union() {
-        let range1 = TimeRange::new(1000, 2000);
-        let range2 = TimeRange::new(1500, 2500);
-        
-        let union = range1.union(&range2);
-        assert_eq!(union.start, 1000);
-        assert_eq!(union.end, 2500);
-        assert!(union.start_inclusive);
-        assert!(union.end_inclusive);
-        
-        // Non-overlapping ranges
-        let range3 = TimeRange::new(3000, 4000);
-        let union = range1.union(&range3);
-        assert_eq!(union.start, 1000);
-        assert_eq!(union.end, 4000);
-        
-        // Inclusive/exclusive combinations
-        let range4 = TimeRange::exclusive(1000, 2000);
-        let range5 = TimeRange::exclusive(1500, 2500);
-        
-        let union = range4.union(&range5);
-        assert_eq!(union.start, 1000);
-        assert_eq!(union.end, 2500);
-        assert!(!union.start_inclusive); // False because range4 is exclusive at start
-        assert!(!union.end_inclusive); // False because range5 is exclusive at end
     }
     
     #[test]
     fn test_time_window() {
         let domain_id: DomainId = "test_domain".into();
-        let range = TimeRange::new(1000, 2000);
+        let range = TimeRange::from_timestamps(1000, 2000);
         let window = TimeWindow::new(domain_id.clone(), range, 100, "block100".into());
         
         assert_eq!(window.domain_id, domain_id);
@@ -485,8 +321,8 @@ mod tests {
     #[test]
     fn test_time_window_overlaps() {
         let domain_id: DomainId = "test_domain".into();
-        let range1 = TimeRange::new(1000, 2000);
-        let range2 = TimeRange::new(1500, 2500);
+        let range1 = TimeRange::from_timestamps(1000, 2000);
+        let range2 = TimeRange::from_timestamps(1500, 2500);
         
         let window1 = TimeWindow::new(domain_id.clone(), range1, 100, "block100".into());
         let window2 = TimeWindow::new(domain_id.clone(), range2, 150, "block150".into());
@@ -494,7 +330,7 @@ mod tests {
         assert!(window1.overlaps(&window2));
         
         let intersection = window1.intersection(&window2).unwrap();
-        assert_eq!(intersection.start, 1500);
-        assert_eq!(intersection.end, 2000);
+        assert!(intersection.contains(&TimePoint::new(1500)));
+        assert!(intersection.contains(&TimePoint::new(2000)));
     }
 } 

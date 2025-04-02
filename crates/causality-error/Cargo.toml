@@ -1,0 +1,27 @@
+[package]
+name = "causality-error"
+version = "0.1.0"
+edition = "2021"
+description = "Error handling framework for the Causality ecosystem"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Standard error handling utilities
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+
+# Optional bincode support
+bincode = { version = "1.3", optional = true }
+
+[features]
+default = []
+with-bincode = ["bincode"]
+
+# No internal dependencies to avoid circular dependencies 

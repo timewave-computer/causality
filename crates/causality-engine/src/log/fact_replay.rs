@@ -8,17 +8,17 @@
 
 use std::collections::{HashMap, HashSet, BTreeMap};
 use std::sync::{Arc, Mutex};
-use causality_types::{DomainId, TraceId, Timestamp};
-use causality_types::{Error, Result};
+use causality_types::{DomainId, Timestamp};
+use causality_error::{EngineError, Result, Error};
 use crate::log::{FactLogger, FactMetadata, FactEntry, LogStorage};
-use causality_engine_types::{FactType, RegisterFact, ZKProofFact};
-use causality_engine_snapshot::{FactId, FactSnapshot, RegisterObservation};
-use crate::resource::register::ContentId;
+use crate::log::fact_types::{FactType, RegisterFact, ZKProofFact};
+use crate::log::fact::{FactId, FactSnapshot, RegisterObservation};
+use causality_types::ContentId;
 
 #[cfg(feature = "md5")]
-use crate::crypto::Md5ChecksumFunction;
+use causality_crypto::md5::Md5ChecksumFunction;
 #[cfg(not(feature = "md5"))]
-use crate::crypto::{HashFactory, HashOutput};
+use causality_crypto::hash::{HashFactory, HashOutput};
 
 /// Callback type for fact replay events
 pub type FactReplayCallback = Box<dyn Fn(&FactEntry) -> Result<()> + Send>;
@@ -125,7 +125,7 @@ impl FactReplayEngine {
     /// Replay facts from storage
     fn replay_facts(&mut self) -> Result<()> {
         let storage = self.storage.lock()
-            .map_err(|_| Error::LockError("Failed to lock storage".to_string()))?;
+            .map_err(|_| Error::LogError("Failed to lock storage".to_string()))?;
             
         let entry_count = storage.entry_count()?;
         

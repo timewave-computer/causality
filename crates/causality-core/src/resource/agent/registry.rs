@@ -5,8 +5,8 @@
 use crate::resource_types::{ResourceId, ResourceType};
 use crate::resource::ResourceError;
 use crate::capability::Capability;
-use crate::crypto::ContentHash;
-use crate::serialization::{Serializable, DeserializationError};
+use causality_types::ContentHash;
+use crate::serialization::{Serializable, SerializationError};
 
 use super::types::{AgentId, AgentType, AgentState, AgentError};
 use super::agent::{Agent, AgentImpl};

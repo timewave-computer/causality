@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 
-use crate::domain::DomainId;
+use causality_types::domain::DomainId;
 
 /// Represents a TEL script
 #[derive(Debug, Clone, Serialize, Deserialize)]

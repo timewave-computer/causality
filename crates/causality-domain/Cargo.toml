@@ -12,17 +12,24 @@ resource = []
 effects-integration = []
 # DEPRECATED: Full effects integration is now provided through causality-core
 effects-provider = ["effects-integration"]
+# Support for CosmWasm zero-knowledge proofs
+cosmwasm_zk = []
 
 [dependencies]
 # External dependencies
-serde = { workspace = true, features = ["derive"] }
-thiserror = { workspace = true }
-anyhow = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+serde_json = "1.0"
+async-trait = "0.1"
+hex = "0.4"
 tracing = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
 
 # Internal dependencies
-causality-types = { workspace = true }
+causality-types = { path = "../causality-types" }
 causality-core = { workspace = true }
+causality-error = { workspace = true }
 
 # DEPRECATED: These dependencies have been consolidated into causality-core
 # All functionality is now available through the core crate

@@ -3,19 +3,31 @@
 // This module provides utilities for serializing and deserializing data
 // in a consistent and canonical way, especially for content addressing.
 
-use std::fmt;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+/// Error type for serialization operations
+#[derive(Debug, Error, Clone)]
 pub enum SerializationError {
-    #[error("Serialization error: {0}")]
+    #[error("Serialization failed: {0}")]
     SerializationFailed(String),
     
-    #[error("Deserialization error: {0}")]
+    #[error("Deserialization failed: {0}")]
     DeserializationFailed(String),
     
-    #[error("Invalid data: {0}")]
-    InvalidData(String),
+    #[error("Invalid format: {0}")]
+    InvalidFormat(String),
+    
+    #[error("Missing field: {0}")]
+    MissingField(String),
+    
+    #[error("Unsupported type: {0}")]
+    UnsupportedType(String),
+    
+    #[error("Unsupported version: {0}")]
+    UnsupportedVersion(String),
+    
+    #[error("{0}")]
+    Other(String),
 }
 
 /// A utility for serializing and deserializing data in a canonical format
@@ -84,6 +96,27 @@ pub trait Serializable: serde::Serialize + serde::de::DeserializeOwned + Sized {
 // Implement Serializable for common types
 impl<T: serde::Serialize + serde::de::DeserializeOwned> Serializable for T {}
 
+// Convenience functions for module-level access
+/// Serialize data to bytes in a canonical format
+pub fn to_bytes<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, SerializationError> {
+    Serializer::to_bytes(value)
+}
+
+/// Deserialize data from bytes
+pub fn from_bytes<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, SerializationError> {
+    Serializer::from_bytes(bytes)
+}
+
+/// Serialize data to a string in a canonical format
+pub fn to_string<T: serde::Serialize>(value: &T) -> Result<String, SerializationError> {
+    Serializer::to_string(value)
+}
+
+/// Deserialize data from a string
+pub fn from_string<T: serde::de::DeserializeOwned>(s: &str) -> Result<T, SerializationError> {
+    Serializer::from_string(s)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,6 +180,24 @@ mod tests {
         let deserialized = TestStruct::from_string(&json).unwrap();
         
         // Should be the same
+        assert_eq!(test, deserialized);
+    }
+    
+    #[test]
+    fn test_module_functions() {
+        let test = TestStruct {
+            a: 42,
+            b: "hello".to_string(),
+            c: vec![1, 2, 3],
+        };
+        
+        // Test module-level functions
+        let bytes = to_bytes(&test).unwrap();
+        let deserialized: TestStruct = from_bytes(&bytes).unwrap();
+        assert_eq!(test, deserialized);
+        
+        let json = to_string(&test).unwrap();
+        let deserialized: TestStruct = from_string(&json).unwrap();
         assert_eq!(test, deserialized);
     }
 } 

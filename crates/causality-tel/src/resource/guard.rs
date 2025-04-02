@@ -10,12 +10,15 @@
 use std::sync::{Arc, RwLock};
 use std::fmt;
 use std::ops::{Deref, DerefMut, Drop};
+use async_trait::async_trait;
+use serde::{Serialize, Deserialize};
+use causality_types::{ContentId, DomainId};
+use causality_core::resource::types::RegisterState;
 
 use causality_tel::{Address};
 use causality_tel::{TelError, TelResult};
 use causality_crypto::ContentId;
 use crate::resource::ResourceRegister;
-use :ResourceRegister:causality_core::resource::Resource::RegisterState;
 use super::manager::ResourceManager;
 
 /// Types of access to a resource

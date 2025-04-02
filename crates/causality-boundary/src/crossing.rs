@@ -9,7 +9,6 @@ use thiserror::Error;
 
 use super::annotation::{BoundaryType, CrossingType, BoundarySafe};
 use super::metrics;
-use crate::crypto::{HashFactory, HashOutput};
 
 /// Errors that can occur during boundary crossings
 #[derive(Debug, Error)]
@@ -107,31 +106,16 @@ impl BoundaryCrossingPayload {
             .unwrap_or_default()
             .as_secs();
         
-        // Create content-based deterministic ID using our crypto module
-        // Combine relevant data for the ID generation
-        let id_source = format!(
-            "crossing:{}:{}:{}:{}",
-            source.to_string(),
-            destination.to_string(),
-            crossing_type.to_string(),
-            now
-        );
-        
-        // Use the default HashFactory to create a hasher
-        let hash_factory = HashFactory::default();
-        let hasher = hash_factory.create_hasher()
-            .expect("Failed to create hasher");
-        
-        // Generate a content-based ID
-        let hash = hasher.hash(id_source.as_bytes());
-        let crossing_id = format!("bcr-{}", hash.to_hex().split_at(16).0);
+        // Generate a simple ID for the crossing based on timestamp and identifiers
+        let id_prefix = format!("{}_{}", source.to_string(), destination.to_string());
+        let crossing_id = format!("bcr-{}-{}", id_prefix, now);
         
         Self {
             crossing_id,
             source_boundary: source.to_string(),
             destination_boundary: destination.to_string(),
             crossing_type: crossing_type.to_string(),
-            data,
+            data: data.clone(),
             authentication: auth,
             context: HashMap::new(),
             timestamp: now,
@@ -169,15 +153,33 @@ pub trait BoundaryCrossingProtocol: Send + Sync + 'static {
         payload: BoundaryCrossingPayload,
     ) -> BoundaryCrossingResult<Vec<u8>>;
     
-    /// Prepare an outgoing boundary crossing
-    fn prepare_outgoing<T: BoundarySafe>(
+    /// Prepare an outgoing boundary crossing with serialized data
+    fn prepare_outgoing_raw(
         &self,
-        data: &T,
+        data: &[u8],
         auth: BoundaryAuthentication,
     ) -> BoundaryCrossingResult<BoundaryCrossingPayload>;
 }
 
+/// Helper trait extension for working with BoundarySafe types 
+/// This separates the generic part from the object-safe trait
+pub trait BoundaryCrossingProtocolExt: BoundaryCrossingProtocol {
+    /// Prepare an outgoing boundary crossing with a BoundarySafe type
+    fn prepare_outgoing<T: BoundarySafe>(
+        &self,
+        data: &T,
+        auth: BoundaryAuthentication,
+    ) -> BoundaryCrossingResult<BoundaryCrossingPayload> {
+        // Let the BoundarySafe trait handle serialization
+        let serialized = data.prepare_for_crossing();
+            
+        // Use the raw method to prepare the crossing
+        self.prepare_outgoing_raw(&serialized, auth)
+    }
+}
+
 /// Default implementation of a boundary crossing protocol
+#[derive(Clone)]
 pub struct DefaultBoundaryCrossingProtocol {
     name: String,
     source: BoundaryType,
@@ -243,6 +245,21 @@ impl DefaultBoundaryCrossingProtocol {
         *last_time = now;
         Ok(())
     }
+    
+    /// Get the source boundary type
+    pub fn source(&self) -> BoundaryType {
+        self.source.clone()
+    }
+    
+    /// Get the destination boundary type
+    pub fn destination(&self) -> BoundaryType {
+        self.destination.clone()
+    }
+    
+    /// Register this protocol with the registry
+    pub fn register(&self, registry: &BoundaryCrossingRegistry) {
+        registry.register_protocol(Arc::new(self.clone()));
+    }
 }
 
 impl BoundaryCrossingProtocol for DefaultBoundaryCrossingProtocol {
@@ -251,11 +268,11 @@ impl BoundaryCrossingProtocol for DefaultBoundaryCrossingProtocol {
     }
     
     fn source_boundary(&self) -> BoundaryType {
-        self.source
+        self.source.clone()
     }
     
     fn destination_boundary(&self) -> BoundaryType {
-        self.destination
+        self.destination.clone()
     }
     
     fn verify_authentication(
@@ -285,18 +302,18 @@ impl BoundaryCrossingProtocol for DefaultBoundaryCrossingProtocol {
                 }
             }
             BoundaryAuthentication::Capability(cap) => {
-                // In a real implementation, verify the capability
-                if !cap.is_empty() {
+                // In a real implementation, verify the capability token
+                if cap.starts_with("cap_") {
                     Ok(true)
                 } else {
                     Err(BoundaryCrossingError::AuthenticationFailed(
-                        "Invalid capability".to_string()
+                        "Invalid capability token".to_string()
                     ))
                 }
             }
             BoundaryAuthentication::ZkProof(proof) => {
-                // In a real implementation, verify the ZK proof
-                if !proof.is_empty() {
+                // In a real implementation, verify the zero-knowledge proof
+                if proof.len() > 32 {
                     Ok(true)
                 } else {
                     Err(BoundaryCrossingError::AuthenticationFailed(
@@ -305,8 +322,8 @@ impl BoundaryCrossingProtocol for DefaultBoundaryCrossingProtocol {
                 }
             }
             BoundaryAuthentication::MultiFactor(factors) => {
-                // In a real implementation, verify all factors
-                if !factors.is_empty() {
+                // In a real implementation, verify all the factors
+                if factors.len() >= 2 && factors.iter().all(|f| f.len() > 5) {
                     Ok(true)
                 } else {
                     Err(BoundaryCrossingError::AuthenticationFailed(
@@ -328,59 +345,46 @@ impl BoundaryCrossingProtocol for DefaultBoundaryCrossingProtocol {
         self.apply_rate_limit(&payload.crossing_id)?;
         
         // Verify authentication
-        self.verify_authentication(&payload)?;
-        
-        // Start timing the crossing
-        let timer = metrics::start_boundary_crossing_timer(&payload.crossing_type);
-        
-        // In a real implementation, we would process the payload based on the crossing type
-        let result = Ok(payload.data);
-        
-        // Record the crossing completion
-        metrics::complete_boundary_crossing(
-            &payload.crossing_type,
-            timer,
-            result.is_ok()
-        );
-        
-        result
-    }
-    
-    fn prepare_outgoing<T: BoundarySafe>(
-        &self,
-        data: &T,
-        auth: BoundaryAuthentication,
-    ) -> BoundaryCrossingResult<BoundaryCrossingPayload> {
-        // Check if the data is compatible with the destination boundary
-        if !data.validate_for_boundary(self.destination_boundary()) {
-            return Err(BoundaryCrossingError::InvalidCrossing(
-                format!("Data is not compatible with destination boundary: {}", self.destination_boundary())
+        if !self.verify_authentication(&payload)? {
+            return Err(BoundaryCrossingError::AuthenticationFailed(
+                "Authentication verification failed".to_string()
             ));
         }
         
-        // Prepare the data for crossing
-        let serialized_data = data.prepare_for_crossing();
+        // Log crossing metrics
+        metrics::record_boundary_crossing(&payload.crossing_type);
         
+        // Return the data
+        Ok(payload.data)
+    }
+    
+    fn prepare_outgoing_raw(
+        &self,
+        data: &[u8],
+        auth: BoundaryAuthentication,
+    ) -> BoundaryCrossingResult<BoundaryCrossingPayload> {
         // Create the payload
         let payload = BoundaryCrossingPayload::new(
-            self.source_boundary(),
-            self.destination_boundary(),
-            self.crossing_type,
-            serialized_data,
+            self.source.clone(),
+            self.destination.clone(),
+            self.crossing_type.clone(),
+            data.to_vec(),
             auth,
         );
         
         // Check size limit
         self.check_size_limit(&payload)?;
         
+        // Apply rate limiting
+        self.apply_rate_limit(&payload.crossing_id)?;
+        
         Ok(payload)
     }
 }
 
 /// Registry for boundary crossing protocols
-#[derive(Default)]
 pub struct BoundaryCrossingRegistry {
-    protocols: RwLock<HashMap<String, Arc<dyn BoundaryCrossingProtocol>>>,
+    protocols: RwLock<HashMap<String, Arc<DefaultBoundaryCrossingProtocol>>>,
 }
 
 impl BoundaryCrossingRegistry {
@@ -392,13 +396,13 @@ impl BoundaryCrossingRegistry {
     }
     
     /// Register a protocol
-    pub fn register_protocol(&self, protocol: Arc<dyn BoundaryCrossingProtocol>) {
+    pub fn register_protocol(&self, protocol: Arc<DefaultBoundaryCrossingProtocol>) {
         let mut protocols = self.protocols.write().unwrap();
         protocols.insert(protocol.name().to_string(), protocol);
     }
     
     /// Get a protocol by name
-    pub fn get_protocol(&self, name: &str) -> Option<Arc<dyn BoundaryCrossingProtocol>> {
+    pub fn get_protocol(&self, name: &str) -> Option<Arc<DefaultBoundaryCrossingProtocol>> {
         let protocols = self.protocols.read().unwrap();
         protocols.get(name).cloned()
     }
@@ -408,7 +412,7 @@ impl BoundaryCrossingRegistry {
         &self,
         source: BoundaryType,
         destination: BoundaryType,
-    ) -> Option<Arc<dyn BoundaryCrossingProtocol>> {
+    ) -> Option<Arc<DefaultBoundaryCrossingProtocol>> {
         let protocols = self.protocols.read().unwrap();
         
         for protocol in protocols.values() {
@@ -420,7 +424,7 @@ impl BoundaryCrossingRegistry {
         None
     }
     
-    /// Process a crossing using a specific protocol
+    /// Process a boundary crossing
     pub fn process_crossing(
         &self,
         protocol_name: &str,
@@ -430,8 +434,11 @@ impl BoundaryCrossingRegistry {
             protocol.process_incoming(payload)
         } else {
             Err(BoundaryCrossingError::ProtocolError(
-                format!("Protocol not found: {}", protocol_name)
+                format!("Protocol {} not found", protocol_name)
             ))
         }
     }
-} 
+}
+
+// Implement the extension trait for all types that implement the base trait
+impl<T: BoundaryCrossingProtocol> BoundaryCrossingProtocolExt for T {} 

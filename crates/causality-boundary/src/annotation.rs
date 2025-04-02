@@ -4,7 +4,7 @@
 use std::fmt;
 
 /// Types of system boundaries
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BoundaryType {
     /// Inside the Causality system
     InsideSystem,
@@ -60,7 +60,7 @@ impl BoundaryType {
 }
 
 /// Types of boundary crossings
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CrossingType {
     /// From inside to outside
     InsideToOutside,

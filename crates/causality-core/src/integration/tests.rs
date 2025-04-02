@@ -184,7 +184,7 @@ mod tests {
         let context = BasicEffectContext::builder().build();
         
         // Create a resource reference
-        let content_id = ContentId::from_bytes(&[1, 2, 3, 4]).unwrap();
+        let content_id = ContentId::from_bytes_unwrap(&[1, 2, 3, 4]);
         let resource_type = ResourceTypeId::new("document");
         let resource_id = CrossDomainResourceId::new(
             content_id.clone(),

@@ -8,9 +8,8 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
-use causality_types::{*};
-use causality_crypto::ContentId;;
-use crate::effect::EffectType;
+use causality_types::{ContentId, DomainId};
+use causality_core::effect::EffectType;
 
 /// An entry representing an effect operation
 #[derive(Debug, Clone, Serialize, Deserialize)]

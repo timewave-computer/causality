@@ -5,15 +5,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::resource_types::{
-    ResourceId, ResourceTypeId, ResourceState,
+    ResourceId, ResourceTypeId,
 };
-use crate::resource_validation::ResourcePermission;
+use crate::resource::ResourceState;
+use crate::resource::validation::ResourcePermission;
 use crate::resource::ResourceSchema;
-use crate::capability::{CapabilitySet, Capability};
-use crate::effect::EffectContext;
-use crate::time::TimeContext;
-use crate::domain::DomainId;
-use crate::content::ContentHash;
+use crate::capability::Capability;
+use causality_types::domain::DomainId;
+use causality_types::ContentHash;
 
 /// Phase of validation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

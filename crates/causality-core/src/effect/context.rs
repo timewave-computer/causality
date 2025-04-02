@@ -1,173 +1,134 @@
-// Effect Context
-//
-// This module provides the context for executing effects, including
-// capabilities, resources, and metadata.
+//! Effect context module
+//!
+//! This module defines the execution context for effects, including capabilities,
+//! resources, and metadata.
 
 use std::collections::{HashMap, HashSet};
-use std::fmt::{self, Debug};
+use std::error::Error;
+use std::fmt::Debug;
 use std::sync::Arc;
-
 use thiserror::Error;
-use serde::{Serialize, Deserialize};
+use std::any::Any;
 
+use super::types::{EffectId, Right, ExecutionBoundary};
 use causality_types::ContentId;
-use crate::resource_types::ResourceId;
-use crate::capability::{Capability, CapabilityGrants, CapabilityError, ResourceId as CapResourceId};
-use super::types::{EffectId, EffectTypeId, ExecutionBoundary};
+use super::registry::EffectExecutor;
+use crate::resource::ResourceId;
 
-/// Type for capability references
-pub type CapabilityReference = Arc<Capability<dyn std::any::Any + Send + Sync>>;
+/// A capability represents permission to access a resource in a specific way
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Capability {
+    /// The resource ID the capability applies to
+    pub resource_id: ContentId,
+    /// The type of access permission
+    pub right: Right,
+}
 
-/// Errors that can occur during effect context operations
-#[derive(Error, Debug)]
+impl Capability {
+    /// Create a new capability
+    pub fn new(resource_id: ContentId, right: Right) -> Self {
+        Self { resource_id, right }
+    }
+    
+    /// Convert to string representation
+    pub fn to_string(&self) -> String {
+        format!("{}:{}", self.resource_id, self.right)
+    }
+}
+
+/// A set of capability grants
+pub type CapabilityGrants = HashSet<Capability>;
+
+/// Error type for capability operations
+#[derive(Debug, Error)]
+pub enum CapabilityError {
+    #[error("Missing required capability: {0:?}")]
+    MissingCapability(Capability),
+    
+    #[error("Invalid capability format: {0}")]
+    InvalidFormat(String),
+    
+    #[error("Capability validation failed: {0}")]
+    ValidationFailed(String),
+}
+
+/// Error type for effect context operations
+#[derive(Debug, Error)]
 pub enum EffectContextError {
-    #[error("Missing capability: {0}")]
-    MissingCapability(String),
+    #[error("Missing capability: {0:?}")]
+    MissingCapability(Capability),
+    
+    #[error("Missing resource: {0}")]
+    MissingResource(ResourceId),
     
     #[error("Invalid resource: {0}")]
     InvalidResource(String),
     
-    #[error("Missing parent context")]
-    MissingParentContext,
+    #[error("Resource access denied: {0}")]
+    ResourceAccessDenied(String),
     
-    #[error("Capability verification error: {0}")]
-    CapabilityVerificationError(#[from] CapabilityError),
-    
-    #[error("Context serialization error: {0}")]
+    #[error("Serialization error: {0}")]
     SerializationError(String),
     
-    #[error("Context deserialization error: {0}")]
-    DeserializationError(String),
-    
-    #[error("Context access error: {0}")]
-    AccessError(String),
-    
-    #[error("Invalid metadata: {0}")]
-    InvalidMetadata(String),
+    #[error("Context error: {0}")]
+    ContextError(String),
 }
 
 /// Result type for effect context operations
 pub type EffectContextResult<T> = Result<T, EffectContextError>;
 
-/// Effect context trait
-pub trait EffectContext: Debug + Send + Sync {
+/// Context for effect execution
+pub trait EffectContext: Send + Sync + Debug {
     /// Get the effect ID
     fn effect_id(&self) -> &EffectId;
     
-    /// Get the capabilities
-    fn capabilities(&self) -> &[CapabilityReference];
+    /// Get the capabilities available in this context
+    fn capabilities(&self) -> &[Capability];
     
-    /// Get metadata
+    /// Get metadata for this context
     fn metadata(&self) -> &HashMap<String, String>;
     
-    /// Get the domain ID if available
-    fn domain_id(&self) -> Option<&str> {
-        self.metadata().get("domain_id").map(|s| s.as_str())
-    }
-    
-    /// Get resources
+    /// Get resources available in this context
     fn resources(&self) -> &HashSet<ResourceId>;
     
-    /// Get parent context if available
+    /// Get the parent context
     fn parent_context(&self) -> Option<&Arc<dyn EffectContext>>;
     
-    /// Check if a capability is present
-    fn has_capability(&self, capability_id: &ContentId) -> bool {
-        self.capabilities().iter().any(|cap| {
-            cap.id.hash.to_content_id().map(|id| &id == capability_id).unwrap_or(false)
-        })
+    /// Check if this context has a capability
+    fn has_capability(&self, capability: &Capability) -> bool;
+    
+    /// Get the associated registry for this context, if any
+    fn get_registry(&self) -> Option<Arc<dyn EffectExecutor>> {
+        None
     }
     
-    /// Check if resource capability is present with required grants
-    fn verify_resource_capability(&self, resource_id: &ResourceId, required_grants: &CapabilityGrants) -> EffectContextResult<bool> {
-        // First check this context's capabilities
-        for capability in self.capabilities() {
-            if capability.id.hash.to_content_id().map(|id| id == resource_id.content_hash().to_content_id().unwrap()).unwrap_or(false) {
-                // Check if the capability grants the required access
-                if capability.grants.includes(required_grants) {
-                    return Ok(true);
-                }
-            }
-        }
-        
-        // Then check parent context if available
-        if let Some(parent) = self.parent_context() {
-            return parent.verify_resource_capability(resource_id, required_grants);
-        }
-        
-        Ok(false)
-    }
-    
-    /// Check if context has read access to resource
-    fn can_read_resource(&self, resource_id: &ResourceId) -> EffectContextResult<bool> {
-        let read_grants = CapabilityGrants {
-            read: true,
-            write: false,
-            delegate: false,
-        };
-        
-        self.verify_resource_capability(resource_id, &read_grants)
-    }
-    
-    /// Check if context has write access to resource
-    fn can_write_resource(&self, resource_id: &ResourceId) -> EffectContextResult<bool> {
-        let write_grants = CapabilityGrants {
-            read: false,
-            write: true,
-            delegate: false,
-        };
-        
-        self.verify_resource_capability(resource_id, &write_grants)
-    }
-    
-    /// Check if context has delegation rights for resource
-    fn can_delegate_resource(&self, resource_id: &ResourceId) -> EffectContextResult<bool> {
-        let delegate_grants = CapabilityGrants {
-            read: false,
-            write: false,
-            delegate: true,
-        };
-        
-        self.verify_resource_capability(resource_id, &delegate_grants)
-    }
-    
-    /// Get metadata value
-    fn get_metadata(&self, key: &str) -> Option<&str> {
-        self.metadata().get(key).map(|s| s.as_str())
-    }
-    
-    /// Check if a resource is accessible
-    fn has_resource(&self, resource_id: &ResourceId) -> bool {
-        self.resources().contains(resource_id)
-    }
-    
-    /// Create a derived context for a new effect
+    /// Derive a new context with a different effect ID
     fn derive_context(&self, effect_id: EffectId) -> Box<dyn EffectContext>;
     
-    /// Create a derived context with additional capabilities
-    fn with_additional_capabilities(&self, capabilities: Vec<CapabilityReference>) -> Box<dyn EffectContext>;
+    /// Add capabilities to this context
+    fn with_additional_capabilities(&self, capabilities: Vec<Capability>) -> Box<dyn EffectContext>;
     
-    /// Create a derived context with additional resources
+    /// Add resources to this context
     fn with_additional_resources(&self, resources: HashSet<ResourceId>) -> Box<dyn EffectContext>;
     
-    /// Create a derived context with additional metadata
+    /// Add metadata to this context
     fn with_additional_metadata(&self, metadata: HashMap<String, String>) -> Box<dyn EffectContext>;
     
-    /// Serialize the context to bytes
-    fn to_bytes(&self) -> EffectContextResult<Vec<u8>>;
+    /// Clone this context
+    fn clone_context(&self) -> Box<dyn EffectContext>;
     
-    /// Create a context from bytes
-    fn from_bytes(bytes: &[u8]) -> EffectContextResult<Box<dyn EffectContext>> where Self: Sized;
+    /// Cast to Any for downcasting
+    fn as_any(&self) -> &dyn Any;
 }
 
-/// Basic effect context implementation
-#[derive(Debug, Clone)]
+/// Basic implementation of effect context
+#[derive(Debug)]
 pub struct BasicEffectContext {
     /// Effect ID
     effect_id: EffectId,
     
     /// Capabilities
-    capabilities: Vec<CapabilityReference>,
+    capabilities: Vec<Capability>,
     
     /// Metadata
     metadata: HashMap<String, String>,
@@ -191,7 +152,7 @@ impl BasicEffectContext {
         }
     }
     
-    /// Create a context with a parent
+    /// Create a new context with a parent
     pub fn with_parent(effect_id: EffectId, parent: Arc<dyn EffectContext>) -> Self {
         Self {
             effect_id,
@@ -202,23 +163,23 @@ impl BasicEffectContext {
         }
     }
     
-    /// Create a context with capabilities
-    pub fn with_capabilities(mut self, capabilities: Vec<CapabilityReference>) -> Self {
+    /// Set capabilities
+    pub fn with_capabilities(mut self, capabilities: Vec<Capability>) -> Self {
         self.capabilities = capabilities;
         self
     }
     
     /// Add a capability
-    pub fn add_capability(&mut self, capability: CapabilityReference) {
+    pub fn add_capability(&mut self, capability: Capability) {
         self.capabilities.push(capability);
     }
     
     /// Add multiple capabilities
-    pub fn add_capabilities(&mut self, capabilities: Vec<CapabilityReference>) {
+    pub fn add_capabilities(&mut self, capabilities: Vec<Capability>) {
         self.capabilities.extend(capabilities);
     }
     
-    /// Add metadata
+    /// Add a metadata entry
     pub fn add_metadata(&mut self, key: String, value: String) {
         self.metadata.insert(key, value);
     }
@@ -243,46 +204,30 @@ impl BasicEffectContext {
         self.resources.extend(resources);
     }
     
-    /// Set execution boundary
+    /// Set the execution boundary
     pub fn set_execution_boundary(&mut self, boundary: ExecutionBoundary) {
-        self.metadata.insert("execution_boundary".to_string(), format!("{:?}", boundary));
+        self.metadata.insert(
+            "execution_boundary".to_string(),
+            boundary.to_string(),
+        );
     }
     
     /// Get the execution boundary
     pub fn execution_boundary(&self) -> ExecutionBoundary {
-        self.metadata.get("execution_boundary")
-            .and_then(|s| match s.as_str() {
-                "Inside" => Some(ExecutionBoundary::Inside),
-                "Outside" => Some(ExecutionBoundary::Outside),
-                "Boundary" => Some(ExecutionBoundary::Boundary),
-                "Any" => Some(ExecutionBoundary::Any),
-                _ => None,
-            })
-            .unwrap_or(ExecutionBoundary::Any)
-    }
-    
-    /// Apply parent context capabilities and resources
-    pub fn apply_parent_context(&mut self) -> EffectContextResult<()> {
-        if let Some(parent) = &self.parent_context {
-            // Copy capabilities from parent
-            for capability in parent.capabilities() {
-                self.capabilities.push(capability.clone());
-            }
-            
-            // Copy resources from parent
-            for resource in parent.resources() {
-                self.resources.insert(resource.clone());
-            }
-            
-            // Merge metadata, but don't override existing values
-            for (key, value) in parent.metadata() {
-                if !self.metadata.contains_key(key) {
-                    self.metadata.insert(key.clone(), value.clone());
+        self.metadata
+            .get("execution_boundary")
+            .map(|s| match s.as_str() {
+                "local" => ExecutionBoundary::Local,
+                "none" => ExecutionBoundary::None,
+                s if s.starts_with("domain:") => {
+                    ExecutionBoundary::Domain(s[7..].to_string())
                 }
-            }
-        }
-        
-        Ok(())
+                s if s.starts_with("custom:") => {
+                    ExecutionBoundary::Custom(s[7..].to_string())
+                }
+                _ => ExecutionBoundary::None,
+            })
+            .unwrap_or_default()
     }
 }
 
@@ -291,7 +236,7 @@ impl EffectContext for BasicEffectContext {
         &self.effect_id
     }
     
-    fn capabilities(&self) -> &[CapabilityReference] {
+    fn capabilities(&self) -> &[Capability] {
         &self.capabilities
     }
     
@@ -307,58 +252,101 @@ impl EffectContext for BasicEffectContext {
         self.parent_context.as_ref()
     }
     
-    fn derive_context(&self, effect_id: EffectId) -> Box<dyn EffectContext> {
-        let mut context = BasicEffectContext::with_parent(effect_id, Arc::new(self.clone()));
+    fn has_capability(&self, capability: &Capability) -> bool {
+        // Check if this context has the capability
+        if self.capabilities.contains(capability) {
+            return true;
+        }
         
-        // Apply basic inheritance from parent
-        let _ = context.apply_parent_context();
+        // Check parent context if available
+        if let Some(parent) = &self.parent_context {
+            return parent.has_capability(capability);
+        }
         
-        Box::new(context)
+        false
     }
     
-    fn with_additional_capabilities(&self, capabilities: Vec<CapabilityReference>) -> Box<dyn EffectContext> {
-        let mut context = self.clone();
-        context.add_capabilities(capabilities);
-        Box::new(context)
+    fn derive_context(&self, effect_id: EffectId) -> Box<dyn EffectContext> {
+        Box::new(BasicEffectContext {
+            effect_id,
+            capabilities: self.capabilities.clone(),
+            metadata: self.metadata.clone(),
+            resources: self.resources.clone(),
+            parent_context: self.parent_context.clone(),
+        })
+    }
+    
+    fn with_additional_capabilities(&self, capabilities: Vec<Capability>) -> Box<dyn EffectContext> {
+        let mut new_context = BasicEffectContext {
+            effect_id: self.effect_id.clone(),
+            capabilities: self.capabilities.clone(),
+            metadata: self.metadata.clone(),
+            resources: self.resources.clone(),
+            parent_context: self.parent_context.clone(),
+        };
+        
+        for capability in capabilities {
+            new_context.add_capability(capability);
+        }
+        
+        Box::new(new_context)
     }
     
     fn with_additional_resources(&self, resources: HashSet<ResourceId>) -> Box<dyn EffectContext> {
-        let mut context = self.clone();
-        context.add_resources(resources);
-        Box::new(context)
+        let mut new_context = BasicEffectContext {
+            effect_id: self.effect_id.clone(),
+            capabilities: self.capabilities.clone(),
+            metadata: self.metadata.clone(),
+            resources: self.resources.clone(),
+            parent_context: self.parent_context.clone(),
+        };
+        
+        for resource in resources {
+            new_context.add_resource(resource);
+        }
+        
+        Box::new(new_context)
     }
     
     fn with_additional_metadata(&self, metadata: HashMap<String, String>) -> Box<dyn EffectContext> {
-        let mut context = self.clone();
-        context.add_metadata_entries(metadata);
-        Box::new(context)
+        let mut new_context = BasicEffectContext {
+            effect_id: self.effect_id.clone(),
+            capabilities: self.capabilities.clone(),
+            metadata: self.metadata.clone(),
+            resources: self.resources.clone(),
+            parent_context: self.parent_context.clone(),
+        };
+        
+        for (key, value) in metadata {
+            new_context.add_metadata(key, value);
+        }
+        
+        Box::new(new_context)
     }
     
-    fn to_bytes(&self) -> EffectContextResult<Vec<u8>> {
-        // Simplified implementation - in a real system, use proper serialization
-        let mut bytes = Vec::new();
-        
-        // Serialize effect ID
-        bytes.extend_from_slice(&self.effect_id.to_bytes().map_err(|e| 
-            EffectContextError::SerializationError(format!("Failed to serialize effect ID: {}", e)))?);
-        
-        // For other fields, use proper serialization in a real implementation
-        
-        Ok(bytes)
+    fn clone_context(&self) -> Box<dyn EffectContext> {
+        Box::new(BasicEffectContext {
+            effect_id: self.effect_id.clone(),
+            capabilities: self.capabilities.clone(),
+            metadata: self.metadata.clone(),
+            resources: self.resources.clone(),
+            parent_context: self.parent_context.clone(),
+        })
     }
     
-    fn from_bytes(bytes: &[u8]) -> EffectContextResult<Box<dyn EffectContext>> {
-        // Simplified implementation - in a real system, use proper deserialization
-        Err(EffectContextError::SerializationError(
-            "Context deserialization not implemented".to_string()
-        ))
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    
+    fn get_registry(&self) -> Option<Arc<dyn EffectExecutor>> {
+        None
     }
 }
 
-/// Builder for effect context
+/// Builder for effect contexts
 pub struct EffectContextBuilder {
     effect_id: EffectId,
-    capabilities: Vec<CapabilityReference>,
+    capabilities: Vec<Capability>,
     metadata: HashMap<String, String>,
     resources: HashSet<ResourceId>,
     parent_context: Option<Arc<dyn EffectContext>>,
@@ -376,25 +364,25 @@ impl EffectContextBuilder {
         }
     }
     
-    /// Set parent context
+    /// Set the parent context
     pub fn with_parent(mut self, parent: Arc<dyn EffectContext>) -> Self {
         self.parent_context = Some(parent);
         self
     }
     
-    /// Add capability
-    pub fn with_capability(mut self, capability: CapabilityReference) -> Self {
+    /// Add a capability
+    pub fn with_capability(mut self, capability: Capability) -> Self {
         self.capabilities.push(capability);
         self
     }
     
-    /// Add capabilities
-    pub fn with_capabilities(mut self, capabilities: Vec<CapabilityReference>) -> Self {
+    /// Add multiple capabilities
+    pub fn with_capabilities(mut self, capabilities: Vec<Capability>) -> Self {
         self.capabilities.extend(capabilities);
         self
     }
     
-    /// Add metadata
+    /// Add a metadata entry
     pub fn with_metadata(mut self, key: String, value: String) -> Self {
         self.metadata.insert(key, value);
         self
@@ -412,36 +400,130 @@ impl EffectContextBuilder {
         self
     }
     
-    /// Add resource
+    /// Add a resource
     pub fn with_resource(mut self, resource_id: ResourceId) -> Self {
         self.resources.insert(resource_id);
         self
     }
     
-    /// Add resources
+    /// Add multiple resources
     pub fn with_resources(mut self, resources: HashSet<ResourceId>) -> Self {
         self.resources.extend(resources);
         self
     }
     
-    /// Set execution boundary
+    /// Set the execution boundary
     pub fn with_execution_boundary(mut self, boundary: ExecutionBoundary) -> Self {
-        self.metadata.insert("execution_boundary".to_string(), format!("{:?}", boundary));
+        self.metadata.insert(
+            "execution_boundary".to_string(),
+            boundary.to_string(),
+        );
         self
     }
     
     /// Build the context
     pub fn build(self) -> BasicEffectContext {
-        let mut context = if let Some(parent) = self.parent_context {
-            BasicEffectContext::with_parent(self.effect_id, parent)
-        } else {
-            BasicEffectContext::new(self.effect_id)
-        };
-        
-        context.add_capabilities(self.capabilities);
-        context.add_metadata_entries(self.metadata);
-        context.add_resources(self.resources);
-        
-        context
+        BasicEffectContext {
+            effect_id: self.effect_id,
+            capabilities: self.capabilities,
+            metadata: self.metadata,
+            resources: self.resources,
+            parent_context: self.parent_context,
+        }
+    }
+}
+
+/// Boxed effect context implementation
+/// This is a simple wrapper around a Box<dyn EffectContext> that implements the EffectContext trait
+#[derive(Debug)]
+pub struct BoxedEffectContext {
+    /// The wrapped context
+    inner: Box<dyn EffectContext>,
+}
+
+impl Clone for BoxedEffectContext {
+    fn clone(&self) -> Self {
+        // Use the clone_context method to create a cloned context
+        Self {
+            inner: self.inner.clone_context(),
+        }
+    }
+}
+
+impl BoxedEffectContext {
+    /// Create a new boxed context from an existing context
+    pub fn new(context: Box<dyn EffectContext>) -> Self {
+        Self { inner: context }
+    }
+
+    /// Create a new boxed context from an existing context reference
+    pub fn from_context(context: &dyn EffectContext) -> Self {
+        Self { inner: context.clone_context() }
+    }
+
+    /// Get a reference to the inner context
+    pub fn inner(&self) -> &dyn EffectContext {
+        self.inner.as_ref()
+    }
+
+    /// Convert to inner box
+    pub fn into_inner(self) -> Box<dyn EffectContext> {
+        self.inner
+    }
+}
+
+impl EffectContext for BoxedEffectContext {
+    fn effect_id(&self) -> &EffectId {
+        self.inner.effect_id()
+    }
+    
+    fn capabilities(&self) -> &[Capability] {
+        self.inner.capabilities()
+    }
+    
+    fn metadata(&self) -> &HashMap<String, String> {
+        self.inner.metadata()
+    }
+    
+    fn resources(&self) -> &HashSet<ResourceId> {
+        self.inner.resources()
+    }
+    
+    fn parent_context(&self) -> Option<&Arc<dyn EffectContext>> {
+        self.inner.parent_context()
+    }
+    
+    fn has_capability(&self, capability: &Capability) -> bool {
+        self.inner.has_capability(capability)
+    }
+    
+    fn get_registry(&self) -> Option<Arc<dyn EffectExecutor>> {
+        self.inner.get_registry()
+    }
+    
+    fn derive_context(&self, effect_id: EffectId) -> Box<dyn EffectContext> {
+        self.inner.derive_context(effect_id)
+    }
+    
+    fn with_additional_capabilities(&self, capabilities: Vec<Capability>) -> Box<dyn EffectContext> {
+        self.inner.with_additional_capabilities(capabilities)
+    }
+    
+    fn with_additional_resources(&self, resources: HashSet<ResourceId>) -> Box<dyn EffectContext> {
+        self.inner.with_additional_resources(resources)
+    }
+    
+    fn with_additional_metadata(&self, metadata: HashMap<String, String>) -> Box<dyn EffectContext> {
+        self.inner.with_additional_metadata(metadata)
+    }
+    
+    fn clone_context(&self) -> Box<dyn EffectContext> {
+        Box::new(Self {
+            inner: self.inner.clone_context(),
+        })
+    }
+    
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 } 

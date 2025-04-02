@@ -213,7 +213,12 @@ impl ContentId {
         }
         Self(HashOutput::new(bytes, HashAlgorithm::Blake3))
     }
-
+    
+    /// Unwrap a ContentId from_bytes operation
+    pub fn from_bytes_unwrap(data: &[u8]) -> Self {
+        Self::from_bytes(data)
+    }
+    
     /// Try to convert this ContentId to a core ContentHash
     pub fn to_core_content_hash(&self) -> Result<ContentHash, HashError> {
         let hash_output = self.hash();
@@ -316,6 +321,11 @@ impl ContentHash {
         Ok(HashOutput::new(data, algorithm))
     }
     
+    /// Get the raw bytes
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+    
     /// Convert to a hex string
     pub fn to_hex(&self) -> String {
         hex::encode(&self.bytes)
@@ -325,10 +335,37 @@ impl ContentHash {
     pub fn to_string(&self) -> String {
         format!("{}:{}", self.algorithm.to_lowercase(), self.to_hex())
     }
+    
+    /// Create a ContentHash from raw bytes
+    pub fn from_bytes(data: &[u8]) -> Result<Self, HashError> {
+        // Create a simple hash for testing purposes
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(data);
+        let hash = hasher.finalize();
+        
+        let mut bytes = Vec::with_capacity(32);
+        bytes.extend_from_slice(hash.as_bytes());
+        
+        Ok(Self::new("blake3", bytes))
+    }
 }
 
 impl fmt::Display for ContentHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_string())
+    }
+}
+
+/// Extension trait to add unwrap() for Result<ContentId, E>
+pub trait ContentIdResultExt<E> {
+    fn unwrap(self) -> ContentId;
+}
+
+impl<E> ContentIdResultExt<E> for Result<ContentId, E> {
+    fn unwrap(self) -> ContentId {
+        match self {
+            Ok(id) => id,
+            Err(_) => panic!("Failed to unwrap ContentId"),
+        }
     }
 } 

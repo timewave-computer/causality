@@ -10,108 +10,145 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use serde::{Serialize, Deserialize};
 
-use causality_types::{Error, Result};
-use crate::domain::{BlockHeight, Timestamp};
-use causality_engine_types::FactType;
-use causality_crypto::ContentId;
-use crate::domain::{
-    adapter::FactQuery,
-    DomainAdapter, DomainRegistry, DomainId,
-    selection::DomainSelectionStrategy, Transaction
-};
-use :ResourceRegister:causality_core::resource::Resource::{ResourceRegister, RegisterState};
-#[cfg(feature = "cosmwasm_zk")]
-use causality_domain_succinct::ZkResourceAdapter;
+use crate::error::{Result as DomainResult, Error};
+use crate::selection::{DomainSelectionStrategy, SelectionCriteria, DomainId};
+use crate::{BlockHeight, Timestamp, DomainAdapter, Transaction, DomainInfo};
+use crate::adapter::FactQuery;
+use crate::fact::types::FactType;
 
-/// Represents a cross-domain resource operation
-#[derive(Debug, Clone)]
-pub enum CrossDomainResourceOperation {
-    /// Store a resource in a domain
-    Store {
-        resource_id: ContentId,
-        target_domain_id: DomainId,
-        contents: Vec<u8>,
-        metadata: HashMap<String, String>,
-    },
-    
-    /// Retrieve a resource from a domain
-    Retrieve {
-        resource_id: ContentId,
-        source_domain_id: DomainId,
-    },
-    
-    /// Transfer a resource between domains
-    Transfer {
-        resource_id: ContentId,
-        source_domain_id: DomainId,
-        target_domain_id: DomainId,
-        metadata: HashMap<String, String>,
-    },
-    
-    /// Verify a resource exists in a domain
-    Verify {
-        resource_id: ContentId,
-        domain_id: DomainId,
-    },
+// Implement the trait to make domain adapters compatible with selection system
+struct DomainAdapterWrapper {
+    inner: Arc<dyn DomainAdapter>
+}
 
-    /// Store a ResourceRegister in a domain (for unified model)
-    StoreRegister {
-        register: :ResourceRegister:causality_core::resource::Resource::ResourceRegister,
-        target_domain_id: DomainId,
-    },
-    
-    /// Transfer a ResourceRegister between domains (for unified model)
-    TransferRegister {
-        register: :ResourceRegister:causality_core::resource::Resource::ResourceRegister,
-        source_domain_id: DomainId,
-        target_domain_id: DomainId,
-        additional_metadata: HashMap<String, String>,
+impl std::fmt::Debug for DomainAdapterWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DomainAdapterWrapper")
+            .field("domain_id", &self.inner.domain_id())
+            .finish()
     }
 }
 
-/// Result of a cross-domain resource operation
-#[derive(Debug, Clone)]
-pub enum CrossDomainResourceResult {
-    /// Resource has been stored successfully with a transaction receipt
-    Stored {
-        resource_id: ContentId,
-        domain_id: DomainId,
-        transaction_id: String,
-        block_height: Option<BlockHeight>,
-        timestamp: Option<Timestamp>,
-    },
+impl crate::selection::DomainAdapter for DomainAdapterWrapper {
+    fn domain_id(&self) -> &DomainId {
+        self.inner.domain_id()
+    }
     
-    /// Resource has been retrieved successfully
-    Retrieved {
-        resource_id: ContentId,
-        domain_id: DomainId,
-        contents: Vec<u8>,
-        metadata: HashMap<String, String>,
-    },
+    fn info(&self) -> crate::selection::DomainInfo {
+        // Create a selection-compatible DomainInfo
+        crate::selection::DomainInfo {
+            domain_id: self.inner.domain_id().clone(),
+            domain_type: self.inner.domain_type().to_string(),
+            capabilities: self.inner.capabilities(),
+            avg_latency: 0, // Default values, could be retrieved from adapter
+            cost: 0,
+            reliability: 1.0,
+        }
+    }
+}
+
+/// Content ID for resources
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct ContentId(pub String);
+
+impl ContentId {
+    /// Create a new content ID
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
     
-    /// Resource has been transferred successfully
-    Transferred {
-        resource_id: ContentId,
-        source_domain_id: DomainId,
-        target_domain_id: DomainId,
-        transaction_id: String,
-        block_height: Option<BlockHeight>,
-        timestamp: Option<Timestamp>,
-    },
-    
-    /// Resource verification result
-    Verified {
-        resource_id: ContentId,
-        domain_id: DomainId,
-        exists: bool,
-        metadata: HashMap<String, String>,
+    /// Convert to string
+    pub fn to_string(&self) -> String {
+        self.0.clone()
+    }
+}
+
+impl std::fmt::Display for ContentId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// Operation type for cross-domain resource operations
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CrossDomainResourceOperation {
+    /// Store a resource in a domain
+    Store,
+    /// Retrieve a resource from a domain
+    Retrieve,
+    /// Verify a resource exists in a domain
+    Verify,
+    /// Transfer a resource from one domain to another
+    Transfer {
+        /// Source domain ID
+        source_domain_id: String,
+        /// Target domain ID
+        target_domain_id: String,
+        /// Additional metadata for the transfer
+        additional_metadata: HashMap<String, String>,
     },
 }
 
-/// Trait for domain-specific resource storage strategies
+/// Result of a cross-domain resource operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CrossDomainResourceResult {
+    /// Resource was stored successfully
+    Stored {
+        /// Resource ID
+        resource_id: ContentId,
+        /// Domain ID
+        domain_id: String,
+        /// Transaction ID
+        transaction_id: String,
+        /// Block height where stored
+        block_height: Option<BlockHeight>,
+        /// Timestamp when stored
+        timestamp: Option<Timestamp>,
+    },
+    /// Resource was retrieved successfully
+    Retrieved {
+        /// Resource ID
+        resource_id: ContentId,
+        /// Domain ID
+        domain_id: String,
+        /// Resource contents
+        contents: Vec<u8>,
+        /// Resource metadata
+        metadata: HashMap<String, String>,
+    },
+    /// Resource verification result
+    Verified {
+        /// Resource ID
+        resource_id: ContentId,
+        /// Domain ID
+        domain_id: String,
+        /// Whether the resource exists
+        exists: bool,
+        /// Resource metadata
+        metadata: HashMap<String, String>,
+    },
+    /// Resource was transferred successfully
+    Transferred {
+        /// Resource ID
+        resource_id: ContentId,
+        /// Source domain ID
+        source_domain_id: String,
+        /// Target domain ID
+        target_domain_id: String,
+        /// Transaction ID
+        transaction_id: String,
+        /// Block height where stored
+        block_height: Option<BlockHeight>,
+        /// Timestamp when stored
+        timestamp: Option<Timestamp>,
+    },
+}
+
+/// Interface for domain resource adapters
 #[async_trait]
-pub trait DomainResourceAdapter: Send + Sync {
+pub trait DomainResourceAdapter: Send + Sync + std::fmt::Debug {
     /// Get the domain ID
     fn domain_id(&self) -> &DomainId;
     
@@ -121,31 +158,57 @@ pub trait DomainResourceAdapter: Send + Sync {
         resource_id: &ContentId, 
         contents: &[u8], 
         metadata: &HashMap<String, String>
-    ) -> Result<CrossDomainResourceResult>;
+    ) -> DomainResult<CrossDomainResourceResult>;
     
     /// Retrieve a resource from the domain
     async fn retrieve_resource(
         &self, 
         resource_id: &ContentId
-    ) -> Result<CrossDomainResourceResult>;
+    ) -> DomainResult<CrossDomainResourceResult>;
     
     /// Verify a resource exists in the domain
     async fn verify_resource(
         &self, 
         resource_id: &ContentId
-    ) -> Result<CrossDomainResourceResult>;
+    ) -> DomainResult<CrossDomainResourceResult>;
     
-    /// Check if a resource operation is allowed in this domain
-    async fn validate_operation(
+    /// Handle a cross-domain resource operation
+    async fn handle_resource_operation(
         &self, 
         resource_id: &ContentId, 
         operation: &CrossDomainResourceOperation
-    ) -> Result<bool>;
+    ) -> DomainResult<CrossDomainResourceResult> {
+        match operation {
+            CrossDomainResourceOperation::Store => {
+                // This requires content, so return an error
+                Err(Box::new(Error::InvalidArgument("Store operation requires content".to_string())))
+            },
+            CrossDomainResourceOperation::Retrieve => {
+                self.retrieve_resource(resource_id).await
+            },
+            CrossDomainResourceOperation::Verify => {
+                self.verify_resource(resource_id).await
+            },
+            CrossDomainResourceOperation::Transfer { .. } => {
+                // Transfer operations are managed by the resource manager, not individual adapters
+                Err(Box::new(Error::UnsupportedOperation("Transfer operations must be handled by the resource manager".to_string())))
+            }
+        }
+    }
 }
 
-/// Adapter for CosmWasm resource operations
+/// CosmWasm-based resource adapter
 pub struct CosmWasmResourceAdapter {
+    /// Domain adapter
     domain_adapter: Arc<dyn DomainAdapter>,
+}
+
+impl std::fmt::Debug for CosmWasmResourceAdapter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CosmWasmResourceAdapter")
+            .field("domain_id", &self.domain_adapter.domain_id())
+            .finish()
+    }
 }
 
 impl CosmWasmResourceAdapter {
@@ -166,7 +229,7 @@ impl DomainResourceAdapter for CosmWasmResourceAdapter {
         resource_id: &ContentId, 
         contents: &[u8], 
         metadata: &HashMap<String, String>
-    ) -> Result<CrossDomainResourceResult> {
+    ) -> DomainResult<CrossDomainResourceResult> {
         // In a full implementation, this would create and submit a CosmWasm contract transaction
         // to store the resource data
         
@@ -175,13 +238,20 @@ impl DomainResourceAdapter for CosmWasmResourceAdapter {
             data: contents.to_vec(),
             transaction_type: "store_resource".to_string(),
             metadata: metadata.clone(),
+            domain_id: self.domain_adapter.domain_id().clone(),
         };
         
         // Submit transaction
-        let tx_id = self.domain_adapter.submit_transaction(tx).await?;
+        let tx_id = match self.domain_adapter.submit_transaction(tx) {
+            Ok(id) => id,
+            Err(e) => return Err(Box::new(Error::TransactionError(e.to_string()))),
+        };
         
         // Wait for transaction to be confirmed
-        let receipt = self.domain_adapter.wait_for_confirmation(&tx_id, Some(30000)).await?;
+        let receipt = match self.domain_adapter.wait_for_confirmation(&tx_id, Some(30000)) {
+            Ok(receipt) => receipt,
+            Err(e) => return Err(Box::new(Error::TransactionError(e.to_string()))),
+        };
         
         // Return result
         Ok(CrossDomainResourceResult::Stored {
@@ -196,24 +266,18 @@ impl DomainResourceAdapter for CosmWasmResourceAdapter {
     async fn retrieve_resource(
         &self, 
         resource_id: &ContentId
-    ) -> Result<CrossDomainResourceResult> {
+    ) -> DomainResult<CrossDomainResourceResult> {
         // For now, we create a fact query to retrieve the resource data
-        let fact_query = FactQuery {
-            domain_id: self.domain_adapter.domain_id().clone(),
-            fact_type: "resource_data".to_string(),
-            parameters: {
-                let mut params = HashMap::new();
-                params.insert("resource_id".to_string(), resource_id.to_string());
-                params.insert("operation".to_string(), "store".to_string());
-                params
-            },
-            block_height: None,
-            block_hash: None,
-            timestamp: None,
-        };
+        let fact_query = FactQuery::new("resource_data")
+            .with_parameter("resource_id", resource_id.to_string())
+            .with_parameter("operation", "store")
+            .with_verification(false);
         
         // Query the domain
-        let (fact_type, fact_meta) = self.domain_adapter.observe_fact(&fact_query).await?;
+        let (fact_type, fact_meta) = match self.domain_adapter.observe_fact(&fact_query) {
+            Ok(result) => result,
+            Err(e) => return Err(Box::new(Error::FactError(e.to_string()))),
+        };
         
         // Extract resource data from the fact type
         match fact_type {
@@ -228,31 +292,21 @@ impl DomainResourceAdapter for CosmWasmResourceAdapter {
                     metadata,
                 })
             },
-            _ => Err(Error::DomainDataError(format!("Unexpected fact type returned for resource {}", resource_id)))
+            _ => Err(Box::new(Error::DomainDataError(format!("Unexpected fact type returned for resource {}", resource_id))))
         }
     }
     
     async fn verify_resource(
         &self, 
         resource_id: &ContentId
-    ) -> Result<CrossDomainResourceResult> {
+    ) -> DomainResult<CrossDomainResourceResult> {
         // Similar to retrieve, but just checks existence
-        let fact_query = FactQuery {
-            domain_id: self.domain_adapter.domain_id().clone(),
-            fact_type: "resource_exists".to_string(),
-            parameters: {
-                let mut params = HashMap::new();
-                params.insert("resource_id".to_string(), resource_id.to_string());
-                params.insert("query_type".to_string(), "contract".to_string());
-                params
-            },
-            block_height: None,
-            block_hash: None,
-            timestamp: None,
-        };
+        let fact_query = FactQuery::new("resource_exists")
+            .with_parameter("resource_id", resource_id.to_string())
+            .with_parameter("query_type", "contract");
         
         // Query the domain
-        let result = self.domain_adapter.observe_fact(&fact_query).await;
+        let result = self.domain_adapter.observe_fact(&fact_query);
         
         // Check if the result is Ok (resource exists) or an error (resource doesn't exist)
         let exists = result.is_ok();
@@ -271,21 +325,20 @@ impl DomainResourceAdapter for CosmWasmResourceAdapter {
             metadata,
         })
     }
-    
-    async fn validate_operation(
-        &self, 
-        resource_id: &ContentId, 
-        operation: &CrossDomainResourceOperation
-    ) -> Result<bool> {
-        // In a full implementation, this would check if the operation is allowed
-        // For now, we'll assume all operations are valid for CosmWasm
-        Ok(true)
-    }
 }
 
-/// Adapter for EVM resource operations
+/// EVM-based resource adapter
 pub struct EvmResourceAdapter {
+    /// Domain adapter
     domain_adapter: Arc<dyn DomainAdapter>,
+}
+
+impl std::fmt::Debug for EvmResourceAdapter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EvmResourceAdapter")
+            .field("domain_id", &self.domain_adapter.domain_id())
+            .finish()
+    }
 }
 
 impl EvmResourceAdapter {
@@ -306,7 +359,7 @@ impl DomainResourceAdapter for EvmResourceAdapter {
         resource_id: &ContentId, 
         contents: &[u8], 
         metadata: &HashMap<String, String>
-    ) -> Result<CrossDomainResourceResult> {
+    ) -> DomainResult<CrossDomainResourceResult> {
         // In a full implementation, this would create and submit an Ethereum transaction
         // to store the resource data in a smart contract
         
@@ -315,13 +368,20 @@ impl DomainResourceAdapter for EvmResourceAdapter {
             data: contents.to_vec(),
             transaction_type: "store_resource".to_string(),
             metadata: metadata.clone(),
+            domain_id: self.domain_adapter.domain_id().clone(),
         };
         
         // Submit transaction
-        let tx_id = self.domain_adapter.submit_transaction(tx).await?;
+        let tx_id = match self.domain_adapter.submit_transaction(tx) {
+            Ok(id) => id,
+            Err(e) => return Err(Box::new(Error::TransactionError(e.to_string()))),
+        };
         
         // Wait for transaction to be confirmed
-        let receipt = self.domain_adapter.wait_for_confirmation(&tx_id, Some(30000)).await?;
+        let receipt = match self.domain_adapter.wait_for_confirmation(&tx_id, Some(30000)) {
+            Ok(receipt) => receipt,
+            Err(e) => return Err(Box::new(Error::TransactionError(e.to_string()))),
+        };
         
         // Return result
         Ok(CrossDomainResourceResult::Stored {
@@ -336,24 +396,18 @@ impl DomainResourceAdapter for EvmResourceAdapter {
     async fn retrieve_resource(
         &self, 
         resource_id: &ContentId
-    ) -> Result<CrossDomainResourceResult> {
+    ) -> DomainResult<CrossDomainResourceResult> {
         // For now, we create a fact query to retrieve the resource data
-        let fact_query = FactQuery {
-            domain_id: self.domain_adapter.domain_id().clone(),
-            fact_type: "resource_data".to_string(),
-            parameters: {
-                let mut params = HashMap::new();
-                params.insert("resource_id".to_string(), resource_id.to_string());
-                params.insert("operation".to_string(), "store".to_string());
-                params
-            },
-            block_height: None,
-            block_hash: None,
-            timestamp: None,
-        };
+        let fact_query = FactQuery::new("resource_data")
+            .with_parameter("resource_id", resource_id.to_string())
+            .with_parameter("operation", "store")
+            .with_verification(false);
         
         // Query the domain
-        let (fact_type, fact_meta) = self.domain_adapter.observe_fact(&fact_query).await?;
+        let (fact_type, fact_meta) = match self.domain_adapter.observe_fact(&fact_query) {
+            Ok(result) => result,
+            Err(e) => return Err(Box::new(Error::FactError(e.to_string()))),
+        };
         
         // Extract resource data from the fact type
         match fact_type {
@@ -368,30 +422,21 @@ impl DomainResourceAdapter for EvmResourceAdapter {
                     metadata,
                 })
             },
-            _ => Err(Error::DomainDataError(format!("Unexpected fact type returned for resource {}", resource_id)))
+            _ => Err(Box::new(Error::DomainDataError(format!("Unexpected fact type returned for resource {}", resource_id))))
         }
     }
     
     async fn verify_resource(
         &self, 
         resource_id: &ContentId
-    ) -> Result<CrossDomainResourceResult> {
+    ) -> DomainResult<CrossDomainResourceResult> {
         // Similar to retrieve, but just checks existence
-        let fact_query = FactQuery {
-            domain_id: self.domain_adapter.domain_id().clone(),
-            fact_type: "resource_exists".to_string(),
-            parameters: {
-                let mut params = HashMap::new();
-                params.insert("resource_id".to_string(), resource_id.to_string());
-                params
-            },
-            block_height: None,
-            block_hash: None,
-            timestamp: None,
-        };
+        let fact_query = FactQuery::new("resource_exists")
+            .with_parameter("resource_id", resource_id.to_string())
+            .with_parameter("query_type", "contract");
         
         // Query the domain
-        let result = self.domain_adapter.observe_fact(&fact_query).await;
+        let result = self.domain_adapter.observe_fact(&fact_query);
         
         // Check if the result is Ok (resource exists) or an error (resource doesn't exist)
         let exists = result.is_ok();
@@ -410,61 +455,61 @@ impl DomainResourceAdapter for EvmResourceAdapter {
             metadata,
         })
     }
+}
+
+/// Interface for a domain registry
+pub trait DomainRegistry: Send + Sync + std::fmt::Debug {
+    /// Get a domain adapter by ID
+    fn get_adapter(&self, domain_id: &DomainId) -> Option<Arc<dyn DomainAdapter>>;
     
-    async fn validate_operation(
-        &self, 
-        resource_id: &ContentId, 
-        operation: &CrossDomainResourceOperation
-    ) -> Result<bool> {
-        // In a full implementation, this would check if the operation is allowed
-        // For now, we'll assume all operations are valid for EVM
-        Ok(true)
-    }
+    /// List all registered domain IDs
+    fn list_domains(&self) -> Vec<DomainId>;
+    
+    /// Get all registered adapters
+    fn get_all_adapters(&self) -> DomainResult<Vec<Arc<dyn DomainAdapter>>>;
+    
+    /// Get domain information
+    fn get_domain_info(&self, domain_id: &DomainId) -> Option<DomainInfo>;
 }
 
 /// Factory for creating domain resource adapters
 pub struct DomainResourceAdapterFactory {
-    domain_registry: Arc<DomainRegistry>,
+    domain_registry: Arc<dyn DomainRegistry>,
 }
 
 impl DomainResourceAdapterFactory {
     /// Create a new domain resource adapter factory
-    pub fn new(domain_registry: Arc<DomainRegistry>) -> Self {
+    pub fn new(domain_registry: Arc<dyn DomainRegistry>) -> Self {
         Self { domain_registry }
     }
     
-    /// Create a domain resource adapter for a specific domain
-    pub async fn create_adapter(&self, domain_id: &DomainId) -> Result<Box<dyn DomainResourceAdapter>> {
-        // Get the domain adapter from the registry
-        let domain_adapter = self.domain_registry.get_adapter(domain_id)
-            .ok_or_else(|| Error::DomainAdapterNotFound(domain_id.clone()))?;
+    /// Create an adapter for the specified domain
+    pub async fn create_adapter(&self, domain_id: &DomainId) -> DomainResult<Box<dyn DomainResourceAdapter>> {
+        // Get domain adapter from registry
+        let adapter = self.domain_registry.get_adapter(domain_id)
+            .ok_or_else(|| Box::new(Error::DomainAdapterNotFound(domain_id.clone())))?;
         
         // Get domain info
         let domain_info = self.domain_registry.get_domain_info(domain_id)
-            .ok_or_else(|| Error::DomainNotFound(domain_id.clone()))?;
+            .ok_or_else(|| Box::new(Error::DomainNotFound(domain_id.clone())))?;
         
-        // Create the appropriate resource adapter based on domain type
-        match domain_info.domain_type.as_str() {
-            "cosmos" | "cosmwasm" => {
-                Ok(Box::new(CosmWasmResourceAdapter::new(domain_adapter)))
-            },
-            "ethereum" | "evm" => {
-                Ok(Box::new(EvmResourceAdapter::new(domain_adapter)))
-            },
+        // Create the appropriate adapter based on domain type
+        let adapter: Box<dyn DomainResourceAdapter> = match domain_info.domain_type.as_str() {
+            // For CosmWasm domains, we use the CosmWasm adapter
             #[cfg(feature = "cosmwasm_zk")]
-            "zk" | "zkvm" | "risc0" | "succinct" => {
-                // Use the new ZK resource adapter for ZK domains
-                Ok(Box::new(causality_domain_succinct::ZkResourceAdapter::new(domain_adapter)))
-            },
+            "cosmwasm" => Ok(Box::new(CosmWasmResourceAdapter::new(adapter))),
+            
             #[cfg(not(feature = "cosmwasm_zk"))]
-            "zk" | "zkvm" | "risc0" | "succinct" => {
-                // Without ZK feature, return an error
-                Err(Error::UnsupportedDomainType(format!("{} (requires 'cosmwasm_zk' feature)", domain_info.domain_type)))
-            },
-            _ => {
-                Err(Error::UnsupportedDomainType(domain_info.domain_type.clone()))
-            }
-        }
+            "cosmwasm" => Err(Box::new(Error::UnsupportedDomainType(format!("{} (requires 'cosmwasm_zk' feature)", domain_info.domain_type)))),
+            
+            // For EVM domains, we use the EVM adapter
+            "evm" | "ethereum" => Ok(Box::new(EvmResourceAdapter::new(adapter))),
+            
+            // Other domain types are not supported yet
+            _ => Err(Box::new(Error::UnsupportedDomainType(domain_info.domain_type.clone())))
+        }?;
+        
+        Ok(adapter)
     }
     
     /// Create the most appropriate domain resource adapter based on selection strategy
@@ -473,15 +518,29 @@ impl DomainResourceAdapterFactory {
         required_capabilities: &std::collections::HashSet<String>,
         preferences: &HashMap<String, String>,
         strategy: &dyn DomainSelectionStrategy,
-    ) -> Result<Box<dyn DomainResourceAdapter>> {
+    ) -> DomainResult<Box<dyn DomainResourceAdapter>> {
         // Get all adapters
         let adapters = self.domain_registry.get_all_adapters()?;
         
+        // Convert to SelectionCriteria
+        let criteria = SelectionCriteria {
+            required_capabilities: required_capabilities.iter().cloned().collect(),
+            constraints: preferences.clone(),
+            ..Default::default()
+        };
+        
+        // Convert adapter types to match selection strategy's expected type
+        let selection_adapters: Vec<Arc<dyn crate::selection::DomainAdapter>> = 
+            adapters.iter()
+                .map(|a| Arc::new(DomainAdapterWrapper { inner: a.clone() }) as Arc<dyn crate::selection::DomainAdapter>)
+                .collect();
+        
         // Use the strategy to select a domain
-        let domain_id = strategy.select_domain(&adapters, required_capabilities, preferences).await?;
+        let selection_result = strategy.select_domain(&selection_adapters, &criteria)
+            .ok_or_else(|| Error::DomainNotFound("No suitable domain found for the given criteria".to_string()))?;
         
         // Create the adapter for the selected domain
-        self.create_adapter(&domain_id).await
+        self.create_adapter(&selection_result.domain_id).await
     }
 }
 
@@ -494,7 +553,7 @@ pub struct CrossDomainResourceManager {
 impl CrossDomainResourceManager {
     /// Create a new cross-domain resource manager
     pub fn new(
-        domain_registry: Arc<DomainRegistry>,
+        domain_registry: Arc<dyn DomainRegistry>,
         default_strategy: Box<dyn DomainSelectionStrategy>,
     ) -> Self {
         let adapter_factory = Arc::new(DomainResourceAdapterFactory::new(domain_registry));
@@ -504,417 +563,425 @@ impl CrossDomainResourceManager {
         }
     }
     
-    /// Execute a cross-domain resource operation
-    pub async fn execute_operation(
+    /// Store a resource in a domain
+    pub async fn store_resource(
         &self,
-        operation: CrossDomainResourceOperation,
-    ) -> Result<CrossDomainResourceResult> {
-        // Handle operation based on type
-        match &operation {
-            CrossDomainResourceOperation::Store { resource_id, target_domain_id, contents, metadata } => {
-                // Create adapter for target domain
-                let adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
-                
-                // Validate operation
-                if !adapter.validate_operation(resource_id, &operation).await? {
-                    return Err(Error::AccessDenied(format!(
-                        "Operation not allowed for resource {} in domain {}", 
-                        resource_id, target_domain_id
-                    )));
-                }
-                
-                // Store the resource
-                adapter.store_resource(resource_id, contents, metadata).await
+        resource_id: &ContentId,
+        contents: &[u8],
+        metadata: &HashMap<String, String>,
+        target_domain_id: &DomainId,
+    ) -> DomainResult<CrossDomainResourceResult> {
+        // Check permissions for the operation
+        self.check_store_permission(resource_id, target_domain_id).await?;
+        
+        // Create the resource adapter
+        let adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
+        
+        // Store the resource
+        adapter.store_resource(resource_id, contents, metadata).await
+    }
+    
+    /// Retrieve a resource from a domain
+    pub async fn retrieve_resource(
+        &self,
+        resource_id: &ContentId,
+        source_domain_id: &DomainId,
+    ) -> DomainResult<CrossDomainResourceResult> {
+        // Check permissions for the operation
+        self.check_retrieve_permission(resource_id, source_domain_id).await?;
+        
+        // Create the resource adapter
+        let adapter = self.adapter_factory.create_adapter(source_domain_id).await?;
+        
+        // Retrieve the resource
+        adapter.retrieve_resource(resource_id).await
+    }
+    
+    /// Verify a resource exists in a domain
+    pub async fn verify_resource(
+        &self,
+        resource_id: &ContentId,
+        domain_id: &DomainId,
+    ) -> DomainResult<CrossDomainResourceResult> {
+        // Check permissions for the operation
+        self.check_verify_permission(resource_id, domain_id).await?;
+        
+        // Create the resource adapter
+        let adapter = self.adapter_factory.create_adapter(domain_id).await?;
+        
+        // Verify the resource
+        adapter.verify_resource(resource_id).await
+    }
+    
+    /// Transfer a resource from one domain to another
+    pub async fn transfer_resource(
+        &self,
+        resource_id: &ContentId,
+        source_domain_id: &DomainId,
+        target_domain_id: &DomainId,
+        additional_metadata: &HashMap<String, String>,
+    ) -> DomainResult<CrossDomainResourceResult> {
+        // Check permissions for the operation
+        self.check_transfer_permission(resource_id, source_domain_id, target_domain_id).await?;
+        
+        // Retrieve the resource from the source domain
+        let source_adapter = self.adapter_factory.create_adapter(source_domain_id).await?;
+        let result = source_adapter.retrieve_resource(resource_id).await?;
+        
+        // Extract content and metadata
+        let (contents, metadata) = match result {
+            CrossDomainResourceResult::Retrieved { contents, metadata, .. } => {
+                (contents, metadata)
             },
-            
-            CrossDomainResourceOperation::Retrieve { resource_id, source_domain_id } => {
-                // Create adapter for source domain
-                let adapter = self.adapter_factory.create_adapter(source_domain_id).await?;
-                
-                // Validate operation
-                if !adapter.validate_operation(resource_id, &operation).await? {
-                    return Err(Error::AccessDenied(format!(
-                        "Operation not allowed for resource {} in domain {}", 
-                        resource_id, source_domain_id
-                    )));
-                }
-                
-                // Retrieve the resource
-                adapter.retrieve_resource(resource_id).await
+            _ => return Err(Box::new(Error::DomainDataError(format!(
+                "Unexpected result type from retrieve operation"
+            )))),
+        };
+        
+        // Store the resource in the target domain
+        let target_adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
+        let result = target_adapter.store_resource(resource_id, &contents, &metadata).await?;
+        
+        // Create the transfer result
+        match result {
+            CrossDomainResourceResult::Stored { transaction_id, block_height, timestamp, .. } => {
+                Ok(CrossDomainResourceResult::Transferred {
+                    resource_id: resource_id.clone(),
+                    source_domain_id: source_domain_id.to_string(),
+                    target_domain_id: target_domain_id.to_string(),
+                    transaction_id,
+                    block_height,
+                    timestamp,
+                })
             },
-            
-            CrossDomainResourceOperation::Transfer { 
-                resource_id, 
-                source_domain_id, 
-                target_domain_id, 
-                metadata 
-            } => {
-                // Create adapters for source and target domains
-                let source_adapter = self.adapter_factory.create_adapter(source_domain_id).await?;
-                let target_adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
-                
-                // Validate operations
-                if !source_adapter.validate_operation(resource_id, &operation).await? {
-                    return Err(Error::AccessDenied(format!(
-                        "Transfer operation not allowed for resource {} in source domain {}", 
-                        resource_id, source_domain_id
-                    )));
-                }
-                
-                if !target_adapter.validate_operation(resource_id, &operation).await? {
-                    return Err(Error::AccessDenied(format!(
-                        "Transfer operation not allowed for resource {} in target domain {}", 
-                        resource_id, target_domain_id
-                    )));
-                }
-                
-                // Retrieve the resource from the source domain
-                let result = source_adapter.retrieve_resource(resource_id).await?;
-                
-                // Extract contents and metadata
-                if let CrossDomainResourceResult::Retrieved { contents, metadata: source_metadata, .. } = result {
-                    // Merge metadata
-                    let mut combined_metadata = source_metadata;
-                    for (key, value) in metadata {
-                        combined_metadata.insert(key.clone(), value.clone());
-                    }
-                    
-                    // Store the resource in the target domain
-                    let store_result = target_adapter.store_resource(resource_id, &contents, &combined_metadata).await?;
-                    
-                    // Return transfer result
-                    if let CrossDomainResourceResult::Stored { transaction_id, block_height, timestamp, .. } = store_result {
-                        Ok(CrossDomainResourceResult::Transferred {
-                            resource_id: resource_id.clone(),
-                            source_domain_id: source_domain_id.clone(),
-                            target_domain_id: target_domain_id.clone(),
-                            transaction_id,
-                            block_height,
-                            timestamp,
-                        })
-                    } else {
-                        Err(Error::DomainError("Unexpected result type from store operation".to_string()))
-                    }
-                } else {
-                    Err(Error::DomainError("Unexpected result type from retrieve operation".to_string()))
-                }
-            },
-            
-            CrossDomainResourceOperation::Verify { resource_id, domain_id } => {
-                // Create adapter for domain
-                let adapter = self.adapter_factory.create_adapter(domain_id).await?;
-                
-                // Validate operation
-                if !adapter.validate_operation(resource_id, &operation).await? {
-                    return Err(Error::AccessDenied(format!(
-                        "Verify operation not allowed for resource {} in domain {}", 
-                        resource_id, domain_id
-                    )));
-                }
-                
-                // Verify the resource
-                adapter.verify_resource(resource_id).await
-            },
-
-            CrossDomainResourceOperation::StoreRegister { register, target_domain_id } => {
-                // Create adapter for target domain
-                let adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
-                
-                // Validate operation
-                if !adapter.validate_operation(&register.id, &operation).await? {
-                    return Err(Error::AccessDenied(format!(
-                        "StoreRegister operation not allowed for resource {} in domain {}", 
-                        register.id, target_domain_id
-                    )));
-                }
-                
-                // Store the resource
-                adapter.store_resource(&register.id, &register.contents, &register.metadata).await
-            },
-            
-            CrossDomainResourceOperation::TransferRegister { register, source_domain_id, target_domain_id, additional_metadata } => {
-                // Validate the source domain
-                let source_adapter = self.adapter_factory.create_adapter(&source_domain_id).await?;
-                
-                // Check if the register exists in the source domain
-                let verify_result = source_adapter.verify_resource(&register.id).await?;
-                
-                match verify_result {
-                    CrossDomainResourceResult::Verified { exists, .. } if exists => {
-                        // Register exists in source domain, proceed with transfer
-                    },
-                    _ => {
-                        return Err(Error::DomainDataError(format!(
-                            "Register {} not found in source domain {}", register.id, source_domain_id
-                        )));
-                    }
-                }
-                
-                // Validate the target domain
-                let target_adapter = self.adapter_factory.create_adapter(&target_domain_id).await?;
-                
-                // Create transfer operation for ResourceRegister
-                let operation = CrossDomainResourceOperation::TransferRegister {
-                    register: register.clone(),
-                    source_domain_id,
-                    target_domain_id,
-                    additional_metadata,
-                };
-                
-                // Validate operations on both source and target domains
-                if !source_adapter.validate_operation(&register.id, &operation).await? {
-                    return Err(Error::AccessDenied(format!(
-                        "Transfer operation not allowed for register {} in source domain {}", 
-                        register.id, source_domain_id
-                    )));
-                }
-                
-                if !target_adapter.validate_operation(&register.id, &operation).await? {
-                    return Err(Error::AccessDenied(format!(
-                        "Transfer operation not allowed for register {} in target domain {}", 
-                        register.id, target_domain_id
-                    )));
-                }
-                
-                // Execute the transfer operation
-                self.execute_operation(operation).await
-            },
+            _ => Err(Box::new(Error::DomainDataError("Unexpected result type from store operation".to_string())))
         }
     }
     
-    /// Store a resource in the most appropriate domain based on selection strategy
-    pub async fn store_resource_by_strategy(
+    /// Transfer a register from one domain to another
+    pub async fn transfer_register(
         &self,
-        resource_id: ContentId,
-        contents: Vec<u8>,
-        metadata: HashMap<String, String>,
-        required_capabilities: std::collections::HashSet<String>,
-        preferences: HashMap<String, String>,
-    ) -> Result<CrossDomainResourceResult> {
-        // Create the most appropriate domain resource adapter based on selection strategy
-        let adapter = self.adapter_factory.create_adapter_by_strategy(
-            &required_capabilities,
-            &preferences,
-            self.default_strategy.as_ref(),
-        ).await?;
+        register: &ResourceRegister,
+        source_domain_id: &DomainId,
+        target_domain_id: &DomainId,
+        additional_metadata: &HashMap<String, String>,
+    ) -> DomainResult<RegisterTransferResult> {
+        // Check permissions for the operation
+        self.check_register_transfer_permission(register, source_domain_id, target_domain_id).await?;
         
-        // Create storage operation
-        let operation = CrossDomainResourceOperation::Store {
-            resource_id: resource_id.clone(),
-            target_domain_id: adapter.domain_id().clone(),
-            contents,
-            metadata,
+        // Create source adapter
+        let source_adapter = self.adapter_factory.create_adapter(source_domain_id).await?;
+        
+        // Create target adapter
+        let target_adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
+        
+        // Verify register exists in source domain
+        let result = source_adapter.verify_resource(&register.id).await?;
+        
+        let exists = match result {
+            CrossDomainResourceResult::Verified { exists, .. } => exists,
+            _ => return Err(Box::new(Error::DomainDataError(format!(
+                "Register {} not found in source domain {}", register.id, source_domain_id
+            )))),
         };
         
-        // Execute the operation
-        self.execute_operation(operation).await
-    }
-    
-    /// Store a ResourceRegister in the most appropriate domain based on selection strategy
-    pub async fn store_resource_register_by_strategy(
-        &self,
-        register: :ResourceRegister:causality_core::resource::Resource::ResourceRegister,
-        required_capabilities: std::collections::HashSet<String>,
-        preferences: HashMap<String, String>,
-    ) -> Result<CrossDomainResourceResult> {
-        // Create the most appropriate domain resource adapter based on selection strategy
-        let adapter = self.adapter_factory.create_adapter_by_strategy(
-            &required_capabilities,
-            &preferences,
-            self.default_strategy.as_ref(),
-        ).await?;
-        
-        // Create storage operation for ResourceRegister
-        let operation = CrossDomainResourceOperation::StoreRegister {
-            register,
-            target_domain_id: adapter.domain_id().clone(),
-        };
-        
-        // Execute the operation
-        self.execute_operation(operation).await
-    }
-    
-    /// Transfer a ResourceRegister between domains
-    pub async fn transfer_resource_register(
-        &self,
-        register: ResourceRegister,
-        source_domain_id: DomainId,
-        target_domain_id: DomainId,
-        additional_metadata: HashMap<String, String>,
-    ) -> Result<CrossDomainResourceResult> {
-        // Validate the source domain
-        let source_adapter = self.adapter_factory.create_adapter(&source_domain_id).await?;
-        
-        // Check if the register exists in the source domain
-        let verify_result = source_adapter.verify_resource(&register.id).await?;
-        
-        match verify_result {
-            CrossDomainResourceResult::Verified { exists, .. } if exists => {
-                // Register exists in source domain, proceed with transfer
-            },
-            _ => {
-                return Err(Error::DomainDataError(format!(
-                    "Register {} not found in source domain {}", register.id, source_domain_id
-                )));
-            }
+        if !exists {
+            return Err(Box::new(Error::DomainDataError(format!(
+                "Register {} not found in source domain {}", register.id, source_domain_id
+            ))));
         }
         
-        // Validate the target domain
-        let target_adapter = self.adapter_factory.create_adapter(&target_domain_id).await?;
-        
-        // Create transfer operation for ResourceRegister
-        let operation = CrossDomainResourceOperation::TransferRegister {
-            register: register.clone(),
+        // Transfer the register data
+        let transfer_result = self.transfer_resource(
+            &register.id,
             source_domain_id,
             target_domain_id,
             additional_metadata,
-        };
+        ).await?;
         
-        // Validate operations on both source and target domains
-        if !source_adapter.validate_operation(&register.id, &operation).await? {
-            return Err(Error::AccessDenied(format!(
-                "Transfer operation not allowed for register {} in source domain {}", 
-                register.id, source_domain_id
-            )));
-        }
-        
-        if !target_adapter.validate_operation(&register.id, &operation).await? {
-            return Err(Error::AccessDenied(format!(
-                "Transfer operation not allowed for register {} in target domain {}", 
-                register.id, target_domain_id
-            )));
-        }
-        
-        // Execute the transfer operation
-        self.execute_operation(operation).await
-    }
-    
-    /// Batch transfer multiple ResourceRegisters between domains
-    pub async fn batch_transfer_resource_registers(
-        &self,
-        registers: Vec<ResourceRegister>,
-        source_domain_id: DomainId,
-        target_domain_id: DomainId,
-        additional_metadata: HashMap<String, String>,
-    ) -> Result<Vec<Result<CrossDomainResourceResult>>> {
-        let mut results = Vec::new();
-        
-        for register in registers {
-            let result = self.transfer_resource_register(
-                register,
-                source_domain_id.clone(),
-                target_domain_id.clone(),
-                additional_metadata.clone()
-            ).await;
-            
-            results.push(result);
-        }
-        
-        Ok(results)
-    }
-    
-    /// Retrieve a ResourceRegister from a domain
-    pub async fn retrieve_resource_register(
-        &self,
-        resource_id: ContentId,
-        source_domain_id: DomainId,
-    ) -> Result<ResourceRegister> {
-        // Create retrieve operation
-        let operation = CrossDomainResourceOperation::Retrieve {
-            resource_id: resource_id.clone(),
-            source_domain_id,
-        };
-        
-        // Execute the operation
-        let result = self.execute_operation(operation).await?;
-        
-        // Convert the result to a ResourceRegister
-        match result {
-            CrossDomainResourceResult::Retrieved { resource_id, contents, metadata, .. } => {
-                // Create a ResourceRegister from the retrieved data
-                let register = ResourceRegister {
-                    id: resource_id,
-                    resource_logic: Default::default(),
-                    fungibility_domain: Default::default(),
-                    quantity: Default::default(),
-                    metadata: metadata.clone(),
-                    state: RegisterState::Active,
-                    nullifier_key: None,
-                    controller_label: None,
-                    observed_at: Default::default(),
-                    storage_strategy: Default::default(),
-                    contents,
-                    version: 1,
-                    controller: None,
-                    lifecycle_manager: None,
-                };
-                
-                Ok(register)
+        // Create the register transfer result
+        match transfer_result {
+            CrossDomainResourceResult::Transferred {
+                transaction_id,
+                block_height,
+                timestamp,
+                ..
+            } => {
+                Ok(RegisterTransferResult {
+                    register_id: register.id.clone(),
+                    source_domain_id: source_domain_id.to_string(),
+                    target_domain_id: target_domain_id.to_string(),
+                    transaction_id,
+                    block_height,
+                    timestamp,
+                })
             },
-            _ => Err(Error::DomainDataError(format!(
-                "Unexpected result type from retrieve operation for resource {}", resource_id
-            ))),
+            _ => Err(Box::new(Error::DomainDataError(format!(
+                "Unexpected result type from transfer operation for register {}", register.id
+            ))))
         }
     }
     
-    /// Verify a ResourceRegister exists in a domain
-    pub async fn verify_resource_register(
+    /// Store a register in a domain
+    pub async fn store_register(
         &self,
-        resource_id: ContentId,
-        domain_id: DomainId,
-    ) -> Result<bool> {
-        // Create verify operation
-        let operation = CrossDomainResourceOperation::Verify {
-            resource_id: resource_id.clone(),
-            domain_id,
-        };
+        register: &ResourceRegister,
+        target_domain_id: &DomainId,
+    ) -> DomainResult<RegisterStoreResult> {
+        // Check permissions for the operation
+        self.check_register_store_permission(register, target_domain_id).await?;
         
-        // Execute the operation
-        let result = self.execute_operation(operation).await?;
+        // Create the resource adapter
+        let adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
         
-        // Extract the verification result
+        // Store the register data
+        let result = adapter.store_resource(&register.id, &register.data, &register.metadata).await?;
+        
+        // Create the register store result
+        match result {
+            CrossDomainResourceResult::Stored {
+                transaction_id,
+                block_height,
+                timestamp,
+                ..
+            } => {
+                Ok(RegisterStoreResult {
+                    register_id: register.id.clone(),
+                    domain_id: target_domain_id.to_string(),
+                    transaction_id,
+                    block_height,
+                    timestamp,
+                })
+            },
+            _ => Err(Box::new(Error::DomainDataError(format!(
+                "Unexpected result type from store operation for register {}", register.id
+            ))))
+        }
+    }
+    
+    /// Retrieve a register from a domain
+    pub async fn retrieve_register(
+        &self,
+        register_id: &ContentId,
+        domain_id: &DomainId,
+    ) -> DomainResult<ResourceRegister> {
+        // Check permissions for the operation
+        self.check_register_retrieve_permission(register_id, domain_id).await?;
+        
+        // Create the resource adapter
+        let adapter = self.adapter_factory.create_adapter(domain_id).await?;
+        
+        // Retrieve the register data
+        let result = adapter.retrieve_resource(register_id).await?;
+        
+        // Create the register
+        match result {
+            CrossDomainResourceResult::Retrieved {
+                contents,
+                metadata,
+                ..
+            } => {
+                Ok(ResourceRegister {
+                    id: register_id.clone(),
+                    data: contents,
+                    metadata,
+                })
+            },
+            _ => Err(Box::new(Error::DomainDataError(format!(
+                "Unexpected result type from retrieve operation for resource {}", register_id
+            ))))
+        }
+    }
+    
+    /// Verify a register exists in a domain
+    pub async fn verify_register(
+        &self,
+        register_id: &ContentId,
+        domain_id: &DomainId,
+    ) -> DomainResult<bool> {
+        // Check permissions for the operation
+        self.check_register_verify_permission(register_id, domain_id).await?;
+        
+        // Create the resource adapter
+        let adapter = self.adapter_factory.create_adapter(domain_id).await?;
+        
+        // Verify the register
+        let result = adapter.verify_resource(register_id).await?;
+        
+        // Return whether the register exists
         match result {
             CrossDomainResourceResult::Verified { exists, .. } => {
                 Ok(exists)
             },
-            _ => Err(Error::DomainDataError(format!(
-                "Unexpected result type from verify operation for resource {}", resource_id
-            ))),
+            _ => Err(Box::new(Error::DomainDataError(format!(
+                "Unexpected result type from verify operation for resource {}", register_id
+            ))))
         }
     }
     
-    /// Get the adapter factory
-    pub fn adapter_factory(&self) -> &Arc<DomainResourceAdapterFactory> {
-        &self.adapter_factory
+    // Permission checking methods
+    
+    /// Check permission to store a resource
+    async fn check_store_permission(&self, resource_id: &ContentId, target_domain_id: &DomainId) -> DomainResult<()> {
+        // This is a placeholder for permission checking logic
+        // In a real implementation, this would check against an authorization system
+        
+        // Always allow for now
+        Ok(())
     }
-
-    // Create a ResourceRegister using its base constructor for testing or utility purposes
-    // This is a helper method to ensure we properly use the ResourceRegister type
-    #[cfg(test)]
-    pub fn create_test_register(&self, id: ContentId) -> ResourceRegister {
-        ResourceRegister {
-            id,
-            resource_logic: Default::default(),
-            fungibility_domain: Default::default(),
-            quantity: Default::default(),
-            metadata: Default::default(),
-            state: Default::default(),
-            nullifier_key: None,
-            controller_label: None,
-            observed_at: Default::default(),
-            storage_strategy: Default::default(),
-            contents: Vec::new(),
-            version: 1,
-            controller: None,
-            lifecycle_manager: None,
+    
+    /// Check permission to retrieve a resource
+    async fn check_retrieve_permission(&self, resource_id: &ContentId, source_domain_id: &DomainId) -> DomainResult<()> {
+        // Always allow for now
+        Ok(())
+    }
+    
+    /// Check permission to verify a resource
+    async fn check_verify_permission(&self, resource_id: &ContentId, domain_id: &DomainId) -> DomainResult<()> {
+        // Always allow for now
+        Ok(())
+    }
+    
+    /// Check permission to transfer a resource
+    async fn check_transfer_permission(
+        &self,
+        resource_id: &ContentId,
+        source_domain_id: &DomainId,
+        target_domain_id: &DomainId,
+    ) -> DomainResult<()> {
+        // Check source domain permission
+        if !self.has_source_domain_permission(resource_id, source_domain_id).await {
+            return Err(Box::new(Error::AccessDenied(format!(
+                "Transfer operation not allowed for resource {} in source domain {}", 
+                resource_id, source_domain_id
+            ))));
         }
+        
+        // Check target domain permission
+        if !self.has_target_domain_permission(resource_id, target_domain_id).await {
+            return Err(Box::new(Error::AccessDenied(format!(
+                "Transfer operation not allowed for resource {} in target domain {}", 
+                resource_id, target_domain_id
+            ))));
+        }
+        
+        Ok(())
     }
+    
+    /// Check permission to store a register
+    async fn check_register_store_permission(&self, register: &ResourceRegister, target_domain_id: &DomainId) -> DomainResult<()> {
+        // Check target domain permission
+        if !self.has_target_domain_permission(&register.id, target_domain_id).await {
+            return Err(Box::new(Error::AccessDenied(format!(
+                "StoreRegister operation not allowed for resource {} in domain {}", 
+                register.id, target_domain_id
+            ))));
+        }
+        
+        Ok(())
+    }
+    
+    /// Check permission to retrieve a register
+    async fn check_register_retrieve_permission(&self, register_id: &ContentId, domain_id: &DomainId) -> DomainResult<()> {
+        // Always allow for now
+        Ok(())
+    }
+    
+    /// Check permission to verify a register
+    async fn check_register_verify_permission(&self, register_id: &ContentId, domain_id: &DomainId) -> DomainResult<()> {
+        // Always allow for now
+        Ok(())
+    }
+    
+    /// Check permission to transfer a register
+    async fn check_register_transfer_permission(
+        &self,
+        register: &ResourceRegister,
+        source_domain_id: &DomainId,
+        target_domain_id: &DomainId,
+    ) -> DomainResult<()> {
+        // Check source domain permission
+        if !self.has_source_domain_permission(&register.id, source_domain_id).await {
+            return Err(Box::new(Error::AccessDenied(format!(
+                "Transfer operation not allowed for register {} in source domain {}", 
+                register.id, source_domain_id
+            ))));
+        }
+        
+        // Check target domain permission
+        if !self.has_target_domain_permission(&register.id, target_domain_id).await {
+            return Err(Box::new(Error::AccessDenied(format!(
+                "Transfer operation not allowed for register {} in target domain {}", 
+                register.id, target_domain_id
+            ))));
+        }
+        
+        Ok(())
+    }
+    
+    // Helper methods
+    
+    /// Check if resource has source domain permission
+    async fn has_source_domain_permission(&self, resource_id: &ContentId, domain_id: &DomainId) -> bool {
+        // In a real implementation, this would check against an authorization system
+        // Always allow for now
+        true
+    }
+    
+    /// Check if resource has target domain permission
+    async fn has_target_domain_permission(&self, resource_id: &ContentId, domain_id: &DomainId) -> bool {
+        // Always allow for now
+        true
+    }
+}
+
+/// Resource register for cross-domain resources
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceRegister {
+    /// Register ID
+    pub id: ContentId,
+    /// Register data
+    pub data: Vec<u8>,
+    /// Register metadata
+    pub metadata: HashMap<String, String>,
+}
+
+/// Result of a register store operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterStoreResult {
+    /// Register ID
+    pub register_id: ContentId,
+    /// Domain ID
+    pub domain_id: String,
+    /// Transaction ID
+    pub transaction_id: String,
+    /// Block height where stored
+    pub block_height: Option<BlockHeight>,
+    /// Timestamp when stored
+    pub timestamp: Option<Timestamp>,
+}
+
+/// Result of a register transfer operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterTransferResult {
+    /// Register ID
+    pub register_id: ContentId,
+    /// Source domain ID
+    pub source_domain_id: String,
+    /// Target domain ID
+    pub target_domain_id: String,
+    /// Transaction ID
+    pub transaction_id: String,
+    /// Block height where stored
+    pub block_height: Option<BlockHeight>,
+    /// Timestamp when stored
+    pub timestamp: Option<Timestamp>,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use causality_domain::PreferredDomainStrategy;
+    
+    
     
     // Test implementation would go here
 } 

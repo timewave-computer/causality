@@ -7,7 +7,7 @@
 // allowing objects to be resolved, verified, and queried across different domains
 // using their content hashes.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use borsh::{BorshSerialize, BorshDeserialize};

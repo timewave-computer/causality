@@ -2,11 +2,14 @@
 //
 // This module defines types for working with domains in the time module.
 
+use std::fmt;
+use serde::{Serialize, Deserialize};
+
 /// Domain identifier type
 pub type DomainId = String;
 
 /// Domain position in time
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DomainPosition {
     /// The timestamp in the domain
     pub timestamp: u64,
@@ -44,5 +47,40 @@ impl DomainPosition {
     /// Check if this position is after another position
     pub fn is_after(&self, other: &Self) -> bool {
         self.timestamp > other.timestamp || (self.timestamp == other.timestamp && self.index > other.index)
+    }
+}
+
+/// Domain attestation source type
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DomainAttestationSource {
+    /// System clock time source
+    System,
+    
+    /// Network time protocol source
+    NTP,
+    
+    /// External time source
+    External(String),
+    
+    /// Consensus time source
+    Consensus(String),
+    
+    /// User-provided time
+    User,
+    
+    /// Custom time source
+    Custom(String),
+}
+
+impl fmt::Display for DomainAttestationSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DomainAttestationSource::System => write!(f, "System"),
+            DomainAttestationSource::NTP => write!(f, "NTP"),
+            DomainAttestationSource::External(src) => write!(f, "External({})", src),
+            DomainAttestationSource::Consensus(src) => write!(f, "Consensus({})", src),
+            DomainAttestationSource::User => write!(f, "User"),
+            DomainAttestationSource::Custom(name) => write!(f, "Custom({})", name),
+        }
     }
 } 

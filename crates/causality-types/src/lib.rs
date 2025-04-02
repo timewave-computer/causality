@@ -10,7 +10,8 @@ use std::hash::Hash;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
-use borsh::{BorshSerialize, BorshDeserialize};
+use borsh;
+use rand;
 
 // Export crypto_primitives module
 pub mod crypto_primitives;
@@ -24,16 +25,19 @@ pub mod verification;
 pub mod time_snapshot;
 // Export time_effect_system module
 pub mod time_effect_system;
+// Export content module
+pub mod content;
 
 // Export core types from crypto_primitives module
 pub use crypto_primitives::{
     ContentAddressed,
-    ContentId,
-    ContentHash,
-    HashOutput,
     HashAlgorithm,
     HashError,
 };
+
+// Re-export core types
+pub use crypto_primitives::{ContentId, ContentHash, HashOutput};
+pub use content::{ContentAddressingError}; 
 
 // Export utility functions
 pub use utils::{
@@ -107,65 +111,53 @@ pub mod trace {
     }
     
     impl ContentAddressed for TraceIdContent {
-        fn content_hash(&self) -> Result<HashOutput, HashError> {
-            // Use canonical serialization for content hashing
-            crate::content_addressing::canonical_content_hash(self)
-                .map_err(|e| HashError::SerializationError(e.to_string()))
+        fn content_hash(&self) -> Result<crypto_primitives::HashOutput, crypto_primitives::HashError> {
+            // Use a direct hash of the serialized content
+            let serialized = serde_json::to_vec(self)
+                .map_err(|e| crypto_primitives::HashError::SerializationError(e.to_string()))?;
+            
+            // Create a hash from the serialized bytes
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(&serialized);
+            let hash_bytes = hasher.finalize();
+            let mut output = [0u8; 32];
+            output.copy_from_slice(hash_bytes.as_bytes());
+            
+            Ok(crypto_primitives::HashOutput::new(output, crypto_primitives::HashAlgorithm::Blake3))
         }
         
-        fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
+        fn verify(&self, expected_hash: &crypto_primitives::HashOutput) -> Result<bool, crypto_primitives::HashError> {
             let actual_hash = self.content_hash()?;
             Ok(actual_hash == *expected_hash)
         }
         
-        fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
-            // Use canonical binary serialization
-            crate::content_addressing::canonical::to_canonical_binary(self)
-                .map_err(|e| HashError::SerializationError(e.to_string()))
+        fn to_bytes(&self) -> Result<Vec<u8>, crypto_primitives::HashError> {
+            // Use serde serialization directly
+            serde_json::to_vec(self)
+                .map_err(|e| crypto_primitives::HashError::SerializationError(e.to_string()))
         }
         
-        fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
-            // Use canonical binary deserialization
-            crate::content_addressing::canonical::from_canonical_binary(bytes)
-                .map_err(|e| HashError::SerializationError(e.to_string()))
+        fn from_bytes(bytes: &[u8]) -> Result<Self, crypto_primitives::HashError> {
+            // Use serde deserialization directly
+            serde_json::from_slice(bytes)
+                .map_err(|e| crypto_primitives::HashError::SerializationError(e.to_string()))
         }
     }
     
     impl TraceId {
         /// Create a new trace ID with content-derived identifier
         pub fn new() -> Self {
-            let content = TraceIdContent {
-                timestamp: chrono::Utc::now().timestamp(),
-                nonce: rand::random::<[u8; 16]>(),
-                parent: None,
-                operation: None,
-            };
-            
-            // Handle potential error from content_id(), falling back to a default ID if needed
-            let content_id = content.content_id().unwrap_or_else(|_| {
-                // Create a temporary hash output for the default case
-                let zero_bytes = [0u8; 32];
-                let hash_output = HashOutput::new(zero_bytes, HashAlgorithm::default());
-                ContentId::from(hash_output)
-            });
-            TraceId(format!("trace:{}", content_id))
+            // Use ContentId instead of UUID for content addressing
+            let content = crypto_primitives::ContentId::from_bytes(&rand::random::<[u8; 16]>());
+            TraceId(format!("trace:{}", content))
         }
         
         /// Create a child trace ID from a parent trace ID
         pub fn child_of(parent: &TraceId, operation: Option<&str>) -> Self {
-            let content = TraceIdContent {
-                timestamp: chrono::Utc::now().timestamp(),
-                nonce: rand::random::<[u8; 16]>(),
-                parent: Some(parent.as_str().to_string()),
-                operation: operation.map(|s| s.to_string()),
-            };
-            
-            // Handle potential error from content_id(), falling back to a default ID if needed
-            let content_id = content.content_id().unwrap_or_else(|_| {
-                // Create a content ID from the parent string
-                ContentId::new(format!("child-of-{}", parent.as_str()))
-            });
-            TraceId(format!("trace:{}", content_id))
+            // Generate a content-addressed ID with reference to the parent
+            let seed = format!("child-of-{}-{}", parent.as_str(), operation.unwrap_or(""));
+            let content = crypto_primitives::ContentId::from_bytes(seed.as_bytes());
+            TraceId(format!("trace:child-of-{}-{}", parent.as_str(), content))
         }
         
         /// Create a trace ID from a string
@@ -191,8 +183,8 @@ pub mod trace {
         }
     }
     
-    impl From<ContentId> for TraceId {
-        fn from(content_id: ContentId) -> Self {
+    impl From<crypto_primitives::ContentId> for TraceId {
+        fn from(content_id: crypto_primitives::ContentId) -> Self {
             Self(format!("trace:{}", content_id))
         }
     }

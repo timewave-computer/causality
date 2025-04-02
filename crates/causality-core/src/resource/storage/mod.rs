@@ -12,4 +12,8 @@ pub use storage::{
     ResourceStorage, ContentAddressedResourceStorage,
     InMemoryResourceStorage, ResourceStorageConfig, 
     create_resource_storage,
-}; 
+};
+
+pub mod error;
+
+pub use error::ContentAddressedStorageError; 

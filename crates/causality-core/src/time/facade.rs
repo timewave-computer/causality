@@ -1,15 +1,28 @@
 // Time Facade
 //
-// This module provides a simplified interface for working with time effects in application code.
-// It abstracts away the details of the effect system and provides a fluent API for time operations.
+// This module provides a high-level facade for interacting with the time system.
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use anyhow::Result;
-use std::collections::HashMap;
+use std::fmt::Debug;
+use std::time::Duration;
+use std::any::Any;
 
+use async_trait::async_trait;
+use thiserror::Error;
+use anyhow::Result;
+
+// Internal imports
+use crate::effect::{EffectExecutor, EffectContext as CoreEffectContext, EffectOutcome, EffectResult};
+use crate::effect::types::EffectId;
+use crate::effect::context::Capability;
+use crate::ResourceId;
+
+// External types from causality-types
 use causality_types::time_snapshot::{TimeEffect, TimeEffectResult, AttestationSource};
-use crate::effects::{EffectExecutor, EffectContext};
-use super::{TimeProvider, Timestamp};
+
+use super::TimeProvider;
+use crate::time::timestamp::Timestamp;
 
 /// Time facade for working with time effects
 pub struct TimeFacade {
@@ -93,14 +106,17 @@ impl CausalUpdateBuilder {
     }
     
     /// Execute the causal update effect
-    pub async fn execute(self) -> Result<TimeEffectResult> {
+    pub fn execute(self) -> Result<TimeEffectResult> {
         let effect = TimeEffect::CausalUpdate {
             operations: self.operations,
             ordering: self.ordering,
         };
         
-        let ctx = EffectContext::new();
-        self.effect_executor.execute(effect, &ctx).await
+        let ctx = EffectContext::with_executor(self.effect_executor.clone());
+        self.effect_executor.execute_effect(&effect, &ctx)
+            .map_err(|e| anyhow::anyhow!("Effect execution failed: {}", e))?
+            .into_result()
+            .ok_or_else(|| anyhow::anyhow!("No result returned from effect execution"))
     }
 }
 
@@ -138,20 +154,17 @@ impl ClockAttestationBuilder {
     }
     
     /// Set the source to blockchain
-    pub fn blockchain_source(mut self, height: u64, block_hash: impl Into<String>) -> Self {
+    pub fn blockchain_source(mut self, chain_id: impl Into<String>, block_number: Option<u64>) -> Self {
         self.source = Some(AttestationSource::Blockchain {
-            height,
-            block_hash: block_hash.into(),
+            chain_id: chain_id.into(),
+            block_number,
         });
         self
     }
     
     /// Set the source to user
-    pub fn user_source(mut self, user_id: impl Into<String>, signature: impl Into<String>) -> Self {
-        self.source = Some(AttestationSource::User {
-            user_id: user_id.into(),
-            signature: signature.into(),
-        });
+    pub fn user_source(mut self) -> Self {
+        self.source = Some(AttestationSource::User);
         self
     }
     
@@ -165,19 +178,19 @@ impl ClockAttestationBuilder {
     }
     
     /// Set the source to committee
-    pub fn committee_source(mut self, committee_id: impl Into<String>, threshold_signature: impl Into<String>) -> Self {
+    pub fn committee_source(mut self, committee_id: impl Into<String>, signatures: Vec<String>) -> Self {
         self.source = Some(AttestationSource::Committee {
             committee_id: committee_id.into(),
-            threshold_signature: threshold_signature.into(),
+            signatures,
         });
         self
     }
     
     /// Set the source to oracle
-    pub fn oracle_source(mut self, oracle_id: impl Into<String>, signature: impl Into<String>) -> Self {
+    pub fn oracle_source(mut self, oracle_id: impl Into<String>, data: impl Into<String>) -> Self {
         self.source = Some(AttestationSource::Oracle {
             oracle_id: oracle_id.into(),
-            signature: signature.into(),
+            data: data.into(),
         });
         self
     }
@@ -189,7 +202,7 @@ impl ClockAttestationBuilder {
     }
     
     /// Execute the clock attestation effect
-    pub async fn execute(self) -> Result<TimeEffectResult> {
+    pub fn execute(self) -> Result<TimeEffectResult> {
         let domain_id = self.domain_id.ok_or_else(|| anyhow::anyhow!("Domain ID is required"))?;
         let timestamp = self.timestamp.ok_or_else(|| anyhow::anyhow!("Timestamp is required"))?;
         let source = self.source.ok_or_else(|| anyhow::anyhow!("Source is required"))?;
@@ -202,8 +215,11 @@ impl ClockAttestationBuilder {
             confidence,
         };
         
-        let ctx = EffectContext::new();
-        self.effect_executor.execute(effect, &ctx).await
+        let ctx = EffectContext::with_executor(self.effect_executor.clone());
+        self.effect_executor.execute_effect(&effect, &ctx)
+            .map_err(|e| anyhow::anyhow!("Effect execution failed: {}", e))?
+            .into_result()
+            .ok_or_else(|| anyhow::anyhow!("No result returned from effect execution"))
     }
 }
 
@@ -249,17 +265,136 @@ impl TimeMapUpdateBuilder {
     }
     
     /// Execute the time map update effect
-    pub async fn execute(self) -> Result<TimeEffectResult> {
-        if self.positions.is_empty() {
-            return Err(anyhow::anyhow!("At least one position is required"));
-        }
-        
+    pub fn execute(self) -> Result<TimeEffectResult> {
         let effect = TimeEffect::TimeMapUpdate {
             positions: self.positions,
             proofs: self.proofs,
         };
         
-        let ctx = EffectContext::new();
-        self.effect_executor.execute(effect, &ctx).await
+        let ctx = EffectContext::with_executor(self.effect_executor.clone());
+        self.effect_executor.execute_effect(&effect, &ctx)
+            .map_err(|e| anyhow::anyhow!("Effect execution failed: {}", e))?
+            .into_result()
+            .ok_or_else(|| anyhow::anyhow!("No result returned from effect execution"))
+    }
+}
+
+/// Simple effect context for use with time facade operations
+#[derive(Debug)]
+pub struct EffectContext {
+    // Simple identifier for the effect
+    id: EffectId,
+    // Additional metadata
+    metadata: HashMap<String, String>,
+    // Effect executor
+    executor: Option<Arc<dyn EffectExecutor>>,
+    // Resources
+    resources: HashSet<ResourceId>,
+}
+
+impl EffectContext {
+    /// Create a new effect context
+    pub fn new() -> Self {
+        Self {
+            id: EffectId::from("time-facade-effect".to_string()),
+            metadata: HashMap::new(),
+            executor: None,
+            resources: HashSet::new(),
+        }
+    }
+    
+    /// Create a new effect context with an executor
+    pub fn with_executor(executor: Arc<dyn EffectExecutor>) -> Self {
+        Self {
+            id: EffectId::from("time-facade-effect".to_string()),
+            metadata: HashMap::new(),
+            executor: Some(executor),
+            resources: HashSet::new(),
+        }
+    }
+}
+
+impl crate::effect::context::EffectContext for EffectContext {
+    fn effect_id(&self) -> &EffectId {
+        &self.id
+    }
+    
+    fn capabilities(&self) -> &[Capability] {
+        &[]
+    }
+    
+    fn metadata(&self) -> &HashMap<String, String> {
+        &self.metadata
+    }
+    
+    fn resources(&self) -> &HashSet<ResourceId> {
+        &self.resources
+    }
+    
+    fn parent_context(&self) -> Option<&Arc<dyn crate::effect::context::EffectContext>> {
+        None
+    }
+    
+    fn has_capability(&self, _capability: &Capability) -> bool {
+        // For simplicity, allow all capabilities
+        true
+    }
+    
+    fn get_registry(&self) -> Option<Arc<dyn EffectExecutor>> {
+        self.executor.clone()
+    }
+    
+    fn derive_context(&self, effect_id: EffectId) -> Box<dyn EffectContext> {
+        Box::new(Self {
+            id: effect_id,
+            metadata: self.metadata.clone(),
+            executor: self.executor.clone(),
+            resources: self.resources.clone(),
+        })
+    }
+    
+    fn with_additional_capabilities(&self, _capabilities: Vec<Capability>) -> Box<dyn EffectContext> {
+        Box::new(self.clone())
+    }
+    
+    fn with_additional_resources(&self, resources: HashSet<ResourceId>) -> Box<dyn EffectContext> {
+        let mut new_resources = self.resources.clone();
+        new_resources.extend(resources);
+        Box::new(Self {
+            id: self.id.clone(),
+            metadata: self.metadata.clone(),
+            executor: self.executor.clone(),
+            resources: new_resources,
+        })
+    }
+    
+    fn with_additional_metadata(&self, metadata: HashMap<String, String>) -> Box<dyn EffectContext> {
+        let mut new_metadata = self.metadata.clone();
+        new_metadata.extend(metadata);
+        Box::new(Self {
+            id: self.id.clone(),
+            metadata: new_metadata,
+            executor: self.executor.clone(),
+            resources: self.resources.clone(),
+        })
+    }
+    
+    fn clone_context(&self) -> Box<dyn EffectContext> {
+        Box::new(self.clone())
+    }
+    
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl Clone for EffectContext {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            metadata: self.metadata.clone(),
+            executor: self.executor.clone(),
+            resources: self.resources.clone(),
+        }
     }
 } 

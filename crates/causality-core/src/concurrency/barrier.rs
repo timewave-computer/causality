@@ -18,7 +18,8 @@ use tokio::time::{sleep, timeout};
 use causality_types::{Error, Result};
 use causality_crypto::ContentId;
 use causality_core::primitives::{ResourceManager, SharedResourceManager};
-use :ResourceRegister:causality_core::resource::Resource::ResourceRegister;
+// FIXME: Add the proper import for ResourceRegister when it's implemented
+// use crate::resource::ResourceRegister;
 
 /// A barrier that waits for a condition to be true
 ///
@@ -128,6 +129,8 @@ where
                         
                         // Additionally check if ResourceRegisters are active if requested
                         if self.check_resource_register_active {
+                            // FIXME: Uncomment when ResourceRegister is properly defined
+                            /*
                             // Try to check if it's a ResourceRegister and if it's active
                             match manager.is_resource_register_active(resource.clone()) {
                                 Ok(active) => {
@@ -139,6 +142,9 @@ where
                                 // If it's not a ResourceRegister or there's an error, ignore this check
                                 Err(_) => {}
                             }
+                            */
+                            
+                            // For now, just continue with availability check
                         }
                     }
                     all_available

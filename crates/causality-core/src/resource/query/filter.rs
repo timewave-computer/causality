@@ -196,21 +196,20 @@ pub enum FilterOperator {
     Regex,
 }
 
-/// Complex filter expression for combining conditions
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value")]
+/// Filter expression for query engines
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FilterExpression {
-    /// Simple condition
+    /// Single filter condition
     #[serde(rename = "condition")]
     Condition(FilterCondition),
     
-    /// Logical AND of multiple expressions
+    /// Logical AND of two expressions
     #[serde(rename = "and")]
-    And(Vec<FilterExpression>),
+    And(Box<FilterExpression>, Box<FilterExpression>),
     
-    /// Logical OR of multiple expressions
+    /// Logical OR of two expressions
     #[serde(rename = "or")]
-    Or(Vec<FilterExpression>),
+    Or(Box<FilterExpression>, Box<FilterExpression>),
     
     /// Logical NOT of an expression
     #[serde(rename = "not")]
@@ -218,8 +217,12 @@ pub enum FilterExpression {
 }
 
 impl FilterExpression {
-    /// Create a simple condition filter
-    pub fn condition(field: impl Into<String>, operator: FilterOperator, value: FilterValue) -> Self {
+    /// Create a new filter condition
+    pub fn condition(
+        field: impl Into<String>,
+        operator: FilterOperator,
+        value: FilterValue,
+    ) -> Self {
         Self::Condition(FilterCondition {
             field: field.into(),
             operator,
@@ -227,14 +230,14 @@ impl FilterExpression {
         })
     }
     
-    /// Create an AND filter from multiple expressions
-    pub fn and(expressions: Vec<FilterExpression>) -> Self {
-        Self::And(expressions)
+    /// Create an AND filter from two expressions
+    pub fn and(left: FilterExpression, right: FilterExpression) -> Self {
+        Self::And(Box::new(left), Box::new(right))
     }
     
-    /// Create an OR filter from multiple expressions
-    pub fn or(expressions: Vec<FilterExpression>) -> Self {
-        Self::Or(expressions)
+    /// Create an OR filter from two expressions
+    pub fn or(left: FilterExpression, right: FilterExpression) -> Self {
+        Self::Or(Box::new(left), Box::new(right))
     }
     
     /// Create a NOT filter from an expression
@@ -242,34 +245,174 @@ impl FilterExpression {
         Self::Not(Box::new(expression))
     }
     
-    /// Check if a resource matches this filter expression
-    pub fn matches(&self, resource: &impl Resource) -> Result<bool, QueryError> {
+    /// Create a simple condition from string inputs
+    pub fn condition_str(
+        field: impl Into<String>,
+        operator_str: &str,
+        value_str: &str,
+    ) -> Self {
+        // Parse operator string to FilterOperator
+        let operator = match operator_str {
+            "=" | "==" | "eq" => FilterOperator::Equal,
+            "!=" | "<>" | "ne" => FilterOperator::NotEqual,
+            ">" | "gt" => FilterOperator::GreaterThan,
+            ">=" | "gte" => FilterOperator::GreaterThanOrEqual,
+            "<" | "lt" => FilterOperator::LessThan,
+            "<=" | "lte" => FilterOperator::LessThanOrEqual,
+            "contains" => FilterOperator::Contains,
+            "startswith" => FilterOperator::StartsWith,
+            "endswith" => FilterOperator::EndsWith,
+            "in" => FilterOperator::In,
+            "notin" => FilterOperator::NotIn,
+            "null" => FilterOperator::IsNull,
+            "!null" | "notnull" => FilterOperator::IsNotNull,
+            "regex" => FilterOperator::Regex,
+            _ => FilterOperator::Equal, // Default to Equal
+        };
+        
+        // Create a value from the string
+        let value = match operator {
+            FilterOperator::IsNull | FilterOperator::IsNotNull => FilterValue::Null,
+            FilterOperator::In | FilterOperator::NotIn => {
+                // Split comma-separated values
+                let values = value_str
+                    .split(',')
+                    .map(|v| FilterValue::String(v.trim().to_string()))
+                    .collect();
+                FilterValue::Array(values)
+            },
+            _ => FilterValue::String(value_str.to_string()),
+        };
+        
+        Self::Condition(FilterCondition {
+            field: field.into(),
+            operator,
+            value,
+        })
+    }
+    
+    /// Check if this filter matches a resource
+    pub fn matches<R>(&self, resource: &R) -> Result<bool, QueryError> 
+    where 
+        R: Resource + ?Sized,
+    {
         match self {
             FilterExpression::Condition(condition) => {
-                evaluate_condition(condition, resource)
-            },
-            FilterExpression::And(expressions) => {
-                for expr in expressions {
-                    if !expr.matches(resource)? {
-                        return Ok(false);
+                // Use direct field access through the Resource trait methods
+                if condition.field == "id" {
+                    // Check resource ID matching
+                    let id = resource.id();
+                    match &condition.value {
+                        FilterValue::String(s) => {
+                            match condition.operator {
+                                FilterOperator::Equal => Ok(id.to_string() == *s),
+                                FilterOperator::NotEqual => Ok(id.to_string() != *s),
+                                _ => Ok(false), // Unsupported operator for ID
+                            }
+                        },
+                        FilterValue::ContentId(cid) => {
+                            match condition.operator {
+                                FilterOperator::Equal => Ok(id.to_content_id() == *cid),
+                                FilterOperator::NotEqual => Ok(id.to_content_id() != *cid),
+                                _ => Ok(false), // Unsupported operator for ID
+                            }
+                        },
+                        _ => Ok(false), // ID doesn't match other types
                     }
-                }
-                Ok(true)
-            },
-            FilterExpression::Or(expressions) => {
-                if expressions.is_empty() {
-                    return Ok(true);
-                }
-                
-                for expr in expressions {
-                    if expr.matches(resource)? {
-                        return Ok(true);
+                } else if condition.field == "type" || condition.field == "resource_type" {
+                    // Check resource type matching
+                    let rtype = resource.resource_type();
+                    match &condition.value {
+                        FilterValue::String(s) => {
+                            match condition.operator {
+                                FilterOperator::Equal => Ok(rtype.to_string() == *s),
+                                FilterOperator::NotEqual => Ok(rtype.to_string() != *s),
+                                _ => Ok(false), // Unsupported operator for type
+                            }
+                        },
+                        _ => Ok(false), // Type doesn't match other types
                     }
+                } else if condition.field == "state" {
+                    // Check resource state matching
+                    let state = resource.state();
+                    match &condition.value {
+                        FilterValue::String(s) => {
+                            match condition.operator {
+                                FilterOperator::Equal => Ok(state.to_string() == *s),
+                                FilterOperator::NotEqual => Ok(state.to_string() != *s),
+                                _ => Ok(false), // Unsupported operator for state
+                            }
+                        },
+                        _ => Ok(false), // State doesn't match other types
+                    }
+                } else if condition.field.starts_with("metadata.") {
+                    // Check metadata
+                    let key = condition.field.strip_prefix("metadata.").unwrap_or(&condition.field);
+                    let value = resource.get_metadata(key);
+                    
+                    match &condition.operator {
+                        FilterOperator::Equal => {
+                            if let FilterValue::String(s) = &condition.value {
+                                Ok(value.as_deref() == Some(s))
+                            } else {
+                                Ok(false)
+                            }
+                        },
+                        FilterOperator::NotEqual => {
+                            if let FilterValue::String(s) = &condition.value {
+                                Ok(value.as_deref() != Some(s))
+                            } else {
+                                Ok(false)
+                            }
+                        },
+                        FilterOperator::Contains => {
+                            if let FilterValue::String(s) = &condition.value {
+                                Ok(value.as_deref().map(|v| v.contains(s)).unwrap_or(false))
+                            } else {
+                                Ok(false)
+                            }
+                        },
+                        FilterOperator::StartsWith => {
+                            if let FilterValue::String(s) = &condition.value {
+                                Ok(value.as_deref().map(|v| v.starts_with(s)).unwrap_or(false))
+                            } else {
+                                Ok(false)
+                            }
+                        },
+                        FilterOperator::EndsWith => {
+                            if let FilterValue::String(s) = &condition.value {
+                                Ok(value.as_deref().map(|v| v.ends_with(s)).unwrap_or(false))
+                            } else {
+                                Ok(false)
+                            }
+                        },
+                        FilterOperator::IsNull => Ok(value.is_none()),
+                        FilterOperator::IsNotNull => Ok(value.is_some()),
+                        _ => Ok(false), // Other operators not supported for metadata
+                    }
+                } else {
+                    // Default to false for unknown fields
+                    Ok(false)
                 }
-                Ok(false)
             },
-            FilterExpression::Not(expression) => {
-                let result = expression.matches(resource)?;
+            FilterExpression::And(left, right) => {
+                let left_result = left.matches(resource)?;
+                if !left_result {
+                    return Ok(false); // Short-circuit
+                }
+                let right_result = right.matches(resource)?;
+                Ok(right_result)
+            },
+            FilterExpression::Or(left, right) => {
+                let left_result = left.matches(resource)?;
+                if left_result {
+                    return Ok(true); // Short-circuit
+                }
+                let right_result = right.matches(resource)?;
+                Ok(right_result)
+            },
+            FilterExpression::Not(expr) => {
+                let result = expr.matches(resource)?;
                 Ok(!result)
             },
         }
@@ -280,7 +423,10 @@ impl FilterExpression {
 pub type Filter = FilterExpression;
 
 /// Evaluate a filter condition against a resource
-fn evaluate_condition(condition: &FilterCondition, resource: &impl Resource) -> Result<bool, QueryError> {
+fn evaluate_condition<R>(condition: &FilterCondition, resource: &R) -> Result<bool, QueryError> 
+where 
+    R: Resource + Serialize,
+{
     // Extract the field value from the resource
     let field_value = extract_field_value(resource, &condition.field)?;
     
@@ -322,7 +468,10 @@ fn evaluate_condition(condition: &FilterCondition, resource: &impl Resource) -> 
 }
 
 /// Extract a field value from a resource
-fn extract_field_value(resource: &impl Resource, field_path: &str) -> Result<FilterValue, QueryError> {
+fn extract_field_value<R>(resource: &R, field_path: &str) -> Result<FilterValue, QueryError> 
+where
+    R: Resource + Serialize,
+{
     // Convert the resource to a JSON value
     let resource_json = serde_json::to_value(resource)
         .map_err(|e| QueryError::SerializationError(e.to_string()))?;
@@ -395,15 +544,17 @@ fn compare_ordering(a: &FilterValue, b: &FilterValue, order: Ordering) -> Result
             }
         },
         (FilterValue::Integer(a_int), FilterValue::Float(b_float)) => {
+            let a_float = *a_int as f64;
             match order {
-                Ordering::Less => Ok((*a_int as f64) < *b_float),
-                Ordering::Greater => Ok((*a_int as f64) > *b_float),
+                Ordering::Less => Ok(a_float < *b_float),
+                Ordering::Greater => Ok(a_float > *b_float),
             }
         },
         (FilterValue::Float(a_float), FilterValue::Integer(b_int)) => {
+            let b_float = *b_int as f64;
             match order {
-                Ordering::Less => Ok(*a_float < (*b_int as f64)),
-                Ordering::Greater => Ok(*a_float > (*b_int as f64)),
+                Ordering::Less => Ok(*a_float < b_float),
+                Ordering::Greater => Ok(*a_float > b_float),
             }
         },
         _ => Err(QueryError::TypeMismatch {
@@ -486,5 +637,204 @@ fn compare_regex(a: &FilterValue, b: &FilterValue) -> Result<bool, QueryError> {
             expected: "String".to_string(),
             actual: format!("{:?}", a),
         }),
+    }
+}
+
+impl FilterCondition {
+    /// Check if a resource matches this condition
+    pub fn matches<R>(&self, resource: &R) -> Result<bool, QueryError> 
+    where 
+        R: Resource + Serialize + ?Sized,
+    {
+        // Convert resource to JSON value for field access
+        let resource_json = serde_json::to_value(resource)
+            .map_err(|e| QueryError::SerializationError(format!("Failed to serialize resource: {}", e)))?;
+        
+        // Get the field value
+        let field_value = match resource_json.get(&self.field) {
+            Some(value) => value,
+            None => return Ok(false), // Field doesn't exist, no match
+        };
+        
+        // Match based on operator and value
+        match self.operator {
+            FilterOperator::Equal => {
+                if field_value.is_null() && matches!(self.value, FilterValue::Null) {
+                    return Ok(true);
+                }
+                
+                match &self.value {
+                    FilterValue::String(s) => Ok(field_value.as_str().map(|v| v == s).unwrap_or(false)),
+                    FilterValue::Integer(n) => Ok(field_value.as_i64().map(|v| v == *n).unwrap_or(false)),
+                    FilterValue::Float(n) => Ok(field_value.as_f64().map(|v| (v - n).abs() < std::f64::EPSILON).unwrap_or(false)),
+                    FilterValue::Boolean(b) => Ok(field_value.as_bool().map(|v| v == *b).unwrap_or(false)),
+                    FilterValue::Null => Ok(field_value.is_null()),
+                    FilterValue::Array(_) => Ok(false), // Can't equal an array
+                    FilterValue::ContentId(_) => Ok(false), // Special case not handled here
+                }
+            },
+            FilterOperator::NotEqual => {
+                if field_value.is_null() && !matches!(self.value, FilterValue::Null) {
+                    return Ok(true);
+                }
+                
+                match &self.value {
+                    FilterValue::String(s) => Ok(!field_value.as_str().map(|v| v == s).unwrap_or(true)),
+                    FilterValue::Integer(n) => Ok(!field_value.as_i64().map(|v| v == *n).unwrap_or(true)),
+                    FilterValue::Float(n) => Ok(!field_value.as_f64().map(|v| (v - n).abs() < std::f64::EPSILON).unwrap_or(true)),
+                    FilterValue::Boolean(b) => Ok(!field_value.as_bool().map(|v| v == *b).unwrap_or(true)),
+                    FilterValue::Null => Ok(!field_value.is_null()),
+                    FilterValue::Array(_) => Ok(true), // Can't equal an array, so not equal is true
+                    FilterValue::ContentId(_) => Ok(true), // Special case not handled here
+                }
+            },
+            FilterOperator::GreaterThan => {
+                match &self.value {
+                    FilterValue::String(s) => Ok(field_value.as_str().map(|v| v > s.as_str()).unwrap_or(false)),
+                    FilterValue::Integer(n) => Ok(field_value.as_i64().map(|v| v > *n).unwrap_or(false)),
+                    FilterValue::Float(n) => Ok(field_value.as_f64().map(|v| v > *n).unwrap_or(false)),
+                    _ => Ok(false), // Can't compare other types
+                }
+            },
+            FilterOperator::GreaterThanOrEqual => {
+                match &self.value {
+                    FilterValue::String(s) => Ok(field_value.as_str().map(|v| v >= s.as_str()).unwrap_or(false)),
+                    FilterValue::Integer(n) => Ok(field_value.as_i64().map(|v| v >= *n).unwrap_or(false)),
+                    FilterValue::Float(n) => Ok(field_value.as_f64().map(|v| v >= *n).unwrap_or(false)),
+                    _ => Ok(false), // Can't compare other types
+                }
+            },
+            FilterOperator::LessThan => {
+                match &self.value {
+                    FilterValue::String(s) => Ok(field_value.as_str().map(|v| v < s.as_str()).unwrap_or(false)),
+                    FilterValue::Integer(n) => Ok(field_value.as_i64().map(|v| v < *n).unwrap_or(false)),
+                    FilterValue::Float(n) => Ok(field_value.as_f64().map(|v| v < *n).unwrap_or(false)),
+                    _ => Ok(false), // Can't compare other types
+                }
+            },
+            FilterOperator::LessThanOrEqual => {
+                match &self.value {
+                    FilterValue::String(s) => Ok(field_value.as_str().map(|v| v <= s.as_str()).unwrap_or(false)),
+                    FilterValue::Integer(n) => Ok(field_value.as_i64().map(|v| v <= *n).unwrap_or(false)),
+                    FilterValue::Float(n) => Ok(field_value.as_f64().map(|v| v <= *n).unwrap_or(false)),
+                    _ => Ok(false), // Can't compare other types
+                }
+            },
+            FilterOperator::Contains => {
+                match &self.value {
+                    FilterValue::String(s) => {
+                        Ok(field_value.as_str().map(|v| v.contains(s)).unwrap_or(false))
+                    },
+                    _ => Ok(false), // Contains only works with strings
+                }
+            },
+            FilterOperator::StartsWith => {
+                match &self.value {
+                    FilterValue::String(s) => {
+                        Ok(field_value.as_str().map(|v| v.starts_with(s)).unwrap_or(false))
+                    },
+                    _ => Ok(false), // StartsWith only works with strings
+                }
+            },
+            FilterOperator::EndsWith => {
+                match &self.value {
+                    FilterValue::String(s) => {
+                        Ok(field_value.as_str().map(|v| v.ends_with(s)).unwrap_or(false))
+                    },
+                    _ => Ok(false), // EndsWith only works with strings
+                }
+            },
+            FilterOperator::In => {
+                match &self.value {
+                    FilterValue::Array(values) => {
+                        let mut result = false;
+                        for value in values {
+                            match value {
+                                FilterValue::String(s) => {
+                                    if field_value.as_str().map(|v| v == s).unwrap_or(false) {
+                                        result = true;
+                                        break;
+                                    }
+                                },
+                                FilterValue::Integer(n) => {
+                                    if field_value.as_i64().map(|v| v == *n).unwrap_or(false) {
+                                        result = true;
+                                        break;
+                                    }
+                                },
+                                FilterValue::Float(n) => {
+                                    if field_value.as_f64().map(|v| (v - n).abs() < std::f64::EPSILON).unwrap_or(false) {
+                                        result = true;
+                                        break;
+                                    }
+                                },
+                                FilterValue::Boolean(b) => {
+                                    if field_value.as_bool().map(|v| v == *b).unwrap_or(false) {
+                                        result = true;
+                                        break;
+                                    }
+                                },
+                                _ => {},
+                            }
+                        }
+                        Ok(result)
+                    },
+                    _ => Ok(false), // In requires an array
+                }
+            },
+            FilterOperator::NotIn => {
+                match &self.value {
+                    FilterValue::Array(values) => {
+                        let mut in_array = false;
+                        for value in values {
+                            match value {
+                                FilterValue::String(s) => {
+                                    if field_value.as_str().map(|v| v == s).unwrap_or(false) {
+                                        in_array = true;
+                                        break;
+                                    }
+                                },
+                                FilterValue::Integer(n) => {
+                                    if field_value.as_i64().map(|v| v == *n).unwrap_or(false) {
+                                        in_array = true;
+                                        break;
+                                    }
+                                },
+                                FilterValue::Float(n) => {
+                                    if field_value.as_f64().map(|v| (v - n).abs() < std::f64::EPSILON).unwrap_or(false) {
+                                        in_array = true;
+                                        break;
+                                    }
+                                },
+                                FilterValue::Boolean(b) => {
+                                    if field_value.as_bool().map(|v| v == *b).unwrap_or(false) {
+                                        in_array = true;
+                                        break;
+                                    }
+                                },
+                                _ => {},
+                            }
+                        }
+                        Ok(!in_array)
+                    },
+                    _ => Ok(true), // NotIn requires an array, otherwise always true
+                }
+            },
+            FilterOperator::IsNull => {
+                Ok(field_value.is_null())
+            },
+            FilterOperator::IsNotNull => {
+                Ok(!field_value.is_null())
+            },
+            FilterOperator::Regex => {
+                // We don't actually implement regex here, but we need to handle it
+                match &self.value {
+                    FilterValue::String(_) => {
+                        Ok(false) // Not supported in this simple implementation
+                    },
+                    _ => Ok(false), // Regex only works with strings
+                }
+            },
+        }
     }
 } 

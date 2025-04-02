@@ -16,8 +16,8 @@ pub mod hash;
 // pub mod deferred;
 // pub mod traits;
 
-// Basic re-exports from the hash module
-pub use hash::{HashAlgorithm, HashOutput, HashError, ContentHash};
+// Basic re-exports - now directly from causality_types
+pub use causality_types::crypto_primitives::{HashAlgorithm, HashOutput, HashError, ContentHash};
 
 #[cfg(test)]
 mod tests {
