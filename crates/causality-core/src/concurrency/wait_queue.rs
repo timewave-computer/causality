@@ -11,9 +11,10 @@ use std::task::{Context, Poll, Waker};
 use std::future::Future;
 use std::pin::Pin;
 
-use causality_types::{Error, Result};
-use causality_crypto::ContentId;
+use std::result::Result;
+use causality_types::ContentId;
 use super::task_id::TaskId;
+use super::error::WaitQueueError;
 
 /// A shared wait queue that can be cloned and shared between components
 pub type SharedWaitQueue = Arc<WaitQueue>;
@@ -59,10 +60,10 @@ impl WaitQueue {
         resource: ContentId,
         requestor: String,
         owned_resources: HashSet<ContentId>,
-    ) -> Result<()> {
+    ) -> Result<(), super::error::WaitQueueError> {
         // Lock the queues
         let mut queues = self.queues.lock().map_err(|_| 
-            Error::InternalError("Failed to lock wait queues".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock wait queues".to_string()))?;
             
         let queue = queues.entry(resource.clone()).or_insert_with(VecDeque::new);
         
@@ -73,29 +74,29 @@ impl WaitQueue {
         
         // Update owned resources
         let mut owned = self.owned_resources.lock().map_err(|_| 
-            Error::InternalError("Failed to lock owned resources".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock owned resources".to_string()))?;
             
         owned.insert(requestor.clone(), owned_resources);
         
         // Update waiting_for
         let mut waiting = self.waiting_for.lock().map_err(|_| 
-            Error::InternalError("Failed to lock waiting for resources".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock waiting for resources".to_string()))?;
             
         waiting.insert(requestor, resource);
         
         // Check for deadlocks
         if self.has_deadlock() {
-            return Err(Error::ResourceDeadlock);
+            return Err(super::error::WaitQueueError::ResourceDeadlock);
         }
         
         Ok(())
     }
     
     /// Remove a requestor from the wait queue for a resource
-    pub fn remove_requestor(&self, resource: ContentId, requestor: &str) -> Result<()> {
+    pub fn remove_requestor(&self, resource: ContentId, requestor: &str) -> Result<(), super::error::WaitQueueError> {
         // Update queues
         let mut queues = self.queues.lock().map_err(|_| 
-            Error::InternalError("Failed to lock wait queues".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock wait queues".to_string()))?;
             
         if let Some(queue) = queues.get_mut(&resource) {
             // Find and remove the requestor
@@ -112,13 +113,13 @@ impl WaitQueue {
         
         // Remove from owned resources
         let mut owned = self.owned_resources.lock().map_err(|_| 
-            Error::InternalError("Failed to lock owned resources".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock owned resources".to_string()))?;
             
         owned.remove(requestor);
         
         // Remove from waiting_for
         let mut waiting = self.waiting_for.lock().map_err(|_| 
-            Error::InternalError("Failed to lock waiting for resources".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock waiting for resources".to_string()))?;
             
         waiting.remove(requestor);
         
@@ -128,9 +129,9 @@ impl WaitQueue {
     /// Get the next requestor for a resource
     ///
     /// Returns None if there are no requestors for the resource.
-    pub fn get_next_requestor(&self, resource: ContentId) -> Result<Option<String>> {
+    pub fn get_next_requestor(&self, resource: ContentId) -> Result<Option<String>, super::error::WaitQueueError> {
         let queues = self.queues.lock().map_err(|_| 
-            Error::InternalError("Failed to lock wait queues".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock wait queues".to_string()))?;
             
         if let Some(queue) = queues.get(&resource) {
             Ok(queue.front().cloned())
@@ -144,9 +145,9 @@ impl WaitQueue {
         &self,
         requestor: &str,
         resources: HashSet<ContentId>,
-    ) -> Result<()> {
+    ) -> Result<(), super::error::WaitQueueError> {
         let mut owned = self.owned_resources.lock().map_err(|_| 
-            Error::InternalError("Failed to lock owned resources".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock owned resources".to_string()))?;
             
         if owned.contains_key(requestor) {
             owned.insert(requestor.to_string(), resources);
@@ -154,7 +155,7 @@ impl WaitQueue {
         
         // Check for deadlocks after updating ownership
         if self.has_deadlock() {
-            return Err(Error::ResourceDeadlock);
+            return Err(super::error::WaitQueueError::ResourceDeadlock);
         }
         
         Ok(())
@@ -257,39 +258,39 @@ impl WaitQueue {
     }
     
     /// Get the number of requestors waiting for a resource
-    pub fn queue_length(&self, resource: ContentId) -> Result<usize> {
+    pub fn queue_length(&self, resource: ContentId) -> Result<usize, super::error::WaitQueueError> {
         let queues = self.queues.lock().map_err(|_| 
-            Error::InternalError("Failed to lock wait queues".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock wait queues".to_string()))?;
             
         Ok(queues.get(&resource).map_or(0, |q| q.len()))
     }
     
     /// Get the set of resources that have waiters
-    pub fn resources_with_waiters(&self) -> Result<HashSet<ContentId>> {
+    pub fn resources_with_waiters(&self) -> Result<HashSet<ContentId>, super::error::WaitQueueError> {
         let queues = self.queues.lock().map_err(|_| 
-            Error::InternalError("Failed to lock wait queues".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock wait queues".to_string()))?;
             
         Ok(queues.keys().cloned().collect())
     }
     
     /// Get the resource that a requestor is waiting for
-    pub fn requestor_waiting_for(&self, requestor: &str) -> Result<Option<ContentId>> {
+    pub fn requestor_waiting_for(&self, requestor: &str) -> Result<Option<ContentId>, super::error::WaitQueueError> {
         let waiting = self.waiting_for.lock().map_err(|_| 
-            Error::InternalError("Failed to lock waiting for resources".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock waiting for resources".to_string()))?;
             
         Ok(waiting.get(requestor).cloned())
     }
     
     /// Get the resources owned by a requestor
-    pub fn get_owned_resources(&self, requestor: &str) -> Result<Option<HashSet<ContentId>>> {
+    pub fn get_owned_resources(&self, requestor: &str) -> Result<Option<HashSet<ContentId>>, super::error::WaitQueueError> {
         let owned = self.owned_resources.lock().map_err(|_| 
-            Error::InternalError("Failed to lock owned resources".to_string()))?;
+            super::error::WaitQueueError::LockError("Failed to lock owned resources".to_string()))?;
             
         Ok(owned.get(requestor).cloned())
     }
     
     /// Check if a requestor is next in line for a resource
-    pub fn is_next_requestor(&self, resource: ContentId, requestor: &str) -> Result<bool> {
+    pub fn is_next_requestor(&self, resource: ContentId, requestor: &str) -> Result<bool, super::error::WaitQueueError> {
         let next = self.get_next_requestor(resource)?;
         Ok(next.as_deref() == Some(requestor))
     }
@@ -407,7 +408,7 @@ mod tests {
     use super::*;
     
     #[test]
-    fn test_wait_queue_basic() -> Result<()> {
+    fn test_wait_queue_basic() -> Result<(), WaitQueueError> {
         let wait_queue = WaitQueue::new();
         
         // Add some requestors
@@ -444,7 +445,7 @@ mod tests {
     }
     
     #[test]
-    fn test_wait_queue_deadlock_detection() -> Result<()> {
+    fn test_wait_queue_deadlock_detection() -> Result<(), WaitQueueError> {
         let wait_queue = WaitQueue::new();
         
         // Set up a potential deadlock scenario
@@ -470,7 +471,7 @@ mod tests {
             owned2,
         );
         
-        assert!(matches!(result, Err(Error::ResourceDeadlock)));
+        assert!(matches!(result, Err(WaitQueueError::ResourceDeadlock)));
         
         Ok(())
     }

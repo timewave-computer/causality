@@ -13,10 +13,10 @@ use std::fs;
 use std::io;
 use chrono::{DateTime, Utc, Duration};
 
-use causality_types::{Error, Result};
+use causality_error::{EngineResult as Result, EngineError as Error};
 use crate::log::LogEntry;
-use causality_engine::{LogSegment, SegmentInfo, generate_segment_id};
-use causality_engine::StorageConfig;
+use crate::log::segment::{LogSegment, SegmentInfo, generate_segment_id};
+use crate::log::storage::StorageConfig;
 use causality_types::Timestamp;
 
 /// Criteria for rotating log segments

@@ -98,7 +98,7 @@ pub async fn execute_tel(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::DomainId;
+    use causality_types::domain::DomainId;
     
     #[test]
     fn test_tel_macro() {

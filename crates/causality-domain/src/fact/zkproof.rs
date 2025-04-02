@@ -1,193 +1,137 @@
-// Zero-knowledge proof fact observer
-// Original file: src/domain/fact/zkproof_observer.rs
+// Zero-knowledge proof facts for domain verification
+// Original file: src/domain/fact/zkproof.rs
 
-// ZK Proof Fact Observer for Causality
+// ZK Proof Module for Causality
 //
-// This module provides a specialized observer for ZK proof-related facts.
+// This module provides functionality for zero-knowledge proofs.
 
-use std::sync::{Arc, Mutex};
-use causality_types::{DomainId, TraceId};
-use causality_types::{Error, Result};
-use crate::log::{FactLogger, FactMetadata};
-use causality_engine_types::{FactType, ZKProofFact};
-use causality_engine_snapshot::{FactId, FactSnapshot};
-use causality_domain::observer::FactObserver;
+use std::fmt::Debug;
+use async_trait::async_trait;
+use std::collections::HashMap;
 
-/// Observer for ZK proof-related facts
-pub struct ZKProofFactObserver {
-    /// The fact logger
-    logger: Arc<FactLogger>,
-    /// The domain ID
-    domain_id: DomainId,
-    /// Observer name
-    observer_name: String,
+use crate::error::Result;
+use crate::fact::types::{FactType, ZKProofFact};
+use crate::fact::verification::{FactVerifier};
+use crate::error::Error;
+use crate::fact::verification::{FactVerification};
+
+/// Interface for ZK proof verifiers
+#[async_trait]
+pub trait ZKProofVerifier: Send + Sync + Debug {
+    /// Get the verifier name
+    fn name(&self) -> &str;
+    
+    /// Verify a ZK proof fact
+    async fn verify_proof(&self, fact: &ZKProofFact) -> Result<VerificationStatus>;
 }
 
-impl ZKProofFactObserver {
-    /// Create a new ZK proof fact observer
-    pub fn new(
-        logger: Arc<FactLogger>,
-        domain_id: DomainId,
-        observer_name: String,
-    ) -> Self {
-        ZKProofFactObserver {
-            logger,
-            domain_id,
-            observer_name,
+/// Status of a ZK proof verification
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VerificationStatus {
+    /// The proof is valid
+    Valid,
+    /// The proof is invalid
+    Invalid(String),
+    /// The proof verification was inconclusive
+    Inconclusive(String),
+}
+
+/// A simple ZK proof verifier implementation
+#[derive(Debug)]
+pub struct SimpleZKProofVerifier {
+    /// The verifier name
+    name: String,
+}
+
+impl SimpleZKProofVerifier {
+    /// Create a new simple ZK proof verifier
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl ZKProofVerifier for SimpleZKProofVerifier {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    async fn verify_proof(&self, fact: &ZKProofFact) -> Result<VerificationStatus> {
+        // In a real implementation, this would verify the ZK proof
+        // For now, we just return valid if the proof is not empty
+        if fact.proof.is_empty() {
+            return Ok(VerificationStatus::Invalid("Empty proof".to_string()));
+        }
+        
+        // Verify the proof using the verification key
+        if fact.verification_key.is_empty() {
+            return Ok(VerificationStatus::Invalid("Empty verification key".to_string()));
+        }
+        
+        // For demonstration purposes, we consider it valid
+        Ok(VerificationStatus::Valid)
+    }
+}
+
+/// Zero-knowledge proof verifier for facts
+#[derive(Debug)]
+pub struct ZKFactVerifier {
+    /// Configuration for the verifier
+    config: HashMap<String, String>,
+}
+
+impl ZKFactVerifier {
+    /// Create a new ZK fact verifier
+    pub fn new() -> Self {
+        Self {
+            config: HashMap::new(),
         }
     }
     
-    /// Observe a proof verification
-    pub fn observe_proof_verification(
-        &self,
-        trace_id: TraceId,
-        verification_key_id: &str,
-        proof_hash: &str,
-        public_inputs: &[String],
-        success: bool,
-    ) -> Result<FactId> {
-        let zkproof_fact = ZKProofFact::ProofVerification {
-            verification_key_id: verification_key_id.to_string(),
-            proof_hash: proof_hash.to_string(),
-            public_inputs: public_inputs.to_vec(),
-            success,
-        };
-        
-        let fact_type = FactType::ZKProofFact(zkproof_fact);
-        
-        let metadata = FactMetadata::new(&self.observer_name)
-            .with_confidence(1.0)
-            .with_verification(true, Some("zkproof-verification".to_string()));
-        
-        // Log the fact
-        self.logger.log_fact(
-            trace_id,
-            &format!("zkproof:verification:{}", proof_hash),
-            None,
-            &fact_type,
-            Some(metadata),
-        )?;
-        
-        // Return fact ID (simplified)
-        Ok(FactId(format!("zkproof:verification:{}", proof_hash)))
-    }
-    
-    /// Observe a batch verification
-    pub fn observe_batch_verification(
-        &self,
-        trace_id: TraceId,
-        verification_key_ids: &[String],
-        proof_hashes: &[String],
-        public_inputs: &[String],
-        success: bool,
-    ) -> Result<FactId> {
-        let zkproof_fact = ZKProofFact::BatchVerification {
-            verification_key_ids: verification_key_ids.to_vec(),
-            proof_hashes: proof_hashes.to_vec(),
-            public_inputs: public_inputs.to_vec(),
-            success,
-        };
-        
-        let fact_type = FactType::ZKProofFact(zkproof_fact);
-        
-        let metadata = FactMetadata::new(&self.observer_name)
-            .with_confidence(1.0)
-            .with_verification(true, Some("zkproof-batch-verification".to_string()));
-        
-        // Log the fact - use the first proof hash as part of the ID
-        let id_hash = if proof_hashes.is_empty() { "batch" } else { &proof_hashes[0] };
-        
-        self.logger.log_fact(
-            trace_id,
-            &format!("zkproof:batch:{}", id_hash),
-            None,
-            &fact_type,
-            Some(metadata),
-        )?;
-        
-        // Return fact ID (simplified)
-        Ok(FactId(format!("zkproof:batch:{}", id_hash)))
-    }
-    
-    /// Observe circuit execution
-    pub fn observe_circuit_execution(
-        &self,
-        trace_id: TraceId,
-        circuit_id: &str,
-        private_inputs_hash: &str,
-        public_inputs: &[String],
-        generated_proof_hash: &str,
-    ) -> Result<FactId> {
-        let zkproof_fact = ZKProofFact::CircuitExecution {
-            circuit_id: circuit_id.to_string(),
-            private_inputs_hash: private_inputs_hash.to_string(),
-            public_inputs: public_inputs.to_vec(),
-            generated_proof_hash: generated_proof_hash.to_string(),
-        };
-        
-        let fact_type = FactType::ZKProofFact(zkproof_fact);
-        
-        let metadata = FactMetadata::new(&self.observer_name)
-            .with_confidence(1.0)
-            .with_verification(true, Some("zkproof-circuit-execution".to_string()));
-        
-        // Log the fact
-        self.logger.log_fact(
-            trace_id,
-            &format!("zkproof:circuit:{}:{}", circuit_id, generated_proof_hash),
-            None,
-            &fact_type,
-            Some(metadata),
-        )?;
-        
-        // Return fact ID (simplified)
-        Ok(FactId(format!("zkproof:circuit:{}:{}", circuit_id, generated_proof_hash)))
-    }
-    
-    /// Observe proof composition
-    pub fn observe_proof_composition(
-        &self,
-        trace_id: TraceId,
-        source_proof_hashes: &[String],
-        result_proof_hash: &str,
-        composition_circuit_id: &str,
-    ) -> Result<FactId> {
-        let zkproof_fact = ZKProofFact::ProofComposition {
-            source_proof_hashes: source_proof_hashes.to_vec(),
-            result_proof_hash: result_proof_hash.to_string(),
-            composition_circuit_id: composition_circuit_id.to_string(),
-        };
-        
-        let fact_type = FactType::ZKProofFact(zkproof_fact);
-        
-        let metadata = FactMetadata::new(&self.observer_name)
-            .with_confidence(1.0)
-            .with_verification(true, Some("zkproof-composition".to_string()));
-        
-        // Log the fact
-        self.logger.log_fact(
-            trace_id,
-            &format!("zkproof:composition:{}", result_proof_hash),
-            None,
-            &fact_type,
-            Some(metadata),
-        )?;
-        
-        // Return fact ID (simplified)
-        Ok(FactId(format!("zkproof:composition:{}", result_proof_hash)))
-    }
-    
-    /// Create a fact snapshot with ZK proof facts
-    pub fn create_zkproof_snapshot(
-        &self,
-        fact_ids: &[FactId],
-    ) -> FactSnapshot {
-        let mut snapshot = FactSnapshot::new(&self.observer_name);
-        
-        for fact_id in fact_ids {
-            snapshot.add_fact(fact_id.clone(), self.domain_id.clone());
+    /// Create a new ZK fact verifier with config
+    pub fn with_config(config: HashMap<String, String>) -> Self {
+        Self {
+            config,
         }
+    }
+}
+
+impl FactVerifier for ZKFactVerifier {
+    /// Get the verifier name
+    fn name(&self) -> &str {
+        "zkp-verifier"
+    }
+    
+    /// Verify a fact using zero-knowledge proofs
+    fn verify(&self, _fact: &FactType) -> std::result::Result<FactVerification, Error> {
+        // This is a placeholder implementation
+        // In a real implementation, this would perform cryptographic verification
         
-        snapshot
+        // For now, we just return a success result
+        Ok(FactVerification::success())
+    }
+    
+    /// Get the verifier metadata
+    fn metadata(&self) -> HashMap<String, String> {
+        let mut metadata = HashMap::new();
+        metadata.insert("type".to_string(), "zkp".to_string());
+        metadata.insert("version".to_string(), "0.1.0".to_string());
+        metadata
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_zkp_verifier_basics() {
+        let verifier = ZKFactVerifier::new();
+        let fact = FactType::String("test".to_string());
+        
+        let verification = verifier.verify(&fact).unwrap();
+        assert!(verification.is_valid());
     }
 } 

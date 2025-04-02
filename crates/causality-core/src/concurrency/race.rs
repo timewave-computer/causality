@@ -13,7 +13,7 @@ use std::sync::Arc;
 // Remove the unused import
 // use tokio::sync::oneshot;
 
-use crate::error::Error;
+use causality_error::Error;
 use causality_types::Result;
 
 /// Run multiple futures concurrently and return the result of the first one to complete

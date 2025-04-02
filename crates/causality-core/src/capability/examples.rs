@@ -5,14 +5,17 @@
 
 use super::{
     ResourceId, IdentityId, Capability, CapabilityGrants, ResourceRegistry,
-    ContentAddressedCapability, ContentRef, helpers,
+    ContentRef, ResourceGuard, CapabilityError
 };
+use super::utils;
+use std::marker::PhantomData;
+use serde;
 
 // Example 1: Basic capability usage
-pub fn basic_capability_example() -> Result<(), super::CapabilityError> {
+pub fn basic_capability_example() -> Result<(), CapabilityError> {
     // Create a registry and an identity
-    let registry = ResourceRegistry::new();
-    let alice = IdentityId::new();
+    let mut registry = ResourceRegistry::new();
+    let alice = "alice".to_string();
     
     // Register a resource (a simple String in this case)
     let data = "Hello, world!".to_string();
@@ -26,7 +29,12 @@ pub fn basic_capability_example() -> Result<(), super::CapabilityError> {
     assert_eq!(*data, "Hello, world!".to_string());
     
     // Create a restricted capability (read-only)
-    let read_only = guard.create_restricted_capability(CapabilityGrants::read_only())?;
+    let read_only: Capability<String> = Capability {
+        id: capability.id.clone(),
+        grants: CapabilityGrants::read_only(),
+        origin: Some(alice.clone()),
+        _phantom: PhantomData,
+    };
     
     // Access with the restricted capability
     let read_guard = registry.access(&read_only)?;
@@ -36,16 +44,18 @@ pub fn basic_capability_example() -> Result<(), super::CapabilityError> {
     assert_eq!(*data, "Hello, world!".to_string());
     
     // Writing should fail
+    // We need to create a mutable guard to try writing
+    let mut read_guard = registry.access(&read_only)?;
     assert!(read_guard.write().is_err());
     
     Ok(())
 }
 
 // Example 2: Content-addressed capabilities
-pub fn content_addressed_example() -> Result<(), super::CapabilityError> {
+pub fn content_addressed_example() -> Result<(), CapabilityError> {
     // Create a registry with content addressing
-    let registry = helpers::create_content_addressed_registry();
-    let alice = IdentityId::new();
+    let mut registry = ResourceRegistry::new();
+    let alice = "alice".to_string();
     
     // Register a resource
     let data = vec![1, 2, 3, 4, 5];
@@ -55,10 +65,13 @@ pub fn content_addressed_example() -> Result<(), super::CapabilityError> {
     let guard = registry.access(&capability)?;
     
     // Convert capability to content-addressed capability
-    let content_capability = guard.to_content_addressed()?;
+    let content_capability: Capability<Vec<i32>> = guard.to_content_addressed()?;
     
-    // Get content reference
-    let content_ref = content_capability.to_content_ref()?;
+    // Create a content reference from the content hash
+    let content_ref: ContentRef<Vec<i32>> = ContentRef {
+        hash: content_capability.id.hash.clone(),
+        _phantom: PhantomData,
+    };
     
     // Access by content reference
     let content_guard = registry.access_by_content(&content_ref)?;
@@ -71,25 +84,22 @@ pub fn content_addressed_example() -> Result<(), super::CapabilityError> {
 }
 
 // Example 3: Capability delegation
-pub fn capability_delegation_example() -> Result<(), super::CapabilityError> {
+pub fn capability_delegation_example() -> Result<(), CapabilityError> {
     // Create a registry
-    let registry = ResourceRegistry::new();
-    let alice = IdentityId::new();
-    let bob = IdentityId::new();
+    let mut registry = ResourceRegistry::new();
+    let alice = "alice".to_string();
+    let bob = "bob".to_string();
     
     // Register a resource
     let data = "Shared data".to_string();
     let capability = registry.register(data, alice.clone())?;
     
-    // Access the resource
-    let guard = registry.access(&capability)?;
-    
     // Create a delegatable read-only capability
-    let delegatable = Capability {
+    let delegatable: Capability<String> = Capability {
         id: capability.id.clone(),
         grants: CapabilityGrants::new(true, false, true), // read + delegate
         origin: Some(alice.clone()),
-        _phantom: std::marker::PhantomData,
+        _phantom: PhantomData,
     };
     
     // Transfer the capability to Bob
@@ -107,16 +117,17 @@ pub fn capability_delegation_example() -> Result<(), super::CapabilityError> {
 }
 
 // Example 4: Working with complex resources
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ComplexResource {
     name: String,
     data: Vec<u8>,
     metadata: std::collections::HashMap<String, String>,
 }
 
-pub fn complex_resource_example() -> Result<(), super::CapabilityError> {
+pub fn complex_resource_example() -> Result<(), CapabilityError> {
     // Create a registry
-    let registry = ResourceRegistry::new();
-    let alice = IdentityId::new();
+    let mut registry = ResourceRegistry::new();
+    let alice = "alice".to_string();
     
     // Create a complex resource
     let resource = ComplexResource {
@@ -134,11 +145,11 @@ pub fn complex_resource_example() -> Result<(), super::CapabilityError> {
     let capability = registry.register(resource, alice.clone())?;
     
     // Access the resource
-    let guard = registry.access(&capability)?;
+    let mut guard = registry.access(&capability)?;
     
     // Modify the resource
     {
-        let mut resource = guard.write()?;
+        let resource = guard.write()?;
         resource.data.push(4);
         resource.metadata.insert("modified".to_string(), "now".to_string());
     }

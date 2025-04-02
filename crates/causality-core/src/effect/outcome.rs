@@ -4,7 +4,7 @@
 // failure, and other result states.
 
 use std::collections::HashMap;
-use std::fmt::{Debug, Display};
+use std::fmt::{self, Display, Formatter};
 use std::sync::Arc;
 
 use serde::{Serialize, Deserialize};
@@ -12,10 +12,10 @@ use thiserror::Error;
 
 use super::types::EffectId;
 use causality_types::ContentId;
-use crate::resource_types::ResourceId;
+use crate::resource::types::ResourceId;
 
 /// Status of an effect execution
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EffectStatus {
     /// Effect executed successfully
     Success,
@@ -32,20 +32,20 @@ pub enum EffectStatus {
 }
 
 impl Display for EffectStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            EffectStatus::Success => write!(f, "SUCCESS"),
-            EffectStatus::Failure => write!(f, "FAILURE"),
-            EffectStatus::Pending => write!(f, "PENDING"),
-            EffectStatus::Cancelled => write!(f, "CANCELLED"),
-            EffectStatus::Waiting => write!(f, "WAITING"),
-            EffectStatus::Timeout => write!(f, "TIMEOUT"),
+            EffectStatus::Success => write!(f, "success"),
+            EffectStatus::Failure => write!(f, "failure"),
+            EffectStatus::Pending => write!(f, "pending"),
+            EffectStatus::Cancelled => write!(f, "cancelled"),
+            EffectStatus::Waiting => write!(f, "waiting"),
+            EffectStatus::Timeout => write!(f, "timeout"),
         }
     }
 }
 
 /// Structured result data for effect outcomes
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ResultData {
     /// No data (void)
     None,
@@ -89,7 +89,7 @@ impl ResultData {
         match self {
             ResultData::Boolean(b) => Some(*b),
             ResultData::Number(n) => Some(*n != 0.0),
-            ResultData::String(s) => Some(!s.is_empty()),
+            ResultData::String(s) => s.parse().ok(),
             ResultData::Resources(r) => Some(!r.is_empty()),
             ResultData::Map(m) => Some(!m.is_empty()),
             ResultData::Binary(b) => Some(!b.is_empty()),
@@ -102,7 +102,7 @@ impl ResultData {
         match self {
             ResultData::Boolean(b) => Some(if *b { 1.0 } else { 0.0 }),
             ResultData::Number(n) => Some(*n),
-            ResultData::String(s) => s.parse::<f64>().ok(),
+            ResultData::String(s) => s.parse().ok(),
             _ => None,
         }
     }
@@ -124,7 +124,8 @@ impl ResultData {
     pub fn as_resource(&self) -> Option<ResourceId> {
         match self {
             ResultData::Resource(r) => Some(r.clone()),
-            ResultData::String(s) => s.parse::<ResourceId>().ok(),
+            ResultData::Resources(r) => Some(r[0].clone()),
+            ResultData::String(s) => s.parse().ok(),
             _ => None,
         }
     }
@@ -198,8 +199,22 @@ impl EffectOutcome {
         Self {
             effect_id: None,
             status: EffectStatus::Success,
+            data,
+            result: ResultData::None,
+            error_message: None,
+            affected_resources: Vec::new(),
+            child_outcomes: Vec::new(),
+            content_hash: None,
+        }
+    }
+    
+    /// Create a successful outcome with data map
+    pub fn success_with_data(data: HashMap<String, String>) -> Self {
+        Self {
+            effect_id: None,
+            status: EffectStatus::Success,
             data: data.clone(),
-            result: ResultData::from_map(data),
+            result: ResultData::Map(data),
             error_message: None,
             affected_resources: Vec::new(),
             child_outcomes: Vec::new(),
@@ -209,35 +224,10 @@ impl EffectOutcome {
     
     /// Create a successful outcome with structured result
     pub fn success_with_result(result: ResultData) -> Self {
-        let data = match &result {
-            ResultData::Map(m) => m.clone(),
-            ResultData::String(s) => {
-                let mut map = HashMap::new();
-                map.insert("value".to_string(), s.clone());
-                map
-            },
-            ResultData::Boolean(b) => {
-                let mut map = HashMap::new();
-                map.insert("value".to_string(), b.to_string());
-                map
-            },
-            ResultData::Number(n) => {
-                let mut map = HashMap::new();
-                map.insert("value".to_string(), n.to_string());
-                map
-            },
-            ResultData::Resource(r) => {
-                let mut map = HashMap::new();
-                map.insert("resource_id".to_string(), r.to_string());
-                map
-            },
-            _ => HashMap::new(),
-        };
-        
         Self {
             effect_id: None,
             status: EffectStatus::Success,
-            data,
+            data: HashMap::new(),
             result,
             error_message: None,
             affected_resources: Vec::new(),
@@ -493,6 +483,72 @@ impl EffectOutcome {
             self.child_outcomes.len()
         )
     }
+
+    /// Create a success outcome with data
+    pub fn success_from_result(data: Box<ResultData>) -> Self {
+        EffectOutcome::success_with_result(*data)
+    }
+    
+    /// Create an error outcome
+    pub fn error(error: Box<crate::effect::EffectError>) -> Self {
+        EffectOutcome::failure(error.to_string())
+    }
+
+    /// Get the data from this outcome
+    pub fn get_data(&self) -> Option<&HashMap<String, String>> {
+        Some(&self.data)
+    }
+    
+    /// Get the error message from this outcome
+    pub fn get_error(&self) -> Option<&String> {
+        self.error_message.as_ref()
+    }
+
+    /// Create a failure outcome with data
+    pub fn failure_with_data(error: impl ToString, data: HashMap<String, String>) -> Self {
+        let mut data_map = data;
+        data_map.insert("error".to_string(), error.to_string());
+        data_map.insert("status".to_string(), "failure".to_string());
+        
+        let result_data = ResultData::Map(data_map);
+        let data_map = if let ResultData::Map(ref m) = result_data {
+            m.clone()
+        } else {
+            HashMap::new() // Should never reach here
+        };
+        
+        Self {
+            effect_id: None,
+            status: EffectStatus::Failure,
+            data: data_map,
+            result: result_data,
+            error_message: None,
+            affected_resources: Vec::new(),
+            child_outcomes: Vec::new(),
+            content_hash: None,
+        }
+    }
+
+    /// Create an error outcome with an error message and data
+    pub fn error_with_data(error: impl ToString, data: HashMap<String, String>) -> Self {
+        Self::failure_with_data(error, data)
+    }
+
+    /// Create a failure outcome from an error
+    pub fn from_error<E: std::fmt::Display>(error: E, additional_data: Option<HashMap<String, String>>) -> Self {
+        use crate::effect::utils::error_to_map;
+        
+        let mut data = error_to_map(error);
+        
+        // Merge additional data if provided
+        if let Some(extra_data) = additional_data {
+            for (key, value) in extra_data {
+                data.insert(key, value);
+            }
+        }
+        
+        Self::failure_with_data("Operation failed", data)
+    }
 }
 
 /// Builder for effect outcomes
@@ -698,53 +754,5 @@ impl Default for EffectOutcomeBuilder {
     }
 }
 
-/// Error that can occur during effect execution
-#[derive(Error, Debug, Clone, Serialize, Deserialize)]
-pub enum EffectError {
-    /// Invalid parameters provided to the effect
-    #[error("Invalid parameter: {0}")]
-    InvalidParameter(String),
-    
-    /// Resources not found or invalid
-    #[error("Resource error: {0}")]
-    ResourceError(String),
-    
-    /// Authorization failed
-    #[error("Authorization failed: {0}")]
-    AuthorizationFailed(String),
-    
-    /// Missing capability
-    #[error("Capability error: {0}")]
-    CapabilityError(String),
-    
-    /// Validation failed
-    #[error("Validation error: {0}")]
-    ValidationError(String),
-    
-    /// Execution error
-    #[error("Execution error: {0}")]
-    ExecutionError(String),
-    
-    /// Dependency error
-    #[error("Dependency error: {0}")]
-    DependencyError(String),
-    
-    /// External error
-    #[error("External error: {0}")]
-    ExternalError(String),
-    
-    /// Timeout error
-    #[error("Timeout: {0}")]
-    Timeout(String),
-    
-    /// Unsupported operation
-    #[error("Unsupported operation: {0}")]
-    Unsupported(String),
-    
-    /// Unknown error
-    #[error("Unknown error: {0}")]
-    Unknown(String),
-}
-
-/// Result type for effect execution
-pub type EffectResult<T> = Result<T, EffectError>; 
+/// Result type for effect operations
+pub type EffectResult<T> = Result<T, crate::effect::EffectError>; 

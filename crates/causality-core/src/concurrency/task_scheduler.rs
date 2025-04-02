@@ -8,12 +8,12 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use causality_types::{Error, Result};
-use causality_crypto::ContentId;
+use std::result::Result;
+use causality_types::ContentId;
 
 use super::lock::DeterministicMutex;
-use super::resource_manager::{ResourceManager, SharedResourceManager};
 use super::task_id::{TaskId, TaskPriority};
+use super::error::TaskSchedulerError;
 
 /// Metrics for the task scheduler.
 #[derive(Debug, Default, Clone)]
@@ -132,6 +132,40 @@ impl TaskInfo {
     }
 }
 
+// Define placeholders for the missing resource manager types
+/// A placeholder for the missing SharedResourceManager
+#[derive(Debug, Clone)]
+pub struct SharedResourceManager;
+
+impl SharedResourceManager {
+    /// Create a new SharedResourceManager
+    pub fn new() -> Self {
+        Self
+    }
+    
+    /// Check if a resource is available
+    /// This is a placeholder implementation
+    pub fn is_resource_available(&self, _resource_id: &ContentId) -> Result<bool, std::io::Error> {
+        // Since this is a placeholder, we'll just return true
+        Ok(true)
+    }
+}
+
+/// A placeholder for ResourceManager used in tests
+#[derive(Debug, Clone)]
+pub struct ResourceManager<K, V> {
+    _marker: std::marker::PhantomData<(K, V)>,
+}
+
+impl<K, V> ResourceManager<K, V> {
+    /// Create a new ResourceManager
+    pub fn new() -> Self {
+        Self {
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
 /// A scheduler for concurrent task execution.
 pub struct TaskScheduler {
     /// Resource manager for handling resource allocation
@@ -190,7 +224,7 @@ impl TaskScheduler {
         id: TaskId, 
         priority: TaskPriority,
         required_resources: HashSet<ContentId>,
-    ) -> Result<()> {
+    ) -> Result<(), super::error::TaskSchedulerError> {
         // Create task info
         let task_info = TaskInfo::new(
             id.clone(),
@@ -201,7 +235,7 @@ impl TaskScheduler {
         // Add to tasks map
         let mut tasks = self.tasks.lock();
         if tasks.contains_key(&id) {
-            return Err(Error::OperationFailed(
+            return Err(super::error::TaskSchedulerError::TaskAlreadyExists(
                 format!("Task with ID {} already exists", id)
             ));
         }
@@ -220,7 +254,7 @@ impl TaskScheduler {
     }
     
     /// Try to execute the next task in the queue
-    pub fn try_execute_next(&self) -> Result<Option<TaskId>> {
+    pub fn try_execute_next(&self) -> Result<Option<TaskId>, super::error::TaskSchedulerError> {
         // Check if we can run more tasks
         let max_tasks = *self.max_concurrent_tasks.lock();
         let running_count = self.get_running_tasks_count();
@@ -258,7 +292,7 @@ impl TaskScheduler {
         // Try to acquire all required resources
         // For simplicity, we don't actually acquire them here, just check availability
         let resources_available = task.required_resources.iter().all(|res| {
-            self.resource_manager.is_resource_available(res.clone()).unwrap_or(false)
+            self.resource_manager.is_resource_available(res).unwrap_or(false)
         });
         
         if !resources_available {
@@ -280,12 +314,12 @@ impl TaskScheduler {
     }
     
     /// Mark a task as completed
-    pub fn complete_task(&self, task_id: &TaskId, success: bool, error_msg: Option<String>) -> Result<()> {
+    pub fn complete_task(&self, task_id: &TaskId, success: bool, error_msg: Option<String>) -> Result<(), super::error::TaskSchedulerError> {
         let mut tasks = self.tasks.lock();
         let task = match tasks.get_mut(task_id) {
             Some(task) => task,
             None => {
-                return Err(Error::OperationFailed(
+                return Err(super::error::TaskSchedulerError::TaskNotFound(
                     format!("Task with ID {} not found", task_id)
                 ));
             }
@@ -293,7 +327,7 @@ impl TaskScheduler {
         
         // Check if the task is running
         if !task.is_running() {
-            return Err(Error::OperationFailed(
+            return Err(super::error::TaskSchedulerError::TaskNotRunning(
                 format!("Task with ID {} is not running", task_id)
             ));
         }
@@ -343,12 +377,12 @@ impl TaskScheduler {
     }
     
     /// Cancel a task
-    pub fn cancel_task(&self, task_id: &TaskId) -> Result<()> {
+    pub fn cancel_task(&self, task_id: &TaskId) -> Result<(), super::error::TaskSchedulerError> {
         let mut tasks = self.tasks.lock();
         let task = match tasks.get_mut(task_id) {
             Some(task) => task,
             None => {
-                return Err(Error::OperationFailed(
+                return Err(super::error::TaskSchedulerError::TaskNotFound(
                     format!("Task with ID {} not found", task_id)
                 ));
             }
@@ -356,7 +390,7 @@ impl TaskScheduler {
         
         // Check if the task can be cancelled
         if !task.is_queued() {
-            return Err(Error::OperationFailed(
+            return Err(super::error::TaskSchedulerError::TaskNotInCancellableState(
                 format!("Task with ID {} is not in a cancellable state", task_id)
             ));
         }

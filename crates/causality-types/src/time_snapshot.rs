@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use borsh::{BorshSerialize, BorshDeserialize};
+use std::fmt;
 
 use crate::Result;
 use crate::crypto_primitives::{ContentAddressed, HashOutput, HashError};
@@ -95,48 +96,221 @@ pub enum TimeEffect {
     },
 }
 
-/// Source of a time attestation
-#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+/// The source of a time attestation
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum AttestationSource {
-    /// Blockchain timestamp (trust depends on consensus model)
+    /// Network Time Protocol
+    NTP,
+    /// External time source
+    External(String),
+    /// Consensus-based time
+    Consensus(String),
+    /// User-provided time
+    User,
+    /// Custom time source
+    Custom(String),
+    /// System clock source
+    SystemClock,
+    /// Blockchain source
     Blockchain {
-        /// Block height
-        height: u64,
-        /// Block hash
-        block_hash: String,
+        /// Chain ID or name
+        chain_id: String,
+        /// Block number
+        block_number: Option<u64>,
     },
-    
-    /// User attestation (low trust)
-    User {
-        /// User ID
-        user_id: String,
-        /// Signature
-        signature: String,
-    },
-    
-    /// Operator attestation (medium trust)
+    /// Operator source
     Operator {
-        /// Operator ID
+        /// Operator identifier
         operator_id: String,
         /// Signature
         signature: String,
     },
-    
-    /// Committee attestation (higher trust)
+    /// Committee source
     Committee {
-        /// Committee ID
+        /// Committee identifier
         committee_id: String,
-        /// Threshold signature
-        threshold_signature: String,
+        /// Signatures
+        signatures: Vec<String>,
     },
-    
-    /// External oracle (trust depends on oracle reputation)
+    /// Oracle source
     Oracle {
-        /// Oracle ID
+        /// Oracle identifier
         oracle_id: String,
-        /// Signature
-        signature: String,
+        /// Oracle data
+        data: String,
     },
+}
+
+impl borsh::BorshSerialize for AttestationSource {
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        match self {
+            AttestationSource::NTP => {
+                borsh::BorshSerialize::serialize(&0u8, writer)?;
+            }
+            AttestationSource::External(s) => {
+                borsh::BorshSerialize::serialize(&1u8, writer)?;
+                borsh::BorshSerialize::serialize(s, writer)?;
+            }
+            AttestationSource::Consensus(s) => {
+                borsh::BorshSerialize::serialize(&2u8, writer)?;
+                borsh::BorshSerialize::serialize(s, writer)?;
+            }
+            AttestationSource::User => {
+                borsh::BorshSerialize::serialize(&3u8, writer)?;
+            }
+            AttestationSource::Custom(s) => {
+                borsh::BorshSerialize::serialize(&4u8, writer)?;
+                borsh::BorshSerialize::serialize(s, writer)?;
+            }
+            AttestationSource::SystemClock => {
+                borsh::BorshSerialize::serialize(&5u8, writer)?;
+            }
+            AttestationSource::Blockchain { chain_id, block_number } => {
+                borsh::BorshSerialize::serialize(&6u8, writer)?;
+                borsh::BorshSerialize::serialize(chain_id, writer)?;
+                borsh::BorshSerialize::serialize(block_number, writer)?;
+            }
+            AttestationSource::Operator { operator_id, signature } => {
+                borsh::BorshSerialize::serialize(&7u8, writer)?;
+                borsh::BorshSerialize::serialize(operator_id, writer)?;
+                borsh::BorshSerialize::serialize(signature, writer)?;
+            }
+            AttestationSource::Committee { committee_id, signatures } => {
+                borsh::BorshSerialize::serialize(&8u8, writer)?;
+                borsh::BorshSerialize::serialize(committee_id, writer)?;
+                borsh::BorshSerialize::serialize(signatures, writer)?;
+            }
+            AttestationSource::Oracle { oracle_id, data } => {
+                borsh::BorshSerialize::serialize(&9u8, writer)?;
+                borsh::BorshSerialize::serialize(oracle_id, writer)?;
+                borsh::BorshSerialize::serialize(data, writer)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl borsh::BorshDeserialize for AttestationSource {
+    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        let variant_idx = u8::deserialize_reader(reader)?;
+        match variant_idx {
+            0 => Ok(AttestationSource::NTP),
+            1 => {
+                let s = String::deserialize_reader(reader)?;
+                Ok(AttestationSource::External(s))
+            }
+            2 => {
+                let s = String::deserialize_reader(reader)?;
+                Ok(AttestationSource::Consensus(s))
+            }
+            3 => Ok(AttestationSource::User),
+            4 => {
+                let s = String::deserialize_reader(reader)?;
+                Ok(AttestationSource::Custom(s))
+            }
+            5 => Ok(AttestationSource::SystemClock),
+            6 => {
+                let chain_id = String::deserialize_reader(reader)?;
+                let block_number = Option::<u64>::deserialize_reader(reader)?;
+                Ok(AttestationSource::Blockchain { chain_id, block_number })
+            }
+            7 => {
+                let operator_id = String::deserialize_reader(reader)?;
+                let signature = String::deserialize_reader(reader)?;
+                Ok(AttestationSource::Operator { operator_id, signature })
+            }
+            8 => {
+                let committee_id = String::deserialize_reader(reader)?;
+                let signatures = Vec::<String>::deserialize_reader(reader)?;
+                Ok(AttestationSource::Committee { committee_id, signatures })
+            }
+            9 => {
+                let oracle_id = String::deserialize_reader(reader)?;
+                let data = String::deserialize_reader(reader)?;
+                Ok(AttestationSource::Oracle { oracle_id, data })
+            }
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Unknown AttestationSource variant: {}", variant_idx),
+            )),
+        }
+    }
+}
+
+impl fmt::Display for AttestationSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AttestationSource::NTP => write!(f, "NTP"),
+            AttestationSource::External(src) => write!(f, "External({})", src),
+            AttestationSource::Consensus(src) => write!(f, "Consensus({})", src),
+            AttestationSource::User => write!(f, "User"),
+            AttestationSource::Custom(name) => write!(f, "Custom({})", name),
+            AttestationSource::SystemClock => write!(f, "SystemClock"),
+            AttestationSource::Blockchain { chain_id, block_number } => {
+                write!(f, "Blockchain({}: {})", chain_id, 
+                    block_number.map_or_else(|| "unknown".to_string(), |b| b.to_string()))
+            },
+            AttestationSource::Operator { operator_id, signature } => {
+                write!(f, "Operator({}): {}", operator_id, signature)
+            },
+            AttestationSource::Committee { committee_id, signatures } => {
+                write!(f, "Committee({}): {} signatures", committee_id, signatures.len())
+            },
+            AttestationSource::Oracle { oracle_id, data } => {
+                write!(f, "Oracle({}): {}", oracle_id, data)
+            },
+        }
+    }
+}
+
+/// Domain position in time
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct DomainPosition {
+    /// Domain identifier
+    pub domain_id: String,
+    /// Timestamp value
+    pub timestamp: u64,
+    /// Optional block number
+    pub block: Option<u64>,
+    /// Optional transaction index
+    pub tx_index: Option<u64>,
+}
+
+impl DomainPosition {
+    /// Create a new domain position
+    pub fn new(domain_id: &str, timestamp: u64) -> Self {
+        Self {
+            domain_id: domain_id.to_string(),
+            timestamp,
+            block: None,
+            tx_index: None,
+        }
+    }
+    
+    /// Set the block number
+    pub fn with_block(mut self, block: u64) -> Self {
+        self.block = Some(block);
+        self
+    }
+    
+    /// Set the transaction index
+    pub fn with_tx_index(mut self, tx_index: u64) -> Self {
+        self.tx_index = Some(tx_index);
+        self
+    }
+}
+
+impl fmt::Display for DomainPosition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}@{}", self.domain_id, self.timestamp)?;
+        if let Some(block) = self.block {
+            write!(f, " (block: {})", block)?;
+        }
+        if let Some(tx_index) = self.tx_index {
+            write!(f, " (tx: {})", tx_index)?;
+        }
+        Ok(())
+    }
 }
 
 /// Result of a time effect operation

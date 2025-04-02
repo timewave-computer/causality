@@ -3,12 +3,13 @@ use std::sync::Arc;
 
 use serde::{Serialize, Deserialize};
 
-use crate::content::{ContentAddressed, ContentAddressingError, ContentHash};
+use causality_types::{ContentAddressed, ContentHash};
+use causality_types::crypto_primitives::{HashError, HashOutput};
 use crate::resource::{ResourceId, ResourceTypeId};
 use crate::resource::storage::{
     ResourceStorage, InMemoryResourceStorage, ResourceStorageConfig, create_resource_storage
 };
-use crate::storage::InMemoryContentAddressedStorage;
+use crate::resource::storage::InMemoryContentAddressedStorage;
 
 // Test resource implementation
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -19,14 +20,34 @@ struct TestResource {
 }
 
 impl ContentAddressed for TestResource {
-    fn content_hash(&self) -> Result<ContentHash, ContentAddressingError> {
+    fn content_hash(&self) -> Result<HashOutput, HashError> {
         // Create a deterministic content hash for testing
         let mut hasher = blake3::Hasher::new();
         hasher.update(self.name.as_bytes());
         hasher.update(&self.value.to_le_bytes());
         hasher.update(&self.data);
         let hash = hasher.finalize();
-        Ok(ContentHash::new(hash.as_bytes().to_vec()))
+        
+        // Create a HashOutput with Blake3 algorithm
+        let mut data = [0u8; 32];
+        data.copy_from_slice(hash.as_bytes());
+        Ok(HashOutput::new(data, causality_types::crypto_primitives::HashAlgorithm::Blake3))
+    }
+
+    fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+        // Serialize the resource to bytes
+        match serde_json::to_vec(self) {
+            Ok(bytes) => Ok(bytes),
+            Err(err) => Err(HashError::SerializationError(err.to_string())),
+        }
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        // Deserialize from bytes
+        match serde_json::from_slice(bytes) {
+            Ok(resource) => Ok(resource),
+            Err(err) => Err(HashError::SerializationError(err.to_string())),
+        }
     }
 }
 
@@ -78,7 +99,8 @@ async fn test_basic_resource_storage_operations() {
     assert!(storage.has_resource(&resource_id2).await.unwrap());
     
     // Test non-existence
-    let fake_id = ResourceId::new();
+    let fake_hash = ContentHash::new("blake3", vec![0, 1, 2, 3, 4]);
+    let fake_id = ResourceId::new(fake_hash);
     assert!(!storage.has_resource(&fake_id).await.unwrap());
     
     // Test retrieval

@@ -4,23 +4,43 @@
 // allowing for interchangeable time sources (real-time, simulated, etc).
 
 use std::sync::Arc;
+use std::fmt::Debug;
 use async_trait::async_trait;
 use anyhow::Result;
+use std::sync::Mutex;
+use std::collections::HashMap;
+use std::time::Duration;
 
-use super::{Timestamp, Duration, TimeMap, DomainPosition};
-use super::types::DomainId;
+use super::{Timestamp, TimeMap};
+use super::duration::TimeDelta;
+use super::types::{DomainId, DomainPosition};
+use super::map::TimeMapSnapshot;
+use super::timestamp::now;
+
+/// Error type for time provider operations
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Failed to acquire lock")]
+    LockError,
+    
+    #[error("Domain not found: {0}")]
+    DomainNotFound(String),
+    
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
 
 /// Time provider interface for abstracting different sources of time
 #[async_trait]
-pub trait TimeProvider: Send + Sync {
+pub trait TimeProvider: Send + Sync + Debug {
     /// Get the current timestamp
     async fn now(&self) -> Result<Timestamp>;
     
     /// Sleep for the specified duration
-    async fn sleep(&self, duration: Duration) -> Result<()>;
+    async fn sleep(&self, duration: TimeDelta) -> Result<()>;
     
     /// Create a deadline after the specified duration
-    async fn deadline(&self, duration: Duration) -> Result<Timestamp> {
+    async fn deadline(&self, duration: TimeDelta) -> Result<Timestamp> {
         let now = self.now().await?;
         Ok(now + duration)
     }
@@ -35,7 +55,7 @@ pub trait TimeProvider: Send + Sync {
     async fn update_domain_position(&self, domain_id: &str, timestamp: u64) -> Result<Option<DomainPosition>>;
     
     /// Get a snapshot of the current time state
-    async fn snapshot(&self) -> Result<super::TimeMapSnapshot>;
+    async fn snapshot(&self) -> Result<TimeMapSnapshot>;
 }
 
 /// Factory for creating time providers
@@ -54,9 +74,16 @@ impl TimeProviderFactory {
     ) -> Arc<dyn TimeProvider> {
         Arc::new(SimulationTimeProvider::new(initial_time, time_scale))
     }
+    
+    /// Create an in-memory provider for testing and development
+    pub fn create_in_memory() -> Arc<dyn TimeProvider> {
+        // Delegate to simulation provider with default settings
+        Self::create_simulation_provider(None, None)
+    }
 }
 
 /// Real-time provider that uses the system clock
+#[derive(Debug, Clone)]
 pub struct RealTimeProvider {
     time_map: Arc<std::sync::Mutex<TimeMap>>,
 }
@@ -73,19 +100,19 @@ impl RealTimeProvider {
 #[async_trait]
 impl TimeProvider for RealTimeProvider {
     async fn now(&self) -> Result<Timestamp> {
-        Ok(super::now())
+        Ok(super::timestamp::now())
     }
     
-    async fn sleep(&self, duration: Duration) -> Result<()> {
+    async fn sleep(&self, duration: TimeDelta) -> Result<()> {
         tokio::time::sleep(tokio::time::Duration::from_nanos(duration.as_nanos() as u64)).await;
         Ok(())
     }
     
     async fn domain_timestamp(&self, domain_id: &str) -> Result<Option<Timestamp>> {
-        let time_map = self.time_map.lock()
+        let guard = self.time_map.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
         
-        if let Some(position) = time_map.get_position(domain_id) {
+        if let Some(position) = (*guard).get_position(domain_id) {
             Ok(Some(Timestamp::from_nanos(position.get_timestamp())))
         } else {
             Ok(None)
@@ -93,28 +120,29 @@ impl TimeProvider for RealTimeProvider {
     }
     
     async fn time_map(&self) -> Result<Arc<TimeMap>> {
-        let time_map = self.time_map.lock()
+        let guard = self.time_map.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
         
-        Ok(Arc::new(time_map.clone()))
+        Ok(Arc::new((*guard).clone()))
     }
     
     async fn update_domain_position(&self, domain_id: &str, timestamp: u64) -> Result<Option<DomainPosition>> {
-        let mut time_map = self.time_map.lock()
+        let mut guard = self.time_map.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
         
-        Ok(time_map.update_position(domain_id, timestamp))
+        Ok((*guard).update_position(domain_id, timestamp))
     }
     
-    async fn snapshot(&self) -> Result<super::TimeMapSnapshot> {
-        let time_map = self.time_map.lock()
+    async fn snapshot(&self) -> Result<TimeMapSnapshot> {
+        let guard = self.time_map.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
         
-        Ok(time_map.snapshot())
+        Ok((*guard).snapshot())
     }
 }
 
 /// Simulation time provider for testing
+#[derive(Debug, Clone)]
 pub struct SimulationTimeProvider {
     current_time: Arc<std::sync::Mutex<Timestamp>>,
     time_scale: f64,
@@ -134,7 +162,7 @@ impl SimulationTimeProvider {
     }
     
     /// Advance the simulated time by the specified duration
-    pub fn advance(&self, duration: Duration) -> Result<Timestamp> {
+    pub fn advance(&self, duration: TimeDelta) -> Result<Timestamp> {
         let mut current = self.current_time.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock current time"))?;
         
@@ -166,10 +194,10 @@ impl TimeProvider for SimulationTimeProvider {
         Ok(*current)
     }
     
-    async fn sleep(&self, duration: Duration) -> Result<()> {
+    async fn sleep(&self, duration: TimeDelta) -> Result<()> {
         // Scale the sleep duration by the time scale
-        let scaled_duration = Duration::from_nanos(
-            (duration.as_nanos() as f64 / self.time_scale) as u64
+        let scaled_duration = TimeDelta::from_nanos(
+            ((duration.as_nanos() as f64) / self.time_scale) as i64
         );
         
         // In simulation mode, we might just advance the clock instead of actually sleeping
@@ -186,10 +214,10 @@ impl TimeProvider for SimulationTimeProvider {
     }
     
     async fn domain_timestamp(&self, domain_id: &str) -> Result<Option<Timestamp>> {
-        let time_map = self.time_map.lock()
+        let guard = self.time_map.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
         
-        if let Some(position) = time_map.get_position(domain_id) {
+        if let Some(position) = (*guard).get_position(domain_id) {
             Ok(Some(Timestamp::from_nanos(position.get_timestamp())))
         } else {
             Ok(None)
@@ -197,30 +225,72 @@ impl TimeProvider for SimulationTimeProvider {
     }
     
     async fn time_map(&self) -> Result<Arc<TimeMap>> {
-        let time_map = self.time_map.lock()
+        let guard = self.time_map.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
         
-        Ok(Arc::new(time_map.clone()))
+        Ok(Arc::new((*guard).clone()))
     }
     
     async fn update_domain_position(&self, domain_id: &str, timestamp: u64) -> Result<Option<DomainPosition>> {
-        let mut time_map = self.time_map.lock()
+        let mut guard = self.time_map.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
         
-        Ok(time_map.update_position(domain_id, timestamp))
+        Ok((*guard).update_position(domain_id, timestamp))
     }
     
-    async fn snapshot(&self) -> Result<super::TimeMapSnapshot> {
-        let time_map = self.time_map.lock()
+    async fn snapshot(&self) -> Result<TimeMapSnapshot> {
+        let guard = self.time_map.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
         
         // In simulation mode, we use the current simulation time for the snapshot
         let current = self.current_time.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock current time"))?;
         
-        let mut snapshot = time_map.snapshot();
-        snapshot.timestamp = current.as_nanos();
+        let mut snapshot = (*guard).snapshot();
+        snapshot.timestamp = current.as_nanos() as u64;
         
         Ok(snapshot)
+    }
+}
+
+/// Base time provider implementation
+#[derive(Debug)]
+pub struct BaseTimeProvider {
+    time_map: Arc<Mutex<TimeMap>>,
+}
+
+impl BaseTimeProvider {
+    /// Create a new base time provider
+    pub fn new() -> Self {
+        Self {
+            time_map: Arc::new(Mutex::new(TimeMap::new())),
+        }
+    }
+
+    /// Get the current position for a domain
+    pub fn get_position(&self, domain_id: &str) -> Result<Option<DomainPosition>, Error> {
+        let guard = self.time_map.lock().map_err(|_| Error::LockError)?;
+        
+        Ok((*guard).get_position(domain_id))
+    }
+
+    /// Update the position for a domain
+    pub fn update_position(&self, domain_id: &str, timestamp: u64) -> Result<Option<DomainPosition>, Error> {
+        let mut guard = self.time_map.lock().map_err(|_| Error::LockError)?;
+        
+        Ok((*guard).update_position(domain_id, timestamp))
+    }
+
+    /// Get a snapshot of the current time state
+    pub fn snapshot(&self) -> Result<TimeMapSnapshot, Error> {
+        let guard = self.time_map.lock().map_err(|_| Error::LockError)?;
+        
+        Ok((*guard).snapshot())
+    }
+}
+
+impl Default for BaseTimeProvider {
+    fn default() -> Self {
+        Self::new()
     }
 } 

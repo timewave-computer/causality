@@ -3,7 +3,7 @@
 // This file contains utilities for handling physical time, including
 // timestamps, durations, and conversions between different time formats.
 
-use crate::error::{Error, Result};
+use causality_error::{Error, Result};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// A physical timestamp that represents a point in physical time

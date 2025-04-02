@@ -8,10 +8,9 @@
 use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-
-use causality_types::{*};
-use causality_crypto::ContentId;;
-use causality_engine::{EffectEntry, FactEntry};
+use causality_types::*;
+use crate::crypto::ContentId;
+use crate::{EffectEntry, FactEntry};
 
 /// The state reconstructed during replay
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -237,7 +236,7 @@ mod tests {
         assert!(state.hash.is_none());
         
         let new_height = BlockHeight::new(100);
-        let new_hash = Some(BlockHash::new("abc123".to_string()));
+        let new_hash = Some(BlockHash::new("abc123"));
         let new_timestamp = Timestamp::new(1000);
         state.update(new_height.clone(), new_hash.clone(), new_timestamp.clone(), "entry_2".to_string());
         

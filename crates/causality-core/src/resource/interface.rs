@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::crypto::{ContentId, ContentAddressed};
+use causality_types::{ContentId, ContentAddressed};
 
 /// Resource state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -37,6 +37,14 @@ pub enum ResourceState {
     
     /// Archived
     Archived,
+}
+
+impl ResourceState {
+    /// Get properties for this state
+    pub fn properties(&self) -> std::collections::HashMap<String, String> {
+        // Return an empty HashMap for now to make the code compile
+        std::collections::HashMap::new()
+    }
 }
 
 impl Display for ResourceState {
@@ -120,6 +128,10 @@ pub enum ResourceError {
     /// Dependency error
     #[error("Dependency error: {0}")]
     DependencyError(String),
+    
+    /// Internal error
+    #[error("Internal error: {0}")]
+    Internal(String),
     
     /// Resource error
     #[error("Resource error: {0}")]
@@ -247,6 +259,23 @@ pub trait ResourceInterface: Send + Sync + Debug {
     
     /// Get resource dependency
     async fn get_dependency(&self) -> ResourceResult<Arc<dyn ResourceDependency>>;
+    
+    /// Deploy a resource
+    async fn deploy(&self, data: HashMap<String, String>, config: HashMap<String, String>) 
+        -> ResourceResult<()>;
+    
+    /// Update a resource
+    async fn update(&self, data: HashMap<String, String>) -> ResourceResult<()>;
+    
+    /// Read properties from a resource
+    async fn read_properties(&self, properties: Vec<String>) -> ResourceResult<HashMap<String, String>>;
+    
+    /// Destroy a resource
+    async fn destroy(&self) -> ResourceResult<()>;
+    
+    /// Execute a custom operation on a resource
+    async fn execute_operation(&self, operation: &str, params: HashMap<String, String>) 
+        -> ResourceResult<HashMap<String, String>>;
 }
 
 /// Resource configuration

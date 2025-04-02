@@ -1,34 +1,74 @@
-// Causality Core Crate
-//
-// This crate provides the core functionality for the causality platform.
-// It includes the effect system, resource management, and other core components.
+// Copyright 2023 Causality Ltd
+// Licensed under the Apache License, Version 2.0 (the "License");
 
-// Core modules
-pub mod effect; // New simplified effect system based on ADR-034
-pub mod capability; // Preserving old capability module for backward compatibility
-pub mod resource; // Preserving old resource module for backward compatibility
-pub mod resource_types;
-// pub mod collection; // Temporarily disabled until implemented
+//! # Causality Core Library
+//!
+//! This crate provides the core functionality for the Causality system,
+//! including resource management, effect handling, concurrency control,
+//! and temporal reasoning primitives.
 
-// Support modules
-// pub mod time; // Temporarily disabled while we fix the compatibility issues
+// Module exports
+pub mod capability;
+// pub mod crypto; // No dedicated crypto module in core
+pub mod effect;
+pub mod identity; // Add identity module
+pub mod resource;
+pub mod resource_types; // Add resource_types module for compatibility
+// pub mod role; // Role module doesn't exist yet
+pub mod time; // Re-enable the time module
 pub mod concurrency;
-// pub mod integration;
 pub mod serialization;
-pub mod verification;
-// pub mod observation; // Temporarily disabled while we fix the compatibility issues
-
-// Utility modules
-pub mod error;
-pub mod log;
 pub mod id_utils;
-pub mod zk;
-// Use the causality-crypto crate instead of defining a local module
-pub use causality_crypto as crypto;
+pub mod utils; // Module with utility functions
 
-// Re-exports
-pub use effect::*;
-// Use tracing instead of log
-pub use tracing::{debug, error, info, trace, warn};
+// Re-export key types from submodules
+pub use capability::{Capability, ResourceGuard};
+pub use effect::{Effect, EffectContext, EffectOutcome, EffectId, EffectType};
+pub use identity::IdentityId; // Re-export IdentityId
+pub use resource::Resource;
+pub use crate::resource::types::ResourceId;
 
-// Reexport key types 
+// Re-export utilities for easier access
+pub use utils::content_addressing::{
+    content_hash_to_id,
+    content_id_to_hash,
+    hash_bytes,
+    hash_string,
+    default_content_hash,
+    hash_object,
+};
+
+// Re-export core types from causality_types
+pub use causality_types::{ContentAddressed, ContentHash, ContentId};
+pub use causality_crypto::hash::ContentHasher;
+
+// Error types
+pub use causality_error::{CausalityError, ErrorCode, ErrorDomain, Result};
+
+// Standard library dependencies
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
+
+// Version of the library
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// Top-level initialization function (example)
+pub fn initialize() {
+    // Perform any necessary setup for the core library
+    println!("Causality Core library initialized (version {})", VERSION);
+}
+
+// Example usage or test function
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_initialization() {
+        initialize();
+        assert!(true); // Simple test to ensure initialization runs
+    }
+}

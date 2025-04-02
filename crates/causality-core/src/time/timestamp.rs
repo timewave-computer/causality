@@ -6,8 +6,17 @@
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fmt;
 use std::ops::{Add, Sub};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::duration::Duration;
+use super::duration::TimeDelta;
+
+/// Get the current timestamp
+pub fn now() -> Timestamp {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    Timestamp::from_nanos(now.as_nanos() as u64)
+}
 
 /// A timestamp representing a point in time
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -84,16 +93,20 @@ impl Timestamp {
     }
     
     /// Add a duration to this timestamp, saturating at the maximum value
-    pub fn saturating_add(&self, duration: Duration) -> Self {
+    pub fn saturating_add(&self, duration: TimeDelta) -> Self {
+        // Convert duration to u64 before addition to avoid overflow issues
+        let duration_nanos = duration.as_nanos();
         Self {
-            nanos: self.nanos.saturating_add(duration.as_nanos()),
+            nanos: self.nanos.saturating_add(duration_nanos),
         }
     }
     
     /// Subtract a duration from this timestamp, saturating at zero
-    pub fn saturating_sub(&self, duration: Duration) -> Self {
+    pub fn saturating_sub(&self, duration: TimeDelta) -> Self {
+        // Convert duration to u64 before subtraction to avoid underflow issues
+        let duration_nanos = duration.as_nanos();
         Self {
-            nanos: self.nanos.saturating_sub(duration.as_nanos()),
+            nanos: self.nanos.saturating_sub(duration_nanos),
         }
     }
     
@@ -138,34 +151,45 @@ impl PartialOrd for Timestamp {
     }
 }
 
-impl Add<Duration> for Timestamp {
+impl Add<TimeDelta> for Timestamp {
     type Output = Timestamp;
     
-    fn add(self, duration: Duration) -> Self::Output {
+    fn add(self, duration: TimeDelta) -> Self::Output {
+        // Safely handle conversion between u64 and potential i64 from TimeDelta
+        let duration_nanos = duration.as_nanos();
         Self {
-            nanos: self.nanos.checked_add(duration.as_nanos()).unwrap_or(u64::MAX),
+            nanos: self.nanos.checked_add(duration_nanos).unwrap_or(u64::MAX),
         }
     }
 }
 
-impl Sub<Duration> for Timestamp {
+impl Sub<TimeDelta> for Timestamp {
     type Output = Timestamp;
     
-    fn sub(self, duration: Duration) -> Self::Output {
+    fn sub(self, duration: TimeDelta) -> Self::Output {
+        // Safely handle conversion between u64 and potential i64 from TimeDelta
+        let duration_nanos = duration.as_nanos();
         Self {
-            nanos: self.nanos.checked_sub(duration.as_nanos()).unwrap_or(0),
+            nanos: self.nanos.checked_sub(duration_nanos).unwrap_or(0),
         }
     }
 }
 
 impl Sub<Timestamp> for Timestamp {
-    type Output = Duration;
+    type Output = TimeDelta;
     
     fn sub(self, other: Timestamp) -> Self::Output {
         if self >= other {
-            Duration::from_nanos(self.nanos - other.nanos)
+            // Safely convert the u64 difference to i64 for TimeDelta
+            let diff = self.nanos - other.nanos;
+            // Ensure we don't overflow i64
+            if diff > i64::MAX as u64 {
+                TimeDelta::from_nanos(i64::MAX)
+            } else {
+                TimeDelta::from_nanos(diff as i64)
+            }
         } else {
-            Duration::zero() // Cannot have negative durations, so return zero
+            TimeDelta::zero() // Cannot have negative durations, so return zero
         }
     }
 }
@@ -198,14 +222,22 @@ impl TimeRange {
     }
     
     /// Create a time range spanning from time for the specified duration
-    pub fn from_duration(time: Timestamp, duration: Duration) -> Self {
+    pub fn from_duration(time: Timestamp, duration: TimeDelta) -> Self {
         let end = time + duration;
         Self::new(time, end)
     }
     
     /// Create a time range centered around a timestamp with the specified duration
-    pub fn around(time: Timestamp, duration: Duration) -> Self {
-        let half_duration = Duration::from_nanos(duration.as_nanos() / 2);
+    pub fn around(time: Timestamp, duration: TimeDelta) -> Self {
+        // Safely handle the division for half duration
+        let duration_nanos = duration.as_nanos();
+        let half_nanos = duration_nanos / 2;
+        let half_duration = if half_nanos > i64::MAX as u64 {
+            TimeDelta::from_nanos(i64::MAX)
+        } else {
+            TimeDelta::from_nanos(half_nanos as i64)
+        };
+        
         let start = time - half_duration;
         let end = time + half_duration;
         Self::new(start, end)
@@ -222,7 +254,7 @@ impl TimeRange {
     }
     
     /// Get the duration of the range
-    pub fn duration(&self) -> Duration {
+    pub fn duration(&self) -> TimeDelta {
         self.end - self.start
     }
     
@@ -273,7 +305,7 @@ impl TimeRange {
     }
     
     /// Extend this range by a duration on both ends
-    pub fn extend(&self, duration: Duration) -> Self {
+    pub fn extend(&self, duration: TimeDelta) -> Self {
         Self::new(
             self.start - duration,
             self.end + duration,
@@ -281,7 +313,7 @@ impl TimeRange {
     }
     
     /// Create an iterator over timestamps in this range with the given step
-    pub fn iter(&self, step: Duration) -> TimeRangeIterator {
+    pub fn iter(&self, step: TimeDelta) -> TimeRangeIterator {
         TimeRangeIterator {
             current: self.start,
             end: self.end,
@@ -327,6 +359,26 @@ impl Iterator for TimeRangeIterator {
     }
 }
 
+/// Get the midpoint between two timestamps
+pub fn midpoint(start: Timestamp, end: Timestamp) -> Timestamp {
+    if start > end {
+        return midpoint(end, start); // Ensure start <= end
+    }
+    
+    // Simple case, just add half the difference
+    let duration = end - start;
+    // Safely handle the division for half duration
+    let duration_nanos = duration.as_nanos();
+    let half_nanos = duration_nanos / 2;
+    let half_duration = if half_nanos > i64::MAX as u64 {
+        TimeDelta::from_nanos(i64::MAX)
+    } else {
+        TimeDelta::from_nanos(half_nanos as i64)
+    };
+    
+    start + half_duration
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -363,7 +415,7 @@ mod tests {
     #[test]
     fn test_timestamp_operations() {
         let ts = Timestamp::from_secs(10);
-        let duration = Duration::from_secs(5);
+        let duration = TimeDelta::from_secs(5);
         
         assert_eq!((ts + duration).as_secs(), 15);
         assert_eq!((ts - duration).as_secs(), 5);
@@ -371,7 +423,7 @@ mod tests {
         // Test timestamp subtraction
         let ts1 = Timestamp::from_secs(10);
         let ts2 = Timestamp::from_secs(5);
-        assert_eq!((ts1 - ts2).as_secs(), 5);
+        assert_eq!((ts1 - ts2).as_nanos(), 5_000_000_000);
         
         // Subtracting a larger timestamp gives zero duration
         assert_eq!((ts2 - ts1).as_nanos(), 0);
@@ -398,7 +450,7 @@ mod tests {
         
         assert_eq!(range.start(), start);
         assert_eq!(range.end(), end);
-        assert_eq!(range.duration().as_secs(), 10);
+        assert_eq!(range.duration().as_nanos(), 10_000_000_000);
         
         // If start > end, they should be swapped
         let range2 = TimeRange::new(end, start);
@@ -408,7 +460,7 @@ mod tests {
     #[test]
     fn test_time_range_from_duration() {
         let time = Timestamp::from_secs(10);
-        let duration = Duration::from_secs(5);
+        let duration = TimeDelta::from_secs(5);
         let range = TimeRange::from_duration(time, duration);
         
         assert_eq!(range.start(), time);
@@ -419,7 +471,7 @@ mod tests {
     #[test]
     fn test_time_range_around() {
         let time = Timestamp::from_secs(10);
-        let duration = Duration::from_secs(6);
+        let duration = TimeDelta::from_secs(6);
         let range = TimeRange::around(time, duration);
         
         // 10 - 3 = 7, 10 + 3 = 13
@@ -571,7 +623,7 @@ mod tests {
             Timestamp::from_secs(20),
         );
         
-        let extended = range.extend(Duration::from_secs(5));
+        let extended = range.extend(TimeDelta::from_secs(5));
         assert_eq!(extended.start(), Timestamp::from_secs(5));
         assert_eq!(extended.end(), Timestamp::from_secs(25));
     }
@@ -583,7 +635,7 @@ mod tests {
             Timestamp::from_secs(15),
         );
         
-        let timestamps: Vec<_> = range.iter(Duration::from_secs(2)).collect();
+        let timestamps: Vec<_> = range.iter(TimeDelta::from_secs(2)).collect();
         
         assert_eq!(timestamps.len(), 3);
         assert_eq!(timestamps[0], Timestamp::from_secs(10));

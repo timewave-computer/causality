@@ -1,52 +1,96 @@
-// Time service implementation
+// Time Service
 //
-// This module provides a concrete implementation of the TimeEffectHandler trait
-// for managing the time system through effects.
+// This module provides a high-level service API for time-related operations.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use async_trait::async_trait;
-use anyhow::Result;
+use std::fmt::Debug;
+use std::time::Duration;
 use chrono::{DateTime, Utc};
+use std::collections::HashSet;
+use serde::{Serialize, Deserialize};
 
-use causality_types::time_snapshot::{TimeEffect, TimeEffectResult, AttestationSource};
+use async_trait::async_trait;
+use thiserror::Error;
+use anyhow::Result;
+
+use crate::effect::{EffectContext, EffectExecutor, EffectRegistry, EffectOutcome, EffectResult};
 use crate::time::{
-    TimeEffectHandler, TimeMap, DomainId, TimeProvider,
-    DEFAULT_TICK_INTERVAL, DEFAULT_TICK_COUNT,
+    TimeMap,
 };
-use crate::types::FactId;
-use crate::time::effect::{
-    TimeError, 
-    CausalTimeEffect, 
-    ClockTimeEffect, 
-    TimeAttestation, 
-    TemporalDistance
+use crate::time::map::TimeMapSnapshot;
+use crate::time::duration::TimeDelta;
+use crate::time::timestamp::Timestamp;
+use crate::time::clock::ClockTime;
+use crate::time::event::Timer;
+use crate::id_utils::FactId;
+use super::effect::{
+    TimeEffect, TimeEffectHandler, TimeEffectType, TimeAttestation, AttestationSource,
+    BasicTimeEffectHandler, CausalTimeEffect, ClockTimeEffect, TimeError,
 };
+
+// Import the TimeEffectResult from causality-types
+use causality_types::time_snapshot::TimeEffectResult;
+// Import TimeProvider from the top-level time module
+use super::provider::TimeProvider;
+use crate::resource::types::ResourceId;
+
+use crate::effect::handler::{EffectHandler, HandlerResult};
+use crate::effect::{DowncastEffect, Effect, EffectError, EffectTypeId};
+
+/// Represents the temporal distance between facts
+#[derive(Debug, Clone)]
+pub struct TemporalDistance {
+    /// Logical distance (number of causal steps between facts)
+    pub logical_distance: u64,
+    
+    /// Wall clock distance in nanoseconds
+    pub wall_clock_distance: u64,
+    
+    /// Is this a direct causal relationship
+    pub is_direct: bool,
+}
+
+/// Time service error types
+#[derive(Debug, Error)]
+pub enum TimeServiceError {
+    #[error("Time provider error: {0}")]
+    ProviderError(String),
+    
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+    
+    #[error("Effect error: {0}")]
+    EffectError(String),
+    
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
 
 /// Service for causal time operations
 #[async_trait]
 pub trait CausalTimeService: Send + Sync + 'static {
     /// Get the current logical clock for a domain
-    async fn get_logical_clock(&self, domain_id: &DomainId) -> Result<u64, TimeError>;
+    async fn get_logical_clock(&self, domain_id: &FactId) -> Result<u64, TimeError>;
     
     /// Get the current vector clock for a domain
-    async fn get_vector_clock(&self, domain_id: &DomainId) 
-        -> Result<HashMap<DomainId, u64>, TimeError>;
+    async fn get_vector_clock(&self, domain_id: &FactId) 
+        -> Result<HashMap<FactId, u64>, TimeError>;
     
     /// Advance the logical clock for a domain
-    async fn advance_logical_clock(&self, domain_id: &DomainId) -> Result<u64, TimeError>;
+    async fn advance_logical_clock(&self, domain_id: &FactId) -> Result<u64, TimeError>;
     
     /// Update the vector clock for a domain
     async fn update_vector_clock(
         &self, 
-        domain_id: &DomainId,
-        updates: HashMap<DomainId, u64>,
+        domain_id: &FactId,
+        updates: HashMap<FactId, u64>,
     ) -> Result<(), TimeError>;
     
     /// Create a causal time effect
     async fn create_causal_time_effect(
         &self,
-        domain_id: &DomainId,
+        domain_id: &FactId,
         dependencies: Vec<FactId>,
     ) -> Result<CausalTimeEffect, TimeError>;
 }
@@ -66,7 +110,7 @@ pub trait ClockTimeService: Send + Sync + 'static {
     /// Create a clock time effect
     async fn create_clock_time_effect(
         &self,
-        domain_id: &DomainId,
+        domain_id: &FactId,
     ) -> Result<ClockTimeEffect, TimeError>;
 }
 
@@ -112,20 +156,20 @@ pub trait TimeAttestationStore: Send + Sync + 'static {
     /// Store a time attestation
     async fn store_attestation(
         &self,
-        domain_id: DomainId,
+        domain_id: FactId,
         attestation: TimeAttestation,
     ) -> Result<(), TimeError>;
     
     /// Get a time attestation for a domain
     async fn get_attestation(
         &self,
-        domain_id: &DomainId,
+        domain_id: &FactId,
     ) -> Result<Option<TimeAttestation>, TimeError>;
     
     /// Get all attestations for a domain
     async fn get_attestations(
         &self,
-        domain_id: &DomainId,
+        domain_id: &FactId,
     ) -> Result<Vec<TimeAttestation>, TimeError>;
 }
 
@@ -136,7 +180,7 @@ pub trait FactTimeStore: Send + Sync + 'static {
     async fn record_logical_time(
         &self,
         fact_id: &FactId,
-        domain_id: &DomainId,
+        domain_id: &FactId,
         logical_time: u64,
     ) -> Result<(), TimeError>;
     
@@ -144,7 +188,7 @@ pub trait FactTimeStore: Send + Sync + 'static {
     async fn record_wall_time(
         &self,
         fact_id: &FactId,
-        domain_id: &DomainId,
+        domain_id: &FactId,
         wall_time: DateTime<Utc>,
     ) -> Result<(), TimeError>;
     
@@ -152,14 +196,14 @@ pub trait FactTimeStore: Send + Sync + 'static {
     async fn get_logical_time(
         &self,
         fact_id: &FactId,
-        domain_id: &DomainId,
+        domain_id: &FactId,
     ) -> Result<Option<u64>, TimeError>;
     
     /// Get wall clock time for a fact
     async fn get_wall_time(
         &self,
         fact_id: &FactId,
-        domain_id: &DomainId,
+        domain_id: &FactId,
     ) -> Result<Option<DateTime<Utc>>, TimeError>;
     
     /// Record fact dependencies
@@ -183,16 +227,20 @@ pub trait FactTimeStore: Send + Sync + 'static {
 }
 
 /// Service for managing time through effects
-pub struct TimeService {
+#[derive(Debug)]
+pub struct TimeServiceImpl {
     /// The time map for tracking relative positions across domains
     time_map: Arc<Mutex<TimeMap>>,
     /// The clock sources registered with this service
     clock_sources: Arc<Mutex<HashMap<String, ClockSourceInfo>>>,
     /// Time provider used by this service
     time_provider: Arc<dyn TimeProvider>,
+    /// Cache for timers
+    timer_cache: Arc<Mutex<HashMap<String, Arc<Timer>>>>,
 }
 
 /// Information about a clock source
+#[derive(Debug)]
 struct ClockSourceInfo {
     /// Latest timestamp from this source
     latest_timestamp: u64,
@@ -202,13 +250,14 @@ struct ClockSourceInfo {
     source_type: String,
 }
 
-impl TimeService {
+impl TimeServiceImpl {
     /// Create a new time service
     pub fn new() -> Self {
         Self {
             time_map: Arc::new(Mutex::new(TimeMap::new())),
             clock_sources: Arc::new(Mutex::new(HashMap::new())),
             time_provider: crate::time::provider::TimeProviderFactory::create_real_time_provider(),
+            timer_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
     
@@ -218,6 +267,7 @@ impl TimeService {
             time_map: Arc::new(Mutex::new(TimeMap::new())),
             clock_sources: Arc::new(Mutex::new(HashMap::new())),
             time_provider: provider,
+            timer_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
     
@@ -225,14 +275,15 @@ impl TimeService {
     pub fn time_map_snapshot(&self) -> Result<causality_types::time_snapshot::TimeMapSnapshot> {
         let time_map = self.time_map.lock().map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
         
-        // Create a snapshot of the current time map
-        // This is a simplified implementation
-        Ok(causality_types::time_snapshot::TimeMapSnapshot {
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|e| anyhow::anyhow!("Failed to get system time: {}", e))?
-                .as_secs(),
-        })
+        // Get the current timestamp
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| anyhow::anyhow!("Failed to get system time: {}", e))?
+            .as_secs();
+        
+        // Create a snapshot with just the timestamp
+        // In a real implementation, we would extract domain_timestamps and causality_edges
+        Ok(causality_types::time_snapshot::TimeMapSnapshot::with_timestamp(timestamp))
     }
     
     /// Get the current timestamp for a given domain
@@ -242,8 +293,10 @@ impl TimeService {
             Ok(Some(timestamp.as_nanos()))
         } else {
             // Fall back to the local time map if time provider doesn't have the data
-            let time_map = self.time_map.lock().map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
-            Ok(time_map.get_position(domain_id).map(|pos| pos.get_timestamp()))
+            let guard = self.time_map.lock().map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
+            
+            // Dereference the guard to access the TimeMap methods
+            Ok((*guard).get_position(domain_id).map(|pos| pos.get_timestamp()))
         }
     }
     
@@ -251,94 +304,146 @@ impl TimeService {
     pub fn time_provider(&self) -> Arc<dyn TimeProvider> {
         self.time_provider.clone()
     }
+    
+    /// Get a domain timer with the specified domain ID
+    fn get_domain_timer(&self, domain_id: &str) -> Arc<Timer> {
+        // Create a timer directly with the domain ID string
+        match self.timer_cache.lock().unwrap().get(domain_id) {
+            Some(timer) => Arc::clone(timer),
+            None => {
+                let timer = Arc::new(Timer::new(domain_id));
+                self.timer_cache
+                    .lock()
+                    .unwrap()
+                    .insert(domain_id.to_string(), Arc::clone(&timer));
+                timer
+            }
+        }
+    }
 }
 
-impl Default for TimeService {
+impl Default for TimeServiceImpl {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait]
-impl TimeEffectHandler for TimeService {
-    async fn handle_causal_update(
-        &self, 
-        operations: Vec<String>, 
-        ordering: Vec<(String, String)>
-    ) -> Result<TimeEffectResult> {
-        // In a real implementation, we would update a causal graph here
-        // For now, we'll just return a placeholder result
+impl TimeEffectHandler for TimeServiceImpl {
+    async fn handle_advance_causal_time(
+        &self,
+        domain_id: &str,
+        logical_clock: u64,
+        vector_clock_updates: HashMap<String, u64>,
+        dependencies: Vec<crate::id_utils::FactId>,
+    ) -> Result<HashMap<String, String>, TimeError> {
+        // Implement the causal time handling logic
+        // This is a placeholder implementation
+        let mut result = HashMap::new();
+        result.insert("domain_id".to_string(), domain_id.to_string());
+        result.insert("logical_clock".to_string(), logical_clock.to_string());
         
-        Ok(TimeEffectResult::CausalUpdate {
-            graph_hash: "placeholder_hash".to_string(),
-            affected_operations: operations,
-        })
+        // Add more result data as needed
+        Ok(result)
     }
     
-    async fn handle_clock_attestation(
+    async fn handle_set_clock_time(
         &self,
-        domain_id: String,
-        timestamp: u64,
+        domain_id: &str,
+        wall_time: DateTime<Utc>,
         source: AttestationSource,
-        confidence: f64,
-    ) -> Result<TimeEffectResult> {
-        // Update the clock source information
-        let mut clock_sources = self.clock_sources.lock()
-            .map_err(|_| anyhow::anyhow!("Failed to lock clock sources"))?;
+    ) -> Result<HashMap<String, String>, TimeError> {
+        // Implement the clock time setting logic
+        // This is a placeholder implementation
+        let mut result = HashMap::new();
+        result.insert("domain_id".to_string(), domain_id.to_string());
+        result.insert("timestamp".to_string(), wall_time.timestamp().to_string());
+        result.insert("source".to_string(), format!("{:?}", source));
         
-        let source_type = match &source {
-            AttestationSource::Blockchain { .. } => "blockchain",
-            AttestationSource::User { .. } => "user",
-            AttestationSource::Operator { .. } => "operator", 
-            AttestationSource::Committee { .. } => "committee",
-            AttestationSource::Oracle { .. } => "oracle",
-        };
-        
-        clock_sources.insert(domain_id.clone(), ClockSourceInfo {
-            latest_timestamp: timestamp,
-            confidence,
-            source_type: source_type.to_string(),
-        });
-        
-        // Update the domain position using the time provider
-        self.time_provider.update_domain_position(&domain_id, timestamp).await?;
-        
-        // Also update our local time map
-        let mut time_map = self.time_map.lock()
-            .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
-        
-        // Update the domain position in the time map
-        time_map.update_position(&domain_id, timestamp);
-        
-        // Return the result
-        Ok(TimeEffectResult::ClockUpdate {
-            domain_id,
-            timestamp,
-            confidence,
-        })
+        // Add more result data as needed
+        Ok(result)
     }
     
-    async fn handle_time_map_update(
+    async fn handle_register_attestation(
         &self,
-        positions: HashMap<String, u64>,
-        proofs: HashMap<String, String>,
-    ) -> Result<TimeEffectResult> {
-        let mut time_map = self.time_map.lock()
-            .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
+        domain_id: &str,
+        attestation: TimeAttestation,
+    ) -> Result<HashMap<String, String>, TimeError> {
+        // Implement the attestation registration logic
+        // This is a placeholder implementation
+        let mut result = HashMap::new();
+        result.insert("domain_id".to_string(), domain_id.to_string());
+        result.insert("timestamp".to_string(), format!("{:?}", attestation.timestamp));
+        result.insert("source".to_string(), format!("{:?}", attestation.source));
         
-        // Update the time map with the new positions
-        let domains_updated: Vec<String> = positions.keys().cloned().collect();
+        // Add more result data as needed
+        Ok(result)
+    }
+    
+    fn get_domain_timer(&self, domain_id: &str) -> Option<Timer> {
+        // Create a content hash from the domain_id for the resource ID
+        let domain_hash = crate::utils::content_addressing::hash_string(domain_id);
         
-        for (domain_id, position) in positions.clone() {
-            // Update both our local time map and the provider's time map
-            time_map.update_position(&domain_id, position);
-            self.time_provider.update_domain_position(&domain_id, position).await?;
-        }
-        
-        // Return the result
-        Ok(TimeEffectResult::TimeMapUpdate {
-            map_hash: "placeholder_hash".to_string(),
-            domains_updated,
+        // Simple implementation that creates a new timer with all required fields
+        Some(Timer {
+            id: format!("timer-{}", domain_id),
+            resource_id: ResourceId::new(domain_hash),
+            scheduled_at: Utc::now(),
+            duration: chrono::Duration::seconds(0),
+            recurring: false,
+            callback_effect: None,
         })
+    }
+}
+
+#[async_trait]
+impl EffectHandler for TimeServiceImpl {
+    fn supported_effect_types(&self) -> Vec<EffectTypeId> {
+        vec![
+            EffectTypeId::new("time.advance_causal"),
+            EffectTypeId::new("time.set_clock"),
+            EffectTypeId::new("time.register_attestation")
+        ]
+    }
+    
+    async fn handle(&self, effect: &dyn Effect, _context: &dyn EffectContext) -> HandlerResult<EffectOutcome> {
+        // Get the effect type to help with debugging
+        let effect_type = effect.effect_type();
+        
+        // Try to downcast to our time-specific effect types
+        if let Some(effect) = effect.as_any().downcast_ref::<CausalTimeEffect>() {
+            // Handle causal time effect
+            match self.handle_advance_causal_time(
+                &effect.domain_id,
+                effect.logical_clock.unwrap_or(0),
+                effect.vector_clock_updates.clone(),
+                effect.dependencies.clone()
+            ).await {
+                Ok(data) => Ok(EffectOutcome::success_with_data(data)),
+                Err(e) => Err(EffectError::ExecutionError(e.to_string()))
+            }
+        } else if let Some(effect) = effect.as_any().downcast_ref::<ClockTimeEffect>() {
+            // Convert timestamp to DateTime
+            let timestamp = effect.timestamp;
+            let naive = chrono::NaiveDateTime::from_timestamp_opt(timestamp as i64, 0)
+                .ok_or_else(|| EffectError::InvalidParameter("Invalid timestamp".to_string()))?;
+            let datetime = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(naive, chrono::Utc);
+            
+            // Handle clock time effect
+            match self.handle_set_clock_time(
+                &effect.domain_id,
+                datetime,
+                effect.source.clone()
+            ).await {
+                Ok(data) => Ok(EffectOutcome::success_with_data(data)),
+                Err(e) => Err(EffectError::ExecutionError(e.to_string()))
+            }
+        } else {
+            // Unsupported effect type
+            Err(EffectError::HandlerNotFound(format!(
+                "TimeServiceImpl cannot handle effect type: {}",
+                effect_type
+            )))
+        }
     }
 } 

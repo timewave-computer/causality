@@ -2,23 +2,30 @@
 name = "causality-types"
 version = "0.1.0"
 edition = "2021"
-description = "Causality - Core type definitions"
+description = "Causality - Core types and definitions"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-# External dependencies
+# External dependencies using workspace definitions
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 borsh = { workspace = true }
-rand = { workspace = true }
 chrono = { workspace = true }
 hex = { workspace = true }
-lazy_static = "1.4"
-parking_lot = "0.12"
-async-trait = "0.1"
-blake3 = "1.3"
+rand = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+sha2 = { workspace = true }
 
-# This is a base crate with no internal dependencies
+# Specific external dependencies (not in workspace or different versions/features)
+serde_bytes = "0.11"
+blake3 = "1.5"
+lazy_static = "1.4"
+
+# Internal dependencies (if any)
+# causality-error = { workspace = true } # Example if needed
+
+[features]
+default = []

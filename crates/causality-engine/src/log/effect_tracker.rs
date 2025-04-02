@@ -8,13 +8,15 @@
 
 use std::collections::{HashMap, HashSet, BTreeMap};
 use std::sync::{Arc, RwLock};
+use std::fmt::Debug;
 
-use causality_types::{Error, Result};
-use causality_engine::{LogEntry, EntryType, EntryData};
-use causality_engine_snapshot::{FactId, FactSnapshot, FactDependency, FactDependencyType};
-use causality_engine::LogStorage;
-use causality_types::{*};
-use causality_crypto::ContentId;;
+use causality_error::{Result, Error};
+use causality_types::{Timestamp, DomainId, TraceId, ContentId};
+
+// Import fact-related types from our own crate
+use crate::log::fact::{FactId, FactDependency, FactDependencyType, FactSnapshot};
+use crate::log::types::{LogEntry, EntryType, EntryData};
+use crate::log::LogStorage;
 
 /// Represents a causal relationship between a fact and an effect
 #[derive(Debug, Clone)]
@@ -79,9 +81,9 @@ impl FactEffectTracker {
                     let fact_id = FactId(fact.fact_id.clone());
                     
                     // Register in time index
-                    let mut time_index = self.time_indexed_facts.write().map_err(|_| {
-                        Error::LockError("Failed to acquire write lock on time_indexed_facts".to_string())
-                    })?;
+                    let mut time_index = self.time_indexed_facts.write().map_err(|e| 
+                        Box::new(Error::Unavailable(format!("Failed to acquire write lock on time_indexed_facts: {}", e)))
+                    )?;
                     
                     time_index
                         .entry(entry.timestamp)
@@ -97,9 +99,9 @@ impl FactEffectTracker {
                     
                     if !dependencies.is_empty() {
                         // Register effect-to-fact relationships
-                        let mut effect_facts = self.effect_to_facts.write().map_err(|_| {
-                            Error::LockError("Failed to acquire write lock on effect_to_facts".to_string())
-                        })?;
+                        let mut effect_facts = self.effect_to_facts.write().map_err(|e| 
+                            Box::new(Error::Unavailable(format!("Failed to acquire write lock on effect_to_facts: {}", e)))
+                        )?;
                         
                         let fact_ids: HashSet<FactId> = dependencies
                             .iter()
@@ -109,9 +111,9 @@ impl FactEffectTracker {
                         effect_facts.insert(entry.id.clone(), fact_ids.clone());
                         
                         // Register fact-to-effect relationships
-                        let mut fact_effects = self.fact_to_effects.write().map_err(|_| {
-                            Error::LockError("Failed to acquire write lock on fact_to_effects".to_string())
-                        })?;
+                        let mut fact_effects = self.fact_to_effects.write().map_err(|e| 
+                            Box::new(Error::Unavailable(format!("Failed to acquire write lock on fact_to_effects: {}", e)))
+                        )?;
                         
                         for dep in &dependencies {
                             fact_effects
@@ -124,9 +126,9 @@ impl FactEffectTracker {
                         self.register_relations(entry, &dependencies)?;
                         
                         // Register in time index
-                        let mut time_index = self.time_indexed_effects.write().map_err(|_| {
-                            Error::LockError("Failed to acquire write lock on time_indexed_effects".to_string())
-                        })?;
+                        let mut time_index = self.time_indexed_effects.write().map_err(|e| 
+                            Box::new(Error::Unavailable(format!("Failed to acquire write lock on time_indexed_effects: {}", e)))
+                        )?;
                         
                         time_index
                             .entry(entry.timestamp)
@@ -147,14 +149,14 @@ impl FactEffectTracker {
     fn extract_dependencies(&self, entry: &LogEntry) -> Result<Vec<FactDependency>> {
         let mut dependencies = Vec::new();
         
-        if let EntryData::Effect(effect) = &entry.data {
+        if let EntryData::Effect(_effect) = &entry.data {
             // Look for fact snapshot in the metadata
             if let Some(snapshot_json) = entry.metadata.get("fact_snapshot") {
                 if let Ok(snapshot) = serde_json::from_str::<FactSnapshot>(snapshot_json) {
                     // Add all facts from the snapshot
                     for fact_id in &snapshot.observed_facts {
                         let domains: Vec<DomainId> = snapshot.domains.iter().cloned().collect();
-                        let domain = domains.first().cloned().unwrap_or_else(|| DomainId::new(0));
+                        let domain = domains.first().cloned().unwrap_or_else(|| DomainId::new("0"));
                         
                         dependencies.push(FactDependency::new(
                             fact_id.clone(),
@@ -188,21 +190,21 @@ impl FactEffectTracker {
     /// Register detailed relations
     fn register_relations(&self, entry: &LogEntry, dependencies: &[FactDependency]) -> Result<()> {
         if let EntryData::Effect(effect) = &entry.data {
-            let mut relations = self.relations.write().map_err(|_| {
-                Error::LockError("Failed to acquire write lock on relations".to_string())
-            })?;
+            let mut relations = self.relations.write().map_err(|e| 
+                Box::new(Error::Unavailable(format!("Failed to acquire write lock on relations: {}", e)))
+            )?;
             
-            let mut resource_rels = self.resource_relations.write().map_err(|_| {
-                Error::LockError("Failed to acquire write lock on resource_relations".to_string())
-            })?;
+            let mut resource_rels = self.resource_relations.write().map_err(|e| 
+                Box::new(Error::Unavailable(format!("Failed to acquire write lock on resource_relations: {}", e)))
+            )?;
             
-            let mut domain_rels = self.domain_relations.write().map_err(|_| {
-                Error::LockError("Failed to acquire write lock on domain_relations".to_string())
-            })?;
+            let mut domain_rels = self.domain_relations.write().map_err(|e| 
+                Box::new(Error::Unavailable(format!("Failed to acquire write lock on domain_relations: {}", e)))
+            )?;
             
-            let mut trace_rels = self.trace_relations.write().map_err(|_| {
-                Error::LockError("Failed to acquire write lock on trace_relations".to_string())
-            })?;
+            let mut trace_rels = self.trace_relations.write().map_err(|e| 
+                Box::new(Error::Unavailable(format!("Failed to acquire write lock on trace_relations: {}", e)))
+            )?;
             
             // Extract resources and domains
             let resources = effect.resources.clone().unwrap_or_default()
@@ -259,18 +261,18 @@ impl FactEffectTracker {
     
     /// Get all effects that depend on a fact
     pub fn get_dependent_effects(&self, fact_id: &FactId) -> Result<HashSet<String>> {
-        let fact_effects = self.fact_to_effects.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on fact_to_effects".to_string())
-        })?;
+        let fact_effects = self.fact_to_effects.read().map_err(|e| 
+            Box::new(Error::Unavailable(format!("Failed to acquire read lock on fact_to_effects: {}", e)))
+        )?;
         
         Ok(fact_effects.get(fact_id).cloned().unwrap_or_default())
     }
     
     /// Get all facts that an effect depends on
     pub fn get_effect_dependencies(&self, effect_id: &str) -> Result<HashSet<FactId>> {
-        let effect_facts = self.effect_to_facts.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on effect_to_facts".to_string())
-        })?;
+        let effect_facts = self.effect_to_facts.read().map_err(|e| 
+            Box::new(Error::Unavailable(format!("Failed to acquire read lock on effect_to_facts: {}", e)))
+        )?;
         
         Ok(effect_facts.get(effect_id).cloned().unwrap_or_default())
     }
@@ -281,9 +283,9 @@ impl FactEffectTracker {
         start_time: Timestamp,
         end_time: Timestamp
     ) -> Result<HashSet<FactId>> {
-        let time_index = self.time_indexed_facts.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on time_indexed_facts".to_string())
-        })?;
+        let time_index = self.time_indexed_facts.read().map_err(|e| 
+            Box::new(Error::Unavailable(format!("Failed to acquire read lock on time_indexed_facts: {}", e)))
+        )?;
         
         let mut result = HashSet::new();
         
@@ -300,9 +302,9 @@ impl FactEffectTracker {
         start_time: Timestamp,
         end_time: Timestamp
     ) -> Result<HashSet<String>> {
-        let time_index = self.time_indexed_effects.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on time_indexed_effects".to_string())
-        })?;
+        let time_index = self.time_indexed_effects.read().map_err(|e| 
+            Box::new(Error::Unavailable(format!("Failed to acquire read lock on time_indexed_effects: {}", e)))
+        )?;
         
         let mut result = HashSet::new();
         
@@ -315,13 +317,13 @@ impl FactEffectTracker {
     
     /// Get all relations for a resource
     pub fn get_resource_relations(&self, resource_id: &ContentId) -> Result<Vec<FactEffectRelation>> {
-        let resource_rels = self.resource_relations.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on resource_relations".to_string())
-        })?;
+        let resource_rels = self.resource_relations.read().map_err(|e| 
+            Box::new(Error::Unavailable(format!("Failed to acquire read lock on resource_relations: {}", e)))
+        )?;
         
-        let relations = self.relations.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on relations".to_string())
-        })?;
+        let relations = self.relations.read().map_err(|e| 
+            Box::new(Error::Unavailable(format!("Failed to acquire read lock on relations: {}", e)))
+        )?;
         
         let mut result = Vec::new();
         
@@ -338,13 +340,13 @@ impl FactEffectTracker {
     
     /// Get all relations for a domain
     pub fn get_domain_relations(&self, domain_id: &DomainId) -> Result<Vec<FactEffectRelation>> {
-        let domain_rels = self.domain_relations.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on domain_relations".to_string())
-        })?;
+        let domain_rels = self.domain_relations.read().map_err(|e| 
+            Box::new(Error::Unavailable(format!("Failed to acquire read lock on domain_relations: {}", e)))
+        )?;
         
-        let relations = self.relations.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on relations".to_string())
-        })?;
+        let relations = self.relations.read().map_err(|e| 
+            Box::new(Error::Unavailable(format!("Failed to acquire read lock on relations: {}", e)))
+        )?;
         
         let mut result = Vec::new();
         
@@ -361,13 +363,13 @@ impl FactEffectTracker {
     
     /// Get all relations for a trace
     pub fn get_trace_relations(&self, trace_id: &TraceId) -> Result<Vec<FactEffectRelation>> {
-        let trace_rels = self.trace_relations.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on trace_relations".to_string())
-        })?;
+        let trace_rels = self.trace_relations.read().map_err(|e| 
+            Box::new(Error::Unavailable(format!("Failed to acquire read lock on trace_relations: {}", e)))
+        )?;
         
-        let relations = self.relations.read().map_err(|_| {
-            Error::LockError("Failed to acquire read lock on relations".to_string())
-        })?;
+        let relations = self.relations.read().map_err(|e| 
+            Box::new(Error::Unavailable(format!("Failed to acquire read lock on relations: {}", e)))
+        )?;
         
         let mut result = Vec::new();
         
@@ -398,7 +400,7 @@ impl FactEffectTracker {
             for relation in relations {
                 let domain = relation.domains.iter().next()
                     .cloned()
-                    .unwrap_or_else(|| DomainId::new(0));
+                    .unwrap_or_else(|| DomainId::new("0"));
                     
                 if !snapshot.contains_fact(&relation.fact_id) {
                     snapshot.add_fact(relation.fact_id.clone(), domain);
@@ -450,8 +452,9 @@ impl FactEffectTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_engine::{FactEntry, EffectEntry};
-    use causality_engine::memory_storage::MemoryLogStorage;
+    // Update imports to use crate-level modules
+    use crate::log::types::{FactEntry, EffectEntry};
+    use crate::log::memory_storage::MemoryLogStorage;
     use std::sync::Arc;
     
     fn create_fact_entry(id: &str, fact_id: &str, domain_id: DomainId) -> LogEntry {
@@ -466,8 +469,8 @@ mod tests {
                 height: 10,
                 hash: "hash123".to_string(),
                 timestamp: Timestamp::now(),
-                resources: Some(vec!["resource1".to_string()]),
-                domains: Some(vec![domain_id.to_string()]),
+                resources: Some(vec![ContentId::new("resource1")]),
+                domains: Some(vec![domain_id.clone()]),
                 data: serde_json::json!({}),
             }),
             trace_id: None,
@@ -498,15 +501,15 @@ mod tests {
             entry_type: EntryType::Effect,
             data: EntryData::Effect(EffectEntry {
                 effect_type: "test".to_string(),
-                resources: Some(vec![resource_id.to_string()]),
-                domains: Some(vec![domain_id.to_string()]),
+                resources: Some(vec![ContentId::new(resource_id)]),
+                domains: Some(vec![domain_id.clone()]),
                 code_hash: None,
                 parameters: serde_json::json!({}),
                 result: None,
                 success: true,
                 error: None,
             }),
-            trace_id: Some("trace1".to_string()),
+            trace_id: Some(TraceId::from_str("trace1")),
             parent_id: None,
             metadata,
             entry_hash: None,
@@ -518,7 +521,7 @@ mod tests {
         let tracker = FactEffectTracker::new();
         
         // Create a fact
-        let domain_id = DomainId::new(1);
+        let domain_id = DomainId::new("1");
         let fact_entry = create_fact_entry("entry1", "fact1", domain_id.clone());
         let fact_id = FactId("fact1".to_string());
         
@@ -552,7 +555,7 @@ mod tests {
         assert!(effect_dependencies.contains(&fact_id));
         
         // Check resource relations
-        let resource_relations = tracker.get_resource_relations(&"resource1".to_string())?;
+        let resource_relations = tracker.get_resource_relations(&ContentId::new("resource1"))?;
         assert_eq!(resource_relations.len(), 1);
         assert_eq!(resource_relations[0].fact_id, fact_id);
         assert_eq!(resource_relations[0].effect_id, "effect1");
@@ -562,7 +565,7 @@ mod tests {
         assert_eq!(domain_relations.len(), 1);
         
         // Check trace relations
-        let trace_relations = tracker.get_trace_relations(&"trace1".to_string())?;
+        let trace_relations = tracker.get_trace_relations(&TraceId::from_str("trace1"))?;
         assert_eq!(trace_relations.len(), 1);
         
         Ok(())
@@ -574,7 +577,7 @@ mod tests {
         let storage = MemoryLogStorage::new();
         
         // Create a fact
-        let domain_id = DomainId::new(1);
+        let domain_id = DomainId::new("1");
         let fact_entry = create_fact_entry("entry1", "fact1", domain_id.clone());
         let fact_id = FactId("fact1".to_string());
         
@@ -618,8 +621,8 @@ mod tests {
         let tracker = FactEffectTracker::new();
         
         // Create facts for different resources and domains
-        let domain1 = DomainId::new(1);
-        let domain2 = DomainId::new(2);
+        let domain1 = DomainId::new("1");
+        let domain2 = DomainId::new("2");
         
         let fact1 = create_fact_entry("entry1", "fact1", domain1.clone());
         let fact2 = create_fact_entry("entry2", "fact2", domain2.clone());
@@ -665,7 +668,7 @@ mod tests {
         
         // Create a snapshot for resource1 and domain1
         let snapshot = tracker.create_snapshot(
-            &[String::from("resource1")],
+            &[ContentId::new("resource1")],
             &[domain1.clone()],
             "test_observer",
         )?;
@@ -677,7 +680,7 @@ mod tests {
         
         // Create a snapshot for both resources and domains
         let snapshot2 = tracker.create_snapshot(
-            &[String::from("resource1"), String::from("resource2")],
+            &[ContentId::new("resource1"), ContentId::new("resource2")],
             &[domain1.clone(), domain2.clone()],
             "test_observer",
         )?;

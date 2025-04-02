@@ -10,7 +10,7 @@ use serde_json::Value;
 use serde::{Serialize, Deserialize};
 
 use crate::resource::{ResourceId, ResourceTypeId, ResourceSchema};
-use crate::content::ContentHash;
+use causality_types::ContentHash;
 
 use super::context::ValidationContext;
 use super::result::{ValidationResult, ValidationIssue, ValidationError, ValidationSeverity};

@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use std::io::{Read, Write};
 use crypto;
@@ -24,7 +25,7 @@ use crate::tel::{
     effect::ResourceEffect,
 };
 use causality_crypto::ContentId;
-use :ResourceRegister:causality_core::resource::Resource::{ResourceRegister, RegisterState};
+use causality_core::resource::types::{ResourceRegister, RegisterState};
 use crate::operation::{Operation, RegisterOperationType};
 
 /// Format for effect proofs

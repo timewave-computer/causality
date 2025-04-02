@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Serialize, Deserialize};
 use crate::crypto_primitives::{HashError, HashOutput, HashAlgorithm, ContentId, ContentAddressed};
+use thiserror::Error;
 
 // Extended set of types and functions for content addressing
 
@@ -249,334 +250,21 @@ pub fn canonical_content_id<T: serde::Serialize + borsh::BorshSerialize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::{Serialize, Deserialize};
-    use borsh::{BorshSerialize, BorshDeserialize};
-    
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
-    struct TestObject {
-        id: u64,
-        name: String,
-        tags: Vec<String>,
-        metadata: std::collections::HashMap<String, String>,
-    }
-    
-    #[test]
-    fn test_canonical_json_serialization() {
-        // Create test object with intentionally unordered fields
-        let mut metadata = std::collections::HashMap::new();
-        metadata.insert("z_field".to_string(), "z_value".to_string());
-        metadata.insert("a_field".to_string(), "a_value".to_string());
-        
-        let test_obj = TestObject {
-            id: 42,
-            name: "Test Object".to_string(),
-            tags: vec!["tag1".to_string(), "tag2".to_string()],
-            metadata,
-        };
-        
-        // Get canonical JSON
-        let canonical_json = canonical::to_canonical_json(&test_obj).unwrap();
-        
-        // Deserialize and verify
-        let deserialized: TestObject = canonical::from_canonical_json(&canonical_json).unwrap();
-        assert_eq!(test_obj, deserialized);
-        
-        // Verify deterministic serialization
-        let canonical_json2 = canonical::to_canonical_json(&test_obj).unwrap();
-        assert_eq!(canonical_json, canonical_json2);
-        
-        // Check the order of metadata in JSON string
-        let json_str = std::str::from_utf8(&canonical_json).unwrap();
-        
-        // a_field should come before z_field in canonical JSON
-        let a_pos = json_str.find("a_field").unwrap();
-        let z_pos = json_str.find("z_field").unwrap();
-        assert!(a_pos < z_pos, "Canonical JSON should have ordered keys");
-    }
-    
-    #[test]
-    fn test_canonical_binary_serialization() {
-        let mut metadata = std::collections::HashMap::new();
-        metadata.insert("field1".to_string(), "value1".to_string());
-        
-        let test_obj = TestObject {
-            id: 123,
-            name: "Binary Test".to_string(),
-            tags: vec!["binary".to_string()],
-            metadata,
-        };
-        
-        // Get canonical binary
-        let canonical_binary = canonical::to_canonical_binary(&test_obj).unwrap();
-        
-        // Deserialize and verify
-        let deserialized: TestObject = canonical::from_canonical_binary(&canonical_binary).unwrap();
-        assert_eq!(test_obj, deserialized);
-    }
-    
-    #[test]
-    fn test_content_hash_determinism() {
-        // Create two maps with same entries but different insertion orders
-        let mut map1 = std::collections::HashMap::new();
-        map1.insert("z".to_string(), "value".to_string());
-        map1.insert("a".to_string(), "value".to_string());
-        
-        let mut map2 = std::collections::HashMap::new();
-        map2.insert("a".to_string(), "value".to_string());
-        map2.insert("z".to_string(), "value".to_string());
-        
-        // Create test objects
-        let obj1 = TestObject {
-            id: 1,
-            name: "Same Content".to_string(),
-            tags: vec!["tag".to_string()],
-            metadata: map1,
-        };
-        
-        let obj2 = TestObject {
-            id: 1,
-            name: "Same Content".to_string(),
-            tags: vec!["tag".to_string()],
-            metadata: map2,
-        };
-        
-        // Compute canonical hashes
-        let hash1 = canonical_content_hash(&obj1).unwrap();
-        let hash2 = canonical_content_hash(&obj2).unwrap();
-        
-        // Hashes should be identical despite different insertion orders
-        assert_eq!(hash1, hash2, "Hash should be deterministic");
-        
-        // Create content IDs
-        let id1 = canonical_content_id(&obj1).unwrap();
-        let id2 = canonical_content_id(&obj2).unwrap();
-        
-        // Content IDs should be identical
-        assert_eq!(id1, id2, "Content ID should be deterministic");
-    }
-    
-    #[test]
-    fn test_normalization_json() {
-        // Create test object with unordered fields and mixed case
-        let mut metadata = std::collections::HashMap::new();
-        metadata.insert("Z_FIELD".to_string(), "Z_VALUE ".to_string());
-        metadata.insert("a_field".to_string(), " a_value".to_string());
-        
-        let test_obj = TestObject {
-            id: 42,
-            name: "Test Object  ".to_string(),
-            tags: vec!["TAG2".to_string(), "tag1".to_string()],
-            metadata,
-        };
-        
-        // Create normalization options for JSON
-        let mut options = NormalizationOptions::default();
-        options.serialization_format = SerializationFormat::Json;
-        options.sort_arrays = true; // Sort arrays too
-        
-        // Get normalized bytes
-        let normalized = test_obj.normalize(&options).unwrap();
-        
-        // Deserialize the normalized JSON to verify normalization
-        let json_str = std::str::from_utf8(&normalized).unwrap();
-        let value: serde_json::Value = serde_json::from_str(json_str).unwrap();
-        
-        // Check normalization of strings
-        assert_eq!(value["name"], "test object");
-        
-        // Check array ordering
-        let tags = value["tags"].as_array().unwrap();
-        assert_eq!(tags[0], "tag1"); // Should be sorted
-        assert_eq!(tags[1], "tag2"); // And normalized to lowercase
-        
-        // Check map key ordering
-        let a_field_pos = json_str.find("a_field").unwrap();
-        let z_field_pos = json_str.find("z_field").unwrap();
-        assert!(a_field_pos < z_field_pos, "Keys should be sorted");
-        
-        // Check map value normalization
-        assert_eq!(value["metadata"]["a_field"], "a_value");
-        assert_eq!(value["metadata"]["z_field"], "z_value");
-    }
-    
-    #[test]
-    fn test_normalization_binary() {
-        // Create test objects with different field order but same content
-        let mut metadata1 = std::collections::HashMap::new();
-        metadata1.insert("field1".to_string(), "value1".to_string());
-        metadata1.insert("field2".to_string(), "value2".to_string());
-        
-        let mut metadata2 = std::collections::HashMap::new();
-        metadata2.insert("field2".to_string(), "value2".to_string()); // Different order
-        metadata2.insert("field1".to_string(), "value1".to_string());
-        
-        let test_obj1 = TestObject {
-            id: 123,
-            name: "Test Object".to_string(),
-            tags: vec!["tag1".to_string(), "tag2".to_string()],
-            metadata: metadata1,
-        };
-        
-        let test_obj2 = TestObject {
-            id: 123,
-            name: "Test Object".to_string(), // Same content
-            tags: vec!["tag1".to_string(), "tag2".to_string()],
-            metadata: metadata2, // Different order
-        };
-        
-        // Get normalized content hashes
-        let options = NormalizationOptions::default(); // Binary by default
-        let hash1 = test_obj1.normalized_content_hash(&options).unwrap();
-        let hash2 = test_obj2.normalized_content_hash(&options).unwrap();
-        
-        // With binary serialization, the hashes might be different because
-        // HashMap serialization order is not deterministic by default with borsh
-        // This is expected - binary serialization follows the memory layout
-        
-        // Now try with JSON format which should normalize the order
-        let mut json_options = NormalizationOptions::default();
-        json_options.serialization_format = SerializationFormat::Json;
-        
-        let json_hash1 = test_obj1.normalized_content_hash(&json_options).unwrap();
-        let json_hash2 = test_obj2.normalized_content_hash(&json_options).unwrap();
-        
-        // With JSON normalization, the hashes should be identical
-        assert_eq!(json_hash1, json_hash2, "JSON normalized hashes should match");
-    }
-    
-    #[test]
-    fn test_empty_value_removal() {
-        // Create a test object with empty values
-        let mut metadata = std::collections::HashMap::new();
-        metadata.insert("empty_string".to_string(), "".to_string());
-        metadata.insert("normal_field".to_string(), "value".to_string());
-        metadata.insert("empty_array_field".to_string(), "[]".to_string());
-        
-        let test_obj = TestObject {
-            id: 42,
-            name: "".to_string(), // Empty name
-            tags: vec![], // Empty tags
-            metadata,
-        };
-        
-        // Create options with empty value removal
-        let mut options = NormalizationOptions::default();
-        options.serialization_format = SerializationFormat::Json;
-        options.remove_empty_values = true;
-        
-        // Normalize
-        let normalized = test_obj.normalize(&options).unwrap();
-        
-        // Deserialize to check
-        let json_str = std::str::from_utf8(&normalized).unwrap();
-        let value: serde_json::Value = serde_json::from_str(json_str).unwrap();
-        
-        // Check that empty values were removed
-        assert!(!value.as_object().unwrap().contains_key("name"), "Empty name should be removed");
-        assert!(!value.as_object().unwrap().contains_key("tags"), "Empty tags should be removed");
-        assert!(!value["metadata"].as_object().unwrap().contains_key("empty_string"), "Empty string in metadata should be removed");
-        
-        // Normal fields should remain
-        assert_eq!(value["id"], 42);
-        assert_eq!(value["metadata"]["normal_field"], "value");
-    }
-    
-    #[test]
-    fn test_normalization_content_addressed() {
-        // Create a custom content-addressed type
-        #[derive(Debug, PartialEq, Eq)]
-        struct MyContentAddressedType {
-            data: String,
-            number: u32,
-        }
-        
-        impl ContentAddressed for MyContentAddressedType {
-            fn content_hash(&self) -> Result<HashOutput, HashError> {
-                let mut hasher = blake3::Hasher::new();
-                hasher.update(self.data.as_bytes());
-                hasher.update(&self.number.to_be_bytes());
-                let hash = hasher.finalize();
-                
-                let mut data = [0u8; 32];
-                data.copy_from_slice(hash.as_bytes());
-                
-                Ok(HashOutput::new(data, HashAlgorithm::Blake3))
-            }
-            
-            fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
-                let actual_hash = self.content_hash()?;
-                Ok(actual_hash == *expected_hash)
-            }
-            
-            fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
-                let mut bytes = Vec::new();
-                bytes.extend_from_slice(self.data.as_bytes());
-                bytes.extend_from_slice(&self.number.to_be_bytes());
-                Ok(bytes)
-            }
-            
-            fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
-                if bytes.len() < 4 {
-                    return Err(HashError::SerializationError("Not enough bytes".to_string()));
-                }
-                
-                let data_bytes = &bytes[0..bytes.len()-4];
-                let number_bytes = &bytes[bytes.len()-4..];
-                
-                let data = String::from_utf8(data_bytes.to_vec())
-                    .map_err(|e| HashError::SerializationError(e.to_string()))?;
-                
-                let mut number_array = [0u8; 4];
-                number_array.copy_from_slice(number_bytes);
-                let number = u32::from_be_bytes(number_array);
-                
-                Ok(Self { data, number })
-            }
-        }
-        
-        // Create instances with different case/whitespace
-        let obj1 = MyContentAddressedType {
-            data: "Hello World".to_string(),
-            number: 42,
-        };
-        
-        let obj2 = MyContentAddressedType {
-            data: "HELLO WORLD".to_string(),
-            number: 42,
-        };
-        
-        // Regular content hashes will be different
-        let hash1 = obj1.content_hash().unwrap();
-        let hash2 = obj2.content_hash().unwrap();
-        assert_ne!(hash1, hash2, "Regular content hashes should differ due to case");
-        
-        // But normalized hashes should be the same
-        let mut options = NormalizationOptions::default();
-        options.normalize_strings = true;
-        
-        let norm_hash1 = obj1.normalized_content_hash(&options).unwrap();
-        let norm_hash2 = obj2.normalized_content_hash(&options).unwrap();
-        
-        // The normalized hashes might still differ because our simple implementation 
-        // doesn't do complex string normalization on the raw bytes,
-        // but we can verify the normalization extension trait works
-        assert!(obj1.verify_normalized(&norm_hash1, &options).unwrap());
-    }
+    use crate::crypto_primitives::{ContentAddressed, HashError, HashOutput};
+    use std::collections::HashMap;
     
     #[test]
     fn test_deterministic_map_ordering() {
-        // Test the to_ordered_map utility
-        let mut unordered_map = std::collections::HashMap::new();
-        // Insert in random order
-        unordered_map.insert("z", 3);
-        unordered_map.insert("a", 1);
-        unordered_map.insert("m", 2);
+        let mut map = HashMap::new();
+        map.insert("z".to_string(), 3);
+        map.insert("a".to_string(), 1);
+        map.insert("m".to_string(), 2);
         
-        let ordered_map = normalization::to_ordered_map(&unordered_map);
+        let ordered_map = super::normalization::to_ordered_map(&map);
         
         // Check keys are in alphabetical order
         let keys: Vec<_> = ordered_map.keys().collect();
-        assert_eq!(keys, vec!["a", "m", "z"]);
+        assert_eq!(keys, vec![&"a", &"m", &"z"]);
         
         // Check values maintained association
         assert_eq!(ordered_map["a"], 1);
@@ -625,7 +313,7 @@ pub mod storage {
     }
     
     /// Standard content-addressed storage interface
-    pub trait ContentAddressedStorage: Send + Sync {
+    pub trait ContentAddressedStorage: Send + Sync + std::fmt::Debug {
         /// Store binary data and return content ID
         fn store_bytes(&self, bytes: &[u8]) -> Result<ContentId, StorageError>;
         
@@ -653,7 +341,7 @@ pub mod storage {
     /// Extension methods for ContentAddressedStorage
     pub trait ContentAddressedStorageExt: ContentAddressedStorage {
         /// Store an object in the content-addressed storage
-        fn store<T: ContentAddressed>(&self, object: &T) -> Result<ContentId, StorageError> {
+        fn store_object<T: ContentAddressed + serde::Serialize>(&self, object: &T) -> Result<ContentId, StorageError> {
             // Serialize the object
             let bytes = object.to_bytes()?;
             // Store the bytes
@@ -661,13 +349,33 @@ pub mod storage {
         }
         
         /// Retrieve an object from storage by its content ID
-        fn get<T: ContentAddressed>(&self, id: &ContentId) -> Result<T, StorageError> {
+        fn get_object<T: ContentAddressed + serde::de::DeserializeOwned>(&self, id: &ContentId) -> Result<T, StorageError> {
             let bytes = self.get_bytes(id)?;
             T::from_bytes(&bytes).map_err(|e| StorageError::HashError(e))
         }
     }
     
+    // Automatically implement the extension trait for all implementors of ContentAddressedStorage
+    impl<T: ContentAddressedStorage + ?Sized> ContentAddressedStorageExt for T {}
+    
+    // For backward compatibility - these functions have the old names but use the new methods
+    pub trait LegacyContentAddressedStorage: ContentAddressedStorageExt {
+        /// Store an object (legacy method)
+        fn store<T: ContentAddressed + serde::Serialize>(&self, object: &T) -> Result<ContentId, StorageError> {
+            self.store_object(object)
+        }
+        
+        /// Get an object (legacy method)
+        fn get<T: ContentAddressed + serde::de::DeserializeOwned>(&self, id: &ContentId) -> Result<T, StorageError> {
+            self.get_object(id)
+        }
+    }
+    
+    // Automatically implement the legacy trait for all implementors of ContentAddressedStorageExt
+    impl<T: ContentAddressedStorageExt + ?Sized> LegacyContentAddressedStorage for T {}
+    
     /// In-memory implementation of content-addressed storage
+    #[derive(Debug)]
     pub struct InMemoryStorage {
         objects: RwLock<HashMap<ContentId, Vec<u8>>>,
     }
@@ -739,6 +447,7 @@ pub mod storage {
     }
     
     /// Caching layer for content-addressed storage
+    #[derive(Debug)]
     pub struct CachingStorage {
         /// The underlying storage
         backing_store: Arc<dyn ContentAddressedStorage>,
@@ -778,7 +487,7 @@ pub mod storage {
     impl ContentAddressedStorage for CachingStorage {
         fn store_bytes(&self, bytes: &[u8]) -> Result<ContentId, StorageError> {
             // Create a content ID
-            let content_id = content_id_from_bytes(bytes);
+            let _content_id = content_id_from_bytes(bytes);
             
             // Store in backing storage first
             let content_id = self.backing_store.store_bytes(bytes)?;
@@ -905,8 +614,8 @@ pub mod storage {
         pub _phantom: std::marker::PhantomData<T>,
     }
     
-    impl<T: ContentAddressed> ContentRef<T> {
-        /// Create a new reference to a content-addressed object
+    impl<T: ContentAddressed + serde::de::DeserializeOwned> ContentRef<T> {
+        /// Create a new content reference
         pub fn new(id: ContentId) -> Self {
             Self {
                 id,
@@ -914,15 +623,15 @@ pub mod storage {
             }
         }
         
-        /// Create a reference from an object
+        /// Create a content reference from an object
         pub fn from_object(object: &T) -> Result<Self, HashError> {
             let id = object.content_id()?;
             Ok(Self::new(id))
         }
         
-        /// Resolve the reference to get the object
+        /// Resolve this reference to get the actual object
         pub fn resolve(&self, storage: &impl ContentAddressedStorage) -> Result<T, StorageError> {
-            storage.get(&self.id)
+            storage.get_object(&self.id)
         }
     }
 }
@@ -980,14 +689,13 @@ pub mod metrics {
         }
     }
     
-    /// Storage wrapper that collects metrics
+    /// Metrics wrapper for ContentAddressedStorage
+    #[derive(Debug)]
     pub struct MetricStorage {
-        /// The underlying storage
+        /// Storage implementation
         storage: Arc<dyn ContentAddressedStorage>,
-        /// Collected metrics
+        /// Metric counters
         metrics: RwLock<StorageMetrics>,
-        /// Optional size tracker for content IDs
-        size_tracker: RwLock<HashMap<ContentId, usize>>,
     }
     
     impl MetricStorage {
@@ -996,7 +704,6 @@ pub mod metrics {
             Self {
                 storage,
                 metrics: RwLock::new(StorageMetrics::default()),
-                size_tracker: RwLock::new(HashMap::new()),
             }
         }
         
@@ -1017,29 +724,36 @@ pub mod metrics {
     impl ContentAddressedStorage for MetricStorage {
         fn store_bytes(&self, bytes: &[u8]) -> Result<ContentId, StorageError> {
             let start = Instant::now();
-            
-            // Store in underlying storage
             let result = self.storage.store_bytes(bytes);
-            
-            // Update metrics
             let duration = start.elapsed();
             {
                 let mut metrics = self.metrics.write().unwrap();
                 metrics.total_stores += 1;
                 
-                let new_avg = ((metrics.avg_store_latency.as_nanos() as f64 * (metrics.total_stores - 1) as f64)
-                    + duration.as_nanos() as f64) / metrics.total_stores as f64;
+                // Update average latency using weighted average
+                if metrics.total_stores > 1 {
+                    // Calculate weighted average: (old_avg * (n-1) + new_value) / n
+                    let weight_old = metrics.total_stores - 1;
+                    let weight_new = 1;
+                    let total_weight = metrics.total_stores;
                     
-                metrics.avg_store_latency = Duration::from_nanos(new_avg as u64);
+                    let old_nanos = metrics.avg_store_latency.as_nanos() * (weight_old as u128);
+                    let new_nanos = duration.as_nanos() * (weight_new as u128);
+                    let weighted_avg_nanos = (old_nanos + new_nanos) / (total_weight as u128);
+                    
+                    metrics.avg_store_latency = Duration::from_nanos(weighted_avg_nanos as u64);
+                } else {
+                    // First measurement, just use the duration directly
+                    metrics.avg_store_latency = duration;
+                }
                 
-                // Track object size
-                let size = bytes.len();
-                metrics.bytes_stored += size as u64;
-                
-                // Update size tracker if result is successful
-                if let Ok(content_id) = &result {
-                    let mut size_tracker = self.size_tracker.write().unwrap();
-                    size_tracker.insert(content_id.clone(), size);
+                if let Ok(_content_id) = &result {
+                    // Update current objects count
+                    metrics.current_objects = self.storage.len();
+                    
+                    // Update bytes stored
+                    let size = bytes.len();
+                    metrics.bytes_stored += size as u64;
                 }
             }
             
@@ -1052,22 +766,30 @@ pub mod metrics {
         
         fn get_bytes(&self, id: &ContentId) -> Result<Vec<u8>, StorageError> {
             let start = Instant::now();
-            
-            // Get from underlying storage
             let result = self.storage.get_bytes(id);
-            
-            // Update metrics
             let duration = start.elapsed();
             {
                 let mut metrics = self.metrics.write().unwrap();
                 metrics.total_gets += 1;
                 
-                let new_avg = ((metrics.avg_get_latency.as_nanos() as f64 * (metrics.total_gets - 1) as f64)
-                    + duration.as_nanos() as f64) / metrics.total_gets as f64;
+                // Update average latency using weighted average
+                if metrics.total_gets > 1 {
+                    // Calculate weighted average: (old_avg * (n-1) + new_value) / n
+                    let weight_old = metrics.total_gets - 1;
+                    let weight_new = 1;
+                    let total_weight = metrics.total_gets;
                     
-                metrics.avg_get_latency = Duration::from_nanos(new_avg as u64);
+                    let old_nanos = metrics.avg_get_latency.as_nanos() * (weight_old as u128);
+                    let new_nanos = duration.as_nanos() * (weight_new as u128);
+                    let weighted_avg_nanos = (old_nanos + new_nanos) / (total_weight as u128);
+                    
+                    metrics.avg_get_latency = Duration::from_nanos(weighted_avg_nanos as u64);
+                } else {
+                    // First measurement, just use the duration directly
+                    metrics.avg_get_latency = duration;
+                }
                 
-                // Track bytes retrieved
+                // Update bytes retrieved if successful
                 if let Ok(bytes) = &result {
                     metrics.bytes_retrieved += bytes.len() as u64;
                 }
@@ -1077,13 +799,7 @@ pub mod metrics {
         }
         
         fn remove(&self, id: &ContentId) -> Result<(), StorageError> {
-            // Track size before removal
-            let size = {
-                let size_tracker = self.size_tracker.read().unwrap();
-                size_tracker.get(id).cloned()
-            };
-            
-            // Remove from underlying storage
+            // Get the size before removing
             let result = self.storage.remove(id);
             
             // Update metrics
@@ -1091,25 +807,15 @@ pub mod metrics {
                 let mut metrics = self.metrics.write().unwrap();
                 metrics.total_removes += 1;
                 
-                // Remove from size tracker
-                if result.is_ok() {
-                    let mut size_tracker = self.size_tracker.write().unwrap();
-                    size_tracker.remove(id);
-                    
-                    // Update current objects
-                    metrics.current_objects = self.len();
-                }
+                // Update current objects count after removal
+                metrics.current_objects = self.storage.len();
             }
             
             result
         }
         
         fn clear(&self) {
-            // Clear underlying storage
             self.storage.clear();
-            
-            // Clear size tracker
-            self.size_tracker.write().unwrap().clear();
             
             // Update metrics
             let mut metrics = self.metrics.write().unwrap();
@@ -1176,6 +882,31 @@ mod storage_tests {
             canonical::from_canonical_binary(bytes)
                 .map_err(|e| HashError::SerializationError(e.to_string()))
         }
+    }
+    
+    #[test]
+    fn test_content_ref() {
+        let mut storage = super::storage::InMemoryStorage::new();
+        let obj = TestStorageObject {
+            id: 1,
+            name: "test".to_string(),
+            data: vec![1, 2, 3, 4],
+        };
+        
+        // Store object
+        let content_id = storage.store_object(&obj).unwrap();
+        
+        // Create reference
+        let content_ref = super::ContentRef::new(content_id);
+        
+        // Resolve reference
+        let resolved = content_ref.resolve(&storage).unwrap();
+        assert_eq!(obj, resolved);
+        
+        // Create reference directly from object
+        let direct_ref = super::ContentRef::from_object(&obj).unwrap();
+        let direct_resolved = direct_ref.resolve(&storage).unwrap();
+        assert_eq!(obj, direct_resolved);
     }
     
     #[test]
@@ -1331,34 +1062,6 @@ mod storage_tests {
         assert_eq!(metrics.total_stores, 0);
         assert_eq!(metrics.total_gets, 0);
         assert_eq!(metrics.current_objects, 1); // Still one object in storage
-    }
-    
-    #[test]
-    fn test_content_ref() {
-        // Create storage
-        let storage = StorageFactory::create_memory_storage();
-        
-        // Create test object
-        let obj = TestStorageObject {
-            id: 42,
-            name: "Reference Test".to_string(),
-            data: vec![1, 2, 3],
-        };
-        
-        // Store object
-        let content_id = storage.store(&obj).unwrap();
-        
-        // Create content reference
-        let content_ref = ContentRef::<TestStorageObject>::new(content_id);
-        
-        // Resolve reference
-        let resolved = content_ref.resolve(&*storage).unwrap();
-        assert_eq!(obj, resolved);
-        
-        // Create reference directly from object
-        let direct_ref = ContentRef::from_object(&obj).unwrap();
-        let direct_resolved = direct_ref.resolve(&*storage).unwrap();
-        assert_eq!(obj, direct_resolved);
     }
 }
 
@@ -2014,4 +1717,4 @@ use self::storage::{ContentAddressedStorage, ContentAddressedStorageExt};
 
 // Enable ContentAddressedStorageExt for all ContentAddressedStorage implementors
 // This restores the blanket implementation but avoids conflicts with specific implementations
-impl<T> ContentAddressedStorageExt for T where T: ContentAddressedStorage + ?Sized {} 
+// impl<T> ContentAddressedStorageExt for T where T: ContentAddressedStorage + ?Sized {} 

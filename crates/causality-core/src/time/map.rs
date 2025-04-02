@@ -140,6 +140,33 @@ impl TimeMap {
     }
 }
 
+impl TimeMapSnapshot {
+    /// Check if this snapshot is valid at the given reference time map
+    pub fn is_valid_at(&self, reference: &TimeMap) -> bool {
+        // Simple validity check - in a real system, this would be more sophisticated
+        for (domain_id, position) in &self.positions {
+            if let Some(ref_position) = reference.get_position(domain_id) {
+                // The snapshot is invalid if any position in the reference is newer
+                if ref_position.timestamp > position.timestamp {
+                    return false;
+                }
+            }
+        }
+        
+        true
+    }
+    
+    /// Get the timestamp of this snapshot
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
+    }
+    
+    /// Get the hash of this snapshot
+    pub fn hash(&self) -> &str {
+        &self.hash
+    }
+}
+
 impl Default for TimeMap {
     fn default() -> Self {
         Self::new()

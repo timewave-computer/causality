@@ -25,11 +25,13 @@ pub use types::{
     AgentRelationship,
     RelationshipType,
     AgentError,
+    // AgentResult
 };
 
 pub use agent::{
     Agent,
     AgentImpl,
+    // AgentQuery,
     AgentBuilder,
 };
 
@@ -37,24 +39,33 @@ pub use operation::{
     Operation,
     OperationId,
     OperationType,
+    // OperationStatus,
     OperationResult,
     OperationError,
-    OperationBuilder,
+    // OperationBatch,
+    // OperationRequest,
+    // OperationResponse
 };
 
 pub use authorization::{
     Authorization,
+    // AuthorizationId,
+    // AuthorizationType,
+    // AuthorizationStatus,
+    // AuthorizationResult,
     AuthorizationError,
-    CapabilityVerifier,
-    CapabilityRegistry,
-    CapabilityDefinition,
-    AuthorizationService,
+    // AuthorizationManager,
+    // AuthorizationScope
 };
 
 pub use registry::{
     AgentRegistry,
-    AgentRegistryError as RegistryError,
-    InMemoryAgentRegistry,
+    AgentRegistryError,
+    // AgentRegistryResult,
+    // AgentRegistration,
+    // AgentRegistrationBuilder,
+    // RegistrationStatus,
+    // RegistryConfig
 };
 
 // Re-export specialized agent types
@@ -62,32 +73,34 @@ pub use user::{
     UserAgent,
     UserAgentBuilder,
     UserProfile,
-    AuthenticationMethod,
-    UserAgentError,
+    // UserRole,
+    // UserStatus,
+    // UserPreferences,
+    UserAgentError
 };
 
 pub use committee::{
     CommitteeAgent,
     CommitteeAgentBuilder,
-    CommitteeConfig,
     CommitteeMember,
-    MemberRole,
+    // CommitteePolicy,
     CommitteeDecision,
-    Vote,
-    VoteValue,
-    DecisionResult,
-    CommitteeAgentError,
+    // CommitteeVote,
+    // CommitteeVoteType,
+    // CommitteeStatus,
+    CommitteeAgentError
 };
 
+// Re-export operator types (commenting out missing types)
 pub use operator::{
     OperatorAgent,
     OperatorAgentBuilder,
-    OperatorRole,
-    SystemOperation,
-    SystemOperationType,
-    SystemOperationStatus,
-    SystemOperationResult,
-    MaintenanceWindow,
+    // OperatorRole,
+    // SystemOperation,
+    // SystemOperationType,
+    // SystemOperationStatus,
+    // SystemOperationResult,
+    // MaintenanceWindow,
     OperatorAgentError,
 };
 

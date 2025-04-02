@@ -5,7 +5,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use crate::error::Error;
+use causality_error::Error;
 
 /// A generic signature type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -135,8 +135,7 @@ impl<T, S> SignedData<T, S> {
 }
 
 impl<T, S> Signed for SignedData<T, S> {
-    // Using a general std error for the error type
-    type Error = std::io::Error;
+    type Error = Error;
     type Data = T;
     type Signature = S;
     
@@ -288,7 +287,7 @@ mod tests {
             if data == signature.as_bytes() {
                 Ok(())
             } else {
-                Err(Error::Verification("Signature doesn't match data".into()))
+                Err(Error::verification("Signature doesn't match data"))
             }
         }
     }
@@ -347,7 +346,7 @@ mod tests {
             if data == sig.as_bytes() {
                 Ok(())
             } else {
-                Err(Error::Verification("Signature doesn't match data".into()))
+                Err(Error::verification("Signature doesn't match data"))
             }
         });
         

@@ -207,33 +207,24 @@ impl InMemoryResourceIndex {
     
     /// Extract value from a resource for indexing
     fn extract_index_value(resource: &dyn Resource, field: &str) -> Result<String, QueryError> {
-        // Convert resource to JSON
-        let resource_json = serde_json::to_value(resource)
-            .map_err(|e| QueryError::SerializationError(e.to_string()))?;
-        
-        // Navigate the JSON structure to extract the field value
-        let mut current = &resource_json;
-        for part in field.split('.') {
-            match current {
-                serde_json::Value::Object(obj) => {
-                    current = obj.get(part).ok_or_else(|| 
-                        QueryError::FieldNotFound(format!("Field not found for indexing: {}", part))
-                    )?;
-                },
-                _ => return Err(QueryError::FieldNotFound(
-                    format!("Cannot navigate into non-object at path part: {}", part)
-                )),
+        // Use direct Resource trait methods instead of serializing to JSON
+        if field == "id" {
+            return Ok(resource.id().to_string());
+        } else if field == "type" || field == "resource_type" {
+            return Ok(resource.resource_type().to_string());
+        } else if field == "state" {
+            return Ok(resource.state().to_string());
+        } else if field.starts_with("metadata.") {
+            let metadata_key = field.strip_prefix("metadata.").unwrap_or(field);
+            match resource.get_metadata(metadata_key) {
+                Some(value) => return Ok(value),
+                None => return Ok("null".to_string()),
             }
         }
         
-        // Convert the value to a string for indexing
-        match current {
-            serde_json::Value::String(s) => Ok(s.clone()),
-            serde_json::Value::Number(n) => Ok(n.to_string()),
-            serde_json::Value::Bool(b) => Ok(b.to_string()),
-            serde_json::Value::Null => Ok("null".to_string()),
-            _ => Ok(current.to_string()), // Convert arrays and objects to JSON string
-        }
+        // For other fields, we can't extract without serialization
+        // Return an appropriate error or default value
+        Err(QueryError::FieldNotFound(format!("Cannot extract non-standard field: {}", field)))
     }
     
     /// Add a resource to an index
@@ -262,7 +253,7 @@ impl InMemoryResourceIndex {
             ));
         }
         
-        entry.add_resource(resource.resource_id().clone());
+        entry.add_resource(resource.id().clone().into());
         
         Ok(())
     }
@@ -360,30 +351,30 @@ impl InMemoryResourceIndex {
         let range = match (start, end) {
             (Some(start), Some(end)) => {
                 if include_start && include_end {
-                    index.range(start.to_string()..=end.to_string())
+                    index.range::<String, _>(&start.to_string()..=&end.to_string())
                 } else if include_start {
-                    index.range(start.to_string()..end.to_string())
+                    index.range::<String, _>(&start.to_string()..)
                 } else if include_end {
-                    index.range((start.to_string())..=end.to_string())
+                    index.range::<String, _>(..=&end.to_string())
                 } else {
-                    index.range((start.to_string())..(end.to_string()))
+                    index.range::<String, _>(&start.to_string()..&end.to_string())
                 }
             },
             (Some(start), None) => {
                 if include_start {
-                    index.range(start.to_string()..)
+                    index.range::<String, _>(&start.to_string()..)
                 } else {
-                    index.range((start.to_string())..)
+                    index.range::<String, _>(&start.to_string()..)
                 }
             },
             (None, Some(end)) => {
                 if include_end {
-                    index.range(..=end.to_string())
+                    index.range::<String, _>(..=&end.to_string())
                 } else {
-                    index.range(..end.to_string())
+                    index.range::<String, _>(..&end.to_string())
                 }
             },
-            (None, None) => index.range(..),
+            (None, None) => index.range::<String, _>(..)
         };
         
         // Collect all resource IDs in the range
@@ -402,12 +393,12 @@ impl ResourceIndex for InMemoryResourceIndex {
             QueryError::IndexError("Failed to acquire write lock on resources".to_string())
         )?;
         
-        let resource_id = resource.resource_id().clone();
+        let resource_id = resource.id().clone();
         let resource_type = resource.resource_type().clone();
         
         // Add resource to resources map
         resources.insert(
-            resource_id.clone(),
+            resource_id.clone().into(),
             Arc::new(resource.clone_resource())
         );
         
@@ -419,7 +410,7 @@ impl ResourceIndex for InMemoryResourceIndex {
         resources_by_type
             .entry(resource_type)
             .or_insert_with(Vec::new)
-            .push(resource_id.clone());
+            .push(resource_id.clone().into());
         
         // Add to all indexes
         let indexes = self.indexes.read().map_err(|_| 
@@ -439,8 +430,9 @@ impl ResourceIndex for InMemoryResourceIndex {
             QueryError::IndexError("Failed to acquire read lock on resources".to_string())
         )?;
         
-        let resource_id = resource.resource_id();
-        let old_resource = resources.get(resource_id).cloned();
+        let resource_id = resource.id();
+        let content_id = resource_id.clone().into();
+        let old_resource = resources.get(&content_id).cloned();
         
         // Remove from indexes and add back with new values
         drop(resources); // Release read lock before acquiring write lock
@@ -453,7 +445,7 @@ impl ResourceIndex for InMemoryResourceIndex {
             
             for key in indexes.keys() {
                 let old_value = Self::extract_index_value(old_resource.as_ref(), &key.field).ok();
-                self.remove_from_index(key, resource_id, old_value.as_deref())?;
+                self.remove_from_index(key, &content_id, old_value.as_deref())?;
             }
         }
         
@@ -513,39 +505,28 @@ impl ResourceIndex for InMemoryResourceIndex {
             FilterExpression::Condition(condition) => {
                 self.find_by_condition(condition)
             },
-            FilterExpression::And(expressions) => {
-                if expressions.is_empty() {
-                    return self.get_all_resources();
-                }
+            FilterExpression::And(left, right) => {
+                // Find resources that match both expressions
+                let left_results = self.find_resources(left)?;
+                let right_results = self.find_resources(right)?;
                 
-                let mut results = self.find_resources(&expressions[0])?;
-                
-                for expr in expressions.iter().skip(1) {
-                    let next_results = self.find_resources(expr)?;
-                    results.retain(|id| next_results.contains(id));
-                    
-                    if results.is_empty() {
-                        break;
-                    }
-                }
-                
-                Ok(results)
+                // Intersection of results (resources that match both)
+                Ok(left_results.into_iter()
+                    .filter(|id| right_results.contains(id))
+                    .collect())
             },
-            FilterExpression::Or(expressions) => {
-                if expressions.is_empty() {
-                    return Ok(Vec::new());
-                }
+            FilterExpression::Or(left, right) => {
+                // Find resources that match either expression
+                let left_results = self.find_resources(left)?;
+                let right_results = self.find_resources(right)?;
                 
-                let mut results = Vec::new();
+                // Union of results (deduplicated)
+                let mut results = left_results;
                 
-                for expr in expressions {
-                    let next_results = self.find_resources(expr)?;
-                    
-                    // Add unique IDs to results
-                    for id in next_results {
-                        if !results.contains(&id) {
-                            results.push(id);
-                        }
+                // Add unique IDs from right_results
+                for id in right_results {
+                    if !results.contains(&id) {
+                        results.push(id);
                     }
                 }
                 

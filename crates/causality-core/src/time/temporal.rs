@@ -3,7 +3,7 @@
 // This file contains abstractions for handling logical time, temporal ordering,
 // and causal relationships between events.
 
-use crate::error::{Error, Result};
+use causality_error::{Error, Result};
 use std::cmp::Ordering;
 use std::fmt;
 

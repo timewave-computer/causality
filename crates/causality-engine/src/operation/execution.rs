@@ -9,18 +9,42 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use async_trait::async_trait;
-use log::{debug, warn};
+use tracing::{debug, warn};
+use serde_json::Value;
+use serde::{Serialize, Deserialize};
+use thiserror::Error;
 
-use causality_types::{Error, Result};
-use crate::effect::{Effect, EffectOutcome};
-use crate::resource::ResourceRegisterTrait;
-use causality_crypto::ContentId;
-use crate::verification::{VerificationService, VerificationContext, VerificationOptions};
+use causality_error::{EngineResult as Result, EngineError as Error};
+use causality_core::effect::Effect;
+use causality_core::effect::outcome::{EffectOutcome, EffectStatus, ResultData};
+use causality_core::effect::types::EffectId;
+use causality_types::{ContentId, DomainId};
+
+use super::verification::{VerificationService, VerificationContext, VerificationOptions};
+
+// Define Interpreter trait since it doesn't exist yet
+#[async_trait]
+trait Interpreter: Send + Sync {
+    async fn execute_effect(&self, effect: &dyn Effect) -> Result<EffectOutcome>;
+}
+
+// FIXME: Placeholder for ResourceRegisterTrait that's missing
+#[async_trait]
+trait ResourceRegisterTrait: Send + Sync {
+    async fn create_register(&self, register_id: &str, data: &HashMap<String, String>) -> Result<()>;
+    async fn update_register(&self, register_id: &str, data: &HashMap<String, String>) -> Result<()>;
+    async fn transfer_register(&self, register_id: &str, new_owner: &str) -> Result<()>;
+    async fn lock_register(&self, register_id: &str) -> Result<()>;
+    async fn unlock_register(&self, register_id: &str) -> Result<()>;
+    async fn freeze_register(&self, register_id: &str) -> Result<()>;
+    async fn archive_register(&self, register_id: &str) -> Result<()>;
+}
 
 use super::{
     Operation, OperationType, ExecutionContext, ExecutionPhase, ExecutionEnvironment,
     AbstractContext, RegisterContext, PhysicalContext, ZkContext,
-    ResourceRef, RegisterOperation, PhysicalOperation, ResourceRefType
+    ResourceRef, RegisterOperation, PhysicalOperation, ResourceRefType,
+    RegisterOperationType
 };
 
 use super::transformation::transform_operation;
@@ -56,6 +80,23 @@ pub enum ExecutionError {
     InternalError(String),
 }
 
+// Implement From trait to convert ExecutionError to EngineError
+impl From<ExecutionError> for Error {
+    fn from(error: ExecutionError) -> Self {
+        match error {
+            ExecutionError::InvalidContext(ctx) => Error::ValidationError(format!("Invalid execution context: {:?}", ctx)),
+            ExecutionError::MissingImplementation => Error::ValidationError("Missing concrete implementation".to_string()),
+            ExecutionError::MissingProof => Error::ValidationError("Missing required proof".to_string()),
+            ExecutionError::VerificationFailed(msg) => Error::ValidationError(format!("Verification failed: {}", msg)),
+            ExecutionError::EffectExecutionFailed(msg) => Error::ExecutionTimeout(format!("Effect execution failed: {}", msg)),
+            ExecutionError::RegisterOperationFailed(msg) => Error::StorageError(format!("Register operation failed: {}", msg)),
+            ExecutionError::PhysicalOperationFailed(msg) => Error::ExecutionFailed(format!("Physical operation failed: {}", msg)),
+            ExecutionError::TransformationError(msg) => Error::ValidationError(format!("Transformation error: {}", msg)),
+            ExecutionError::InternalError(msg) => Error::InternalError(format!("Internal error: {}", msg)),
+        }
+    }
+}
+
 /// Result of an operation execution
 #[derive(Debug, Clone)]
 pub struct OperationResult<C: ExecutionContext> {
@@ -80,12 +121,16 @@ pub struct OperationResult<C: ExecutionContext> {
 pub trait OperationExecutor<C: ExecutionContext>: Send + Sync {
     /// Execute an operation in the given context
     async fn execute(&self, operation: &Operation<C>) -> std::result::Result<OperationResult<C>, ExecutionError>;
-    
+}
+
+/// Extension trait for transforming and executing operations in different contexts
+#[async_trait]
+pub trait OperationTransformer<C: ExecutionContext>: OperationExecutor<C> {
     /// Transform and execute an operation in a different context
     async fn transform_and_execute<D: ExecutionContext>(
         &self,
         operation: &Operation<C>,
-        target_executor: &dyn OperationExecutor<D>
+        target_executor: &(dyn OperationExecutor<D> + Send + Sync)
     ) -> std::result::Result<OperationResult<D>, ExecutionError> {
         let transformed = transform_operation::<C, D>(operation)
             .map_err(|e| ExecutionError::TransformationError(e.to_string()))?;
@@ -94,15 +139,18 @@ pub trait OperationExecutor<C: ExecutionContext>: Send + Sync {
     }
 }
 
+// Implement the transformer trait for all executor types
+impl<C: ExecutionContext, T: OperationExecutor<C>> OperationTransformer<C> for T {}
+
 /// Executor for abstract operations
 pub struct AbstractExecutor {
-    interpreter: Arc<Interpreter>,
+    interpreter: Arc<dyn Interpreter>,
     verification_service: Arc<VerificationService>,
 }
 
 impl AbstractExecutor {
     /// Create a new abstract executor
-    pub fn new(interpreter: Arc<Interpreter>, verification_service: Arc<VerificationService>) -> Self {
+    pub fn new(interpreter: Arc<dyn Interpreter>, verification_service: Arc<VerificationService>) -> Self {
         Self {
             interpreter,
             verification_service,
@@ -125,11 +173,9 @@ impl OperationExecutor<AbstractContext> for AbstractExecutor {
         let result = OperationResult {
             operation: operation.clone(),
             effect_outcome: Some(effect_outcome.clone()),
-            success: effect_outcome.success,
-            error: effect_outcome.error.clone(),
-            result_data: effect_outcome.data.iter()
-                .map(|(k, v)| (k.clone(), v.to_string()))
-                .collect(),
+            success: effect_outcome.status == EffectStatus::Success,
+            error: effect_outcome.error_message.clone(),
+            result_data: effect_outcome.data.clone(),
         };
         
         Ok(result)
@@ -158,67 +204,73 @@ impl RegisterExecutor {
     async fn execute_register_operation(
         &self,
         register_op: &RegisterOperation
-    ) -> Result<HashMap<String, String>, Error> {
+    ) -> Result<HashMap<String, String>> {
         // Execute the register operation
         let result = match &register_op.operation {
-            super::RegisterOperationType::Create => {
-                self.resource_register.create_register(&register_op.register_id, &register_op.data)
-                    .await
-                    .map(|_| HashMap::new())
+            RegisterOperationType::Create => {
+                self.resource_register.create_register(&register_op.register_id.to_string(), &register_op.data).await?;
+                Ok(register_op.data.clone())
             },
-            super::RegisterOperationType::Update => {
-                self.resource_register.update_register(&register_op.register_id, &register_op.data)
-                    .await
-                    .map(|_| HashMap::new())
+            RegisterOperationType::Update => {
+                self.resource_register.update_register(&register_op.register_id.to_string(), &register_op.data).await?;
+                Ok(register_op.data.clone())
             },
-            super::RegisterOperationType::Transfer => {
-                // For transfers, we need to extract the new owner
+            RegisterOperationType::Transfer => {
                 let new_owner = register_op.data.get("new_owner")
-                    .ok_or_else(|| Error::InvalidArgument("Missing 'new_owner' for transfer operation".to_string()))?;
-                
-                self.resource_register.transfer_register(&register_op.register_id, new_owner)
-                    .await
-                    .map(|_| HashMap::new())
+                    .ok_or_else(|| Error::InvalidArgument("New owner not specified".to_string()))?;
+                self.resource_register.transfer_register(&register_op.register_id.to_string(), new_owner).await?;
+                Ok(register_op.data.clone())
             },
-            super::RegisterOperationType::Lock => {
-                self.resource_register.lock_register(&register_op.register_id)
-                    .await
-                    .map(|_| HashMap::new())
+            RegisterOperationType::Lock => {
+                self.resource_register.lock_register(&register_op.register_id.to_string()).await?;
+                Ok(register_op.data.clone())
             },
-            super::RegisterOperationType::Unlock => {
-                self.resource_register.unlock_register(&register_op.register_id)
-                    .await
-                    .map(|_| HashMap::new())
+            RegisterOperationType::Unlock => {
+                self.resource_register.unlock_register(&register_op.register_id.to_string()).await?;
+                Ok(register_op.data.clone())
             },
-            super::RegisterOperationType::Freeze => {
-                self.resource_register.freeze_register(&register_op.register_id)
-                    .await
-                    .map(|_| HashMap::new())
+            RegisterOperationType::Freeze => {
+                self.resource_register.freeze_register(&register_op.register_id.to_string()).await?;
+                Ok(register_op.data.clone())
             },
-            super::RegisterOperationType::Archive => {
-                self.resource_register.archive_register(&register_op.register_id)
-                    .await
-                    .map(|_| HashMap::new())
+            RegisterOperationType::Custom(_) => {
+                Err(Error::Other("Custom register operations not implemented".to_string()))
             },
-            super::RegisterOperationType::Custom(ref op_name) => {
-                // For custom operations, we pass all data to the register
-                self.resource_register.custom_operation(&register_op.register_id, op_name, &register_op.data)
-                    .await
+            RegisterOperationType::Unfreeze => {
+                Err(Error::Other("Unfreeze operation not implemented".to_string()))
+            },
+            RegisterOperationType::MarkPending => {
+                Err(Error::Other("MarkPending operation not implemented".to_string()))
+            },
+            RegisterOperationType::Consume => {
+                Err(Error::Other("Consume operation not implemented".to_string()))
+            },
+            RegisterOperationType::Archive => {
+                self.resource_register.archive_register(&register_op.register_id.to_string()).await?;
+                Ok(register_op.data.clone())
+            },
+            RegisterOperationType::Unarchive => {
+                Err(Error::Other("Unarchive operation not implemented".to_string()))
             },
         };
-        
+
         result
     }
 
     /// Execute abstract effect if available
-    async fn execute_abstract_effect(&self, effect: &Option<Box<dyn Effect>>) -> Result<EffectOutcome, Error> {
+    async fn execute_abstract_effect(&self, effect: &Option<Box<dyn Effect>>) -> Result<EffectOutcome> {
         if let Some(effect) = effect {
             // Execute the effect (implementation would depend on your effect system)
             // This is a placeholder for the actual implementation
             Ok(EffectOutcome {
-                success: true,
-                error: None,
+                effect_id: Some(EffectId::new()),
+                status: EffectStatus::Success,
                 data: HashMap::new(),
+                result: ResultData::String(effect.description()),
+                error_message: None,
+                affected_resources: Vec::new(),
+                child_outcomes: Vec::new(),
+                content_hash: None,
             })
         } else {
             Err(Error::InvalidArgument("No abstract effect to execute".to_string()))
@@ -332,7 +384,7 @@ impl OperationExecutor<ZkContext> for ZkExecutor {
 /// Execute an operation with the given executor
 pub async fn execute_operation<C: ExecutionContext>(
     operation: &Operation<C>,
-    executor: &dyn OperationExecutor<C>
+    executor: &(dyn OperationExecutor<C> + Send + Sync)
 ) -> std::result::Result<OperationResult<C>, ExecutionError> {
     // Log operation execution
     debug!("Executing operation: {:?}", operation);
@@ -350,17 +402,32 @@ pub async fn execute_operation<C: ExecutionContext>(
 
 /// Record operation execution for auditing purposes
 async fn record_operation_execution<C: ExecutionContext>(
-    operation: &Operation<C>
+    _operation: &Operation<C>
 ) -> std::result::Result<(), ExecutionError> {
     // TODO: Implement recording of operation execution
     Ok(())
+}
+
+impl From<RegisterOperationType> for EffectOutcome {
+    fn from(op: RegisterOperationType) -> Self {
+        EffectOutcome {
+            effect_id: Some(EffectId::new()),
+            status: EffectStatus::Success,
+            data: HashMap::new(),
+            result: ResultData::String(format!("{:?}", op)),
+            error_message: None,
+            affected_resources: Vec::new(),
+            child_outcomes: Vec::new(),
+            content_hash: None,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::effect::EmptyEffect;
-    use causality_crypto::ContentId;
+    use causality_types::ContentId;
     
     #[tokio::test]
     async fn test_abstract_executor() {
@@ -395,15 +462,16 @@ mod tests {
     
     #[async_trait]
     impl Interpreter for MockInterpreter {
-        async fn execute_effect(&self, effect: &dyn Effect) -> Result<EffectOutcome, Error> {
+        async fn execute_effect(&self, effect: &dyn Effect) -> Result<EffectOutcome> {
             Ok(EffectOutcome {
-                id: effect.id().to_string(),
-                success: true,
+                effect_id: Some(EffectId::random()),
+                status: EffectStatus::Success,
                 data: HashMap::new(),
-                error: None,
-                execution_id: None,
-                resource_changes: Vec::new(),
-                metadata: HashMap::new(),
+                result: ResultData::String(effect.to_string()),
+                error_message: None,
+                affected_resources: Vec::new(),
+                child_outcomes: Vec::new(),
+                content_hash: None,
             })
         }
     }
@@ -415,7 +483,7 @@ mod tests {
             &self,
             _context: VerificationContext,
             _options: VerificationOptions
-        ) -> Result<MockVerificationResult, Error> {
+        ) -> Result<MockVerificationResult> {
             Ok(MockVerificationResult {})
         }
     }

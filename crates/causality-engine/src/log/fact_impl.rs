@@ -6,11 +6,11 @@ use std::sync::{Arc, Mutex};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 
-use causality_types::{Error, Result};
+use causality_error::{Error, Result};
 use crate::log::{LogEntry, LogStorage};
 use crate::log::{FactEntry, EntryData};
-use causality_types::{*};
-use causality_crypto::ContentId;;
+use causality_types::*;
+use causality_types::crypto_primitives::ContentId;
 
 /// Manages fact observation logging
 pub struct FactLogger {
@@ -31,10 +31,14 @@ pub struct FactMetadata {
     pub confidence: f64,
     /// Whether the fact is verifiable
     pub verifiable: bool,
+    /// Whether the fact has been verified
+    pub verified: bool,
     /// The verification method, if any
     pub verification_method: Option<String>,
     /// The expiration time, if any
     pub expires_at: Option<DateTime<Utc>>,
+    /// Additional metadata
+    pub additional: std::collections::HashMap<String, String>,
 }
 
 impl Default for FactMetadata {
@@ -44,22 +48,26 @@ impl Default for FactMetadata {
             observer: "unknown".to_string(),
             confidence: 1.0,
             verifiable: false,
+            verified: false,
             verification_method: None,
             expires_at: None,
+            additional: std::collections::HashMap::new(),
         }
     }
 }
 
 impl FactMetadata {
-    /// Create new fact metadata
+    /// Create new metadata with the specified observer
     pub fn new(observer: &str) -> Self {
         FactMetadata {
             observed_at: Utc::now(),
             observer: observer.to_string(),
             confidence: 1.0,
             verifiable: false,
+            verified: false,
             verification_method: None,
             expires_at: None,
+            additional: std::collections::HashMap::new(),
         }
     }
     
@@ -69,14 +77,16 @@ impl FactMetadata {
         self
     }
     
-    /// Set the verification status
-    pub fn with_verification(
-        mut self, 
-        verifiable: bool, 
-        method: Option<String>
-    ) -> Self {
-        self.verifiable = verifiable;
+    /// Set verification details
+    pub fn with_verification(mut self, verified: bool, method: Option<String>) -> Self {
+        self.verified = verified;
         self.verification_method = method;
+        self
+    }
+    
+    /// Add additional metadata
+    pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
+        self.additional.insert(key.to_string(), value.to_string());
         self
     }
     

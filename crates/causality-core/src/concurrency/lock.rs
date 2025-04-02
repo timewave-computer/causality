@@ -272,7 +272,6 @@ where
 ///
 /// Use only when you need interior mutability without thread safety.
 /// For thread-safe interior mutability, use AtomicCell from the atomic module.
-#[derive(Debug)]
 pub struct Cell<T> {
     /// The inner value
     value: UnsafeCell<T>,
@@ -313,8 +312,11 @@ impl<T> Cell<T> {
     }
     
     /// Replace the value in the cell and return the old value
-    pub fn replace(&self, value: T) -> T {
-        let old = self.get_clone();
+    pub fn replace(&self, value: T) -> T 
+    where
+        T: Copy,
+    {
+        let old = self.get();
         self.set(value);
         old
     }

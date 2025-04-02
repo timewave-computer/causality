@@ -7,8 +7,10 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 # External dependencies
-serde = { workspace = true, features = ["derive"] }
-thiserror = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+serde_json = "1.0"
+lazy_static = "1.4"
 anyhow = { workspace = true }
 tracing = { workspace = true }
 
@@ -19,3 +21,8 @@ causality-core = { workspace = true }
 # DEPRECATED: Dependencies on legacy crates have been removed
 # All functionality is now available through causality-core
 # causality-resource = { workspace = true }
+
+[features]
+default = []
+on_chain = []
+off_chain = []

@@ -3,11 +3,9 @@
 // This file implements the specialized UserAgent type, representing human users of the system.
 
 use crate::resource_types::{ResourceId, ResourceType};
-use crate::resource::ResourceError;
-use crate::capability::Capability;
-use crate::crypto::ContentHash;
-use crate::serialization::{Serializable, DeserializationError};
-use crate::effect::Effect;
+use crate::resource::{Resource, ResourceState, ResourceResult, ResourceError};
+use crate::resource::operation::Capability;
+use crate::utils::content_addressing;
 
 use super::types::{AgentId, AgentType, AgentState, AgentRelationship, AgentError};
 use super::agent::{Agent, AgentImpl};
@@ -17,6 +15,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
+use chrono::Utc;
 
 /// User-specific error types
 #[derive(Error, Debug)]
@@ -36,6 +35,10 @@ pub enum UserAgentError {
     /// Other error
     #[error("User error: {0}")]
     Other(String),
+    
+    /// Resource error
+    #[error("Resource error: {0}")]
+    ResourceError(String),
 }
 
 /// Authentication method used by a user
@@ -151,8 +154,8 @@ impl UserAgent {
         self.auth_method = auth_method;
         
         // Update the content hash
-        self.base.set_metadata("auth_method_updated", &chrono::Utc::now().to_rfc3339()).await
-            .map_err(UserAgentError::AgentError)?;
+        self.base.set_metadata("auth_method_updated", &chrono::Utc::now().to_rfc3339())
+            .map_err(|e: ResourceError| UserAgentError::ResourceError(e.to_string()))?;
         
         Ok(())
     }
@@ -167,8 +170,8 @@ impl UserAgent {
         self.profile = profile;
         
         // Update the content hash
-        self.base.set_metadata("profile_updated", &chrono::Utc::now().to_rfc3339()).await
-            .map_err(UserAgentError::AgentError)?;
+        self.base.set_metadata("profile_updated", &chrono::Utc::now().to_rfc3339())
+            .map_err(|e: ResourceError| UserAgentError::ResourceError(e.to_string()))?;
         
         Ok(())
     }
@@ -183,8 +186,8 @@ impl UserAgent {
         self.account_ids.push(account_id);
         
         // Update the content hash
-        self.base.set_metadata("account_added", &chrono::Utc::now().to_rfc3339()).await
-            .map_err(UserAgentError::AgentError)?;
+        self.base.set_metadata("account_added", &chrono::Utc::now().to_rfc3339())
+            .map_err(|e: ResourceError| UserAgentError::ResourceError(e.to_string()))?;
         
         Ok(())
     }
@@ -194,8 +197,8 @@ impl UserAgent {
         self.verified = true;
         
         // Update the content hash
-        self.base.set_metadata("verified", "true").await
-            .map_err(UserAgentError::AgentError)?;
+        self.base.set_metadata("verified", "true")
+            .map_err(|e: ResourceError| UserAgentError::ResourceError(e.to_string()))?;
         
         Ok(())
     }
@@ -211,8 +214,8 @@ impl UserAgent {
         self.last_login = Some(now);
         
         // Update the content hash
-        self.base.set_metadata("last_login", &now.to_string()).await
-            .map_err(UserAgentError::AgentError)?;
+        self.base.set_metadata("last_login", &ToString::to_string(&now))
+            .map_err(|e: ResourceError| UserAgentError::ResourceError(e.to_string()))?;
         
         Ok(())
     }
@@ -222,51 +225,33 @@ impl UserAgent {
         self.last_login
     }
     
-    /// Authenticate the user
+    /// Authenticate the user with the provided credentials
     pub async fn authenticate(&mut self, credentials: &str) -> Result<bool, UserAgentError> {
-        // This is a simplified authentication method
-        // In a real implementation, this would validate the credentials against the auth_method
-        
-        // For example, if using password authentication:
-        match &self.auth_method {
-            AuthenticationMethod::Password { hash, salt } => {
-                // In a real implementation, hash the provided credentials with the salt
-                // and compare with the stored hash
-                let authenticated = credentials == hash;
-                
-                if authenticated {
-                    self.record_login().await?;
-                }
-                
-                Ok(authenticated)
+        // Very basic authentication logic for demonstration
+        let authenticated = match &self.auth_method {
+            AuthenticationMethod::Password { hash, salt: _ } => {
+                // In a real implementation, we would properly hash and validate the password
+                credentials == hash
             },
             AuthenticationMethod::PublicKey { public_key } => {
-                // In a real implementation, verify the signature using the public key
-                let authenticated = credentials == public_key;
-                
-                if authenticated {
-                    self.record_login().await?;
-                }
-                
-                Ok(authenticated)
+                // In a real implementation, we would validate a signature
+                credentials == public_key
             },
-            AuthenticationMethod::OAuth { provider, token } => {
-                // In a real implementation, validate the token with the OAuth provider
-                let authenticated = credentials == token;
-                
-                if authenticated {
-                    self.record_login().await?;
-                }
-                
-                Ok(authenticated)
+            AuthenticationMethod::OAuth { provider: _, token } => {
+                // In a real implementation, we would validate the token with the OAuth provider
+                credentials == token
             },
-            AuthenticationMethod::MultiFactorAuth { primary, secondary } => {
-                // In a real implementation, perform multiple authentication steps
-                Err(UserAgentError::AuthenticationError(
-                    "Multi-factor authentication not implemented".to_string()
-                ))
+            AuthenticationMethod::MultiFactorAuth { .. } => {
+                // In a real implementation, we would have a proper MFA flow
+                false
             },
+        };
+        
+        if authenticated {
+            self.record_login().await?;
         }
+        
+        Ok(authenticated)
     }
 }
 
@@ -295,14 +280,14 @@ impl Agent for UserAgent {
     }
     
     fn state(&self) -> &AgentState {
-        self.base.state()
+        Agent::state(&self.base)
     }
     
     async fn set_state(&mut self, state: AgentState) -> Result<(), AgentError> {
         self.base.set_state(state).await
     }
     
-    async fn add_capability(&mut self, capability: Capability) -> Result<(), AgentError> {
+    async fn add_capability(&mut self, capability: Capability<Box<dyn Resource>>) -> Result<(), AgentError> {
         self.base.add_capability(capability).await
     }
     
@@ -314,7 +299,7 @@ impl Agent for UserAgent {
         self.base.has_capability(capability_id)
     }
     
-    fn capabilities(&self) -> Vec<Capability> {
+    fn capabilities(&self) -> Vec<Capability<Box<dyn Resource>>> {
         self.base.capabilities()
     }
     
@@ -340,25 +325,42 @@ impl Agent for UserAgent {
 }
 
 // Implement the Resource trait through delegation to the base agent
-impl crate::resource::Resource for UserAgent {
-    fn id(&self) -> &ResourceId {
-        self.base.id()
+#[async_trait]
+impl Resource for UserAgent {
+    fn id(&self) -> ResourceId {
+        self.base.id().clone()
     }
-    
+
     fn resource_type(&self) -> ResourceType {
-        self.base.resource_type()
+        ResourceType::new("Agent", "1.0")
+    }
+
+    fn state(&self) -> ResourceState {
+        match Agent::state(&self.base) {
+            &AgentState::Active => ResourceState::Active,
+            &AgentState::Inactive => ResourceState::Created,
+            &AgentState::Suspended { .. } => ResourceState::Locked,
+        }
+    }
+
+    fn get_metadata(&self, key: &str) -> Option<String> {
+        self.base.get_metadata(key)
+    }
+
+    fn set_metadata(&mut self, key: &str, value: &str) -> ResourceResult<()> {
+        self.base.set_metadata(key, value)
     }
     
-    fn metadata(&self) -> &HashMap<String, String> {
-        self.base.metadata()
-    }
-    
-    fn metadata_mut(&mut self) -> &mut HashMap<String, String> {
-        self.base.metadata_mut()
-    }
-    
-    fn clone_resource(&self) -> Box<dyn crate::resource::Resource> {
+    fn clone_resource(&self) -> Box<dyn Resource> {
         Box::new(self.clone())
+    }
+    
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 
@@ -395,13 +397,13 @@ impl UserAgentBuilder {
     }
     
     /// Add a capability
-    pub fn with_capability(mut self, capability: Capability) -> Self {
+    pub fn with_capability(mut self, capability: Capability<Box<dyn Resource>>) -> Self {
         self.base_builder = self.base_builder.with_capability(capability);
         self
     }
     
     /// Add multiple capabilities
-    pub fn with_capabilities(mut self, capabilities: Vec<Capability>) -> Self {
+    pub fn with_capabilities(mut self, capabilities: Vec<Capability<Box<dyn Resource>>>) -> Self {
         self.base_builder = self.base_builder.with_capabilities(capabilities);
         self
     }
@@ -571,7 +573,7 @@ mod tests {
         assert_eq!(user_agent.account_ids().len(), 0);
         
         // Add an account
-        let account_id = ResourceId::new(ContentHash::default());
+        let account_id = ResourceId::new(content_addressing::default_content_hash());
         user_agent.add_account_id(account_id.clone()).await.unwrap();
         
         // Check accounts

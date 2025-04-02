@@ -1,76 +1,216 @@
-// Transaction replay functionality
-// Original file: src/execution/replay.rs
-
-// Execution replay module for Causality Content-Addressed Code System
+// Execution replay system
 //
 // This module provides functionality for replaying execution traces,
-// enabling deterministic recreation of past executions and time-travel debugging.
+// which is useful for debugging, analysis, and visualization of
+// execution flows.
 
 use std::collections::HashMap;
-use std::fmt;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
+use causality_error::{Result, Error};
+// Replace the import that's causing problems
+// use causality_core::effect::runtime::EffectRuntime;
+use causality_types::ContentId as ContentHash;
 
-use causality_types::{Error, Result};
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::ContentHash;
-use crate::execution::{ContextId, ExecutionContext, ExecutionEvent, Value};
-use causality_engine::ExecutionTracer;
-
-/// Current position in a trace replay
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ReplayPosition {
-    /// The event index in the trace
-    event_index: usize,
+// Define ExecutionTrace struct locally if not available in the crate
+/// Execution trace for recording and replaying execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionTrace {
+    /// Trace ID
+    pub id: String,
+    
+    /// Events in the trace
+    pub events: Vec<ExecutionEvent>,
+    
+    /// Metadata
+    pub metadata: HashMap<String, String>,
 }
 
-impl ReplayPosition {
-    /// Create a new replay position at the start of the trace
-    pub fn start() -> Self {
-        ReplayPosition { event_index: 0 }
+/// Execution event for tracing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ExecutionEvent {
+    // Event variants would go here
+    /// Call event
+    Call {
+        /// Function name
+        function_name: String,
+        /// Arguments
+        args: Vec<Value>,
+        /// Timestamp
+        timestamp: u64,
+    },
+    /// Return event
+    Return {
+        /// Return value
+        value: Value,
+        /// Timestamp
+        timestamp: u64,
+    },
+    /// Custom event
+    Custom {
+        /// Event name
+        name: String,
+        /// Event data
+        data: HashMap<String, Value>,
+        /// Timestamp
+        timestamp: u64,
+    },
+}
+
+/// Value type for execution events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Value {
+    /// Null value
+    Null,
+    /// Boolean value
+    Bool(bool),
+    /// Integer value
+    Int(i64),
+    /// String value
+    String(String),
+    /// Map value
+    Map(HashMap<String, Value>),
+    /// Array value
+    Array(Vec<Value>),
+}
+
+// Fix missing ContextId type
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ContextId(String);
+
+impl ContextId {
+    pub fn new() -> Self {
+        ContextId(uuid::Uuid::new_v4().to_string())
     }
-    
-    /// Create a new replay position at a specific event index
-    pub fn at_index(index: usize) -> Self {
-        ReplayPosition { event_index: index }
-    }
-    
-    /// Get the current event index
-    pub fn event_index(&self) -> usize {
-        self.event_index
-    }
-    
-    /// Advance to the next event
-    pub fn advance(&mut self) {
-        self.event_index += 1;
-    }
-    
-    /// Go back to the previous event
-    pub fn reverse(&mut self) -> Result<()> {
-        if self.event_index > 0 {
-            self.event_index -= 1;
-            Ok(())
-        } else {
-            Err(Error::ReplayError("Already at the beginning of the trace".to_string()))
+}
+
+// Define ExecutionContext type that's needed for ReplayContext
+#[derive(Debug)]
+pub struct ExecutionContext {
+    /// Context ID
+    pub id: ContextId,
+    /// Variables
+    pub variables: HashMap<String, Value>,
+}
+
+/// Call frame for tracking the execution stack
+#[derive(Debug, Clone)]
+pub struct CallFrame {
+    /// Name of the function
+    pub function_name: String,
+    /// Line number in the source code
+    pub line: u32,
+    /// Column number in the source code
+    pub column: u32,
+    /// Source file
+    pub source: Option<String>,
+    /// Timestamp when the frame was created
+    pub timestamp: u64,
+}
+
+impl CallFrame {
+    pub fn new(
+        function_name: String,
+        line: u32,
+        column: u32,
+        source: Option<String>,
+        timestamp: u64,
+    ) -> Self {
+        Self {
+            function_name,
+            line,
+            column,
+            source,
+            timestamp,
         }
     }
 }
 
-/// A snapshot of execution state at a specific point in a trace
-#[derive(Debug, Clone)]
+/// Context for replaying execution traces
+pub struct ReplayContext {
+    /// Execution ID
+    pub execution_id: String,
+    
+    /// Status
+    pub status: String,
+    
+    /// Event handlers
+    pub event_handlers: HashMap<String, Box<dyn Fn(&ExecutionEvent) -> Result<()> + Send + Sync>>,
+    
+    /// Call stack
+    pub call_stack: Vec<CallFrame>,
+    
+    /// Current execution trace
+    pub trace: Option<ExecutionTrace>,
+}
+
+/// Position in a replay
+#[derive(Debug, Clone, Copy)]
+pub struct ReplayPosition {
+    /// The current position
+    pub position: usize,
+    
+    /// The total length
+    pub total: usize,
+    
+    /// Current timestamp
+    pub timestamp: u64,
+}
+
+impl ReplayPosition {
+    /// Create a position at the start
+    pub fn start() -> Self {
+        Self {
+            position: 0,
+            total: 0,
+            timestamp: 0,
+        }
+    }
+    
+    /// Create a position at a specific index
+    pub fn at_index(index: usize) -> Self {
+        Self {
+            position: index,
+            total: 0,
+            timestamp: 0,
+        }
+    }
+    
+    /// Get the current event index
+    pub fn event_index(&self) -> usize {
+        self.position
+    }
+    
+    /// Advance to the next position
+    pub fn advance(&mut self) {
+        self.position += 1;
+    }
+    
+    /// Move to the previous position
+    pub fn reverse(&mut self) -> Result<()> {
+        if self.position == 0 {
+            return Err(Error::InvalidArgument("Cannot reverse past the start of the trace".to_string()));
+        }
+        
+        self.position -= 1;
+        Ok(())
+    }
+}
+
+/// Snapshot of execution state at a point in time
+#[derive(Clone)]
 pub struct ExecutionSnapshot {
     /// The position in the trace
     pub position: ReplayPosition,
     /// The variable bindings at this point
     pub variables: HashMap<String, Value>,
     /// The call stack at this point
-    pub call_stack: Vec<causality_engine::CallFrame>,
+    pub call_stack: Vec<CallFrame>,
 }
 
-/// Options for replay execution
-#[derive(Debug, Clone)]
+/// Options for replaying execution
 pub struct ReplayOptions {
     /// Whether to apply effects during replay
     pub apply_effects: bool,
@@ -84,7 +224,7 @@ pub struct ReplayOptions {
 
 impl Default for ReplayOptions {
     fn default() -> Self {
-        ReplayOptions {
+        Self {
             apply_effects: false,
             validate_hashes: true,
             event_handlers: HashMap::new(),
@@ -134,7 +274,7 @@ impl ExecutionReplayer {
     
     /// Check if the replay has reached the end
     pub fn is_at_end(&self) -> bool {
-        self.position.event_index >= self.trace.events.len()
+        self.position.position >= self.trace.events.len()
     }
     
     /// Get the event at the current position
@@ -148,8 +288,8 @@ impl ExecutionReplayer {
     
     /// Create a new snapshot at the current position
     pub fn create_snapshot(&mut self, context: &ExecutionContext) -> Result<()> {
-        let variables = context.variables.read().map_err(|_| Error::LockError)?.clone();
-        let call_stack = context.call_stack.read().map_err(|_| Error::LockError)?.clone();
+        let variables = context.get_variables()?.clone();
+        let call_stack = context.get_call_stack()?.clone();
         
         let snapshot = ExecutionSnapshot {
             position: self.position,
@@ -338,7 +478,7 @@ impl ExecutionReplayer {
         match event {
             ExecutionEvent::FunctionCall { hash, name, arguments, .. } => {
                 // Create a call frame
-                let frame = causality_engine::CallFrame::new(
+                let frame = CallFrame::new(
                     hash.clone(),
                     name.clone(),
                     arguments.clone(),
@@ -384,6 +524,23 @@ impl ExecutionReplayer {
             ExecutionEvent::Error(error) => {
                 // Record the error event
                 context.record_event(event.clone())?;
+            },
+            ExecutionEvent::Return { value, timestamp } => {
+                // Get the current call frame
+                let frame = if let Some(frame) = context.call_stack.last() {
+                    frame.clone()
+                } else {
+                    // Create a default frame if none exists
+                    CallFrame::new(
+                        "unknown".to_string(),
+                        0,
+                        0,
+                        None,
+                        *timestamp
+                    )
+                };
+                
+                // ... existing code ...
             },
         }
         

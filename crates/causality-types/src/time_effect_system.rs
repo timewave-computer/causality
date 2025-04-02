@@ -258,10 +258,15 @@ impl TimeEffectHandler for TimeService {
         
         let source_type = match &source {
             AttestationSource::Blockchain { .. } => "blockchain",
-            AttestationSource::User { .. } => "user",
+            AttestationSource::User => "user",
             AttestationSource::Operator { .. } => "operator", 
             AttestationSource::Committee { .. } => "committee",
             AttestationSource::Oracle { .. } => "oracle",
+            AttestationSource::NTP => "ntp",
+            AttestationSource::External(_) => "external",
+            AttestationSource::Consensus(_) => "consensus",
+            AttestationSource::Custom(_) => "custom",
+            AttestationSource::SystemClock => "system_clock",
         };
         
         clock_sources.insert(domain_id.clone(), ClockSourceInfo {

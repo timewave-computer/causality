@@ -1156,4 +1156,206 @@ mod tests {
         
         Ok(())
     }
+}
+
+// Map implementation for time-based domain mapping
+//
+// This module provides the implementation of the time map
+// for domain synchronization.
+
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+
+use crate::selection::DomainId;
+use crate::map::types::TimePoint;
+use crate::map::time_map::{TimeMap, TimeMapEntry, TimeMapHistory, SharedTimeMap};
+use crate::error::{Result, system_error};
+
+/// Implementation of the time map
+pub struct TimeMapImpl {
+    /// Time map entries by domain and time point
+    entries: RwLock<HashMap<DomainId, HashMap<TimePoint, TimeMapEntry>>>,
+    /// History of changes
+    history: RwLock<HashMap<DomainId, HashMap<TimePoint, Vec<TimeMapEntry>>>>,
+}
+
+impl TimeMapImpl {
+    /// Create a new time map
+    pub fn new() -> Self {
+        Self {
+            entries: RwLock::new(HashMap::new()),
+            history: RwLock::new(HashMap::new()),
+        }
+    }
+}
+
+impl TimeMap for TimeMapImpl {
+    fn add_entry(&self, entry: TimeMapEntry) -> Result<()> {
+        let mut entries = self.entries.write().map_err(|_| system_error("Failed to acquire write lock on time map"))?;
+        
+        let domain_entries = entries.entry(entry.domain_id.clone()).or_insert_with(HashMap::new);
+        
+        // Add to history before replacing
+        let mut history = self.history.write().map_err(|_| system_error("Failed to acquire write lock on time map history"))?;
+        let domain_history = history.entry(entry.domain_id.clone()).or_insert_with(HashMap::new);
+        let entry_history = domain_history.entry(entry.time_point.clone()).or_insert_with(Vec::new);
+        
+        // Add the current entry to history if it exists
+        if let Some(current_entry) = domain_entries.get(&entry.time_point) {
+            entry_history.push(current_entry.clone());
+        }
+        
+        // Update the entry
+        domain_entries.insert(entry.time_point.clone(), entry);
+        
+        Ok(())
+    }
+    
+    fn get_entry(&self, domain_id: &DomainId, time_point: &TimePoint) -> Result<Option<TimeMapEntry>> {
+        let entries = self.entries.read().map_err(|_| system_error("Failed to acquire read lock on time map"))?;
+        
+        if let Some(domain_entries) = entries.get(domain_id) {
+            if let Some(entry) = domain_entries.get(time_point) {
+                return Ok(Some(entry.clone()));
+            }
+        }
+        
+        Ok(None)
+    }
+    
+    fn get_entries_for_domain(&self, domain_id: &DomainId) -> Result<Vec<TimeMapEntry>> {
+        let entries = self.entries.read().map_err(|_| system_error("Failed to acquire read lock on time map"))?;
+        
+        if let Some(domain_entries) = entries.get(domain_id) {
+            Ok(domain_entries.values().cloned().collect())
+        } else {
+            Ok(Vec::new())
+        }
+    }
+    
+    fn remove_entry(&self, domain_id: &DomainId, time_point: &TimePoint) -> Result<bool> {
+        let mut entries = self.entries.write().map_err(|_| system_error("Failed to acquire write lock on time map"))?;
+        
+        if let Some(domain_entries) = entries.get_mut(domain_id) {
+            Ok(domain_entries.remove(time_point).is_some())
+        } else {
+            Ok(false)
+        }
+    }
+    
+    fn clear_domain(&self, domain_id: &DomainId) -> Result<()> {
+        let mut entries = self.entries.write().map_err(|_| system_error("Failed to acquire write lock on time map"))?;
+        
+        entries.remove(domain_id);
+        
+        // Also clear history
+        let mut history = self.history.write().map_err(|_| system_error("Failed to acquire write lock on time map history"))?;
+        history.remove(domain_id);
+        
+        Ok(())
+    }
+    
+    fn clear_all(&self) -> Result<()> {
+        let mut entries = self.entries.write().map_err(|_| system_error("Failed to acquire write lock on time map"))?;
+        entries.clear();
+        
+        let mut history = self.history.write().map_err(|_| system_error("Failed to acquire write lock on time map history"))?;
+        history.clear();
+        
+        Ok(())
+    }
+    
+    fn get_domain_ids(&self) -> Result<Vec<DomainId>> {
+        let entries = self.entries.read().map_err(|_| system_error("Failed to acquire read lock on time map"))?;
+        
+        Ok(entries.keys().cloned().collect())
+    }
+}
+
+impl TimeMapHistory for TimeMapImpl {
+    fn get_entry_history(&self, domain_id: &DomainId, time_point: &TimePoint) -> Result<Vec<TimeMapEntry>> {
+        let history = self.history.read().map_err(|_| system_error("Failed to acquire read lock on time map history"))?;
+        
+        if let Some(domain_history) = history.get(domain_id) {
+            if let Some(entry_history) = domain_history.get(time_point) {
+                return Ok(entry_history.clone());
+            }
+        }
+        
+        Ok(Vec::new())
+    }
+    
+    fn clear_history_for_domain(&self, domain_id: &DomainId) -> Result<()> {
+        let mut history = self.history.write().map_err(|_| system_error("Failed to acquire write lock on time map history"))?;
+        
+        history.remove(domain_id);
+        
+        Ok(())
+    }
+}
+
+impl Default for TimeMapImpl {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SharedTimeMap {
+    /// Create a new shared time map
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(TimeMapImpl::new()),
+        }
+    }
+    
+    /// Get the inner time map implementation
+    pub fn inner(&self) -> Arc<TimeMapImpl> {
+        self.inner.clone()
+    }
+}
+
+impl TimeMap for SharedTimeMap {
+    fn add_entry(&self, entry: TimeMapEntry) -> Result<()> {
+        self.inner.add_entry(entry)
+    }
+    
+    fn get_entry(&self, domain_id: &DomainId, time_point: &TimePoint) -> Result<Option<TimeMapEntry>> {
+        self.inner.get_entry(domain_id, time_point)
+    }
+    
+    fn get_entries_for_domain(&self, domain_id: &DomainId) -> Result<Vec<TimeMapEntry>> {
+        self.inner.get_entries_for_domain(domain_id)
+    }
+    
+    fn remove_entry(&self, domain_id: &DomainId, time_point: &TimePoint) -> Result<bool> {
+        self.inner.remove_entry(domain_id, time_point)
+    }
+    
+    fn clear_domain(&self, domain_id: &DomainId) -> Result<()> {
+        self.inner.clear_domain(domain_id)
+    }
+    
+    fn clear_all(&self) -> Result<()> {
+        self.inner.clear_all()
+    }
+    
+    fn get_domain_ids(&self) -> Result<Vec<DomainId>> {
+        self.inner.get_domain_ids()
+    }
+}
+
+impl TimeMapHistory for SharedTimeMap {
+    fn get_entry_history(&self, domain_id: &DomainId, time_point: &TimePoint) -> Result<Vec<TimeMapEntry>> {
+        self.inner.get_entry_history(domain_id, time_point)
+    }
+    
+    fn clear_history_for_domain(&self, domain_id: &DomainId) -> Result<()> {
+        self.inner.clear_history_for_domain(domain_id)
+    }
+}
+
+impl Default for SharedTimeMap {
+    fn default() -> Self {
+        Self::new()
+    }
 } 

@@ -1,20 +1,20 @@
-// Operation transformation logic
+// Operation transformation
 // Original file: src/operation/transformation.rs
 
 // Operation Transformation Module
 //
-// This module provides utilities for transforming operations between different
-// execution contexts, allowing operations to move through the various stages
-// of their lifecycle.
+// This module provides utilities for transforming operations from one
+// representation to another, e.g., from abstract to register operations.
 
 use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::fmt::Debug;
 use std::sync::Arc;
 
-use causality_types::{Error};
 use crate::effect::{Effect, EffectOutcome};
-use causality_types::DomainId;
-use crate::verification::UnifiedProof;
-use crate::crypto::ContentId;
+use causality_error::{EngineResult, EngineError};
+use causality_types::ContentId;
+use causality_core::verification::proof::UnifiedProof;
 
 use super::{
     Operation, OperationType, ExecutionContext, ExecutionPhase, ExecutionEnvironment,

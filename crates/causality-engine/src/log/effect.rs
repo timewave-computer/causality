@@ -8,13 +8,12 @@ use std::collections::HashMap;
 use borsh::{BorshSerialize, BorshDeserialize};
 use rand;
 
-use causality_types::{Error, Result};
-use crate::log::{LogEntry, EffectEntry, LogStorage};
-use crate::log::{EntryType, EntryData};
-use causality_types::{*};
-use causality_crypto::ContentId;;
+use crate::Error;
+use crate::Result;
+use crate::log::LogStorage;
+use crate::log::entry::{LogEntry, EffectEntry, EntryType, EntryData};
 use crate::effect::EffectType;
-use crate::crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
 
 /// Data for content-addressed log entry IDs
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
@@ -203,9 +202,11 @@ impl EffectLogger {
         
         // Generate a content-derived ID
         let entry_id = format!("log:{}", content_data.content_id());
+        let entry_hash = content_data.content_id();
         
         let log_entry = LogEntry {
             id: entry_id,
+            entry_hash,
             timestamp: Utc::now(),
             entry_type: EntryType::Effect,
             data: EntryData::Effect(effect_entry),

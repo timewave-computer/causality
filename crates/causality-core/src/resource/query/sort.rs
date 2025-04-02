@@ -59,20 +59,48 @@ impl Sort {
     }
     
     /// Compare two resources using this sort specification
-    pub fn compare<R: Resource>(&self, a: &R, b: &R) -> Result<Ordering, QueryError> {
-        // Convert resources to JSON for field extraction
-        let a_json = serde_json::to_value(a)
-            .map_err(|e| QueryError::SerializationError(e.to_string()))?;
-        
-        let b_json = serde_json::to_value(b)
-            .map_err(|e| QueryError::SerializationError(e.to_string()))?;
-        
-        // Extract field values
-        let a_value = extract_field_value(&a_json, &self.field)?;
-        let b_value = extract_field_value(&b_json, &self.field)?;
-        
-        // Compare values
-        let ordering = compare_values(a_value, b_value)?;
+    pub fn compare<R>(&self, a: &R, b: &R) -> Result<Ordering, QueryError> 
+    where 
+        R: Resource,
+    {
+        // Access fields through the Resource interface
+        let ordering = match self.field.as_str() {
+            "id" => {
+                // Compare IDs
+                let a_id = a.id();
+                let b_id = b.id();
+                a_id.to_string().cmp(&b_id.to_string())
+            },
+            "type" | "resource_type" => {
+                // Compare resource types
+                let a_type = a.resource_type();
+                let b_type = b.resource_type();
+                a_type.to_string().cmp(&b_type.to_string())
+            },
+            "state" => {
+                // Compare states
+                let a_state = a.state();
+                let b_state = b.state();
+                a_state.to_string().cmp(&b_state.to_string())
+            },
+            field if field.starts_with("metadata.") => {
+                // Compare metadata values
+                let key = field.strip_prefix("metadata.").unwrap_or(field);
+                let a_value = a.get_metadata(key);
+                let b_value = b.get_metadata(key);
+                
+                match (a_value.as_ref(), b_value.as_ref()) {
+                    (None, None) => Ordering::Equal,
+                    (None, Some(_)) => Ordering::Less,
+                    (Some(_), None) => Ordering::Greater,
+                    (Some(a_str), Some(b_str)) => a_str.cmp(b_str),
+                }
+            },
+            _ => {
+                // Unknown field, assume equality
+                return Err(QueryError::FieldNotFound(format!("Field not found for sorting: {}", self.field)));
+            }
+        };
         
         // Apply sort direction
         match self.direction {
@@ -143,7 +171,10 @@ impl SortOptions {
     }
     
     /// Compare two resources using these sort options
-    pub fn compare<R: Resource>(&self, a: &R, b: &R) -> Result<Ordering, QueryError> {
+    pub fn compare<R>(&self, a: &R, b: &R) -> Result<Ordering, QueryError>
+    where
+        R: Resource,
+    {
         for sort in &self.fields {
             match sort.compare(a, b) {
                 Ok(Ordering::Equal) => continue, // Try next field
@@ -153,8 +184,8 @@ impl SortOptions {
         }
         
         // If all fields are equal, use content ID as tiebreaker to ensure stable sort
-        let a_id = a.resource_id();
-        let b_id = b.resource_id();
+        let a_id = a.id();
+        let b_id = b.id();
         
         Ok(a_id.to_string().cmp(&b_id.to_string()))
     }

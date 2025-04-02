@@ -1,10 +1,7 @@
-// Domain map synchronization
-// Original file: src/domain/map/sync.rs
-
-// Time Synchronization Implementation
+// Synchronization module for time map
 //
-// This module provides functionality for synchronizing time across different
-// domains and ensuring consistent timelines.
+// This module provides functionality for synchronizing time maps
+// across domains and verifying time commitments.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -14,410 +11,379 @@ use tokio::sync::broadcast;
 use tokio::time;
 use tokio::time::timeout as tokio_timeout;
 use serde::{Serialize, Deserialize};
+use async_trait::async_trait;
 
 use causality_types::{Error, Result};
 use causality_types::Timestamp;
 use crate::domain::DomainId;
 use super::{TimeMap, TimeMapEntry, SharedTimeMap};
 use super::TimePoint;
+use crate::selection::TimeRange;
+use crate::error::system_error;
 
-/// Configuration for the time synchronization manager
-#[derive(Debug, Clone)]
+/// Time synchronization configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeSyncConfig {
-    /// How often to attempt synchronization (in seconds)
-    pub sync_interval: u64,
-    /// Timeout for sync operations (in seconds)
-    pub sync_timeout: u64,
-    /// Maximum time difference allowed between domains (in seconds)
-    pub max_time_difference: u64,
-    /// Minimum confidence threshold for accepting time points
-    pub min_confidence: f64,
-    /// Number of history points to maintain
-    pub history_size: usize,
-    /// Whether to verify time points cryptographically
-    pub verify_time_points: bool,
+    /// Interval for sync operations in seconds
+    pub sync_interval_seconds: u64,
+    /// Maximum time deviation allowed in seconds
+    pub max_time_deviation_seconds: u64,
+    /// Minimum confidence threshold
+    pub min_confidence_threshold: f64,
+    /// Required verifications before committing
+    pub required_verifications: u32,
+    /// Domains to sync with
+    pub domains: Vec<DomainId>,
+    /// Additional sync parameters
+    pub parameters: HashMap<String, String>,
 }
 
 impl Default for TimeSyncConfig {
     fn default() -> Self {
-        TimeSyncConfig {
-            sync_interval: 60,
-            sync_timeout: 30,
-            max_time_difference: 300,
-            min_confidence: 0.7,
-            history_size: 100,
-            verify_time_points: true,
+        Self {
+            sync_interval_seconds: 60,
+            max_time_deviation_seconds: 300,
+            min_confidence_threshold: 0.7,
+            required_verifications: 2,
+            domains: Vec::new(),
+            parameters: HashMap::new(),
         }
     }
 }
 
-/// Status of a time synchronization
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Synchronization status
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SyncStatus {
-    /// Sync is in progress
+    /// Synchronization is in progress
     InProgress,
-    /// Sync completed successfully
+    /// Synchronization has been completed
     Completed,
-    /// Sync failed
+    /// Synchronization has failed
     Failed(String),
-    /// Sync was skipped
-    Skipped(String),
+    /// Synchronization has not been started
+    NotStarted,
 }
 
-/// Result of a time synchronization operation
-#[derive(Debug, Clone)]
+impl ToString for SyncStatus {
+    fn to_string(&self) -> String {
+        match self {
+            SyncStatus::InProgress => "in_progress".to_string(),
+            SyncStatus::Completed => "completed".to_string(),
+            SyncStatus::Failed(err) => format!("failed: {}", err),
+            SyncStatus::NotStarted => "not_started".to_string(),
+        }
+    }
+}
+
+/// Result of a synchronization operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncResult {
     /// Status of the sync operation
     pub status: SyncStatus,
-    /// Domains that were synchronized
-    pub synced_domains: HashSet<DomainId>,
-    /// Domains that failed to synchronize
-    pub failed_domains: HashMap<DomainId, String>,
-    /// Updated time map (if successful)
-    pub time_map: Option<TimeMap>,
-    /// When the sync was started
-    pub started_at: DateTime<Utc>,
-    /// When the sync completed
-    pub completed_at: DateTime<Utc>,
-    /// Duration of the sync operation
-    pub duration_ms: u64,
+    /// Domain that was synchronized
+    pub domain_id: DomainId,
+    /// Time point that was synchronized
+    pub time_point: Option<TimePoint>,
+    /// Verification status
+    pub verification: VerificationStatus,
+    /// Timestamp when the sync was started
+    pub started_at: u64,
+    /// Timestamp when the sync was completed
+    pub completed_at: u64,
+    /// Duration of the sync operation in seconds
+    pub duration_seconds: u64,
+    /// Additional metadata
+    pub metadata: HashMap<String, String>,
 }
 
-impl SyncResult {
-    /// Create a new sync result
-    pub fn new(started_at: DateTime<Utc>) -> Self {
-        SyncResult {
-            status: SyncStatus::InProgress,
-            synced_domains: HashSet::new(),
-            failed_domains: HashMap::new(),
-            time_map: None,
-            started_at,
-            completed_at: Utc::now(),
-            duration_ms: 0,
-        }
-    }
-    
-    /// Mark the sync as completed
-    pub fn complete(mut self, time_map: TimeMap) -> Self {
-        self.status = SyncStatus::Completed;
-        self.time_map = Some(time_map);
-        self.completed_at = Utc::now();
-        self.duration_ms = self.completed_at.timestamp_millis() as u64 - 
-                         self.started_at.timestamp_millis() as u64;
-        self
-    }
-    
-    /// Mark the sync as failed
-    pub fn fail(mut self, reason: &str) -> Self {
-        self.status = SyncStatus::Failed(reason.to_string());
-        self.completed_at = Utc::now();
-        self.duration_ms = self.completed_at.timestamp_millis() as u64 - 
-                         self.started_at.timestamp_millis() as u64;
-        self
-    }
-    
-    /// Mark the sync as skipped
-    pub fn skip(mut self, reason: &str) -> Self {
-        self.status = SyncStatus::Skipped(reason.to_string());
-        self.completed_at = Utc::now();
-        self.duration_ms = self.completed_at.timestamp_millis() as u64 - 
-                         self.started_at.timestamp_millis() as u64;
-        self
-    }
-    
-    /// Add a successfully synced domain
-    pub fn add_synced_domain(mut self, domain_id: DomainId) -> Self {
-        self.synced_domains.insert(domain_id);
-        self
-    }
-    
-    /// Add a failed domain with reason
-    pub fn add_failed_domain(mut self, domain_id: DomainId, reason: &str) -> Self {
-        self.failed_domains.insert(domain_id, reason.to_string());
-        self
-    }
-    
-    /// Check if all domains were successfully synced
-    pub fn is_fully_successful(&self) -> bool {
-        self.status == SyncStatus::Completed && self.failed_domains.is_empty()
-    }
-    
-    /// Get the number of synced domains
-    pub fn synced_count(&self) -> usize {
-        self.synced_domains.len()
-    }
-    
-    /// Get the number of failed domains
-    pub fn failed_count(&self) -> usize {
-        self.failed_domains.len()
-    }
-}
-
-/// Source type for time points
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Time source
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TimeSource {
-    /// Local time observation
+    /// Local time source
     Local,
-    /// Remote peer provided this time point
-    Peer(String),
-    /// External source (e.g., API, oracle)
+    /// Remote time source
+    Remote(DomainId),
+    /// Consensus time source (aggregated from multiple domains)
+    Consensus(Vec<DomainId>),
+    /// External time source
     External(String),
-    /// Derived through consensus
-    Consensus,
 }
 
 impl ToString for TimeSource {
     fn to_string(&self) -> String {
         match self {
             TimeSource::Local => "local".to_string(),
-            TimeSource::Peer(id) => format!("peer:{}", id),
-            TimeSource::External(src) => format!("external:{}", src),
-            TimeSource::Consensus => "consensus".to_string(),
+            TimeSource::Remote(domain_id) => format!("remote:{}", domain_id),
+            TimeSource::Consensus(domains) => format!("consensus:{}", domains.iter().map(|d| d.to_string()).collect::<Vec<String>>().join(",")),
+            TimeSource::External(source) => format!("external:{}", source),
         }
     }
 }
 
-/// Time synchronization strategy
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Synchronization strategy
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SyncStrategy {
-    /// Pull time from specified sources
-    Pull(Vec<TimeSource>),
-    /// Push time to specified targets
-    Push(Vec<DomainId>),
-    /// Coordinate time with peers
-    Coordinate,
-    /// Use consensus to establish time
-    Consensus,
+    /// Sync with a single domain
+    SingleDomain(DomainId),
+    /// Sync with multiple domains
+    MultiDomain(Vec<DomainId>),
+    /// Sync with a consensus of domains
+    Consensus {
+        domains: Vec<DomainId>,
+        threshold: usize,
+    },
+    /// Sync with an external time source
+    External(String),
 }
 
-/// Function type for time point providers
-pub type TimePointProvider = Box<dyn Fn(DomainId) -> Result<TimePoint> + Send + Sync>;
+impl ToString for SyncStrategy {
+    fn to_string(&self) -> String {
+        match self {
+            SyncStrategy::SingleDomain(domain_id) => format!("single_domain:{}", domain_id),
+            SyncStrategy::MultiDomain(domains) => format!("multi_domain:{}", domains.iter().map(|d| d.to_string()).collect::<Vec<String>>().join(",")),
+            SyncStrategy::Consensus { domains, threshold } => format!("consensus:{}:{}", domains.iter().map(|d| d.to_string()).collect::<Vec<String>>().join(","), threshold),
+            SyncStrategy::External(source) => format!("external:{}", source),
+        }
+    }
+}
 
-/// Time verification status
+/// Verification status
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VerificationStatus {
-    /// Not verified
-    Unverified,
-    /// Verification in progress
-    InProgress,
-    /// Verified successfully
+    /// Verification is pending
+    Pending,
+    /// Verification has been completed
     Verified,
-    /// Verification failed
+    /// Verification has failed
     Failed(String),
+    /// Verification has not been started
+    NotStarted,
 }
 
-/// A cryptographic commitment for a time point
+impl ToString for VerificationStatus {
+    fn to_string(&self) -> String {
+        match self {
+            VerificationStatus::Pending => "pending".to_string(),
+            VerificationStatus::Verified => "verified".to_string(),
+            VerificationStatus::Failed(err) => format!("failed: {}", err),
+            VerificationStatus::NotStarted => "not_started".to_string(),
+        }
+    }
+}
+
+/// Time commitment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeCommitment {
-    /// The time point being committed to
-    pub time_point: TimeMapEntry,
-    /// Signature over the time point by a trusted authority
-    pub signature: Vec<u8>,
-    /// Public key of the signer
-    pub public_key: Vec<u8>,
-    /// When this commitment was created
-    pub created_at: DateTime<Utc>,
+    /// Domain ID
+    pub domain_id: DomainId,
+    /// Time point
+    pub time_point: TimePoint,
+    /// Source of the time commitment
+    pub source: TimeSource,
     /// Verification status
-    pub status: VerificationStatus,
+    pub verification: VerificationStatus,
+    /// Timestamp when the commitment was created
+    pub created_at: u64,
+    /// Timestamp when the commitment was last updated
+    pub updated_at: u64,
+    /// Signatures or proofs (if any)
+    pub proofs: Vec<Vec<u8>>,
+    /// Additional metadata
+    pub metadata: HashMap<String, String>,
 }
 
-impl TimeCommitment {
-    /// Create a new time commitment with an unverified status
-    pub fn new(time_point: TimeMapEntry, signature: Vec<u8>, public_key: Vec<u8>) -> Self {
-        TimeCommitment {
-            time_point,
-            signature,
-            public_key,
-            created_at: Utc::now(),
-            status: VerificationStatus::Unverified,
-        }
-    }
+/// Time synchronization manager
+#[async_trait]
+pub trait TimeSyncManager: Send + Sync {
+    /// Initialize the sync manager
+    async fn initialize(&self, config: TimeSyncConfig) -> Result<()>;
     
-    /// Set the verification status
-    pub fn with_status(mut self, status: VerificationStatus) -> Self {
-        self.status = status;
-        self
-    }
+    /// Start synchronization
+    async fn start_sync(&self) -> Result<()>;
     
-    /// Check if this commitment is verified
-    pub fn is_verified(&self) -> bool {
-        self.status == VerificationStatus::Verified
-    }
+    /// Stop synchronization
+    async fn stop_sync(&self) -> Result<()>;
+    
+    /// Get the current sync status
+    async fn get_status(&self) -> Result<SyncStatus>;
+    
+    /// Get the last sync result
+    async fn get_last_result(&self) -> Result<Option<SyncResult>>;
+    
+    /// Synchronize with a specific domain
+    async fn sync_with_domain(&self, domain_id: &DomainId) -> Result<SyncResult>;
+    
+    /// Synchronize with multiple domains
+    async fn sync_with_domains(&self, domain_ids: &[DomainId]) -> Result<Vec<SyncResult>>;
+    
+    /// Get time commitments for a specific domain
+    async fn get_commitments(&self, domain_id: &DomainId) -> Result<Vec<TimeCommitment>>;
+    
+    /// Get time commitments for a specific time range
+    async fn get_commitments_in_range(&self, domain_id: &DomainId, range: &TimeRange) -> Result<Vec<TimeCommitment>>;
+    
+    /// Verify a time commitment
+    async fn verify_commitment(&self, commitment: &TimeCommitment) -> Result<VerificationStatus>;
 }
 
-/// Time verification configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VerificationConfig {
-    /// Whether to verify time points
-    pub verify_enabled: bool,
-    /// Minimum number of verifiers required for consensus
-    pub min_verifiers: usize,
-    /// List of trusted public keys for verification
-    pub trusted_keys: Vec<Vec<u8>>,
-    /// Verification timeout in seconds
-    pub timeout: u64,
-    /// Maximum accepted time difference (in seconds) between verifiers
-    pub max_drift: u64,
+/// Time verification service
+#[async_trait]
+pub trait TimeVerificationService: Send + Sync {
+    /// Verify a time point for a specific domain
+    async fn verify_time_point(&self, domain_id: &DomainId, time_point: &TimePoint) -> Result<VerificationStatus>;
+    
+    /// Verify a time commitment
+    async fn verify_commitment(&self, commitment: &TimeCommitment) -> Result<VerificationStatus>;
+    
+    /// Create a time commitment
+    async fn create_commitment(&self, domain_id: &DomainId, time_point: &TimePoint) -> Result<TimeCommitment>;
+    
+    /// Get supported verification methods
+    fn get_verification_methods(&self) -> Vec<String>;
 }
 
-impl Default for VerificationConfig {
-    fn default() -> Self {
-        VerificationConfig {
-            verify_enabled: false,
-            min_verifiers: 1,
-            trusted_keys: Vec::new(),
-            timeout: 30,
-            max_drift: 60,
-        }
-    }
-}
-
-/// A service for verifying time points
-#[derive(Debug)]
-pub struct TimeVerificationService {
-    /// Configuration for this verification service
-    config: VerificationConfig,
-    /// Cache of verified time points
-    verified_cache: HashMap<String, TimeCommitment>,
-}
-
-impl TimeVerificationService {
-    /// Create a new time verification service
-    pub fn new(config: VerificationConfig) -> Self {
-        TimeVerificationService {
-            config,
-            verified_cache: HashMap::new(),
-        }
-    }
-    
-    /// Create a key for the cache
-    fn cache_key(domain_id: &DomainId, timestamp: Timestamp) -> String {
-        format!("{}:{}", domain_id, timestamp)
-    }
-    
-    /// Check if a time point is already verified
-    pub fn is_verified(&self, domain_id: &DomainId, timestamp: Timestamp) -> bool {
-        let key = Self::cache_key(domain_id, timestamp);
-        self.verified_cache.get(&key)
-            .map(|commitment| commitment.is_verified())
-            .unwrap_or(false)
-    }
-    
-    /// Verify a time point using cryptographic attestation
-    /// 
-    /// This verifies that the given time point is attested by a trusted authority.
-    /// In a real implementation, this would validate cryptographic signatures.
-    pub async fn verify_time_point(&mut self, time_point: &TimeMapEntry) -> Result<VerificationStatus> {
-        // If verification is not enabled, return as verified
-        if !self.config.verify_enabled {
-            return Ok(VerificationStatus::Verified);
-        }
-        
-        let domain_id = &time_point.domain_id;
-        let timestamp = time_point.timestamp;
-        let key = Self::cache_key(domain_id, timestamp);
-        
-        // If already verified, return from cache
-        if let Some(commitment) = self.verified_cache.get(&key) {
-            if commitment.is_verified() {
-                return Ok(VerificationStatus::Verified);
-            }
-        }
-        
-        // Mark as in progress
-        let mut status = VerificationStatus::InProgress;
-        
-        // Simulate verification using consensus
-        // In a real implementation, this would verify cryptographic signatures from multiple sources
-        let signatures_valid = true;  // Placeholder for signature verification
-        let sufficient_verifiers = true;  // Placeholder for consensus check
-        
-        if signatures_valid && sufficient_verifiers {
-            status = VerificationStatus::Verified;
-        } else {
-            status = VerificationStatus::Failed("Verification failed".to_string());
-        }
-        
-        // Update cache with result
-        let commitment = TimeCommitment::new(
-            time_point.clone(),
-            vec![],  // Placeholder for signature
-            vec![],  // Placeholder for public key
-        ).with_status(status.clone());
-        
-        self.verified_cache.insert(key, commitment);
-        
-        Ok(status)
-    }
-    
-    /// Verify multiple time points for consensus
-    pub async fn verify_time_map(&mut self, time_map: &TimeMap) -> Result<HashMap<DomainId, VerificationStatus>> {
-        let mut results = HashMap::new();
-        
-        for (domain_id, entry) in &time_map.entries {
-            let status = self.verify_time_point(entry).await?;
-            results.insert(domain_id.clone(), status);
-        }
-        
-        Ok(results)
-    }
-}
-
-/// Consensus-based verification manager that coordinates multiple verifiers
-#[derive(Debug)]
+/// Consensus verification manager
 pub struct ConsensusVerificationManager {
-    /// The verification service
-    service: TimeVerificationService,
-    /// Consensus threshold (0.0 - 1.0)
-    threshold: f64,
-    /// Cache of consensus results
-    consensus_cache: HashMap<String, VerificationStatus>,
+    /// Verification services
+    verification_services: RwLock<Vec<Arc<dyn TimeVerificationService>>>,
+    /// Consensus threshold
+    threshold: usize,
 }
 
 impl ConsensusVerificationManager {
     /// Create a new consensus verification manager
-    pub fn new(config: VerificationConfig, threshold: f64) -> Self {
-        ConsensusVerificationManager {
-            service: TimeVerificationService::new(config),
-            threshold: threshold.max(0.0).min(1.0),
-            consensus_cache: HashMap::new(),
+    pub fn new(threshold: usize) -> Self {
+        Self {
+            verification_services: RwLock::new(Vec::new()),
+            threshold,
         }
     }
     
-    /// Create a cache key
-    fn cache_key(domain_id: &DomainId, timestamp: Timestamp) -> String {
-        format!("consensus:{}:{}", domain_id, timestamp)
+    /// Register a verification service
+    pub fn register_service(&self, service: Arc<dyn TimeVerificationService>) -> Result<()> {
+        let mut services = self.verification_services.write().map_err(|_| system_error("Failed to acquire write lock on verification services"))?;
+        services.push(service);
+        Ok(())
     }
     
-    /// Verify a time point using consensus among verifiers
-    /// 
-    /// This would typically gather attestations from multiple sources and require
-    /// a threshold of them to agree before considering the time point verified.
-    pub async fn verify_with_consensus(&mut self, time_point: &TimeMapEntry) -> Result<VerificationStatus> {
-        let domain_id = &time_point.domain_id;
-        let timestamp = time_point.timestamp;
-        let key = Self::cache_key(domain_id, timestamp);
+    /// Get registered verification services
+    pub fn get_services(&self) -> Result<Vec<Arc<dyn TimeVerificationService>>> {
+        let services = self.verification_services.read().map_err(|_| system_error("Failed to acquire read lock on verification services"))?;
+        Ok(services.clone())
+    }
+}
+
+#[async_trait]
+impl TimeVerificationService for ConsensusVerificationManager {
+    async fn verify_time_point(&self, domain_id: &DomainId, time_point: &TimePoint) -> Result<VerificationStatus> {
+        let services = self.get_services()?;
         
-        // If already in cache, return result
-        if let Some(status) = self.consensus_cache.get(&key) {
-            return Ok(status.clone());
+        if services.is_empty() {
+            return Ok(VerificationStatus::Failed("No verification services registered".to_string()));
         }
         
-        // Use the verification service to verify the time point
-        let status = self.service.verify_time_point(time_point).await?;
+        let mut verified_count = 0;
+        let mut failed_messages = Vec::new();
         
-        // In a real implementation, this would gather reports from multiple sources
-        // and check if a threshold of them agree on the time point.
+        for service in services.iter() {
+            match service.verify_time_point(domain_id, time_point).await {
+                Ok(VerificationStatus::Verified) => {
+                    verified_count += 1;
+                }
+                Ok(VerificationStatus::Failed(msg)) => {
+                    failed_messages.push(msg);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    failed_messages.push(format!("Verification error: {}", e));
+                }
+            }
+        }
         
-        // Cache the consensus result
-        self.consensus_cache.insert(key, status.clone());
+        if verified_count >= self.threshold {
+            Ok(VerificationStatus::Verified)
+        } else {
+            Ok(VerificationStatus::Failed(format!(
+                "Verification failed: {}/{} services failed ({})",
+                services.len() - verified_count,
+                services.len(),
+                failed_messages.join(", ")
+            )))
+        }
+    }
+    
+    async fn verify_commitment(&self, commitment: &TimeCommitment) -> Result<VerificationStatus> {
+        let services = self.get_services()?;
         
-        Ok(status)
+        if services.is_empty() {
+            return Ok(VerificationStatus::Failed("No verification services registered".to_string()));
+        }
+        
+        let mut verified_count = 0;
+        let mut failed_messages = Vec::new();
+        
+        for service in services.iter() {
+            match service.verify_commitment(commitment).await {
+                Ok(VerificationStatus::Verified) => {
+                    verified_count += 1;
+                }
+                Ok(VerificationStatus::Failed(msg)) => {
+                    failed_messages.push(msg);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    failed_messages.push(format!("Verification error: {}", e));
+                }
+            }
+        }
+        
+        if verified_count >= self.threshold {
+            Ok(VerificationStatus::Verified)
+        } else {
+            Ok(VerificationStatus::Failed(format!(
+                "Commitment verification failed: {}/{} services failed ({})",
+                services.len() - verified_count,
+                services.len(),
+                failed_messages.join(", ")
+            )))
+        }
+    }
+    
+    async fn create_commitment(&self, domain_id: &DomainId, time_point: &TimePoint) -> Result<TimeCommitment> {
+        // Use the first service that succeeds
+        let services = self.get_services()?;
+        
+        if services.is_empty() {
+            return Err(system_error("No verification services registered"));
+        }
+        
+        for service in services.iter() {
+            match service.create_commitment(domain_id, time_point).await {
+                Ok(commitment) => return Ok(commitment),
+                Err(_) => continue,
+            }
+        }
+        
+        Err(system_error("Failed to create commitment with any verification service"))
+    }
+    
+    fn get_verification_methods(&self) -> Vec<String> {
+        let services = match self.get_services() {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        
+        let mut methods = Vec::new();
+        for service in services.iter() {
+            methods.extend(service.get_verification_methods());
+        }
+        
+        methods
     }
 }
 
 /// Time synchronization manager
-pub struct TimeSyncManager {
+pub struct TimeSyncManagerImpl {
     /// Configuration for time sync
     config: TimeSyncConfig,
     /// Shared time map
@@ -432,12 +398,12 @@ pub struct TimeSyncManager {
     running: Arc<RwLock<bool>>,
 }
 
-impl TimeSyncManager {
+impl TimeSyncManagerImpl {
     /// Create a new time synchronization manager
     pub fn new(config: TimeSyncConfig, time_map: SharedTimeMap) -> Self {
         let (event_tx, _) = broadcast::channel(100);
         
-        TimeSyncManager {
+        TimeSyncManagerImpl {
             config,
             time_map,
             providers: Arc::new(RwLock::new(HashMap::new())),
@@ -487,7 +453,7 @@ impl TimeSyncManager {
         
         // Spawn the sync task
         tokio::spawn(async move {
-            let interval_duration = StdDuration::from_secs(config.sync_interval);
+            let interval_duration = StdDuration::from_secs(config.sync_interval_seconds);
             let mut interval = time::interval(interval_duration);
             
             loop {
@@ -536,26 +502,38 @@ impl TimeSyncManager {
         providers: &Arc<RwLock<HashMap<DomainId, TimePointProvider>>>,
         recent_points: &Arc<RwLock<Vec<(DomainId, TimePoint)>>>,
     ) -> SyncResult {
-        let started_at = Utc::now();
-        let mut result = SyncResult::new(started_at);
+        let started_at = Utc::now().timestamp();
+        let mut result = SyncResult {
+            status: SyncStatus::InProgress,
+            domain_id: config.domains[0].clone(),
+            time_point: None,
+            verification: VerificationStatus::NotStarted,
+            started_at,
+            completed_at: 0,
+            duration_seconds: 0,
+            metadata: HashMap::new(),
+        };
         
         // Get the list of domains to sync
         let domains = match providers.read() {
             Ok(providers) => providers.keys().cloned().collect::<Vec<_>>(),
             Err(_) => {
-                return result.fail("Failed to lock providers");
+                result.status = SyncStatus::Failed("Failed to lock providers".to_string());
+                return result;
             }
         };
         
         if domains.is_empty() {
-            return result.skip("No domains registered for synchronization");
+            result.status = SyncStatus::Failed("No domains registered for synchronization".to_string());
+            return result;
         }
         
         // Create a copy of the current time map
         let current_map = match time_map.get() {
             Ok(map) => map,
             Err(_) => {
-                return result.fail("Failed to read current time map");
+                result.status = SyncStatus::Failed("Failed to read current time map".to_string());
+                return result;
             }
         };
         
@@ -571,14 +549,14 @@ impl TimeSyncManager {
                     None => continue,
                 },
                 Err(_) => {
-                    result = result.add_failed_domain(domain_id, "Failed to lock providers");
-                    continue;
+                    result.status = SyncStatus::Failed(format!("Failed to lock providers for domain: {}", domain_id));
+                    return result;
                 }
             };
             
             // Fetch the time point with a timeout
             let time_point_result = tokio_timeout(
-                StdDuration::from_secs(config.sync_timeout),
+                StdDuration::from_secs(config.max_time_deviation_seconds as u64),
                 async {
                     match provider(domain_id.clone()) {
                         Ok(point) => Ok(point),
@@ -590,21 +568,15 @@ impl TimeSyncManager {
             match time_point_result {
                 Ok(Ok(time_point)) => {
                     // Check if the time point has sufficient confidence
-                    if time_point.confidence < config.min_confidence {
-                        result = result.add_failed_domain(
-                            domain_id.clone(),
-                            &format!("Insufficient confidence: {}", time_point.confidence),
-                        );
-                        continue;
+                    if time_point.confidence < config.min_confidence_threshold {
+                        result.status = SyncStatus::Failed(format!("Insufficient confidence: {}", time_point.confidence));
+                        return result;
                     }
                     
                     // Check if the time point is verifiable (if required)
-                    if config.verify_time_points && !time_point.verified {
-                        result = result.add_failed_domain(
-                            domain_id.clone(),
-                            "Time point not verified",
-                        );
-                        continue;
+                    if config.required_verifications > 0 && !time_point.verified {
+                        result.status = SyncStatus::Failed("Time point not verified".to_string());
+                        return result;
                     }
                     
                     // Create a time map entry from the time point
@@ -623,9 +595,9 @@ impl TimeSyncManager {
                         recent.push((domain_id.clone(), time_point.clone()));
                         
                         // Trim the list if it gets too large
-                        if recent.len() > config.history_size {
+                        if recent.len() > config.required_verifications as usize {
                             recent.sort_by(|a, b| a.1.timestamp.cmp(&b.1.timestamp));
-                            recent.drain(0..recent.len() - config.history_size);
+                            recent.drain(0..recent.len() - config.required_verifications as usize);
                         }
                     }
                     
@@ -633,26 +605,29 @@ impl TimeSyncManager {
                     updated_map.update_domain(entry);
                     
                     // Mark the domain as synced
-                    result = result.add_synced_domain(domain_id);
+                    result.domain_id = domain_id.clone();
+                    result.time_point = Some(time_point.clone());
+                    result.status = SyncStatus::Completed;
                 }
                 Ok(Err(e)) => {
-                    result = result.add_failed_domain(domain_id, &format!("Provider error: {}", e));
+                    result.status = SyncStatus::Failed(format!("Provider error: {}", e));
+                    return result;
                 }
                 Err(_) => {
-                    result = result.add_failed_domain(domain_id, "Operation timed out");
+                    result.status = SyncStatus::Failed("Operation timed out".to_string());
+                    return result;
                 }
             }
         }
         
         // Update the shared time map if we have any successful syncs
-        if !result.synced_domains.is_empty() {
+        if result.status == SyncStatus::Completed {
             if let Err(e) = time_map.merge(&updated_map) {
-                return result.fail(&format!("Failed to update time map: {}", e));
+                result.status = SyncStatus::Failed(format!("Failed to update time map: {}", e));
             }
             
-            result = result.complete(updated_map);
-        } else {
-            result = result.skip("No domains were successfully synced");
+            result.completed_at = Utc::now().timestamp();
+            result.duration_seconds = result.completed_at - result.started_at;
         }
         
         result
@@ -711,7 +686,7 @@ impl TimeSyncManager {
         domain2: &DomainId,
     ) -> Result<bool> {
         let drift = self.calculate_drift(domain1, domain2)?;
-        let max_drift = Duration::seconds(self.config.max_time_difference as i64);
+        let max_drift = Duration::seconds(self.config.max_time_deviation_seconds as i64);
         
         Ok(drift.abs() <= max_drift)
     }
@@ -758,33 +733,41 @@ mod tests {
     #[test]
     fn test_sync_result() {
         let started_at = Utc::now();
-        let mut result = SyncResult::new(started_at);
+        let mut result = SyncResult {
+            status: SyncStatus::InProgress,
+            domain_id: create_test_domain_id(1),
+            time_point: None,
+            verification: VerificationStatus::NotStarted,
+            started_at: started_at.timestamp(),
+            completed_at: 0,
+            duration_seconds: 0,
+            metadata: HashMap::new(),
+        };
         
         // Check initial state
         assert_eq!(result.status, SyncStatus::InProgress);
-        assert_eq!(result.synced_count(), 0);
-        assert_eq!(result.failed_count(), 0);
-        assert!(result.time_map.is_none());
+        assert_eq!(result.domain_id, create_test_domain_id(1));
+        assert!(result.time_point.is_none());
         
         // Add a synced domain
         let domain1 = create_test_domain_id(1);
-        result = result.add_synced_domain(domain1.clone());
+        result.domain_id = domain1.clone();
         
         // Add a failed domain
         let domain2 = create_test_domain_id(2);
-        result = result.add_failed_domain(domain2.clone(), "Test failure");
-        
-        // Check counts
-        assert_eq!(result.synced_count(), 1);
-        assert_eq!(result.failed_count(), 1);
+        result.status = SyncStatus::Failed(format!("Test failure: {}", domain2));
         
         // Complete the result
         let time_map = TimeMap::new();
-        result = result.complete(time_map);
+        result.status = SyncStatus::Completed;
+        result.time_point = Some(create_test_time_point(100, 1000, 1.0, true));
+        result.completed_at = Utc::now().timestamp();
+        result.duration_seconds = result.completed_at - result.started_at;
         
         // Check final state
         assert_eq!(result.status, SyncStatus::Completed);
-        assert!(result.time_map.is_some());
+        assert_eq!(result.domain_id, domain1);
+        assert!(result.time_point.is_some());
         assert!(!result.is_fully_successful()); // Has failed domains
     }
     
@@ -795,18 +778,21 @@ mod tests {
         
         // Create a config with fast sync
         let config = TimeSyncConfig {
-            sync_interval: 1,
-            sync_timeout: 5,
-            ..Default::default()
+            sync_interval_seconds: 1,
+            max_time_deviation_seconds: 5,
+            min_confidence_threshold: 0.7,
+            required_verifications: 2,
+            domains: vec![create_test_domain_id(1)],
+            parameters: HashMap::new(),
         };
         
         // Create a sync manager
-        let manager = TimeSyncManager::new(config, shared_map);
+        let manager = TimeSyncManagerImpl::new(config, shared_map);
         
         // Register a provider for a domain
         let domain1 = create_test_domain_id(1);
         
-        let provider = TimeSyncManager::create_provider(move |_| {
+        let provider = TimeSyncManagerImpl::create_provider(move |_| {
             Ok(create_test_time_point(100, 1000, 1.0, true))
         });
         
@@ -817,9 +803,8 @@ mod tests {
         
         // Check the result
         assert_eq!(result.status, SyncStatus::Completed);
-        assert_eq!(result.synced_count(), 1);
-        assert_eq!(result.failed_count(), 0);
-        assert!(result.synced_domains.contains(&domain1));
+        assert_eq!(result.domain_id, domain1);
+        assert!(result.time_point.is_some());
         
         // Check the time map was updated
         let time_map = manager.get_time_map()?;
@@ -836,22 +821,25 @@ mod tests {
         
         // Create a config with specific max drift
         let config = TimeSyncConfig {
-            max_time_difference: 100,
-            ..Default::default()
+            max_time_deviation_seconds: 100,
+            min_confidence_threshold: 0.7,
+            required_verifications: 2,
+            domains: vec![create_test_domain_id(1), create_test_domain_id(2)],
+            parameters: HashMap::new(),
         };
         
         // Create a sync manager
-        let manager = TimeSyncManager::new(config, shared_map);
+        let manager = TimeSyncManagerImpl::new(config, shared_map);
         
         // Register providers for two domains
         let domain1 = create_test_domain_id(1);
         let domain2 = create_test_domain_id(2);
         
-        let provider1 = TimeSyncManager::create_provider(move |_| {
+        let provider1 = TimeSyncManagerImpl::create_provider(move |_| {
             Ok(create_test_time_point(100, 1000, 1.0, true))
         });
         
-        let provider2 = TimeSyncManager::create_provider(move |_| {
+        let provider2 = TimeSyncManagerImpl::create_provider(move |_| {
             Ok(create_test_time_point(200, 1050, 1.0, true))
         });
         
@@ -870,7 +858,7 @@ mod tests {
         assert!(acceptable);
         
         // Update domain2 with a larger time difference
-        let provider2 = TimeSyncManager::create_provider(move |_| {
+        let provider2 = TimeSyncManagerImpl::create_provider(move |_| {
             Ok(create_test_time_point(300, 1200, 1.0, true))
         });
         

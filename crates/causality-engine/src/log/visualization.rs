@@ -11,9 +11,11 @@ use std::sync::Arc;
 use std::fmt;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc, NaiveDateTime};
+use std::ops::Range;
+use std::cmp::{min, max};
 
-use causality_types::{Error, Result};
-use crate::log::{LogEntry, EntryType, LogStorage};
+use causality_error::{Error, Result};
+use crate::log::{LogEntry, EntryType, LogStorage, EntryData};
 
 /// Filter criteria for selecting log entries
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,7 +177,7 @@ impl VisualizationFilter {
             // Check in data - this is approximate since we don't parse the data
             match &entry.data {
                 // If JSON, convert to string and check
-                causality_engine::EntryData::Json(json) => {
+                EntryData::Json(json) => {
                     if let Ok(json_str) = serde_json::to_string(json) {
                         if json_str.to_lowercase().contains(&search_lower) {
                             return true;
@@ -183,13 +185,13 @@ impl VisualizationFilter {
                     }
                 },
                 // If binary, we can't really search effectively
-                causality_engine::EntryData::Binary(_, content_type) => {
+                EntryData::Binary(_, content_type) => {
                     if content_type.to_lowercase().contains(&search_lower) {
                         return true;
                     }
                 },
                 // If text, we can search directly
-                causality_engine::EntryData::Text(text) => {
+                EntryData::Text(text) => {
                     if text.to_lowercase().contains(&search_lower) {
                         return true;
                     }
@@ -249,13 +251,13 @@ impl CausalityGraph {
         // First pass: create nodes
         for entry in entries {
             let summary = match &entry.data {
-                causality_engine::EntryData::Json(json) => {
+                EntryData::Json(json) => {
                     format!("{}: {}", entry.entry_type.as_str(), json)
                 },
-                causality_engine::EntryData::Binary(_, content_type) => {
+                EntryData::Binary(_, content_type) => {
                     format!("{}: Binary data ({})", entry.entry_type.as_str(), content_type)
                 },
-                causality_engine::EntryData::Text(text) => {
+                EntryData::Text(text) => {
                     let preview = if text.len() > 50 {
                         format!("{}...", &text[..47])
                     } else {

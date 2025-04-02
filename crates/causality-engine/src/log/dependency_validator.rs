@@ -1,18 +1,18 @@
-// Fact dependency validation
-// Original file: src/log/fact_dependency_validator.rs
+// Fact dependency validator implementation
+// Original file: src/log/dependency_validator.rs
 
 // Fact Dependency Validator for Causality
 //
 // This module provides validation for fact dependencies in effects.
 
 use std::collections::{HashMap, HashSet};
-use causality_types::{*};
-use causality_crypto::ContentId;;
-use causality_types::{Error, Result};
-use causality_engine_types::{FactType, RegisterFact, ZKProofFact};
-use causality_engine_snapshot::{FactSnapshot, FactId, FactDependency, FactDependencyType, RegisterObservation};
-use crate::effect::Effect;
-use crate::resource::register::ContentId;
+
+use causality_types::{DomainId, ContentId};
+use causality_core::Effect;
+
+use crate::log::fact_snapshot::{FactSnapshot, FactId, FactDependency, FactDependencyType, RegisterObservation};
+use crate::Error;
+use crate::Result;
 
 /// Validates fact dependencies for effects
 #[derive(Debug, Clone)]

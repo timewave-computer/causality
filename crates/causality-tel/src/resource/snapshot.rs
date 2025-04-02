@@ -26,7 +26,7 @@ use crate::tel::{
         ResourceManager,
     },
 };
-use :ResourceRegister:causality_core::resource::Resource::ResourceRegister;
+use causality_core::resource::types::ResourceRegister;
 
 /// Snapshot identifier
 #[derive(Debug, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]

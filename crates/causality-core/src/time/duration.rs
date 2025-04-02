@@ -3,323 +3,244 @@
 // This module provides the core duration type for representing
 // time spans across the Causality system.
 
-use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fmt;
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, Sub, Mul, Div};
+use std::convert::{TryFrom, TryInto};
+use thiserror::Error;
+use chrono::{Duration as ChronoDuration, TimeDelta as ChronoTimeDelta}; // Use ChronoDuration
+use serde::{Serialize, Deserialize};
 
-/// A duration representing a span of time
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct Duration {
-    /// The number of nanoseconds
-    nanos: u64,
+#[derive(Error, Debug)]
+pub enum DurationConversionError {
+    #[error("Duration out of range for std::time::Duration: {0}")]
+    OutOfRange(String),
 }
 
-impl Duration {
-    /// Create a new duration from nanoseconds
-    pub fn from_nanos(nanos: u64) -> Self {
-        Self { nanos }
+/// Represents a duration or time difference, wrapping chrono::Duration
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TimeDelta(pub ChronoDuration);
+
+impl TimeDelta {
+    /// Create a new time delta from a standard chrono Duration
+    pub fn new(duration: ChronoDuration) -> Self {
+        Self(duration)
     }
-    
-    /// Create a new duration from microseconds
-    pub fn from_micros(micros: u64) -> Self {
-        Self {
-            nanos: micros * 1_000,
-        }
+
+    /// Get the underlying chrono duration
+    pub fn as_duration(&self) -> ChronoDuration {
+        self.0
     }
-    
-    /// Create a new duration from milliseconds
-    pub fn from_millis(millis: u64) -> Self {
-        Self {
-            nanos: millis * 1_000_000,
-        }
-    }
-    
-    /// Create a new duration from seconds
-    pub fn from_secs(secs: u64) -> Self {
-        Self {
-            nanos: secs * 1_000_000_000,
-        }
-    }
-    
-    /// Create a new duration from minutes
-    pub fn from_minutes(minutes: u64) -> Self {
-        Self {
-            nanos: minutes * 60 * 1_000_000_000,
-        }
-    }
-    
-    /// Create a new duration from hours
-    pub fn from_hours(hours: u64) -> Self {
-        Self {
-            nanos: hours * 60 * 60 * 1_000_000_000,
-        }
-    }
-    
-    /// Get the number of nanoseconds
+
+    /// Get the number of nanoseconds in the duration
     pub fn as_nanos(&self) -> u64 {
-        self.nanos
+        self.0.num_nanoseconds().unwrap_or(0) as u64
     }
     
-    /// Get the number of microseconds
-    pub fn as_micros(&self) -> u64 {
-        self.nanos / 1_000
+    /// Get the number of seconds in the duration
+    pub fn as_secs(&self) -> i64 {
+        self.0.num_seconds()
     }
-    
-    /// Get the number of milliseconds
-    pub fn as_millis(&self) -> u64 {
-        self.nanos / 1_000_000
+
+    /// Create from nanoseconds
+    pub fn from_nanos(nanos: i64) -> Self {
+        Self(ChronoDuration::nanoseconds(nanos))
     }
-    
-    /// Get the number of seconds
-    pub fn as_secs(&self) -> u64 {
-        self.nanos / 1_000_000_000
+
+    /// Create from microseconds
+    pub fn from_micros(micros: i64) -> Self {
+        Self(ChronoDuration::microseconds(micros))
     }
-    
-    /// Get the number of minutes
-    pub fn as_minutes(&self) -> u64 {
-        self.nanos / (60 * 1_000_000_000)
+
+    /// Create from milliseconds
+    pub fn from_millis(millis: i64) -> Self {
+        Self(ChronoDuration::milliseconds(millis))
     }
-    
-    /// Get the number of hours
-    pub fn as_hours(&self) -> u64 {
-        self.nanos / (60 * 60 * 1_000_000_000)
+
+    /// Create from seconds
+    pub fn from_secs(secs: i64) -> Self {
+        Self(ChronoDuration::seconds(secs))
     }
-    
-    /// Get the number of seconds as a floating-point value
-    pub fn as_secs_f64(&self) -> f64 {
-        self.nanos as f64 / 1_000_000_000.0
+
+    // Helper for max value
+    pub fn max_value() -> Self {
+        Self(ChronoDuration::MAX)
     }
-    
-    /// Get the zero duration
-    pub const fn zero() -> Self {
-        Self { nanos: 0 }
+
+    // Helper for zero value
+    pub fn zero() -> Self {
+        Self(ChronoDuration::zero())
     }
-    
-    /// Get the maximum possible duration
-    pub const fn max() -> Self {
-        Self { nanos: u64::MAX }
-    }
-    
-    /// Check if this duration is zero
+
+    // Check if zero
     pub fn is_zero(&self) -> bool {
-        self.nanos == 0
+        self.0.is_zero()
     }
-    
-    /// Check if this duration is the maximum value
-    pub fn is_max(&self) -> bool {
-        self.nanos == u64::MAX
+}
+
+// --- Operator Implementations for TimeDelta ---
+
+impl Add for TimeDelta {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0) // Delegate to chrono::Duration's Add
     }
-    
-    /// Add another duration to this one, saturating at the maximum value
-    pub fn saturating_add(&self, other: Duration) -> Self {
-        Self {
-            nanos: self.nanos.saturating_add(other.nanos),
+}
+
+impl Sub for TimeDelta {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self(self.0 - other.0) // Delegate to chrono::Duration's Sub
+    }
+}
+
+impl Mul<i32> for TimeDelta { // Use i32 as chrono::Duration does
+    type Output = Self;
+
+    fn mul(self, rhs: i32) -> Self {
+        Self(self.0 * rhs) // Delegate to chrono::Duration's Mul<i32>
+    }
+}
+
+impl Div<i32> for TimeDelta { // Use i32 as chrono::Duration does
+    type Output = Self;
+
+    fn div(self, rhs: i32) -> Self {
+        Self(self.0 / rhs) // Delegate to chrono::Duration's Div<i32>
+    }
+}
+
+// Division by another TimeDelta results in a ratio (f64)
+impl Div<TimeDelta> for TimeDelta {
+    type Output = f64;
+
+    fn div(self, rhs: TimeDelta) -> f64 {
+        if rhs.is_zero() {
+            // Handle division by zero, perhaps return NaN or infinity, or panic
+            // Chrono duration division returns None for division by zero
+            // Returning f64::NAN seems reasonable here.
+            return f64::NAN;
         }
-    }
-    
-    /// Subtract another duration from this one, saturating at zero
-    pub fn saturating_sub(&self, other: Duration) -> Self {
-        Self {
-            nanos: self.nanos.saturating_sub(other.nanos),
-        }
-    }
-    
-    /// Multiply this duration by a scalar, saturating at the maximum value
-    pub fn saturating_mul(&self, scalar: u64) -> Self {
-        Self {
-            nanos: self.nanos.saturating_mul(scalar),
-        }
-    }
-    
-    /// Check if this duration is within a certain range
-    pub fn is_within(&self, min: Duration, max: Duration) -> bool {
-        *self >= min && *self <= max
+        // Perform division on nanoseconds for precision
+        (self.0.num_nanoseconds().unwrap_or(0) as f64) /
+        (rhs.0.num_nanoseconds().unwrap_or(0) as f64)
     }
 }
 
-impl fmt::Display for Duration {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Format in the most appropriate unit
-        if self.nanos == 0 {
-            write!(f, "0s")
-        } else if self.nanos < 1_000 {
-            write!(f, "{}ns", self.nanos)
-        } else if self.nanos < 1_000_000 {
-            write!(f, "{:.2}μs", self.nanos as f64 / 1_000.0)
-        } else if self.nanos < 1_000_000_000 {
-            write!(f, "{:.2}ms", self.nanos as f64 / 1_000_000.0)
-        } else if self.nanos < 60 * 1_000_000_000 {
-            write!(f, "{:.2}s", self.nanos as f64 / 1_000_000_000.0)
-        } else if self.nanos < 60 * 60 * 1_000_000_000 {
-            write!(f, "{:.2}m", self.nanos as f64 / (60.0 * 1_000_000_000.0))
-        } else {
-            write!(f, "{:.2}h", self.nanos as f64 / (60.0 * 60.0 * 1_000_000_000.0))
-        }
+
+// --- Conversion Implementations ---
+
+impl TryFrom<std::time::Duration> for TimeDelta {
+    type Error = DurationConversionError;
+
+    fn try_from(duration: std::time::Duration) -> Result<Self, Self::Error> {
+        ChronoDuration::from_std(duration)
+            .map(TimeDelta::new)
+            .map_err(|e| DurationConversionError::OutOfRange(e.to_string()))
     }
 }
 
-impl Ord for Duration {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.nanos.cmp(&other.nanos)
+impl TryFrom<TimeDelta> for std::time::Duration {
+    type Error = DurationConversionError;
+
+    fn try_from(time_delta: TimeDelta) -> Result<Self, Self::Error> {
+        time_delta.0.to_std()
+            .map_err(|e| DurationConversionError::OutOfRange(e.to_string()))
     }
 }
 
-impl PartialOrd for Duration {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
 
-impl Add for Duration {
-    type Output = Duration;
-    
-    fn add(self, other: Self) -> Self::Output {
-        Self {
-            nanos: self.nanos.checked_add(other.nanos).unwrap_or(u64::MAX),
-        }
-    }
-}
+// --- Default Implementation ---
 
-impl Sub for Duration {
-    type Output = Duration;
-    
-    fn sub(self, other: Self) -> Self::Output {
-        Self {
-            nanos: self.nanos.checked_sub(other.nanos).unwrap_or(0),
-        }
-    }
-}
-
-impl Mul<u64> for Duration {
-    type Output = Duration;
-    
-    fn mul(self, scalar: u64) -> Self::Output {
-        Self {
-            nanos: self.nanos.checked_mul(scalar).unwrap_or(u64::MAX),
-        }
-    }
-}
-
-impl Div<u64> for Duration {
-    type Output = Duration;
-    
-    fn div(self, scalar: u64) -> Self::Output {
-        if scalar == 0 {
-            return Self::max();
-        }
-        
-        Self {
-            nanos: self.nanos / scalar,
-        }
-    }
-}
-
-impl Div<Duration> for Duration {
-    type Output = u64;
-    
-    fn div(self, other: Duration) -> Self::Output {
-        if other.nanos == 0 {
-            return u64::MAX;
-        }
-        
-        self.nanos / other.nanos
-    }
-}
-
-impl From<std::time::Duration> for Duration {
-    fn from(duration: std::time::Duration) -> Self {
-        let secs = duration.as_secs();
-        let nanos = duration.subsec_nanos() as u64;
-        
-        let total_nanos = secs
-            .checked_mul(1_000_000_000)
-            .and_then(|secs_as_nanos| secs_as_nanos.checked_add(nanos))
-            .unwrap_or(u64::MAX);
-        
-        Self { nanos: total_nanos }
-    }
-}
-
-impl From<Duration> for std::time::Duration {
-    fn from(duration: Duration) -> Self {
-        let secs = duration.as_secs();
-        let nanos = (duration.nanos % 1_000_000_000) as u32;
-        
-        std::time::Duration::new(secs, nanos)
-    }
-}
-
-impl Default for Duration {
+impl Default for TimeDelta {
     fn default() -> Self {
-        Self::zero()
+        Self(ChronoDuration::zero())
     }
 }
 
+// --- Display Implementation ---
+impl fmt::Display for TimeDelta {
+     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+         // Simple display using chrono's Debug format for now
+         // Can be customized later
+         write!(f, "{:?}", self.0)
+     }
+}
+
+
+// --- Tests ---
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+    use std::convert::TryInto; // Import TryInto
+
     #[test]
-    fn test_duration_creation() {
-        assert_eq!(Duration::from_nanos(1).as_nanos(), 1);
-        assert_eq!(Duration::from_micros(1).as_nanos(), 1_000);
-        assert_eq!(Duration::from_millis(1).as_nanos(), 1_000_000);
-        assert_eq!(Duration::from_secs(1).as_nanos(), 1_000_000_000);
-        assert_eq!(Duration::from_minutes(1).as_nanos(), 60 * 1_000_000_000);
-        assert_eq!(Duration::from_hours(1).as_nanos(), 60 * 60 * 1_000_000_000);
+    fn test_timedelta_creation() {
+        assert_eq!(TimeDelta::from_nanos(1).0, ChronoDuration::nanoseconds(1));
+        assert_eq!(TimeDelta::from_micros(1).0, ChronoDuration::microseconds(1));
+        assert_eq!(TimeDelta::from_millis(1).0, ChronoDuration::milliseconds(1));
+        assert_eq!(TimeDelta::from_secs(1).0, ChronoDuration::seconds(1));
+        assert_eq!(TimeDelta::new(ChronoDuration::minutes(1)).0, ChronoDuration::minutes(1));
+        assert_eq!(TimeDelta::new(ChronoDuration::hours(1)).0, ChronoDuration::hours(1));
     }
-    
+
     #[test]
-    fn test_duration_conversion() {
-        let duration = Duration::from_nanos(1_234_567_890);
-        assert_eq!(duration.as_nanos(), 1_234_567_890);
-        assert_eq!(duration.as_micros(), 1_234_567);
-        assert_eq!(duration.as_millis(), 1_234);
-        assert_eq!(duration.as_secs(), 1);
-        assert_eq!(duration.as_minutes(), 0);
-        assert_eq!(duration.as_hours(), 0);
-        
-        assert!((duration.as_secs_f64() - 1.23456789).abs() < 1e-9);
+    fn test_timedelta_conversion() {
+        let duration = TimeDelta::from_nanos(1_234_567_890);
+        assert_eq!(duration.0.num_nanoseconds(), Some(1_234_567_890));
+        assert_eq!(duration.0.num_microseconds(), Some(1_234_567));
+        assert_eq!(duration.0.num_milliseconds(), 1_234);
+        assert_eq!(duration.0.num_seconds(), 1);
+        assert_eq!(duration.0.num_minutes(), 0);
+        assert_eq!(duration.0.num_hours(), 0);
+
+        let secs_f64 = duration.0.num_nanoseconds().unwrap_or(0) as f64 / 1_000_000_000.0;
+        assert!((secs_f64 - 1.23456789).abs() < 1e-9);
     }
-    
+
     #[test]
-    fn test_duration_constants() {
-        assert_eq!(Duration::zero().as_nanos(), 0);
-        assert_eq!(Duration::max().as_nanos(), u64::MAX);
-        
-        assert!(Duration::zero().is_zero());
-        assert!(!Duration::from_secs(1).is_zero());
-        
-        assert!(Duration::max().is_max());
-        assert!(!Duration::from_secs(1).is_max());
+    fn test_timedelta_constants() {
+        assert_eq!(TimeDelta::zero().0, ChronoDuration::zero());
+        assert_eq!(TimeDelta::default().0, ChronoDuration::zero());
+        assert_eq!(TimeDelta::max_value().0, ChronoDuration::MAX);
+
+        assert!(TimeDelta::zero().is_zero());
+        assert!(!TimeDelta::from_secs(1).is_zero());
+
+        assert!(TimeDelta::max_value().0 == ChronoDuration::MAX);
+        assert!(!(TimeDelta::from_secs(1).0 == ChronoDuration::MAX));
     }
-    
+
     #[test]
-    fn test_duration_operations() {
-        let d1 = Duration::from_secs(10);
-        let d2 = Duration::from_secs(5);
-        
-        assert_eq!((d1 + d2).as_secs(), 15);
-        assert_eq!((d1 - d2).as_secs(), 5);
-        
-        // Subtraction saturates at zero
-        assert_eq!((d2 - d1).as_nanos(), 0);
-        
+    fn test_timedelta_operations() {
+        let d1 = TimeDelta::from_secs(10);
+        let d2 = TimeDelta::from_secs(5);
+
+        assert_eq!((d1 + d2), TimeDelta::from_secs(15));
+        assert_eq!((d1 - d2), TimeDelta::from_secs(5));
+
+        // Subtraction result depends on chrono's behavior (likely wraps or panics on underflow in debug)
+        // Let's test subtraction that doesn't underflow
+        assert_eq!((d2 - TimeDelta::from_secs(2)), TimeDelta::from_secs(3));
+
         // Multiplication
-        assert_eq!((d1 * 2).as_secs(), 20);
-        
-        // Division
-        assert_eq!((d1 / 2).as_secs(), 5);
-        
-        // Division by duration
-        assert_eq!(d1 / d2, 2);
+        assert_eq!((d1 * 2), TimeDelta::from_secs(20));
+
+        // Division by scalar
+        assert_eq!((d1 / 2), TimeDelta::from_secs(5));
+
+        // Division by TimeDelta
+        assert!(((d1 / d2) - 2.0).abs() < f64::EPSILON);
+        assert!(((d2 / d1) - 0.5).abs() < f64::EPSILON);
+        assert!((d1 / TimeDelta::zero()).is_nan()); // Check division by zero
     }
-    
+
     #[test]
-    fn test_duration_comparison() {
-        let d1 = Duration::from_secs(10);
-        let d2 = Duration::from_secs(20);
-        
+    fn test_timedelta_comparison() {
+        let d1 = TimeDelta::from_secs(10);
+        let d2 = TimeDelta::from_secs(20);
+
         assert!(d1 < d2);
         assert!(d2 > d1);
         assert!(d1 <= d1);
@@ -327,40 +248,40 @@ mod tests {
         assert_eq!(d1, d1);
         assert_ne!(d1, d2);
     }
-    
+
     #[test]
-    fn test_duration_is_within() {
-        let d = Duration::from_secs(10);
-        let min = Duration::from_secs(5);
-        let max = Duration::from_secs(15);
-        
-        assert!(d.is_within(min, max));
-        assert!(d.is_within(d, d));
-        assert!(min.is_within(min, max));
-        assert!(max.is_within(min, max));
-        
-        let too_small = Duration::from_secs(4);
-        let too_large = Duration::from_secs(16);
-        
-        assert!(!too_small.is_within(min, max));
-        assert!(!too_large.is_within(min, max));
+    fn test_duration_is_within() { // Renamed test, logic uses comparisons now
+        let d = TimeDelta::from_secs(10);
+        let min = TimeDelta::from_secs(5);
+        let max = TimeDelta::from_secs(15);
+
+        assert!(d >= min && d <= max);
+        assert!(d >= d && d <= d);
+        assert!(min >= min && min <= max);
+        assert!(max >= min && max <= max);
+
+        let too_small = TimeDelta::from_secs(4);
+        let too_large = TimeDelta::from_secs(16);
+
+        assert!(!(too_small >= min && too_small <= max));
+        assert!(!(too_large >= min && too_large <= max));
     }
-    
+
     #[test]
     fn test_std_duration_conversion() {
-        let causality_duration = Duration::from_secs(5);
-        let std_duration = std::time::Duration::from(causality_duration);
-        
+        let causality_duration = TimeDelta::from_secs(5);
+        let std_duration: std::time::Duration = causality_duration.try_into().expect("Conversion failed");
+
         assert_eq!(std_duration.as_secs(), 5);
         assert_eq!(std_duration.subsec_nanos(), 0);
-        
-        let causality_duration2 = Duration::from(std_duration);
+
+        let causality_duration2: TimeDelta = std_duration.try_into().expect("Conversion failed");
         assert_eq!(causality_duration, causality_duration2);
-        
+
         let std_duration2 = std::time::Duration::new(10, 500_000_000);
-        let causality_duration3 = Duration::from(std_duration2);
-        
-        assert_eq!(causality_duration3.as_secs(), 10);
-        assert_eq!(causality_duration3.nanos % 1_000_000_000, 500_000_000);
+        let causality_duration3: TimeDelta = std_duration2.try_into().expect("Conversion failed");
+
+        assert_eq!(causality_duration3.0.num_seconds(), 10);
+        assert_eq!(causality_duration3.0.num_milliseconds(), 10_500); // Check millis directly
     }
 } 

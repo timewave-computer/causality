@@ -4,11 +4,13 @@
 use std::sync::{Arc, Mutex};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
+use serde_json::{Value, json};
 
 use causality_types::{Error, Result};
 use crate::log::{LogEntry, EventEntry, LogStorage};
 use causality_types::{DomainId, TraceId};
 use crate::log::{EventSeverity, EntryData};
+use std::collections::HashMap;
 
 /// Manages event logging
 pub struct EventLogger {
@@ -535,6 +537,34 @@ impl<'a> EventQuery<'a> {
         }
         
         Ok(events)
+    }
+}
+
+/// Create a new event entry
+pub fn create_event_entry(
+    event_name: &str,
+    severity: EventSeverity,
+    component: &str,
+    details: Option<Value>,
+) -> LogEntry {
+    LogEntry {
+        id: format!("event-{}", uuid::Uuid::new_v4()),
+        timestamp: Timestamp::now(),
+        entry_type: EntryType::Event,
+        data: EntryData::Event(SystemEventEntry {
+            severity,
+            event_name: event_name.to_string(),
+            component: component.to_string(),
+            details: details.unwrap_or(json!({})),
+            resources: None,
+            domains: None,
+        }),
+        trace_id: None,
+        parent_id: None,
+        domain: None,
+        hash: "".to_string(),
+        metadata: HashMap::new(),
+        entry_hash: None,
     }
 }
 

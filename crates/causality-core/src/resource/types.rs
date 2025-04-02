@@ -4,20 +4,41 @@
 // including resource identifiers, types, and tags.
 
 use std::fmt::{self, Display, Debug};
+use crate::utils::content_addressing;
 use std::str::FromStr;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use std::hash::{Hash, Hasher};
+
 use serde::{Serialize, Deserialize};
 use borsh::{BorshSerialize, BorshDeserialize};
+use thiserror::Error;
+use async_trait::async_trait;
+use blake3;
 
-use causality_types::{ContentId, ContentHash, ContentAddressed, HashError, HashOutput};
-use causality_types::crypto_primitives::HashAlgorithm;
+// Import specifically from correct modules
+use causality_types::ContentId;
+pub use causality_types::crypto_primitives::ContentHash;
+use causality_types::content_addressing::storage::{
+    ContentAddressedStorage, ContentAddressedStorageExt, StorageError
+};
+use causality_types::crypto_primitives::{ContentAddressed, HashError, HashOutput, HashAlgorithm};
+use causality_crypto::hash::ContentHasher;
+use crate::resource::*;
+use crate::effect::EffectContext;
+use crate::serialization::{SerializationError, to_bytes, from_bytes};
+use crate::resource::operation::Capability;
+use causality_types::ContentId as TypesContentId;
+use causality_types::content_addressing::STANDARD_HASH_ALGORITHM;
+use crate::id_utils::{convert_to_types_content_id, convert_from_types_content_id};
 
 /// Resource identifier type
 ///
 /// A unique identifier for a resource in the system, based on content addressing.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ResourceId {
     /// Content hash of the resource
-    pub hash: ContentHash,
+    pub hash: causality_types::crypto_primitives::ContentHash,
     
     /// Optional human-readable name
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -25,47 +46,76 @@ pub struct ResourceId {
 }
 
 impl ResourceId {
-    /// Create a new resource ID from a content hash
-    pub fn new(hash: ContentHash) -> Self {
+    /// Create a new resource ID with the specified hash
+    pub fn new(hash: causality_types::crypto_primitives::ContentHash) -> Self {
         Self {
             hash,
             name: None,
         }
     }
     
-    /// Create a new resource ID from a content hash with a name
-    pub fn new_with_name(hash: ContentHash, name: impl Into<String>) -> Self {
+    /// Create a new resource ID with a name
+    pub fn with_name(hash: causality_types::crypto_primitives::ContentHash, name: impl Into<String>) -> Self {
         Self {
             hash,
             name: Some(name.into()),
         }
     }
     
-    /// Get the content hash of this resource ID
-    pub fn hash(&self) -> &ContentHash {
+    /// Create from a crypto ContentHash
+    pub fn from_crypto_hash(hash: &causality_crypto::ContentHash) -> Self {
+        let types_hash = crate::utils::content_addressing::convert_legacy_to_types_hash(hash);
+        Self::new(types_hash)
+    }
+    
+    /// Get the content hash
+    pub fn content_hash(&self) -> &causality_types::crypto_primitives::ContentHash {
         &self.hash
     }
     
-    /// Get the name of this resource ID, if any
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
+    /// Get the name of this resource ID
+    pub fn name(&self) -> Option<&String> {
+        self.name.as_ref()
     }
     
     /// Create a resource ID from a string
     pub fn from_string(s: &str) -> Result<Self, String> {
-        // Try to parse as a content hash first
-        if let Ok(hash) = ContentHash::from_str(s) {
-            return Ok(Self::new(hash));
+        // Try to see if it's a named resource first
+        if let Some((name, hash_str)) = s.split_once(':') {
+            // Try to decode the hash part as hex
+            if let Ok(bytes) = hex::decode(hash_str) {
+                if bytes.len() == 32 {
+                    return Ok(Self::with_name(ContentHash::new("blake3", bytes), name));
+                }
+            }
+            // If not a hex string, hash the hash_str itself
+            let bytes = hash_str.as_bytes().to_vec();
+            return Ok(Self::with_name(ContentHash::new("blake3", bytes), name));
         }
         
-        // If that fails, it could be a named resource
-        if let Some((name, hash_str)) = s.split_once(':') {
-            if let Ok(hash) = ContentHash::from_str(hash_str) {
-                return Ok(Self::new_with_name(hash, name));
+        // Otherwise, try to decode as a plain hash
+        if let Ok(bytes) = hex::decode(s) {
+            if bytes.len() == 32 {
+                return Ok(Self::new(ContentHash::new("blake3", bytes)));
             }
         }
         
-        Err(format!("Invalid resource ID format: {}", s))
+        // If not a hex string, hash the input string itself
+        let bytes = s.as_bytes().to_vec();
+        Ok(Self::new(ContentHash::new("blake3", bytes)))
+    }
+    
+    /// Create a resource ID from a legacy ContentId
+    pub fn from_legacy_content_id(content_id: &ContentId) -> Self {
+        // Since ContentId and TypesContentId are the same type (aliases),
+        // we can directly call from_content_id
+        Self::from_content_id(content_id)
+            .unwrap_or_else(|_| {
+                // Fallback: create a new ContentHash from the ContentId's bytes
+                let hash_value = content_id.as_bytes().to_vec();
+                let hash = ContentHash::new("blake3", hash_value);
+                Self::new(hash)
+            })
     }
 }
 
@@ -220,13 +270,6 @@ impl FromStr for ResourceTag {
 // This module provides a content-addressed registry of resource types
 // with versioning and schema validation support for resources in the system.
 
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use async_trait::async_trait;
-use thiserror::Error;
-use crate::storage::{ContentAddressedStorage, ContentAddressedStorageError};
-use crate::serialization::{SerializationError, to_bytes, from_bytes};
-
 /// Unique identifier for a resource type
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ResourceTypeId {
@@ -374,27 +417,31 @@ impl std::fmt::Display for ResourceTypeId {
     }
 }
 
+/// Helper function to convert ContentHash to HashOutput
+fn content_hash_to_hash_output(hash: &causality_types::crypto_primitives::ContentHash) -> Result<HashOutput, HashError> {
+    // Use the to_hash_output method of ContentHash
+    hash.to_hash_output()
+}
+
 /// Helper function to convert ContentId to HashOutput
-fn to_hash_output(content_id: &ContentId) -> HashOutput {
-    HashOutput {
-        algorithm: HashAlgorithm::Blake3,
-        bytes: content_id.to_bytes(),
-    }
+fn content_id_to_hash_output(id: &causality_types::crypto_primitives::ContentId) -> Result<HashOutput, HashError> {
+    // Use the hash method of ContentId
+    Ok(id.hash().clone())
 }
 
 impl ContentAddressed for ResourceTypeId {
     fn content_hash(&self) -> Result<HashOutput, HashError> {
-        // If we already have a content hash, use it
         if let Some(hash) = &self.content_hash {
-            return Ok(to_hash_output(hash));
+            return content_id_to_hash_output(hash);
         }
         
         // Otherwise, compute it
         let bytes = self.to_bytes()?;
-        let hash = ContentId::from_bytes(&bytes)
-            .map_err(|e| HashError::InvalidData(e.to_string()))?;
+        let hash_result = blake3::hash(&bytes);
+        let mut data = [0u8; 32];
+        data.copy_from_slice(hash_result.as_bytes());
         
-        Ok(to_hash_output(&hash))
+        Ok(HashOutput::new(data, HashAlgorithm::Blake3))
     }
     
     fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
@@ -404,7 +451,7 @@ impl ContentAddressed for ResourceTypeId {
     
     fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
         serde_json::from_slice(bytes)
-            .map_err(|e| HashError::DeserializationError(e.to_string()))
+            .map_err(|e| HashError::SerializationError(e.to_string()))
     }
 }
 
@@ -421,22 +468,22 @@ pub struct ResourceSchema {
     pub version: String,
     
     /// Content hash of this schema
-    pub content_hash: Option<ContentId>,
+    pub content_hash: Option<causality_types::crypto_primitives::HashOutput>,
 }
 
 impl ContentAddressed for ResourceSchema {
     fn content_hash(&self) -> Result<HashOutput, HashError> {
-        // If we already have a content hash, use it
         if let Some(hash) = &self.content_hash {
-            return Ok(to_hash_output(hash));
+            return Ok(hash.clone());
         }
         
         // Otherwise, compute it
         let bytes = self.to_bytes()?;
-        let hash = ContentId::from_bytes(&bytes)
-            .map_err(|e| HashError::InvalidData(e.to_string()))?;
+        let hash_result = blake3::hash(&bytes);
+        let mut data = [0u8; 32];
+        data.copy_from_slice(hash_result.as_bytes());
         
-        Ok(to_hash_output(&hash))
+        Ok(HashOutput::new(data, HashAlgorithm::Blake3))
     }
     
     fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
@@ -446,7 +493,7 @@ impl ContentAddressed for ResourceSchema {
     
     fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
         serde_json::from_slice(bytes)
-            .map_err(|e| HashError::DeserializationError(e.to_string()))
+            .map_err(|e| HashError::SerializationError(e.to_string()))
     }
 }
 
@@ -496,21 +543,16 @@ pub struct ResourceTypeDefinition {
 
 impl ContentAddressed for ResourceTypeDefinition {
     fn content_hash(&self) -> Result<HashOutput, HashError> {
-        // If we already have a content hash, return it
         if let Some(content_hash) = &self.id.content_hash() {
-            // Convert from our internal ContentHash to HashOutput
-            Ok(to_hash_output(content_hash))
+            return content_id_to_hash_output(content_hash);
         } else {
             // Compute a hash for the definition
-            let serialized = serde_json::to_string(self)
-                .map_err(|e| HashError::SerializationError(e.to_string()))?;
-                
-            // Create a content hash
-            let hash = causality_types::content_addressing::content_hash_from_bytes(
-                serialized.as_bytes()
-            );
+            let bytes = self.to_bytes()?;
+            let hash_result = blake3::hash(&bytes);
+            let mut data = [0u8; 32];
+            data.copy_from_slice(hash_result.as_bytes());
             
-            Ok(to_hash_output(&hash))
+            Ok(HashOutput::new(data, HashAlgorithm::Blake3))
         }
     }
     
@@ -613,7 +655,6 @@ pub trait ResourceTypeRegistry: Send + Sync + Debug {
 }
 
 /// Content-addressed implementation of resource type registry
-#[derive(Debug)]
 pub struct ContentAddressedResourceTypeRegistry {
     /// Underlying content-addressed storage
     storage: Arc<dyn ContentAddressedStorage>,
@@ -629,6 +670,17 @@ pub struct ContentAddressedResourceTypeRegistry {
     
     /// Index of resource types by capability
     capability_index: HashMap<String, Vec<ResourceTypeId>>,
+}
+
+impl Debug for ContentAddressedResourceTypeRegistry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ContentAddressedResourceTypeRegistry")
+            .field("type_cache", &self.type_cache)
+            .field("name_index", &self.name_index)
+            .field("compatibility_index", &self.compatibility_index)
+            .field("capability_index", &self.capability_index)
+            .finish()
+    }
 }
 
 impl ContentAddressedResourceTypeRegistry {
@@ -735,7 +787,13 @@ impl ResourceTypeRegistry for ContentAddressedResourceTypeRegistry {
             .map_err(|e| ResourceTypeRegistryError::SerializationError(e.to_string()))?;
         
         // Update resource type ID with content hash
-        definition.id = definition.id.with_content_hash(type_hash.clone());
+        let type_hash_str = type_hash.to_string();
+        let parts: Vec<&str> = type_hash_str.split(':').collect();
+        let algorithm = if parts.len() > 1 { parts[0] } else { "blake3" };
+        let value = if parts.len() > 1 { parts[1] } else { &type_hash_str };
+        
+        let content_id = ContentId::new(algorithm.to_string() + ":" + value);
+        definition.id = definition.id.with_content_hash(content_id.clone());
         
         // Check if already exists
         if self.has_resource_type(&definition.id).await? {
@@ -749,14 +807,7 @@ impl ResourceTypeRegistry for ContentAddressedResourceTypeRegistry {
             .map_err(|e| ResourceTypeRegistryError::SerializationError(e.to_string()))?;
         
         // Store in content-addressed storage
-        let content_id = self.storage.store(&definition_bytes)
-            .await
-            .map_err(|e| ResourceTypeRegistryError::StorageError(e.to_string()))?;
-        
-        // Store the mapping from type ID to content ID
-        let type_key = format!("resource_type:{}", definition.id);
-        self.storage.store_with_key(&type_key, &definition_bytes)
-            .await
+        self.storage.store_bytes(&definition_bytes)
             .map_err(|e| ResourceTypeRegistryError::StorageError(e.to_string()))?;
         
         // In a real implementation, update indexes
@@ -771,31 +822,40 @@ impl ResourceTypeRegistry for ContentAddressedResourceTypeRegistry {
     ) -> ResourceTypeRegistryResult<ResourceTypeDefinition> {
         // Check cache first (in a real implementation)
         
-        // Retrieve from content-addressed storage
-        let type_key = format!("resource_type:{}", id);
-        let definition_bytes = self.storage.get_by_key(&type_key)
-            .await
-            .map_err(|e| match e {
-                ContentAddressedStorageError::NotFound(_) => 
-                    ResourceTypeRegistryError::NotFound(format!("Resource type not found: {}", id)),
-                _ => ResourceTypeRegistryError::StorageError(e.to_string()),
-            })?;
-        
-        // Deserialize the definition
-        let definition: ResourceTypeDefinition = from_bytes(&definition_bytes)
-            .map_err(|e| ResourceTypeRegistryError::SerializationError(e.to_string()))?;
-        
-        Ok(definition)
+        // Retrieve from content-addressed storage by content hash
+        if let Some(content_hash) = &id.content_hash {
+            // Convert ContentId to the type expected by the storage
+            let crypto_content_id = convert_from_types_content_id(content_hash);
+            
+            let bytes = self.storage.get_bytes(&crypto_content_id)
+                .map_err(|e| match e {
+                    StorageError::NotFound(_) => 
+                        ResourceTypeRegistryError::NotFound(format!("Resource type not found: {}", id)),
+                    _ => ResourceTypeRegistryError::StorageError(e.to_string()),
+                })?;
+            
+            // Deserialize the definition
+            let definition: ResourceTypeDefinition = from_bytes(&bytes)
+                .map_err(|e| ResourceTypeRegistryError::SerializationError(e.to_string()))?;
+            
+            Ok(definition)
+        } else {
+            Err(ResourceTypeRegistryError::NotFound(
+                format!("Resource type has no content hash: {}", id)
+            ))
+        }
     }
     
     async fn has_resource_type(&self, id: &ResourceTypeId) -> ResourceTypeRegistryResult<bool> {
-        // Check if exists in storage
-        let type_key = format!("resource_type:{}", id);
-        let exists = self.storage.exists_by_key(&type_key)
-            .await
-            .map_err(|e| ResourceTypeRegistryError::StorageError(e.to_string()))?;
-        
-        Ok(exists)
+        // Check if exists in storage based on content hash
+        if let Some(content_hash) = &id.content_hash {
+            // Convert ContentId to the type expected by the storage
+            let crypto_content_id = convert_from_types_content_id(content_hash);
+            
+            Ok(self.storage.contains(&crypto_content_id))
+        } else {
+            Ok(false)
+        }
     }
     
     async fn find_compatible_types(
@@ -993,7 +1053,13 @@ impl ResourceTypeRegistry for InMemoryResourceTypeRegistry {
             .map_err(|e| ResourceTypeRegistryError::SerializationError(e.to_string()))?;
         
         // Update resource type ID with content hash
-        definition.id = definition.id.with_content_hash(type_hash.clone());
+        let type_hash_str = type_hash.to_string();
+        let parts: Vec<&str> = type_hash_str.split(':').collect();
+        let algorithm = if parts.len() > 1 { parts[0] } else { "blake3" };
+        let value = if parts.len() > 1 { parts[1] } else { &type_hash_str };
+        
+        let content_id = ContentId::new(algorithm.to_string() + ":" + value);
+        definition.id = definition.id.with_content_hash(content_id);
         
         // Check if already exists
         let mut types = self.types.clone();
@@ -1179,10 +1245,50 @@ pub fn create_resource_type_registry(
     Arc::new(ContentAddressedResourceTypeRegistry::new(storage))
 }
 
+pub fn create_resource_type_definition(
+    registry: &InMemoryResourceTypeRegistry,
+    name: &str,
+    version: &str,
+    schema: &str,
+) -> ResourceTypeDefinition {
+    let mut definition = ResourceTypeDefinition {
+        id: ResourceTypeId::with_version("test", name, version),
+        schema: ResourceSchema {
+            format: "json-schema".to_string(),
+            definition: schema.to_string(),
+            version: "1.0".to_string(),
+            content_hash: None,
+        },
+        description: Some(format!("Resource type for {}", name)),
+        documentation: None,
+        deprecated: false,
+        compatible_with: Vec::new(),
+        required_capabilities: HashMap::new(),
+        created_at: 12345,
+        updated_at: 12345,
+    };
+
+    // Compute schema hash
+    let schema_hash = definition.schema.content_hash().unwrap();
+    definition.schema.content_hash = Some(schema_hash);
+
+    // Compute type hash
+    let type_hash = definition.content_hash().unwrap();
+    let type_hash_str = type_hash.to_string();
+    let parts: Vec<&str> = type_hash_str.split(':').collect();
+    let algorithm = if parts.len() > 1 { parts[0] } else { "blake3" };
+    let value = if parts.len() > 1 { parts[1] } else { &type_hash_str };
+    
+    let content_id = ContentId::new(algorithm.to_string() + ":" + value);
+    definition.id = definition.id.with_content_hash(content_id);
+
+    definition
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::InMemoryContentAddressedStorage;
+    use causality_types::content_addressing::storage::InMemoryStorage;
     
     fn create_test_schema() -> ResourceSchema {
         ResourceSchema {
@@ -1261,5 +1367,58 @@ mod tests {
         assert_eq!(versions.len(), 2);
         assert!(versions.contains(&id1));
         assert!(versions.contains(&id2));
+    }
+}
+
+// Convert ResourceId to ContentId
+impl From<ResourceId> for TypesContentId {
+    fn from(resource_id: ResourceId) -> Self {
+        // Create a ContentId from the hash using HashOutput
+        let hash_output = resource_id.hash.to_hash_output()
+            .unwrap_or_else(|_| {
+                // Create a default HashOutput if conversion fails
+                let mut data = [0u8; 32];
+                data.copy_from_slice(&resource_id.hash.bytes[..32]);
+                HashOutput::new(data, HashAlgorithm::Blake3)
+            });
+        
+        ContentId::from(hash_output)
+    }
+}
+
+// Convert ContentId to ResourceId
+impl TryFrom<TypesContentId> for ResourceId {
+    type Error = crate::resource::ResourceError;
+    
+    fn try_from(content_id: TypesContentId) -> Result<Self, Self::Error> {
+        // Get the HashOutput from ContentId and create a ContentHash
+        let hash_output = content_id.hash();
+        let content_hash = ContentHash::from_hash_output(hash_output);
+        
+        Ok(ResourceId::new(content_hash))
+    }
+}
+
+// Make it easier to convert references with these helper methods
+impl ResourceId {
+    pub fn to_content_id(&self) -> TypesContentId {
+        // Create a ContentId from the hash using HashOutput
+        let hash_output = self.hash.to_hash_output()
+            .unwrap_or_else(|_| {
+                // Create a default HashOutput if conversion fails
+                let mut data = [0u8; 32];
+                data.copy_from_slice(&self.hash.bytes[..32]);
+                HashOutput::new(data, HashAlgorithm::Blake3)
+            });
+        
+        ContentId::from(hash_output)
+    }
+    
+    pub fn from_content_id(content_id: &TypesContentId) -> Result<Self, crate::resource::ResourceError> {
+        // Get the HashOutput from ContentId and create a ContentHash
+        let hash_output = content_id.hash();
+        let content_hash = ContentHash::from_hash_output(hash_output);
+        
+        Ok(ResourceId::new(content_hash))
     }
 } 

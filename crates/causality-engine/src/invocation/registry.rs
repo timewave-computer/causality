@@ -11,10 +11,9 @@ use std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 
-use causality_types::{Error, Result};
-use crate::domain::DomainId;
-use causality_crypto::ContentId;
-use causality_engine::InvocationContext;
+use causality_error::{Error, Result, EngineError};
+use causality_types::{DomainId, ContentId};
+use crate::invocation::context::InvocationContext;
 
 /// Resource access level for effect handlers
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -167,7 +166,7 @@ impl EffectRegistry {
         // Update the handlers map
         {
             let mut handlers = self.handlers.write().map_err(|_| 
-                Error::InternalError("Failed to acquire write lock on handlers".to_string()))?;
+                EngineError::LockAcquisitionError("Failed to acquire write lock on handlers".to_string()))?;
             
             if handlers.contains_key(&handler_id) {
                 return Err(Error::InvalidArgument(format!("Handler with ID '{}' already registered", handler_id)));
@@ -179,7 +178,7 @@ impl EffectRegistry {
         // Update the domain handlers map
         {
             let mut domain_handlers = self.domain_handlers.write().map_err(|_| 
-                Error::InternalError("Failed to acquire write lock on domain handlers".to_string()))?;
+                EngineError::LockAcquisitionError("Failed to acquire write lock on domain handlers".to_string()))?;
             
             domain_handlers
                 .entry(domain_id)
@@ -195,7 +194,7 @@ impl EffectRegistry {
         // Remove from the handlers map
         let handler = {
             let mut handlers = self.handlers.write().map_err(|_| 
-                Error::InternalError("Failed to acquire write lock on handlers".to_string()))?;
+                EngineError::LockAcquisitionError("Failed to acquire write lock on handlers".to_string()))?;
             
             handlers.remove(handler_id)
         };
@@ -205,7 +204,7 @@ impl EffectRegistry {
             let domain_id = handler.get_registration().target_domain;
             
             let mut domain_handlers = self.domain_handlers.write().map_err(|_| 
-                Error::InternalError("Failed to acquire write lock on domain handlers".to_string()))?;
+                EngineError::LockAcquisitionError("Failed to acquire write lock on domain handlers".to_string()))?;
             
             if let Some(handlers) = domain_handlers.get_mut(&domain_id) {
                 handlers.retain(|id| id != handler_id);
@@ -218,7 +217,7 @@ impl EffectRegistry {
     /// Get a handler by ID
     pub fn get_handler(&self, handler_id: &str) -> Result<Option<Arc<dyn EffectHandler>>> {
         let handlers = self.handlers.read().map_err(|_| 
-            Error::InternalError("Failed to acquire read lock on handlers".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire read lock on handlers".to_string()))?;
         
         Ok(handlers.get(handler_id).cloned())
     }
@@ -226,10 +225,10 @@ impl EffectRegistry {
     /// Get all handlers for a domain
     pub fn get_handlers_for_domain(&self, domain_id: &DomainId) -> Result<Vec<Arc<dyn EffectHandler>>> {
         let domain_handlers = self.domain_handlers.read().map_err(|_| 
-            Error::InternalError("Failed to acquire read lock on domain handlers".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire read lock on domain handlers".to_string()))?;
         
         let handlers = self.handlers.read().map_err(|_| 
-            Error::InternalError("Failed to acquire read lock on handlers".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire read lock on handlers".to_string()))?;
         
         let handler_ids = match domain_handlers.get(domain_id) {
             Some(ids) => ids,
@@ -247,7 +246,7 @@ impl EffectRegistry {
     /// Get all registered handlers
     pub fn get_all_handlers(&self) -> Result<Vec<Arc<dyn EffectHandler>>> {
         let handlers = self.handlers.read().map_err(|_| 
-            Error::InternalError("Failed to acquire read lock on handlers".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire read lock on handlers".to_string()))?;
         
         let all_handlers = handlers.values().cloned().collect();
         
@@ -257,7 +256,7 @@ impl EffectRegistry {
     /// Count the number of registered handlers
     pub fn count_handlers(&self) -> Result<usize> {
         let handlers = self.handlers.read().map_err(|_| 
-            Error::InternalError("Failed to acquire read lock on handlers".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire read lock on handlers".to_string()))?;
         
         Ok(handlers.len())
     }
@@ -265,7 +264,7 @@ impl EffectRegistry {
     /// Get the registration information for all handlers
     pub fn get_all_registrations(&self) -> Result<Vec<HandlerRegistration>> {
         let handlers = self.handlers.read().map_err(|_| 
-            Error::InternalError("Failed to acquire read lock on handlers".to_string()))?;
+            EngineError::LockAcquisitionError("Failed to acquire read lock on handlers".to_string()))?;
         
         let registrations = handlers
             .values()
@@ -386,25 +385,26 @@ mod tests {
         .with_resource(resource1, AccessLevel::ReadOnly)
         .with_resource(resource2, AccessLevel::ReadWrite)
         .with_version("1.0.0")
-        .with_metadata("category", "test")
+        .with_metadata("author", "Test Author")
         .with_metadata("priority", "high");
         
-        // Verify the registration fields
         assert_eq!(registration.handler_id, "test-handler");
         assert_eq!(registration.display_name, "Test Handler");
         assert_eq!(registration.description, "A test handler for testing");
         assert_eq!(registration.target_domain, domain);
         assert_eq!(registration.resources.len(), 2);
+        assert_eq!(registration.version, "1.0.0");
+        assert_eq!(registration.metadata.len(), 2);
+        assert_eq!(registration.metadata.get("author"), Some(&"Test Author".to_string()));
+        assert_eq!(registration.metadata.get("priority"), Some(&"high".to_string()));
+        
+        // Check resources
         assert_eq!(registration.resources[0].resource_id, resource1);
         assert_eq!(registration.resources[0].access_level, AccessLevel::ReadOnly);
         assert_eq!(registration.resources[1].resource_id, resource2);
         assert_eq!(registration.resources[1].access_level, AccessLevel::ReadWrite);
-        assert_eq!(registration.version, "1.0.0");
-        assert_eq!(registration.metadata.len(), 2);
-        assert_eq!(registration.metadata.get("category"), Some(&"test".to_string()));
-        assert_eq!(registration.metadata.get("priority"), Some(&"high".to_string()));
     }
-    
+
     #[tokio::test]
     async fn test_handler_output_builder() {
         let output = HandlerOutput::new(serde_json::json!({

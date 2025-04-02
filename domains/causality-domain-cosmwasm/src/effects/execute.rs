@@ -5,19 +5,19 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::any::Any;
 
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 
+use causality_types::content::ContentId;
 use causality_core::effect::{
-    Effect, EffectContext, EffectId, EffectOutcome, EffectResult, EffectError,
-    DomainEffect, ResourceEffect, ResourceOperation, EffectTypeId
+    Effect, EffectContext, EffectResult, EffectError, EffectOutcome, EffectType,
+    domain::DomainEffect
 };
-use causality_core::resource::ContentId;
 
-use super::{CosmWasmEffect, CosmWasmEffectType, CosmWasmGasParams, COSMWASM_DOMAIN_ID};
+use super::{CosmWasmEffect, CosmWasmEffectType, CosmWasmGasParams, CosmWasmEffectHandler, COSMWASM_DOMAIN_ID};
 
 /// Parameters for CosmWasm execute effect
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,7 +54,7 @@ pub struct Coin {
 /// CosmWasm Execute Effect implementation
 pub struct CosmWasmExecuteEffect {
     /// Unique identifier
-    id: EffectId,
+    id: String,
     
     /// Execute parameters
     params: CosmWasmExecuteParams,
@@ -74,7 +74,7 @@ impl CosmWasmExecuteEffect {
         account_resource_id: ContentId,
     ) -> Self {
         Self {
-            id: EffectId::new_unique(),
+            id: format!("exec-{}-{}", params.chain_id, params.contract_address),
             params,
             contract_resource_id,
             account_resource_id,
@@ -83,7 +83,7 @@ impl CosmWasmExecuteEffect {
     
     /// Create a new CosmWasm execute effect with a specific ID
     pub fn with_id(
-        id: EffectId,
+        id: String,
         params: CosmWasmExecuteParams,
         contract_resource_id: ContentId,
         account_resource_id: ContentId,
@@ -135,93 +135,66 @@ impl fmt::Debug for CosmWasmExecuteEffect {
     }
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 impl Effect for CosmWasmExecuteEffect {
-    fn id(&self) -> &EffectId {
-        &self.id
-    }
-    
-    fn type_id(&self) -> EffectTypeId {
-        EffectTypeId::new("cosmwasm.execute")
-    }
-    
-    fn display_name(&self) -> String {
-        "CosmWasm Contract Execute".to_string()
+    fn effect_type(&self) -> EffectType {
+        EffectType::Custom("cosmwasm.execute".to_string())
     }
     
     fn description(&self) -> String {
-        format!(
-            "Execute contract {} on chain {} with sender {}",
-            self.params.contract_address,
-            self.params.chain_id,
-            self.params.sender
-        )
+        format!("CosmWasm Contract Execute: {} on {}", 
+                self.params.contract_address, 
+                self.params.chain_id)
     }
     
-    fn display_parameters(&self) -> HashMap<String, String> {
-        let mut params = HashMap::new();
-        params.insert("chain_id".to_string(), self.params.chain_id.clone());
-        params.insert("contract_address".to_string(), self.params.contract_address.clone());
-        params.insert("sender".to_string(), self.params.sender.clone());
-        
-        // Add message type if available
-        if let Some(msg_type) = self.params.msg.get("type").and_then(|v| v.as_str()) {
-            params.insert("msg_type".to_string(), msg_type.to_string());
-        }
-        
-        // Add funds information
-        if !self.params.funds.is_empty() {
-            let funds_str = self.params.funds
-                .iter()
-                .map(|c| format!("{}{}", c.amount, c.denom))
-                .collect::<Vec<_>>()
-                .join(", ");
-            
-            params.insert("funds".to_string(), funds_str);
-        }
-        
-        params
-    }
-    
-    async fn execute(&self, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        // In a real implementation, this would call out to the CosmWasm chain
-        // For now, we'll just return a success outcome
-        
-        // Check capabilities
-        if !context.has_capability(&self.contract_resource_id, &causality_core::capability::Right::Call) {
-            return Err(EffectError::CapabilityError(
-                format!("Missing call capability for contract resource: {}", self.contract_resource_id)
+    async fn execute(&self, context: &dyn EffectContext) -> EffectResult {
+        // Verify capability for contract access
+        if !context.has_capability(&format!("cosmwasm.contract.{}", self.params.contract_address)) {
+            return Err(EffectError::PermissionDenied(
+                format!("Missing capability to call contract: {}", self.params.contract_address)
             ));
         }
         
-        if !context.has_capability(&self.account_resource_id, &causality_core::capability::Right::Write) {
-            return Err(EffectError::CapabilityError(
-                format!("Missing write capability for account resource: {}", self.account_resource_id)
+        // Verify capability for account access
+        if !context.has_capability(&format!("cosmwasm.account.{}", self.params.sender)) {
+            return Err(EffectError::PermissionDenied(
+                format!("Missing capability to use account: {}", self.params.sender)
             ));
         }
         
-        // Create outcome data
+        // Prepare outcome data
         let mut outcome_data = HashMap::new();
         outcome_data.insert("chain_id".to_string(), self.params.chain_id.clone());
         outcome_data.insert("contract_address".to_string(), self.params.contract_address.clone());
         outcome_data.insert("sender".to_string(), self.params.sender.clone());
+        outcome_data.insert("msg".to_string(), self.params.msg.to_string());
         
-        // Add message type if available
-        if let Some(msg_type) = self.params.msg.get("type").and_then(|v| v.as_str()) {
-            outcome_data.insert("msg_type".to_string(), msg_type.to_string());
+        // Add funds information
+        if !self.params.funds.is_empty() {
+            let funds_str = self.params.funds.iter()
+                .map(|c| format!("{}{}", c.amount, c.denom))
+                .collect::<Vec<String>>()
+                .join(",");
+            outcome_data.insert("funds".to_string(), funds_str);
         }
         
-        // Return success outcome
-        Ok(EffectOutcome::success(outcome_data)
-            .with_affected_resource(self.contract_resource_id.clone())
-            .with_affected_resource(self.account_resource_id.clone()))
+        // In a real implementation, we would execute the contract call here
+        // For now, we'll just return a simulated success
+        
+        Ok(EffectOutcome::Success {
+            result: Some("contract_executed".to_string()),
+            data: outcome_data,
+        })
+    }
+    
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
-#[async_trait]
 impl DomainEffect for CosmWasmExecuteEffect {
-    fn domain_id(&self) -> &str {
-        COSMWASM_DOMAIN_ID
+    fn domain_id(&self) -> String {
+        COSMWASM_DOMAIN_ID.to_string()
     }
     
     fn domain_parameters(&self) -> HashMap<String, String> {
@@ -231,18 +204,7 @@ impl DomainEffect for CosmWasmExecuteEffect {
     }
 }
 
-#[async_trait]
-impl ResourceEffect for CosmWasmExecuteEffect {
-    fn resource_id(&self) -> &ContentId {
-        &self.contract_resource_id
-    }
-    
-    fn operation(&self) -> ResourceOperation {
-        ResourceOperation::Update
-    }
-}
-
-#[async_trait]
+#[async_trait::async_trait]
 impl CosmWasmEffect for CosmWasmExecuteEffect {
     fn cosmwasm_effect_type(&self) -> CosmWasmEffectType {
         CosmWasmEffectType::Execute
@@ -254,5 +216,9 @@ impl CosmWasmEffect for CosmWasmExecuteEffect {
     
     fn gas_params(&self) -> Option<CosmWasmGasParams> {
         self.params.gas_params.clone()
+    }
+    
+    async fn handle_with_handler(&self, handler: &dyn CosmWasmEffectHandler, context: &dyn EffectContext) -> EffectResult {
+        handler.handle_cosmwasm_effect(self, context).await
     }
 } 

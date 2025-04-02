@@ -8,9 +8,12 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 # External dependencies
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+async-trait = { workspace = true }
 
 # Internal dependencies
 causality-types = { workspace = true }

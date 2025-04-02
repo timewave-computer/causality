@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::json;
 
-use crate::crypto::{Signature, PublicKey, KeyPair};
+use causality_crypto::{Signature, PublicKey, KeyPair};
 use crate::types::{DomainId, FactId};
 use crate::time::effect::{
     TimeError, 

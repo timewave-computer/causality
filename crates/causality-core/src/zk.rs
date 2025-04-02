@@ -9,8 +9,8 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
-
-use causality_types::Result;
+use serde::{Serialize, Deserialize};
+use causality_error::{Result, Error};
 
 /// Zero-Knowledge Virtual Machine interface
 ///
@@ -52,20 +52,11 @@ pub trait ZkAdapter {
     fn load_private_inputs(&mut self, inputs: HashMap<String, Vec<u8>>) -> Result<()>;
 }
 
-/// Witness for ZK proofs
-///
-/// A witness contains all the information needed to generate a ZK proof,
-/// including the program trace, memory accesses, and intermediate states.
-#[derive(Debug, Clone)]
+/// A witness containing the execution trace of a ZK program
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Witness {
-    /// The state transitions that occurred during execution
-    pub transitions: Vec<StateTransition>,
-    
-    /// The memory accesses that occurred during execution
-    pub memory_accesses: Vec<MemoryAccess>,
-    
-    /// Additional data specific to the ZK VM implementation
-    pub additional_data: HashMap<String, Vec<u8>>,
+    /// Raw witness data
+    pub data: Vec<u8>,
 }
 
 /// State transition in a ZK VM
@@ -126,16 +117,10 @@ pub struct MemoryAccess {
 ///
 /// Represents a cryptographic proof that a program executed correctly
 /// without revealing the details of the execution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof {
-    /// The raw proof data
+    /// Raw proof data
     pub data: Vec<u8>,
-    
-    /// The type of the proof (specific to the ZK VM implementation)
-    pub proof_type: String,
-    
-    /// The public inputs to the program
-    pub public_inputs: HashMap<String, Vec<u8>>,
 }
 
 /// A RISC-V program to be executed in a ZK VM
@@ -203,14 +188,14 @@ pub enum RiscVSectionType {
 /// Helper function to serialize a witness to JSON
 pub fn serialize_witness_to_json(witness: &Witness) -> Result<String> {
     serde_json::to_string(witness).map_err(|e| {
-        causality_types::Error::SerializationError(format!("Failed to serialize witness: {}", e))
+        Error::serialization(format!("Failed to serialize witness: {}", e))
     })
 }
 
 /// Helper function to deserialize a witness from JSON
 pub fn deserialize_witness_from_json(json: &str) -> Result<Witness> {
     serde_json::from_str(json).map_err(|e| {
-        causality_types::Error::DeserializationError(format!("Failed to deserialize witness: {}", e))
+        Error::serialization(format!("Failed to deserialize witness: {}", e))
     })
 }
 

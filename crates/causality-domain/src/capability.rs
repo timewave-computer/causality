@@ -1,680 +1,207 @@
-// Domain capability system
-// Original file: src/domain/capability.rs
+// Domain capability management
+//
+// This module defines the capability management for domains, providing
+// a way to register and query domain capabilities.
 
-//! Domain-specific capability system for domain adapters
-//!
-//! This module provides a capability-based system specifically for domain adapters,
-//! integrating with the general capability system.
+use std::collections::{HashMap, HashSet, BTreeMap};
+use std::sync::RwLock;
+use serde::{Serialize, Deserialize};
 
-// Re-export from core capability system
-pub use causality_core::capability::{
-    // Core types
-    ResourceId,
-    IdentityId,
-    Capability,
-    CapabilityGrants,
-    ResourceGuard,
-    ResourceRegistry,
-    CapabilityError,
-    
-    // Content addressing
-    ContentHash,
-    ContentRef,
-    ContentAddressed,
-    ContentAddressedCapability,
-    ContentAddressedRegistry,
-    ContentAddressedStorage,
-    ContentAddressingError,
-    
-    // Domain-specific capability types
-    domain::{
-        DomainCapability,
-        DomainCapabilityType,
-        DomainCapabilityRegistry,
-        DomainCapabilityError,
-    },
-};
+use crate::selection::DomainId;
 
-// Re-export helpers
-pub use causality_core::capability::domain::helpers;
-
-// Domain-specific extensions and utilities
-pub mod extensions {
-    use super::*;
-    use crate::domain::{DomainId, DomainType, DomainAdapter};
-    use std::collections::{HashMap, HashSet};
-    use std::sync::Arc;
-    
-    /// Extension trait for domain adapters
-    pub trait DomainCapabilityExtension {
-        /// Check if this domain adapter has a specific capability
-        fn has_domain_capability(&self, capability: &DomainCapabilityType) -> bool;
-        
-        /// Get all domain capabilities
-        fn domain_capabilities(&self) -> HashSet<DomainCapabilityType>;
-    }
-    
-    impl<T: DomainAdapter> DomainCapabilityExtension for T {
-        fn has_domain_capability(&self, capability: &DomainCapabilityType) -> bool {
-            let capability_str = capability.to_string();
-            self.capabilities().contains(&capability_str)
-        }
-        
-        fn domain_capabilities(&self) -> HashSet<DomainCapabilityType> {
-            self.capabilities()
-                .into_iter()
-                .filter_map(|s| match DomainCapabilityType::from_string(&s) {
-                    Some(cap) => Some(cap),
-                    None => None,
-                })
-                .collect()
-        }
-    }
-    
-    /// Helper method to get domain-specific capabilities
-    pub fn capabilities_for_domain_type(domain_type: &DomainType) -> HashSet<DomainCapabilityType> {
-        let mut capabilities = HashSet::new();
-        
-        // Common capabilities for all domains
-        capabilities.insert(DomainCapabilityType::SendTransaction);
-        capabilities.insert(DomainCapabilityType::ReadState);
-        
-        // Add capabilities based on domain type
-        match domain_type {
-            DomainType::Blockchain => {
-                capabilities.insert(DomainCapabilityType::DeployContract);
-                capabilities.insert(DomainCapabilityType::ExecuteContract);
-                capabilities.insert(DomainCapabilityType::SignTransaction);
-            },
-            DomainType::StateMachine => {
-                capabilities.insert(DomainCapabilityType::WriteState);
-            },
-            DomainType::Database => {
-                capabilities.insert(DomainCapabilityType::WriteState);
-                capabilities.insert(DomainCapabilityType::QueryContract);
-            },
-            DomainType::ZkRollup => {
-                capabilities.insert(DomainCapabilityType::ZkProve);
-                capabilities.insert(DomainCapabilityType::ZkVerify);
-                capabilities.insert(DomainCapabilityType::GenerateProof);
-            },
-            DomainType::Bridge => {
-                capabilities.insert(DomainCapabilityType::BridgeAssets);
-                capabilities.insert(DomainCapabilityType::VerifyBridgeTransaction);
-            },
-            // Add more domain types as needed
-            _ => {
-                // Default capabilities already added
-            }
-        }
-        
-        capabilities
-    }
-    
-    /// Create a capability for the specified domain
-    pub fn create_domain_capability_for_adapter(
-        adapter: &dyn DomainAdapter,
-        capability_type: DomainCapabilityType,
-        owner: IdentityId
-    ) -> DomainCapability {
-        capability_type.create_capability(CapabilityGrants::default(), owner)
-    }
-    
-    /// Helper to convert string to capability type
-    pub fn domain_capability_from_string(s: &str) -> Option<DomainCapabilityType> {
-        match s {
-            "send_transaction" => Some(DomainCapabilityType::SendTransaction),
-            "sign_transaction" => Some(DomainCapabilityType::SignTransaction),
-            "batch_transactions" => Some(DomainCapabilityType::BatchTransactions),
-            "deploy_contract" => Some(DomainCapabilityType::DeployContract),
-            "execute_contract" => Some(DomainCapabilityType::ExecuteContract),
-            "query_contract" => Some(DomainCapabilityType::QueryContract),
-            "read_state" => Some(DomainCapabilityType::ReadState),
-            "write_state" => Some(DomainCapabilityType::WriteState),
-            "verify_signature" => Some(DomainCapabilityType::VerifySignature),
-            "generate_proof" => Some(DomainCapabilityType::GenerateProof),
-            "verify_proof" => Some(DomainCapabilityType::VerifyProof),
-            "zk_prove" => Some(DomainCapabilityType::ZkProve),
-            "zk_verify" => Some(DomainCapabilityType::ZkVerify),
-            "stake" => Some(DomainCapabilityType::Stake),
-            "validate" => Some(DomainCapabilityType::Validate),
-            "vote" => Some(DomainCapabilityType::Vote),
-            "propose_upgrade" => Some(DomainCapabilityType::ProposeUpgrade),
-            "vote_on_proposal" => Some(DomainCapabilityType::VoteOnProposal),
-            "bridge_assets" => Some(DomainCapabilityType::BridgeAssets),
-            "verify_bridge_transaction" => Some(DomainCapabilityType::VerifyBridgeTransaction),
-            s if s.starts_with("custom_") => Some(DomainCapabilityType::Custom(s[7..].to_string())),
-            _ => None,
-        }
-    }
+/// Domain capability represents a specific functionality a domain can provide
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct DomainCapability {
+    /// Unique name of the capability
+    pub name: String,
+    /// Description of what this capability provides
+    pub description: String,
+    /// Version of this capability
+    pub version: String,
+    /// Required permissions to use this capability
+    pub required_permissions: Vec<String>,
+    /// Configuration options available for this capability
+    pub config_options: BTreeMap<String, String>,
 }
 
 impl DomainCapability {
-    /// Convert a domain capability to a string
-    pub fn to_string(&self) -> String {
-        match self {
-            DomainCapability::SendTransaction => "send_transaction".to_string(),
-            DomainCapability::SignTransaction => "sign_transaction".to_string(),
-            DomainCapability::BatchTransactions => "batch_transactions".to_string(),
-            DomainCapability::DeployContract => "deploy_contract".to_string(),
-            DomainCapability::ExecuteContract => "execute_contract".to_string(),
-            DomainCapability::QueryContract => "query_contract".to_string(),
-            DomainCapability::ReadState => "read_state".to_string(),
-            DomainCapability::WriteState => "write_state".to_string(),
-            DomainCapability::VerifySignature => "verify_signature".to_string(),
-            DomainCapability::GenerateProof => "generate_proof".to_string(),
-            DomainCapability::VerifyProof => "verify_proof".to_string(),
-            DomainCapability::ZkProve => "zk_prove".to_string(),
-            DomainCapability::ZkVerify => "zk_verify".to_string(),
-            DomainCapability::Stake => "stake".to_string(),
-            DomainCapability::Validate => "validate".to_string(),
-            DomainCapability::Vote => "vote".to_string(),
-            DomainCapability::ProposeUpgrade => "propose_upgrade".to_string(),
-            DomainCapability::VoteOnProposal => "vote_on_proposal".to_string(),
-            DomainCapability::BridgeAssets => "bridge_assets".to_string(),
-            DomainCapability::VerifyBridgeTransaction => "verify_bridge_transaction".to_string(),
-            DomainCapability::Custom(name) => format!("custom_{}", name),
+    /// Create a new capability with the given name
+    pub fn new(name: &str, description: &str, version: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            description: description.to_string(),
+            version: version.to_string(),
+            required_permissions: Vec::new(),
+            config_options: BTreeMap::new(),
         }
     }
     
-    /// Convert a string to a domain capability
-    pub fn from_string(s: &str) -> Option<DomainCapability> {
-        match s {
-            "send_transaction" => Some(DomainCapability::SendTransaction),
-            "sign_transaction" => Some(DomainCapability::SignTransaction),
-            "batch_transactions" => Some(DomainCapability::BatchTransactions),
-            "deploy_contract" => Some(DomainCapability::DeployContract),
-            "execute_contract" => Some(DomainCapability::ExecuteContract),
-            "query_contract" => Some(DomainCapability::QueryContract),
-            "read_state" => Some(DomainCapability::ReadState),
-            "write_state" => Some(DomainCapability::WriteState),
-            "verify_signature" => Some(DomainCapability::VerifySignature),
-            "generate_proof" => Some(DomainCapability::GenerateProof),
-            "verify_proof" => Some(DomainCapability::VerifyProof),
-            "zk_prove" => Some(DomainCapability::ZkProve),
-            "zk_verify" => Some(DomainCapability::ZkVerify),
-            "stake" => Some(DomainCapability::Stake),
-            "validate" => Some(DomainCapability::Validate),
-            "vote" => Some(DomainCapability::Vote),
-            "propose_upgrade" => Some(DomainCapability::ProposeUpgrade),
-            "vote_on_proposal" => Some(DomainCapability::VoteOnProposal),
-            "bridge_assets" => Some(DomainCapability::BridgeAssets),
-            "verify_bridge_transaction" => Some(DomainCapability::VerifyBridgeTransaction),
-            s if s.starts_with("custom_") => Some(DomainCapability::Custom(s[7..].to_string())),
-            _ => None,
-        }
+    /// Add a required permission to this capability
+    pub fn with_permission(mut self, permission: &str) -> Self {
+        self.required_permissions.push(permission.to_string());
+        self
     }
     
-    /// Get capability based on domain type
-    pub fn capabilities_for_domain_type(domain_type: &DomainType) -> HashSet<DomainCapability> {
-        let mut capabilities = HashSet::new();
-        
-        // Common capabilities for all domains
-        capabilities.insert(DomainCapability::SendTransaction);
-        capabilities.insert(DomainCapability::ReadState);
-        
-        // Add domain-specific capabilities
-        match domain_type {
-            DomainType::EVM => {
-                capabilities.insert(DomainCapability::DeployContract);
-                capabilities.insert(DomainCapability::ExecuteContract);
-                capabilities.insert(DomainCapability::BatchTransactions);
-                capabilities.insert(DomainCapability::WriteState);
-                capabilities.insert(DomainCapability::VerifySignature);
-            },
-            DomainType::CosmWasm => {
-                capabilities.insert(DomainCapability::DeployContract);
-                capabilities.insert(DomainCapability::ExecuteContract);
-                capabilities.insert(DomainCapability::QueryContract);
-                capabilities.insert(DomainCapability::WriteState);
-                capabilities.insert(DomainCapability::VerifySignature);
-                capabilities.insert(DomainCapability::Stake);
-                capabilities.insert(DomainCapability::Validate);
-                capabilities.insert(DomainCapability::Vote);
-                capabilities.insert(DomainCapability::ProposeUpgrade);
-                capabilities.insert(DomainCapability::VoteOnProposal);
-            },
-            DomainType::SOL => {
-                capabilities.insert(DomainCapability::DeployContract);
-                capabilities.insert(DomainCapability::ExecuteContract);
-                capabilities.insert(DomainCapability::WriteState);
-                capabilities.insert(DomainCapability::VerifySignature);
-                capabilities.insert(DomainCapability::Stake);
-                capabilities.insert(DomainCapability::Validate);
-            },
-            DomainType::TEL => {
-                capabilities.insert(DomainCapability::ExecuteContract);
-                capabilities.insert(DomainCapability::QueryContract);
-                capabilities.insert(DomainCapability::ZkProve);
-                capabilities.insert(DomainCapability::ZkVerify);
-            },
-            DomainType::Unknown => {
-                // Only basic capabilities for unknown domain types
-            },
-        }
-        
-        capabilities
+    /// Add a configuration option to this capability
+    pub fn with_config_option(mut self, key: &str, value: &str) -> Self {
+        self.config_options.insert(key.to_string(), value.to_string());
+        self
     }
+}
+
+/// Domain capability manager - keeps track of capabilities for each domain
+pub struct DomainCapabilityManager {
+    /// Capabilities by domain
+    capabilities: RwLock<HashMap<DomainId, HashSet<DomainCapability>>>,
 }
 
 impl DomainCapabilityManager {
     /// Create a new domain capability manager
-    pub fn new(capability_system: Arc<dyn CapabilitySystem>) -> Self {
-        let mut default_capabilities = HashMap::new();
-        
-        // Initialize default capabilities for each domain type
-        default_capabilities.insert(DomainType::EVM, DomainCapability::capabilities_for_domain_type(&DomainType::EVM));
-        default_capabilities.insert(DomainType::CosmWasm, DomainCapability::capabilities_for_domain_type(&DomainType::CosmWasm));
-        default_capabilities.insert(DomainType::SOL, DomainCapability::capabilities_for_domain_type(&DomainType::SOL));
-        default_capabilities.insert(DomainType::TEL, DomainCapability::capabilities_for_domain_type(&DomainType::TEL));
-        default_capabilities.insert(DomainType::Unknown, DomainCapability::capabilities_for_domain_type(&DomainType::Unknown));
-        
+    pub fn new() -> Self {
         Self {
-            capability_system,
-            default_capabilities,
-            domain_capabilities: HashMap::new(),
+            capabilities: RwLock::new(HashMap::new()),
         }
     }
     
-    /// Register domain capabilities for a specific domain
-    pub fn register_domain_capabilities(
-        &mut self,
-        domain_id: &DomainId,
-        capabilities: HashSet<DomainCapability>,
-    ) {
-        self.domain_capabilities.insert(domain_id.clone(), capabilities);
-    }
-    
-    /// Get registered capabilities for a domain
-    pub fn get_domain_capabilities(&self, domain_id: &DomainId) -> Option<&HashSet<DomainCapability>> {
-        self.domain_capabilities.get(domain_id)
+    /// Register a capability for a domain
+    pub fn register_capability(&self, domain_id: &DomainId, capability: DomainCapability) {
+        let mut capabilities = self.capabilities.write().unwrap();
+        let domain_capabilities = capabilities
+            .entry(domain_id.clone())
+            .or_insert_with(HashSet::new);
+        domain_capabilities.insert(capability);
     }
     
     /// Check if a domain has a specific capability
-    pub fn domain_has_capability(&self, domain_id: &DomainId, capability: &DomainCapability) -> bool {
-        if let Some(capabilities) = self.domain_capabilities.get(domain_id) {
-            capabilities.contains(capability)
+    pub fn has_capability(&self, domain_id: &DomainId, capability_name: &str) -> bool {
+        let capabilities = self.capabilities.read().unwrap();
+        if let Some(domain_capabilities) = capabilities.get(domain_id) {
+            domain_capabilities.iter().any(|cap| cap.name == capability_name)
         } else {
             false
         }
     }
     
-    /// Register domain adapter capabilities based on the adapter's capabilities
-    pub fn register_domain_adapter(&mut self, adapter: &dyn DomainAdapter) -> Result<()> {
-        let domain_id = adapter.domain_id();
-        let domain_info = adapter.domain_info().now_or_never()
-            .unwrap_or(Err(Error::UnsupportedOperation("Failed to get domain info".to_string())))??;
-        
-        // Get capabilities from adapter
-        let adapter_capabilities: HashSet<DomainCapability> = adapter.capabilities()
-            .iter()
-            .filter_map(|cap_str| DomainCapability::from_string(cap_str))
-            .collect();
-        
-        // Get default capabilities for this domain type
-        let default_caps = self.default_capabilities
-            .get(&domain_info.domain_type)
+    /// Get all capabilities for a domain
+    pub fn get_capabilities(&self, domain_id: &DomainId) -> HashSet<DomainCapability> {
+        let capabilities = self.capabilities.read().unwrap();
+        capabilities.get(domain_id)
             .cloned()
-            .unwrap_or_default();
-        
-        // Merge adapter capabilities with defaults
-        let mut capabilities = default_caps.clone();
-        capabilities.extend(adapter_capabilities);
-        
-        // Register the merged capabilities
-        self.register_domain_capabilities(domain_id, capabilities);
-        
-        Ok(())
+            .unwrap_or_else(HashSet::new)
     }
     
-    /// Create a capability for using a domain
-    pub async fn create_domain_capability(
-        &self,
-        domain_id: &DomainId,
-        resource_id: &ContentId,
-        owner: &Address,
-        issuer: &Address,
-        capabilities: &[DomainCapability],
-        delegatable: bool,
-    ) -> Result<CapabilityId> {
-        // Convert domain capabilities to capability constraints
-        let operations: Vec<String> = capabilities
-            .iter()
-            .map(|cap| cap.to_string())
-            .collect();
-            
-        let domains_constraint = CapabilityConstraint::Domains(vec![domain_id.to_string()]);
-        let operations_constraint = CapabilityConstraint::Operations(operations);
-        
-        // Create the capability constraints
-        let constraints = vec![domains_constraint, operations_constraint];
-        
-        // Create rights for the capability
-        let mut rights = HashSet::new();
-        rights.insert(Right::Execute);
-        
-        // Create the capability
-        let capability = RigorousCapability {
-            id: CapabilityId::new_random(),
-            resource_id: resource_id.clone(),
-            rights,
-            delegated_from: None,
-            issuer: issuer.clone(),
-            owner: owner.clone(),
-            expires_at: None, // No expiration
-            revocation_id: Some(format!("domain_capability_{}", domain_id)),
-            delegatable,
-            constraints,
-            proof: None, // No proof required for system-created capabilities
-        };
-        
-        // Create the capability in the capability system
-        self.capability_system.create_capability(capability).await
+    /// Get domains that have a specific capability
+    pub fn get_domains_with_capability(&self, capability_name: &str) -> Vec<DomainId> {
+        let capabilities = self.capabilities.read().unwrap();
+        capabilities.iter()
+            .filter(|(_, caps)| {
+                caps.iter().any(|cap| cap.name == capability_name)
+            })
+            .map(|(domain_id, _)| domain_id.clone())
+            .collect()
     }
     
-    /// Check if an address has capability to perform a domain operation
-    pub async fn check_domain_operation_capability(
-        &self,
-        address: &Address,
-        domain_id: &DomainId,
-        operation: &str,
-        resource_id: &ContentId,
-    ) -> Result<bool> {
-        // Get all capabilities owned by the address
-        let capabilities = self.capability_system.get_capabilities_for_owner(address).await?;
-        
-        // Filter capabilities that apply to the specific resource
-        let relevant_capabilities: Vec<&RigorousCapability> = capabilities.iter()
-            .filter(|cap| &cap.resource_id == resource_id)
-            .collect();
-            
-        // Check if any capability grants access to this domain and operation
-        for cap in relevant_capabilities {
-            // Check if capability has the Execute right
-            if !cap.rights.contains(&Right::Execute) {
-                continue;
-            }
-            
-            // Check domain constraint
-            let domain_allowed = cap.constraints.iter().any(|constraint| {
-                if let CapabilityConstraint::Domains(domains) = constraint {
-                    domains.contains(&domain_id.to_string())
-                } else {
-                    false
-                }
-            });
-            
-            if !domain_allowed {
-                continue;
-            }
-            
-            // Check operation constraint
-            let operation_allowed = cap.constraints.iter().any(|constraint| {
-                if let CapabilityConstraint::Operations(operations) = constraint {
-                    operations.contains(&operation.to_string())
-                } else {
-                    true // No operations constraint means all operations allowed
-                }
-            });
-            
-            if operation_allowed {
-                // Validate the capability
-                let status = self.capability_system.validate_capability(&cap.id).await?;
-                if matches!(status, CapabilityStatus::Valid) {
-                    return Ok(true);
-                }
-            }
+    /// Remove a capability from a domain
+    pub fn remove_capability(&self, domain_id: &DomainId, capability_name: &str) {
+        let mut capabilities = self.capabilities.write().unwrap();
+        if let Some(domain_capabilities) = capabilities.get_mut(domain_id) {
+            domain_capabilities.retain(|cap| cap.name != capability_name);
         }
-        
-        // No valid capability found
-        Ok(false)
+    }
+    
+    /// Remove all capabilities for a domain
+    pub fn remove_domain(&self, domain_id: &DomainId) {
+        let mut capabilities = self.capabilities.write().unwrap();
+        capabilities.remove(domain_id);
+    }
+}
+
+impl Default for DomainCapabilityManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Standard capabilities that domains might support
+pub mod standard_capabilities {
+    /// Transaction capability - domain can process transactions
+    pub const TRANSACTION: &str = "transaction";
+    /// Storage capability - domain can store data
+    pub const STORAGE: &str = "storage";
+    /// Query capability - domain can execute queries
+    pub const QUERY: &str = "query";
+    /// Smart contract capability - domain can execute smart contracts
+    pub const SMART_CONTRACT: &str = "smart_contract";
+    /// Token capability - domain has token support
+    pub const TOKEN: &str = "token";
+    /// NFT capability - domain has NFT support
+    pub const NFT: &str = "nft";
+    /// Verification capability - domain can verify facts
+    pub const VERIFICATION: &str = "verification";
+    /// Time synchronization capability - domain supports time sync
+    pub const TIME_SYNC: &str = "time_sync";
+}
+
+/// Extension trait for capabilities
+pub trait CapabilityExtension {
+    /// Get all capabilities this entity has
+    fn capabilities(&self) -> Vec<String>;
+    
+    /// Check if entity has a specific capability
+    fn has_capability(&self, name: &str) -> bool {
+        self.capabilities().iter().any(|cap| cap == name)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{DomainInfo, BlockHeight, BlockHash, Timestamp, TimeMapEntry, 
-                        FactQuery, FactResult, Transaction, TransactionId, TransactionReceipt};
-    use std::fmt;
-    
-    // Mock implementation of DomainAdapter for testing
-    #[derive(Debug)]
-    struct MockDomainAdapter {
-        domain_id: DomainId,
-        domain_type: DomainType,
-        capabilities: Vec<String>,
-    }
-    
-    impl MockDomainAdapter {
-        fn new(domain_id: &str, domain_type: DomainType, capabilities: Vec<String>) -> Self {
-            Self {
-                domain_id: DomainId::new(domain_id),
-                domain_type,
-                capabilities,
-            }
-        }
-    }
-    
-    impl DomainAdapter for MockDomainAdapter {
-        fn domain_id(&self) -> &DomainId {
-            &self.domain_id
-        }
-        
-        async fn domain_info(&self) -> Result<DomainInfo> {
-            Ok(DomainInfo {
-                domain_id: self.domain_id.clone(),
-                name: format!("Test Domain {}", self.domain_id),
-                domain_type: self.domain_type.clone(),
-                status: crate::domain::DomainStatus::Active,
-                metadata: HashMap::new(),
-            })
-        }
-        
-        async fn current_height(&self) -> Result<BlockHeight> {
-            Ok(BlockHeight(100))
-        }
-        
-        async fn current_hash(&self) -> Result<BlockHash> {
-            Ok(BlockHash([0; 32]))
-        }
-        
-        async fn current_time(&self) -> Result<Timestamp> {
-            Ok(Timestamp::now())
-        }
-        
-        async fn time_map_entry(&self, _height: BlockHeight) -> Result<TimeMapEntry> {
-            Ok(TimeMapEntry {
-                domain_id: self.domain_id.clone(),
-                height: BlockHeight(100),
-                time: Timestamp::now(),
-                hash: BlockHash([0; 32]),
-            })
-        }
-        
-        async fn observe_fact(&self, _query: &FactQuery) -> FactResult {
-            unimplemented!()
-        }
-        
-        async fn submit_transaction(&self, _tx: Transaction) -> Result<TransactionId> {
-            Ok(TransactionId::from_str("test_tx_id"))
-        }
-        
-        async fn transaction_receipt(&self, _tx_id: &TransactionId) -> Result<TransactionReceipt> {
-            unimplemented!()
-        }
-        
-        async fn transaction_confirmed(&self, _tx_id: &TransactionId) -> Result<bool> {
-            Ok(true)
-        }
-        
-        async fn wait_for_confirmation(
-            &self,
-            _tx_id: &TransactionId,
-            _max_wait_ms: Option<u64>,
-        ) -> Result<TransactionReceipt> {
-            unimplemented!()
-        }
-        
-        fn capabilities(&self) -> Vec<String> {
-            self.capabilities.clone()
-        }
-    }
-    
-    // Mock implementation of CapabilitySystem for testing
-    struct MockCapabilitySystem {
-        capabilities: HashMap<CapabilityId, RigorousCapability>,
-    }
-    
-    impl MockCapabilitySystem {
-        fn new() -> Self {
-            Self {
-                capabilities: HashMap::new(),
-            }
-        }
-    }
-    
-    #[async_trait]
-    impl CapabilitySystem for MockCapabilitySystem {
-        async fn create_capability(&self, capability: RigorousCapability) -> Result<CapabilityId> {
-            Ok(capability.id.clone())
-        }
-        
-        async fn get_capability(&self, id: &CapabilityId) -> Result<RigorousCapability> {
-            self.capabilities.get(id)
-                .cloned()
-                .ok_or_else(|| Error::ResourceNotFound(format!("Capability not found: {}", id)))
-        }
-        
-        async fn validate_capability(&self, _id: &CapabilityId) -> Result<CapabilityStatus> {
-            Ok(CapabilityStatus::Valid)
-        }
-        
-        async fn check_capability_rights(&self, _id: &CapabilityId, _rights: &[Right]) -> Result<bool> {
-            Ok(true)
-        }
-        
-        async fn delegate_capability(
-            &self,
-            _from_id: &CapabilityId,
-            _to_address: &Address,
-            _rights: &[Right],
-            _constraints: Vec<CapabilityConstraint>,
-            _delegatable: bool,
-        ) -> Result<CapabilityId> {
-            unimplemented!()
-        }
-        
-        async fn revoke_capability(&self, _id: &CapabilityId) -> Result<()> {
-            Ok(())
-        }
-        
-        async fn get_capabilities_for_resource(&self, resource_id: &ContentId) -> Result<Vec<RigorousCapability>> {
-            Ok(self.capabilities
-                .values()
-                .filter(|cap| &cap.resource_id == resource_id)
-                .cloned()
-                .collect())
-        }
-        
-        async fn get_capabilities_for_owner(&self, owner: &Address) -> Result<Vec<RigorousCapability>> {
-            Ok(self.capabilities
-                .values()
-                .filter(|cap| &cap.owner == owner)
-                .cloned()
-                .collect())
-        }
-        
-        async fn can_perform_operation(
-            &self,
-            _id: &CapabilityId,
-            _operation: &str,
-            _parameters: &HashMap<String, serde_json::Value>,
-        ) -> Result<bool> {
-            Ok(true)
-        }
-        
-        async fn consume_capability_use(&self, _id: &CapabilityId) -> Result<()> {
-            Ok(())
-        }
-    }
-    
-    #[tokio::test]
-    async fn test_domain_capability_extension() {
-        let adapter = MockDomainAdapter::new(
-            "test-domain",
-            DomainType::CosmWasm,
-            vec![
-                "send_transaction".to_string(),
-                "execute_contract".to_string(),
-                "query_contract".to_string(),
-            ],
-        );
-        
-        // Test capability check
-        assert!(adapter.has_domain_capability(&DomainCapabilityType::SendTransaction));
-        assert!(adapter.has_domain_capability(&DomainCapabilityType::ExecuteContract));
-        assert!(adapter.has_domain_capability(&DomainCapabilityType::QueryContract));
-        assert!(!adapter.has_domain_capability(&DomainCapabilityType::DeployContract));
-        
-        // Test getting all capabilities
-        let caps = adapter.domain_capabilities();
-        assert_eq!(caps.len(), 3);
-        assert!(caps.contains(&DomainCapabilityType::SendTransaction));
-        assert!(caps.contains(&DomainCapabilityType::ExecuteContract));
-        assert!(caps.contains(&DomainCapabilityType::QueryContract));
-    }
     
     #[test]
-    fn test_capabilities_for_domain_type() {
-        // Test EVM capabilities
-        let evm_caps = DomainCapability::capabilities_for_domain_type(&DomainType::EVM);
-        assert!(evm_caps.contains(&DomainCapability::SendTransaction));
-        assert!(evm_caps.contains(&DomainCapability::DeployContract));
-        assert!(evm_caps.contains(&DomainCapability::ExecuteContract));
-        assert!(evm_caps.contains(&DomainCapability::WriteState));
-        assert!(!evm_caps.contains(&DomainCapability::Vote)); // EVM typically doesn't have this
+    fn test_capability_manager() {
+        let manager = DomainCapabilityManager::new();
         
-        // Test CosmWasm capabilities
-        let cosmwasm_caps = DomainCapability::capabilities_for_domain_type(&DomainType::CosmWasm);
-        assert!(cosmwasm_caps.contains(&DomainCapability::SendTransaction));
-        assert!(cosmwasm_caps.contains(&DomainCapability::ExecuteContract));
-        assert!(cosmwasm_caps.contains(&DomainCapability::QueryContract));
-        assert!(cosmwasm_caps.contains(&DomainCapability::Vote)); // CosmWasm has governance
-        assert!(cosmwasm_caps.contains(&DomainCapability::Stake)); // CosmWasm has staking
-    }
-    
-    #[tokio::test]
-    async fn test_domain_capability_manager() {
-        let mock_capability_system = Arc::new(MockCapabilitySystem::new());
-        let mut manager = DomainCapabilityManager::new(mock_capability_system);
-        
-        // Create a test domain adapter
-        let adapter = MockDomainAdapter::new(
-            "test-domain",
-            DomainType::CosmWasm,
-            vec![
-                "send_transaction".to_string(),
-                "execute_contract".to_string(),
-                "custom_specialized_operation".to_string(),
-            ],
+        // Create some capabilities
+        let tx_capability = DomainCapability::new(
+            "transaction", 
+            "Ability to process transactions", 
+            "1.0"
         );
         
-        // Register the adapter
-        manager.register_domain_adapter(&adapter).unwrap();
+        let storage_capability = DomainCapability::new(
+            "storage", 
+            "Ability to store data", 
+            "1.0"
+        );
         
-        // Check registered capabilities
-        let caps = manager.get_domain_capabilities(&adapter.domain_id()).unwrap();
+        // Register capabilities for domains
+        manager.register_capability(&"domain1".to_string(), tx_capability.clone());
+        manager.register_capability(&"domain1".to_string(), storage_capability.clone());
+        manager.register_capability(&"domain2".to_string(), tx_capability.clone());
         
-        // Should have default CosmWasm capabilities plus custom ones
-        assert!(caps.contains(&DomainCapability::SendTransaction));
-        assert!(caps.contains(&DomainCapability::ExecuteContract));
-        assert!(caps.contains(&DomainCapability::QueryContract)); // From default CosmWasm
-        assert!(caps.contains(&DomainCapability::Custom("specialized_operation".to_string()))); // Custom
+        // Check capabilities
+        assert!(manager.has_capability(&"domain1".to_string(), "transaction"));
+        assert!(manager.has_capability(&"domain1".to_string(), "storage"));
+        assert!(manager.has_capability(&"domain2".to_string(), "transaction"));
+        assert!(!manager.has_capability(&"domain2".to_string(), "storage"));
         
-        // Check capability check
-        assert!(manager.domain_has_capability(&adapter.domain_id(), &DomainCapability::SendTransaction));
-        assert!(manager.domain_has_capability(&adapter.domain_id(), &DomainCapability::QueryContract));
-        assert!(!manager.domain_has_capability(&adapter.domain_id(), &DomainCapability::ZkProve)); // Not in CosmWasm
+        // Get all capabilities for a domain
+        let domain1_caps = manager.get_capabilities(&"domain1".to_string());
+        assert_eq!(domain1_caps.len(), 2);
+        
+        // Get domains with a capability
+        let tx_domains = manager.get_domains_with_capability("transaction");
+        assert_eq!(tx_domains.len(), 2);
+        assert!(tx_domains.contains(&"domain1".to_string()));
+        assert!(tx_domains.contains(&"domain2".to_string()));
+        
+        // Remove a capability
+        manager.remove_capability(&"domain1".to_string(), "transaction");
+        assert!(!manager.has_capability(&"domain1".to_string(), "transaction"));
+        assert!(manager.has_capability(&"domain1".to_string(), "storage"));
+        
+        // Remove a domain
+        manager.remove_domain(&"domain2".to_string());
+        assert!(manager.get_capabilities(&"domain2".to_string()).is_empty());
     }
 } 

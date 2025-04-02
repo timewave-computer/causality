@@ -4,13 +4,13 @@
 // services they offer to other agents in the system.
 
 use crate::resource_types::{ResourceId, ResourceType};
-use crate::capability::Capability;
-use crate::crypto::ContentHash;
+use crate::utils::content_addressing;
+use crate::resource::operation::Capability;
+use causality_types::ContentHash;
 use crate::resource::{Resource, ResourceError};
-use crate::serialization::{Serializable, DeserializationError};
-use crate::effect::Effect;
-
-use super::types::{AgentId, AgentType, AgentError};
+use crate::serialization::{SerializationError, Serializable, Serializer};
+use causality_error::Error as CoreError;
+use crate::resource::agent::types::{AgentId, AgentType, AgentError};
 use super::agent::Agent;
 
 use std::collections::{HashMap, HashSet};
@@ -19,6 +19,7 @@ use tokio::sync::RwLock;
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
+use blake3;
 
 /// Service status error types
 #[derive(Error, Debug)]
@@ -41,7 +42,7 @@ pub enum ServiceStatusError {
     
     /// Serialization error
     #[error("Serialization error: {0}")]
-    SerializationError(#[from] DeserializationError),
+    SerializationError(SerializationError),
     
     /// Internal error
     #[error("Internal error: {0}")]
@@ -136,7 +137,7 @@ impl ServiceStatus {
     ) -> Self {
         // For now, we use a default content hash for the ID
         // This will be replaced with a proper hash when the service is registered
-        let id = ResourceId::new(ContentHash::default());
+        let id = ResourceId::new(content_addressing::default_content_hash());
         let now = chrono::Utc::now().timestamp() as u64;
         
         Self {
@@ -278,6 +279,14 @@ impl crate::resource::Resource for ServiceStatus {
     
     fn clone_resource(&self) -> Box<dyn crate::resource::Resource> {
         Box::new(self.clone())
+    }
+    
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 
@@ -434,9 +443,10 @@ impl ServiceStatusManager {
     pub async fn register_service(&self, mut service: ServiceStatus) -> ServiceStatusResult<ResourceId> {
         // Calculate a proper content hash for the service
         let service_data = serde_json::to_vec(&service)
-            .map_err(|e| ServiceStatusError::SerializationError(DeserializationError::Other(e.to_string())))?;
+            .map_err(|e| ServiceStatusError::SerializationError(SerializationError::SerializationFailed(e.to_string())))?;
         
-        let content_hash = ContentHash::calculate(&service_data);
+        // Create ContentHash using the content_addressing utility
+        let content_hash = content_addressing::hash_bytes(&service_data);
         let service_id = ResourceId::new(content_hash);
         
         // Update the service ID
@@ -739,7 +749,7 @@ mod tests {
     
     // Helper function to create a test agent ID
     fn create_test_agent_id() -> AgentId {
-        AgentId::from_content_hash(ContentHash::default().as_bytes(), AgentType::User)
+        AgentId::from_content_hash(content_addressing::default_content_hash().as_bytes(), AgentType::User)
     }
     
     #[tokio::test]
@@ -869,11 +879,18 @@ mod tests {
     
     #[tokio::test]
     async fn test_agent_services() {
-        let agent1_id = create_test_agent_id();
-        let agent2_id = AgentId::from_content_hash(ContentHash::calculate(b"agent2").as_bytes(), AgentType::User);
         let manager = ServiceStatusManager::new();
+        // Create agent IDs with proper hashing
+        let agent1_id = AgentId::from_content_hash(
+            blake3::hash(b"agent1").as_bytes(), 
+            AgentType::User
+        );
+        let agent2_id = AgentId::from_content_hash(
+            blake3::hash(b"agent2").as_bytes(), 
+            AgentType::User
+        );
         
-        // Create services for different agents
+        // Create services for agent1
         let service1 = ServiceStatusBuilder::new(agent1_id.clone(), "service1")
             .state(ServiceState::Available)
             .build();

@@ -1,19 +1,23 @@
-// Effect Storage System
+// Effect Storage
 //
-// This module provides the storage interfaces and implementations for
-// persisting effects and tracking their execution history. All storage 
-// follows content addressing principles to maintain immutability and 
-// integrity of the effect system.
+// This module provides storage functionality for effect execution records,
+// outcomes, and related data using content addressing.
 
-use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, RwLock};
 use std::fmt::Debug;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
-use crate::storage::{ContentAddressedStorage, ContentAddressedStorageError};
-use crate::serialization::{SerializationError, to_bytes, from_bytes};
 
+use causality_types::content_addressing::storage::ContentAddressedStorage;
+use causality_types::content_addressing::storage::error::ContentAddressedStorageError;
+use causality_types::ContentId;
+
+use crate::serialization::{Serializer, SerializationError, to_bytes, from_bytes};
 use super::{Effect, EffectId, EffectOutcome, EffectResult, EffectTypeId, EffectError};
 
 /// Errors that can occur during effect storage operations

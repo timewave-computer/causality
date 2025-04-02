@@ -17,7 +17,7 @@ use crate::time::handler::{
 use crate::time::implementations::{
     MemoryTimeService, MemoryTimeAttestationStore, MemoryFactTimeStore,
 };
-use crate::crypto::KeyPair;
+use causality_crypto::KeyPair;
 use crate::types::DomainId;
 
 /// Integration utility for the time effect system

@@ -7,7 +7,6 @@ use thiserror::Error;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 use serde::{Serialize, Deserialize};
 
 use crate::observation::extraction::BlockData;
@@ -239,7 +238,7 @@ impl ChainIndexer for BasicIndexer {
         Ok(())
     }
     
-    async fn get_block(&self, height: u64) -> Result<BlockData> {
+    async fn get_block(&self, _height: u64) -> Result<BlockData> {
         // This is a placeholder implementation
         // Real implementation would connect to blockchain RPC
         Err(IndexerError::Internal("Not implemented".to_string()))

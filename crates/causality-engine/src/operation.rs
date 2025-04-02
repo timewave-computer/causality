@@ -12,6 +12,7 @@ mod transformation;
 mod execution;
 mod zk;
 mod api;
+mod verification;
 // External tests module - not part of public API
 #[cfg(test)]
 mod test_fixtures;
@@ -21,29 +22,116 @@ pub use transformation::*;
 pub use execution::*;
 pub use zk::*;
 pub use api::*;
+pub use verification::*;
 
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use borsh::{BorshSerialize, BorshDeserialize};
-
-use causality_types::{DomainId};
-use crate::effect::{Effect, EffectOutcome};
-use crate::verification::UnifiedProof;
-use causality_core::Proof;
-use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
-
-// Re-add with correct paths - these might need to be adjusted based on cargo check results
-use causality_tel::{ResourceOperation, ResourceOperationType};
-use causality_tel::{Address, Domain, Metadata, Parameters, Timestamp, Proof as TelProof};
-
+use std::fmt;
 use std::time::SystemTime;
+
+use causality_error::{EngineResult as Result, EngineError};
+use causality_types::ContentId;
+use causality_core::Effect;
+use causality_core::EffectOutcome;
+use causality_types::{DomainId, Timestamp};
+use causality_core::effect::{ResourceOperation, ResourceOperationType};
+use causality_core::domain::{Address, Domain};
+use causality_core::metadata::Metadata;
+use causality_core::params::Parameters;
+use causality_core::content::ContentAddressed;
+
+/// Content-addressed functionality
+pub trait ContentAddressed {
+    /// Get the content hash
+    fn content_hash(&self) -> Vec<u8>;
+    
+    /// Verify the content hash
+    fn verify(&self) -> bool;
+    
+    /// Convert to bytes
+    fn to_bytes(&self) -> Vec<u8>;
+    
+    /// Convert from bytes
+    fn from_bytes(bytes: &[u8]) -> Result<Self> where Self: Sized;
+    
+    /// Get content ID
+    fn content_id(&self) -> ContentId {
+        let hash = self.content_hash();
+        ContentId::from_bytes(&hash)
+    }
+}
+
+/// HashError for content addressing
+#[derive(Debug, thiserror::Error)]
+pub enum HashError {
+    /// Serialization error
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    /// Invalid hash format
+    #[error("Invalid hash format: {0}")]
+    InvalidFormat(String),
+    
+    /// Hash computation error
+    #[error("Hash computation error: {0}")]
+    ComputationError(String),
+}
+
+/// Unified proof abstraction - combines different proof types
+pub enum UnifiedProof {
+    /// A cryptographic proof (e.g., signature)
+    Cryptographic(Vec<u8>),
+    /// A ZK proof
+    ZeroKnowledge(Vec<u8>),
+    /// A capability-based proof
+    Capability(String),
+    /// Multiple proofs combined
+    Composite(Vec<UnifiedProof>),
+}
+
+/// Proof type from the core library
+pub struct Proof {
+    /// Proof data
+    pub data: Vec<u8>,
+    /// Proof type
+    pub proof_type: String,
+    /// Verification key
+    pub verification_key: Option<Vec<u8>>,
+}
+
+/// ResourceOperation type for operations
+pub struct ResourceOperation {
+    /// Operation ID
+    pub id: String,
+    /// Operation type
+    pub operation_type: ResourceOperationType,
+    /// Operation parameters
+    pub parameters: HashMap<String, String>,
+}
+
+/// ResourceOperationType for operations
+pub enum ResourceOperationType {
+    /// Create a resource
+    Create,
+    /// Read a resource
+    Read,
+    /// Update a resource
+    Update,
+    /// Delete a resource
+    Delete,
+    /// Transfer a resource
+    Transfer,
+    /// Custom operation
+    Custom(String),
+}
 
 /// Unique identifier for operations
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct OperationId(pub String);
 
 /// Content data for operation ID generation
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct OperationIdContent {
     /// Operation type
     op_type: String,
@@ -54,29 +142,35 @@ struct OperationIdContent {
 }
 
 impl ContentAddressed for OperationIdContent {
-    fn content_hash(&self) -> HashOutput {
-        let hash_factory = HashFactory::default();
-        let hasher = hash_factory.create_hasher().unwrap();
-        let data = self.try_to_vec().unwrap();
-        hasher.hash(&data)
+    fn content_hash(&self) -> Vec<u8> {
+        // Use simple serialization and SHA-256 hash
+        let serialized = self.to_bytes();
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(&serialized);
+        hasher.finalize().to_vec()
     }
     
     fn verify(&self) -> bool {
+        // Simple verification - just rehash and compare
         let hash = self.content_hash();
         let serialized = self.to_bytes();
         
-        let hash_factory = HashFactory::default();
-        let hasher = hash_factory.create_hasher().unwrap();
-        hasher.hash(&serialized) == hash
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(&serialized);
+        let computed_hash = hasher.finalize().to_vec();
+        
+        hash == computed_hash
     }
     
     fn to_bytes(&self) -> Vec<u8> {
-        self.try_to_vec().unwrap()
+        // Use serde_json for serialization
+        serde_json::to_vec(self)
+            .unwrap_or_else(|_| Vec::new())
     }
     
-    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
-        BorshDeserialize::try_from_slice(bytes)
-            .map_err(|e| HashError::SerializationError(e.to_string()))
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        serde_json::from_slice(bytes)
+            .map_err(|e| causality_error::Error::SerializationError(e.to_string()))
     }
 }
 
@@ -162,6 +256,22 @@ pub enum OperationType {
     
     /// Execute a custom operation
     Custom(String),
+}
+
+impl fmt::Display for OperationType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OperationType::Transfer => write!(f, "transfer"),
+            OperationType::Deposit => write!(f, "deposit"),
+            OperationType::Withdrawal => write!(f, "withdrawal"),
+            OperationType::Create => write!(f, "create"),
+            OperationType::Update => write!(f, "update"),
+            OperationType::Delete => write!(f, "delete"),
+            OperationType::Merge => write!(f, "merge"),
+            OperationType::Split => write!(f, "split"),
+            OperationType::Custom(s) => write!(f, "custom:{}", s),
+        }
+    }
 }
 
 /// Reference to a resource involved in an operation

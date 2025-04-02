@@ -1,186 +1,149 @@
-// Effect Types
-//
-// This module defines core types for the effect system, including
-// identifiers, type information, and content addressing integration.
+//! Effect system type definitions
+//!
+//! This module contains core type definitions for the effect system
 
-use std::fmt::{self, Debug, Display};
-use std::collections::HashMap;
+use std::fmt::{self, Display, Formatter};
 use serde::{Serialize, Deserialize};
-use causality_types::ContentId;
+use causality_types::crypto_primitives::ContentId;
 
-use crate::serialization::{to_bytes, from_bytes};
-
-/// Unique identifier for an effect instance
+/// An effect identifier
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EffectId(ContentId);
+pub struct EffectId(pub String);
 
 impl EffectId {
-    /// Create a new unique effect ID
-    pub fn new_unique() -> Self {
-        Self(ContentId::generate())
-    }
-
-    /// Create an effect ID from a content ID
-    pub fn from_content_id(id: ContentId) -> Self {
-        Self(id)
-    }
-
-    /// Get the inner content ID
-    pub fn as_content_id(&self) -> &ContentId {
-        &self.0
+    /// Create a new content-addressed effect ID
+    pub fn new() -> Self {
+        // Generate random bytes and create ContentId
+        let random_bytes = rand::random::<[u8; 16]>();
+        let content_id = ContentId::from_bytes(&random_bytes);
+        Self(format!("effect:{}", content_id))
     }
     
-    /// Convert to a string representation
-    pub fn to_string(&self) -> String {
-        format!("Effect-{}", self.0)
+    /// Create an effect ID from a string
+    pub fn from_string(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+    
+    /// Get the underlying string
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
 impl Display for EffectId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Effect-{}", self.0)
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
-/// Type ID for categorizing effects, with content addressing support
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EffectTypeId {
-    /// Name of the effect type
-    name: String,
-    
-    /// Optional namespace for organization
-    namespace: Option<String>,
-    
-    /// Version of the effect type (for evolution)
-    version: Option<String>,
-    
-    /// Content hash for addressing and verification
-    content_hash: Option<ContentId>,
+impl From<String> for EffectId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
 }
+
+impl From<&str> for EffectId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+/// An effect type identifier
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EffectTypeId(pub String);
 
 impl EffectTypeId {
-    /// Create a new effect type ID with just a name
-    pub fn new(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            namespace: None,
-            version: None,
-            content_hash: None,
-        }
+    /// Create a new effect type ID
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
     }
     
-    /// Create a new effect type ID with namespace and name
-    pub fn with_namespace(namespace: &str, name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            namespace: Some(namespace.to_string()),
-            version: None,
-            content_hash: None,
-        }
-    }
-    
-    /// Create a new effect type ID with namespace, name, and version
-    pub fn with_version(namespace: &str, name: &str, version: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            namespace: Some(namespace.to_string()),
-            version: Some(version.to_string()),
-            content_hash: None,
-        }
-    }
-    
-    /// Set the content hash for this effect type
-    pub fn with_content_hash(mut self, hash: ContentId) -> Self {
-        self.content_hash = Some(hash);
-        self
-    }
-    
-    /// Compute the content hash for this effect type
-    pub fn compute_content_hash(&mut self) -> Result<ContentId, anyhow::Error> {
-        let bytes = to_bytes(self)?;
-        let content_id = ContentId::from_bytes(&bytes)?;
-        self.content_hash = Some(content_id.clone());
-        Ok(content_id)
-    }
-    
-    /// Get the name of this effect type
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    
-    /// Get the namespace of this effect type, if any
-    pub fn namespace(&self) -> Option<&str> {
-        self.namespace.as_deref()
-    }
-    
-    /// Get the version of this effect type, if any
-    pub fn version(&self) -> Option<&str> {
-        self.version.as_deref()
-    }
-    
-    /// Get the content hash of this effect type, if set
-    pub fn content_hash(&self) -> Option<&ContentId> {
-        self.content_hash.as_ref()
-    }
-    
-    /// Get the fully qualified name of this effect type
-    pub fn qualified_name(&self) -> String {
-        match (&self.namespace, &self.version) {
-            (Some(ns), Some(ver)) => format!("{}:{}:{}", ns, self.name, ver),
-            (Some(ns), None) => format!("{}:{}", ns, self.name),
-            (None, Some(ver)) => format!("{}:{}", self.name, ver),
-            (None, None) => self.name.clone(),
-        }
-    }
-    
-    /// Check if this effect type is compatible with another type
-    pub fn is_compatible_with(&self, other: &Self) -> bool {
-        // If content hashes are present and equal, they're definitely compatible
-        if let (Some(h1), Some(h2)) = (self.content_hash(), other.content_hash()) {
-            if h1 == h2 {
-                return true;
-            }
-        }
-        
-        // Otherwise check by name, namespace, and version
-        self.name == other.name && 
-        self.namespace == other.namespace &&
-        match (&self.version, &other.version) {
-            // If both have versions, they must match
-            (Some(v1), Some(v2)) => v1 == v2,
-            // If one has no version, consider compatible
-            _ => true,
-        }
+    /// Get the underlying string
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
 impl Display for EffectTypeId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.qualified_name())
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for EffectTypeId {
+    fn from(s: String) -> Self {
+        Self(s)
     }
 }
 
 impl From<&str> for EffectTypeId {
     fn from(s: &str) -> Self {
-        // Parse qualified names like "namespace:name:version"
-        let parts: Vec<&str> = s.split(':').collect();
-        match parts.len() {
-            1 => Self::new(parts[0]),
-            2 => Self::with_namespace(parts[0], parts[1]),
-            _ => Self::with_version(parts[0], parts[1], parts[2]),
+        Self(s.to_string())
+    }
+}
+
+/// A right that can be granted to a resource
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Right {
+    /// Right to read a resource
+    Read,
+    /// Right to write to a resource
+    Write,
+    /// Right to create a resource
+    Create,
+    /// Right to delete a resource
+    Delete,
+    /// Right to delegate access to a resource
+    Delegate,
+    /// Custom right
+    Custom(String),
+}
+
+impl Display for Right {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Right::Read => write!(f, "read"),
+            Right::Write => write!(f, "write"),
+            Right::Create => write!(f, "create"),
+            Right::Delete => write!(f, "delete"),
+            Right::Delegate => write!(f, "delegate"),
+            Right::Custom(c) => write!(f, "custom:{}", c),
         }
     }
 }
 
-/// The target boundary for effect execution
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A boundary for effect execution
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutionBoundary {
-    /// Execute inside the system boundary (within the local system)
-    Inside,
-    /// Execute outside the system boundary (on external systems)
-    Outside,
-    /// Execute at the system boundary (interface between local and external)
-    Boundary,
-    /// Execution boundary doesn't matter
+    /// No boundary - effect can access any resource
+    None,
+    /// Local boundary - effect can only access local resources
+    Local,
+    /// Domain boundary - effect can only access resources in its domain
+    Domain(String),
+    /// Any boundary - for backward compatibility
     Any,
+    /// Boundary - generic boundary for backward compatibility
+    Boundary,
+    /// Custom boundary
+    Custom(String),
+}
+
+impl Default for ExecutionBoundary {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl Display for ExecutionBoundary {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            ExecutionBoundary::None => write!(f, "none"),
+            ExecutionBoundary::Local => write!(f, "local"),
+            ExecutionBoundary::Domain(d) => write!(f, "domain:{}", d),
+            ExecutionBoundary::Any => write!(f, "any"),
+            ExecutionBoundary::Boundary => write!(f, "boundary"),
+            ExecutionBoundary::Custom(c) => write!(f, "custom:{}", c),
+        }
+    }
 } 

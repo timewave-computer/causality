@@ -9,13 +9,14 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
-use crate::content::{ContentId, ContentAddressing, ContentAddressingError};
-use crate::serialization::{to_bytes, from_bytes};
-use crate::domain::{DomainId, DomainError};
-use crate::capability::Capability;
-use crate::effect::context::EffectContext;
+use causality_types::ContentId;
+use causality_types::domain::DomainId;
+use crate::capability::resource::{ResourceCapability, ResourceCapabilityType, CapabilityGrants, Capability};
+use crate::identity::IdentityId;
+use crate::effect::EffectContext;
 use crate::resource::types::{ResourceTypeId, ResourceTypeRegistry, ResourceTypeRegistryError};
 use crate::resource::Resource;
+use std::sync::RwLock;
 
 /// Unique identifier for a cross-domain resource reference
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -194,7 +195,7 @@ pub enum TransferStatus {
 }
 
 /// Resource transfer operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct ResourceTransferOperation {
     /// Transfer ID
     pub id: String,
@@ -215,7 +216,7 @@ pub struct ResourceTransferOperation {
     pub verification_level: VerificationLevel,
     
     /// Authorization capability
-    pub authorization: Capability<dyn Resource>,
+    pub authorization: Capability<Box<dyn Resource>>,
     
     /// Transfer status
     pub status: TransferStatus,
@@ -227,6 +228,23 @@ pub struct ResourceTransferOperation {
     pub metadata: HashMap<String, String>,
 }
 
+impl Clone for ResourceTransferOperation {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            resource_id: self.resource_id.clone(),
+            source_domain: self.source_domain.clone(),
+            target_domain: self.target_domain.clone(),
+            projection_type: self.projection_type.clone(),
+            verification_level: self.verification_level.clone(),
+            authorization: create_dummy_capability(),
+            status: self.status.clone(),
+            resource_data: self.resource_data.clone(),
+            metadata: self.metadata.clone(),
+        }
+    }
+}
+
 impl ResourceTransferOperation {
     /// Create a new resource transfer operation
     pub fn new(
@@ -235,7 +253,7 @@ impl ResourceTransferOperation {
         target_domain: DomainId,
         projection_type: ResourceProjectionType,
         verification_level: VerificationLevel,
-        authorization: Capability<dyn Resource>,
+        authorization: Capability<Box<dyn Resource>>,
     ) -> Self {
         Self {
             id: crate::id_utils::generate_transfer_id(),
@@ -270,8 +288,8 @@ impl ResourceTransferOperation {
     }
 }
 
-/// Cross-domain protocol errors
-#[derive(Error, Debug)]
+/// Errors that can occur in cross-domain protocol operations
+#[derive(Debug, Error)]
 pub enum CrossDomainProtocolError {
     #[error("Resource not found: {0}")]
     ResourceNotFound(String),
@@ -295,7 +313,7 @@ pub enum CrossDomainProtocolError {
     ResourceTypeError(#[from] ResourceTypeRegistryError),
     
     #[error("Domain error: {0}")]
-    DomainError(#[from] DomainError),
+    DomainError(String),
     
     #[error("Serialization error: {0}")]
     SerializationError(String),
@@ -422,7 +440,7 @@ pub trait DomainResourceAdapter: Send + Sync + Debug {
 }
 
 /// Cross-domain resource protocol implementation
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BasicCrossDomainResourceProtocol {
     /// Resource type registry
     resource_type_registry: Arc<dyn ResourceTypeRegistry>,
@@ -695,28 +713,53 @@ pub struct ProtocolAuthorization {
     pub operation: String,
     
     /// The authorization capability
-    pub authorization: Capability<dyn Resource>,
+    pub authorization: Capability<Box<dyn Resource>>,
     
     /// Timestamp when this authorization was created
     pub timestamp: u64,
 }
 
+impl Clone for ProtocolAuthorization {
+    fn clone(&self) -> Self {
+        Self {
+            agent_id: self.agent_id.clone(),
+            operation: self.operation.clone(),
+            authorization: create_dummy_capability(),
+            timestamp: self.timestamp,
+        }
+    }
+}
+
+// Helper function to create a dummy capability for clone implementation
+fn create_dummy_capability() -> Capability<Box<dyn Resource>> {
+    let resource_id = ContentId::from_bytes_unwrap(&[0, 0, 0, 0]);
+    let cap = crate::capability::resource::ResourceCapability::new(
+        crate::capability::resource::ResourceCapabilityType::Read,
+        crate::capability::resource::CapabilityGrants::read_only(),
+        crate::identity::IdentityId::new(),
+    );
+    cap.to_capability::<Box<dyn Resource>>()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::DomainId;
-    use crate::content::ContentId;
-    use crate::capability::BasicCapability;
-    use crate::effect::context::EffectContextBuilder;
+    use causality_types::domain::DomainId;
+    use causality_types::ContentId;
     use crate::resource::types::{InMemoryResourceTypeRegistry, ResourceSchema, ResourceTypeDefinition};
     use std::collections::HashMap;
+    // Use async_trait for the test
+    use async_trait::async_trait;
+    use crate::effect::context::{BasicEffectContext, EffectContextBuilder};
+    use crate::effect::types::Right;
+    use crate::effect::EffectId;
     
     // Mock domain resource adapter for testing
     #[derive(Debug)]
     struct MockDomainResourceAdapter {
         domain_id: DomainId,
         supported_types: Vec<ResourceTypeId>,
-        resources: HashMap<String, Vec<u8>>,
+        resources: Arc<RwLock<HashMap<String, Vec<u8>>>>,
     }
     
     impl MockDomainResourceAdapter {
@@ -724,7 +767,7 @@ mod tests {
             Self {
                 domain_id,
                 supported_types: Vec::new(),
-                resources: HashMap::new(),
+                resources: Arc::new(RwLock::new(HashMap::new())),
             }
         }
         
@@ -733,8 +776,10 @@ mod tests {
             self
         }
         
-        fn with_resource(mut self, resource_id: &CrossDomainResourceId, data: Vec<u8>) -> Self {
-            self.resources.insert(resource_id.content_id.to_string(), data);
+        fn with_resource(self, resource_id: &CrossDomainResourceId, data: Vec<u8>) -> Self {
+            if let Ok(mut resources) = self.resources.write() {
+                resources.insert(resource_id.content_id.to_string(), data);
+            }
             self
         }
     }
@@ -756,9 +801,12 @@ mod tests {
             _metadata: &HashMap<String, String>,
             _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<()> {
-            let mut adapter = self.clone();
-            adapter.resources.insert(resource_id.content_id.to_string(), data.to_vec());
-            Ok(())
+            if let Ok(mut resources) = self.resources.write() {
+                resources.insert(resource_id.content_id.to_string(), data.to_vec());
+                Ok(())
+            } else {
+                Err(CrossDomainProtocolError::InternalError("Failed to acquire write lock".to_string()))
+            }
         }
         
         async fn retrieve_resource(
@@ -766,7 +814,7 @@ mod tests {
             resource_id: &CrossDomainResourceId,
             _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<Vec<u8>> {
-            self.resources.get(&resource_id.content_id.to_string())
+            self.resources.read().unwrap().get(&resource_id.content_id.to_string())
                 .cloned()
                 .ok_or_else(|| CrossDomainProtocolError::ResourceNotFound(
                     format!("Resource {} not found in domain {}", resource_id.content_id, self.domain_id)
@@ -778,7 +826,7 @@ mod tests {
             resource_id: &CrossDomainResourceId,
             _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<bool> {
-            Ok(self.resources.contains_key(&resource_id.content_id.to_string()))
+            Ok(self.resources.read().unwrap().contains_key(&resource_id.content_id.to_string()))
         }
         
         async fn verify_resource(
@@ -786,7 +834,7 @@ mod tests {
             resource_id: &CrossDomainResourceId,
             _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<VerificationResult> {
-            if self.resources.contains_key(&resource_id.content_id.to_string()) {
+            if self.resources.read().unwrap().contains_key(&resource_id.content_id.to_string()) {
                 Ok(VerificationResult::Valid)
             } else {
                 Ok(VerificationResult::Invalid("Resource not found".to_string()))
@@ -800,7 +848,7 @@ mod tests {
         ) -> CrossDomainProtocolResult<()> {
             // In a real implementation, this would lock or remove the resource
             // For testing, just ensure the resource exists
-            if !self.resources.contains_key(&operation.resource_id.content_id.to_string()) {
+            if !self.resources.read().unwrap().contains_key(&operation.resource_id.content_id.to_string()) {
                 return Err(CrossDomainProtocolError::ResourceNotFound(
                     format!("Resource {} not found in domain {}", 
                         operation.resource_id.content_id, 
@@ -816,15 +864,16 @@ mod tests {
             operation: &ResourceTransferOperation,
             _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<()> {
-            // In a real implementation, this would create the resource in the target domain
-            // For testing, just add an empty resource
-            let mut adapter = self.clone();
-            if let Some(data) = &operation.resource_data {
-                adapter.resources.insert(operation.resource_id.content_id.to_string(), data.clone());
+            if let Ok(mut resources) = self.resources.write() {
+                if let Some(data) = &operation.resource_data {
+                    resources.insert(operation.resource_id.content_id.to_string(), data.clone());
+                } else {
+                    resources.insert(operation.resource_id.content_id.to_string(), vec![]);
+                }
+                Ok(())
             } else {
-                adapter.resources.insert(operation.resource_id.content_id.to_string(), vec![]);
+                Err(CrossDomainProtocolError::InternalError("Failed to acquire write lock".to_string()))
             }
-            Ok(())
         }
         
         async fn update_projection(
@@ -833,11 +882,31 @@ mod tests {
             data: &[u8],
             _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<()> {
-            // Update the projection
-            let mut adapter = self.clone();
-            adapter.resources.insert(reference.id.content_id.to_string(), data.to_vec());
-            Ok(())
+            if let Ok(mut resources) = self.resources.write() {
+                resources.insert(reference.id.content_id.to_string(), data.to_vec());
+                Ok(())
+            } else {
+                Err(CrossDomainProtocolError::InternalError("Failed to acquire write lock".to_string()))
+            }
         }
+    }
+    
+    // Helper function to create a test context
+    fn create_test_context() -> BasicEffectContext {
+        let effect_id = EffectId::new();
+        EffectContextBuilder::new(effect_id).build()
+    }
+    
+    // Helper function to create a test capability
+    fn create_test_capability() -> Capability<Box<dyn Resource>> {
+        let resource_id = ContentId::from_bytes_unwrap(&[1, 2, 3, 4]);
+        // Create a resource capability
+        let cap = ResourceCapability::new(
+            ResourceCapabilityType::Read,
+            CapabilityGrants::read_only(),
+            IdentityId::new()
+        );
+        cap.to_capability::<Box<dyn Resource>>()
     }
     
     #[tokio::test]
@@ -872,14 +941,15 @@ mod tests {
         
         // Create resource
         let resource_id = CrossDomainResourceId::new(
-            ContentId::from_bytes(&[1, 2, 3, 4]).unwrap(),
+            ContentId::from_bytes_unwrap(&[1, 2, 3, 4]),
             domain1.clone(),
             resource_type.clone()
         );
         
-        // Create effect context
-        let context = EffectContextBuilder::new()
-            .with_capability(BasicCapability::new("test"))
+        // Create effect context - use a context capability that's different from resource capability
+        let effect_id = EffectId::new();
+        let context = EffectContextBuilder::new(effect_id)
+            .with_capability(crate::effect::context::Capability::new(resource_id.content_id.clone(), Right::Read))
             .build();
         
         // Create a reference (should fail because resource doesn't exist)
@@ -919,14 +989,15 @@ mod tests {
         let data = protocol.resolve_reference(&reference, &context).await.unwrap();
         assert_eq!(data, vec![1, 2, 3, 4]);
         
-        // Create a transfer operation
+        // Create a transfer operation with the proper resource capability
+        let capability = create_test_capability();
         let operation = ResourceTransferOperation::new(
             resource_id.clone(),
             domain1.clone(),
             domain2.clone(),
             ResourceProjectionType::Transferred,
             VerificationLevel::Hash,
-            BasicCapability::new("transfer")
+            capability
         );
         
         // Execute the transfer

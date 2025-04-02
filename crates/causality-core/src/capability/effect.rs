@@ -10,19 +10,103 @@ use std::collections::HashSet;
 
 use thiserror::Error;
 
-use crate::capability::{
-    ResourceId, IdentityId, ContentHash, ContentRef, ContentAddressed, utils
-};
-
-// Import only the types we need directly
+// Fix imports to use the correct types
+use crate::capability::{ResourceId, IdentityId, ContentAddressingError, ContentRef};
+use crate::capability::utils;
+use causality_types::{ContentHash, ContentId};
 use std::marker::PhantomData;
 
-// Define temporary placeholder types
-// These will need to be replaced with proper imports when the module structure is fixed
-type ResourceGuard<T> = T;
-type ResourceRegistry = Arc<()>;
-type Capability<T> = PhantomData<T>;
-type CapabilityGrants = u8;
+// Temporary imported types until we restructure - matched with resource.rs
+#[derive(Debug, Clone, PartialEq)]
+struct ResourceGuard<T>(T);
+
+impl<T> ResourceGuard<T> {
+    // Add placeholder method
+    pub fn read(&self) -> Result<&T, String> {
+        Ok(&self.0)
+    }
+}
+
+struct ResourceRegistry(Arc<()>);
+
+impl ResourceRegistry {
+    pub fn new() -> Self {
+        Self(Arc::new(()))
+    }
+    
+    // Add minimal implementations to fix errors
+    fn register<T>(&self, resource: T, _owner: IdentityId) -> Result<Capability<T>, String> {
+        Ok(Capability {
+            id: ResourceId::new(utils::hash_string("placeholder")),
+            grants: CapabilityGrants(255), // All permissions
+            origin: None,
+            _phantom: PhantomData,
+        })
+    }
+    
+    fn access<T>(&self, _capability: &Capability<T>) -> Result<ResourceGuard<T>, String> {
+        unimplemented!("Not implemented in temporary structure")
+    }
+    
+    fn access_by_content<T>(&self, _content_ref: &ContentRef<T>) -> Result<ResourceGuard<T>, String> {
+        unimplemented!("Not implemented in temporary structure")
+    }
+    
+    fn has_capability(&self, _identity: &IdentityId, _resource_id: &ResourceId) -> Result<bool, String> {
+        unimplemented!("Not implemented in temporary structure")
+    }
+    
+    fn transfer_capability<T>(&self, _capability: &Capability<T>, _from: &IdentityId, _to: &IdentityId) -> Result<(), String> {
+        unimplemented!("Not implemented in temporary structure")
+    }
+}
+
+// Define proper capability types with implementation
+#[derive(Debug, Clone, PartialEq)]
+struct Capability<T> {
+    pub id: ResourceId,
+    pub grants: CapabilityGrants,
+    pub origin: Option<IdentityId>,
+    pub _phantom: PhantomData<T>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct CapabilityGrants(u8);
+
+impl CapabilityGrants {
+    pub fn new(can_read: bool, can_write: bool, can_delegate: bool) -> Self {
+        let mut value = 0;
+        if can_read { value |= 1 }
+        if can_write { value |= 2 }
+        if can_delegate { value |= 4 }
+        Self(value)
+    }
+    
+    pub fn read_only() -> Self {
+        Self::new(true, false, false)
+    }
+    
+    pub fn write_only() -> Self {
+        Self::new(false, true, false)
+    }
+    
+    pub fn full() -> Self {
+        Self::new(true, true, true)
+    }
+    
+    pub fn can_read(&self) -> bool {
+        (self.0 & 1) != 0
+    }
+    
+    pub fn can_write(&self) -> bool {
+        (self.0 & 2) != 0
+    }
+    
+    pub fn can_delegate(&self) -> bool {
+        (self.0 & 4) != 0
+    }
+}
+
 type CapabilityError = String;
 
 /// Effect capability types for various operations
@@ -163,8 +247,8 @@ pub enum EffectCapabilityError {
     #[error("Missing required grants")]
     MissingGrants,
     
-    #[error("Underlying capability error: {0}")]
-    CapabilityError(#[from] CapabilityError),
+    #[error("Underlying capability error")]
+    CapabilityError(Box<dyn std::error::Error + Send + Sync>),
     
     #[error("Content addressing error: {0}")]
     ContentAddressingError(String),
@@ -277,7 +361,7 @@ impl EffectCapabilityRegistry {
             id: capability.id.clone(),
             grants: capability.grants.clone(),
             origin: capability.origin.clone(),
-            _phantom: std::marker::PhantomData::<dyn Any + Send + Sync>,
+            _phantom: std::marker::PhantomData::<Box<dyn Any + Send + Sync>>,
         };
         
         self.registry.transfer_capability(&std_capability, from, to)

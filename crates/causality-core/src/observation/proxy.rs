@@ -4,21 +4,18 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use async_trait::async_trait;
-use serde::{Serialize, Deserialize};
 use tokio::sync::mpsc;
 use thiserror::Error;
 
 use crate::log::{LogStorage, LogStorageError};
-use crate::observation::extraction::{
-    BlockData, ExtractedFact, FactExtractor, RuleEngine,
-    BasicExtractor, ExtractionRule
+use crate::observation::{
+    extraction::{RuleEngine, BasicExtractor, ExtractionRule},
+    indexer::{ChainIndexer, IndexerConfig, IndexerError, IndexerFactory},
+    ExtractedFact, FactExtractor, 
 };
-use crate::observation::indexer::{
-    IndexerConfig, ChainIndexer, 
-    IndexerFactory, IndexerError
-};
+
+// Import tracing for logging
+use tracing::{debug, error, info, trace, warn};
 
 /// Configuration for the observation proxy
 #[derive(Debug, Clone)]
@@ -194,7 +191,7 @@ pub struct ObservationProxy {
     /// Receiver for extracted facts
     fact_receiver: Arc<Mutex<Option<mpsc::Receiver<ExtractedFact>>>>,
     /// Event handlers
-    event_handlers: Mutex<Vec<Arc<dyn ProxyEventHandler>>>,
+    event_handlers: Mutex<Vec<Arc<dyn ProxyEventHandler + Send + Sync>>>,
     /// Whether the proxy is running
     running: Mutex<bool>,
 }
@@ -263,9 +260,11 @@ impl ObservationProxy {
 
     /// Start observing chains
     pub fn start(&self) -> std::result::Result<(), ProxyError> {
-        let mut running = self.running.lock().map_err(|e| 
-            ProxyError::Internal(format!("Failed to lock running: {}", e)))?;
-            
+        let mut running = match self.running.lock() {
+            Ok(guard) => guard,
+            Err(e) => return Err(ProxyError::Internal(format!("Failed to lock running: {}", e)))
+        };
+        
         if *running {
             return Ok(());
         }
@@ -273,61 +272,68 @@ impl ObservationProxy {
         *running = true;
         
         // Start indexers
-        let indexers = self.indexers.lock().map_err(|e| 
-            ProxyError::Internal(format!("Failed to lock indexers: {}", e)))?;
+        {
+            let indexers = match self.indexers.lock() {
+                Ok(guard) => guard,
+                Err(e) => return Err(ProxyError::Internal(format!("Failed to lock indexers: {}", e)))
+            };
             
-        let mut statuses = self.statuses.lock().map_err(|e| 
-            ProxyError::Internal(format!("Failed to lock statuses: {}", e)))?;
+            let mut statuses = match self.statuses.lock() {
+                Ok(guard) => guard,
+                Err(e) => return Err(ProxyError::Internal(format!("Failed to lock statuses: {}", e)))
+            };
             
-        for (chain_id, indexer) in indexers.iter() {
-            // Initialize and start the indexer
-            tokio::spawn({
-                let indexer = indexer.clone();
-                async move {
-                    if let Err(e) = indexer.initialize().await {
-                        log::error!("Failed to initialize indexer for chain {}: {:?}", chain_id, e);
-                    }
-                    if let Err(e) = indexer.start().await {
-                        log::error!("Failed to start indexer for chain {}: {:?}", chain_id, e);
-                    }
-                }
-            });
-            
-            // Update status
-            if let Some(status) = statuses.get_mut(chain_id) {
-                status.is_observed = true;
-                status.last_updated = chrono::Utc::now().timestamp() as u64;
-            }
-            
-            // Start polling for this chain
-            tokio::spawn({
-                let proxy = self.clone();
-                let chain_id = chain_id.clone();
-                async move {
-                    loop {
-                        // Check if we're still running
-                        if !proxy.is_running().unwrap_or(false) {
-                            break;
+            for (chain_id, indexer) in indexers.iter() {
+                // Initialize and start the indexer
+                tokio::spawn({
+                    let indexer = indexer.clone();
+                    let chain_id = chain_id.clone();
+                    async move {
+                        if let Err(e) = indexer.initialize().await {
+                            error!("Failed to initialize indexer for chain {}: {:?}", chain_id, e);
                         }
-                        
-                        // Poll the chain
-                        if let Err(e) = proxy.poll_chain(&chain_id).await {
-                            log::error!("Error polling chain {}: {:?}", chain_id, e);
+                        if let Err(e) = indexer.start().await {
+                            error!("Failed to start indexer for chain {}: {:?}", chain_id, e);
+                        }
+                    }
+                });
+                
+                // Update status
+                if let Some(status) = statuses.get_mut(chain_id) {
+                    status.is_observed = true;
+                    status.last_updated = chrono::Utc::now().timestamp() as u64;
+                }
+                
+                // Start polling for this chain
+                tokio::spawn({
+                    let proxy = self.clone();
+                    let chain_id = chain_id.clone();
+                    async move {
+                        loop {
+                            // Check if we're still running
+                            if !proxy.is_running().unwrap_or(false) {
+                                break;
+                            }
                             
-                            // Emit error event
-                            proxy.emit_event(ProxyEvent::Error {
-                                chain_id: Some(chain_id.clone()),
-                                message: format!("Error polling chain: {:?}", e),
-                            }).await;
+                            // Poll the chain
+                            if let Err(e) = proxy.poll_chain(&chain_id).await {
+                                error!("Error polling chain {}: {:?}", chain_id, e);
+                                
+                                // Emit error event
+                                proxy.emit_event(ProxyEvent::Error {
+                                    chain_id: Some(chain_id.clone()),
+                                    message: format!("Error polling chain: {:?}", e),
+                                }).await;
+                            }
+                            
+                            // Sleep for polling interval
+                            tokio::time::sleep(tokio::time::Duration::from_secs(
+                                proxy.config.polling_interval
+                            )).await;
                         }
-                        
-                        // Sleep for polling interval
-                        tokio::time::sleep(tokio::time::Duration::from_secs(
-                            proxy.config.polling_interval
-                        )).await;
                     }
-                }
-            });
+                });
+            }
         }
         
         Ok(())
@@ -335,9 +341,11 @@ impl ObservationProxy {
 
     /// Stop observing chains
     pub fn stop(&self) -> std::result::Result<(), ProxyError> {
-        let mut running = self.running.lock().map_err(|e| 
-            ProxyError::Internal(format!("Failed to lock running: {}", e)))?;
-            
+        let mut running = match self.running.lock() {
+            Ok(guard) => guard,
+            Err(e) => return Err(ProxyError::Internal(format!("Failed to lock running: {}", e)))
+        };
+        
         if !*running {
             return Ok(());
         }
@@ -345,27 +353,34 @@ impl ObservationProxy {
         *running = false;
         
         // Stop indexers
-        let indexers = self.indexers.lock().map_err(|e| 
-            ProxyError::Internal(format!("Failed to lock indexers: {}", e)))?;
+        {
+            let indexers = match self.indexers.lock() {
+                Ok(guard) => guard,
+                Err(e) => return Err(ProxyError::Internal(format!("Failed to lock indexers: {}", e)))
+            };
             
-        let mut statuses = self.statuses.lock().map_err(|e| 
-            ProxyError::Internal(format!("Failed to lock statuses: {}", e)))?;
+            let mut statuses = match self.statuses.lock() {
+                Ok(guard) => guard,
+                Err(e) => return Err(ProxyError::Internal(format!("Failed to lock statuses: {}", e)))
+            };
             
-        for (chain_id, indexer) in indexers.iter() {
-            // Stop the indexer
-            tokio::spawn({
-                let indexer = indexer.clone();
-                async move {
-                    if let Err(e) = indexer.stop().await {
-                        log::error!("Failed to stop indexer for chain {}: {:?}", chain_id, e);
+            for (chain_id, indexer) in indexers.iter() {
+                // Stop the indexer
+                tokio::spawn({
+                    let indexer = indexer.clone();
+                    let chain_id = chain_id.clone();
+                    async move {
+                        if let Err(e) = indexer.stop().await {
+                            error!("Failed to stop indexer for chain {}: {:?}", chain_id, e);
+                        }
                     }
+                });
+                
+                // Update status
+                if let Some(status) = statuses.get_mut(chain_id) {
+                    status.is_observed = false;
+                    status.last_updated = chrono::Utc::now().timestamp() as u64;
                 }
-            });
-            
-            // Update status
-            if let Some(status) = statuses.get_mut(chain_id) {
-                status.is_observed = false;
-                status.last_updated = chrono::Utc::now().timestamp() as u64;
             }
         }
         
@@ -374,7 +389,7 @@ impl ObservationProxy {
 
     /// Clone the proxy
     fn clone(&self) -> Self {
-        let fact_receiver_lock = self.fact_receiver.lock().unwrap();
+        // Avoid locking the fact_receiver which could cause deadlocks
         let (new_sender, new_receiver) = mpsc::channel(self.config.fact_buffer_size);
         
         ObservationProxy {
@@ -393,14 +408,28 @@ impl ObservationProxy {
 
     /// Emit an event
     async fn emit_event(&self, event: ProxyEvent) {
-        let handlers = self.event_handlers.lock().unwrap_or_else(|_| {
-            log::error!("Failed to lock event handlers");
-            return Vec::new().into();
-        });
+        // Get handlers in a separate scope to ensure they're dropped before any await
+        let handlers_to_call = {
+            let guard = match self.event_handlers.lock() {
+                Ok(guard) => guard,
+                Err(_) => {
+                    error!("Failed to lock event handlers");
+                    return;
+                }
+            };
+            
+            // Clone each handler Arc
+            let mut handlers_vec = Vec::new();
+            for handler in guard.iter() {
+                handlers_vec.push(handler.clone());
+            }
+            handlers_vec
+        };
         
-        for handler in handlers.iter() {
+        // Now handlers_to_call owns all the Arc<dyn ProxyEventHandler> and guard is dropped
+        for handler in handlers_to_call {
             if let Err(e) = handler.handle_event(event.clone()).await {
-                log::error!("Error in event handler: {:?}", e);
+                error!("Error in event handler: {:?}", e);
             }
         }
     }
@@ -470,7 +499,7 @@ impl ObservationProxy {
         if !facts.is_empty() {
             for fact in &facts {
                 if let Err(e) = self.fact_sender.send(fact.clone()).await {
-                    log::error!("Failed to send fact: {:?}", e);
+                    error!("Failed to send fact: {:?}", e);
                 }
             }
             

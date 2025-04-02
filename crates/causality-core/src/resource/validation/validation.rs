@@ -4,18 +4,21 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use async_trait::async_trait;
+use serde::{Serialize, Deserialize};
 
 use crate::resource::{
     ResourceId, ResourceTypeId, ResourceState, ResourceSchema,
-    ResourcePermission, Resource,
+    Resource,
 };
-
+use crate::capability::Capability;
 use super::context::{ValidationContext, ValidationPhase, ValidationOptions};
 use super::result::{ValidationResult, ValidationIssue, ValidationError, ValidationStatus, ValidationSeverity};
 use super::state::{StateTransitionValidator, StateTransitionRule};
 use super::schema::{SchemaValidator, SchemaCompatibility};
 use super::permission::{PermissionValidator, ResourcePermission};
 use super::custom::{CustomValidator, CustomValidationRule};
+
+use causality_types::ContentId;
 
 /// Configuration for the resource validator
 #[derive(Debug, Clone)]
@@ -178,7 +181,7 @@ impl ResourceValidator {
     pub async fn validate_permission(
         &self,
         permission: &ResourcePermission,
-        capabilities: &CapabilitySet,
+        capabilities: &Capability,
     ) -> Result<ValidationResult, ValidationError> {
         let context = ValidationContext::new()
             .with_capabilities(capabilities.clone())

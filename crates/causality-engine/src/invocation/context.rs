@@ -1,24 +1,267 @@
-// Invocation context implementation
+// Invocation context for effect patterns
 // Original file: src/invocation/context.rs
 
-// Invocation Context Module
-//
-// This module defines the invocation context and related types for tracking
-// execution state during effect invocations.
+use std::fmt;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::path::PathBuf;
 
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
-use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 
-use causality_types::{*};
-use causality_crypto::ContentId;;
-use causality_domain::map::TimeMap;
-use causality_types::Result;
-use causality_engine_types::FactType;
+use causality_error::{Error, Result, EngineError};
+use causality_types::{ContentId, DomainId, TraceId};
+use causality_core::time::TimeMap;
 
-/// Invocation state tracking the current execution progress
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+// Import EngineResult and other error types
+use causality_error::{EngineResult, CausalityError, Result as CausalityResult};
+
+// Import ExecutionEvent from execution context
+use crate::execution::context::ExecutionEvent;
+
+/// Context trait for invocation contexts
+pub trait InvocationContextTrait: Clone + fmt::Debug + Send + Sync + 'static {
+    /// Get the context type
+    fn context_type(&self) -> &str;
+    
+    /// Get the domain ID for this context (if any)
+    fn domain_id(&self) -> Option<&DomainId>;
+    
+    /// Get a unique ID for this context
+    fn context_id(&self) -> &str;
+    
+    /// Get the parent context ID (if any)
+    fn parent_id(&self) -> Option<&str>;
+    
+    /// Clone this context with a new ID
+    fn with_id(&self, id: &str) -> Self;
+    
+    /// Check if context has a capability
+    fn has_capability(&self, capability: &str) -> bool;
+    
+    /// Get the security policy
+    fn security_policy(&self) -> Arc<dyn SecurityPolicy>;
+}
+
+/// Security policy for controlling access to capabilities
+pub trait SecurityPolicy: Send + Sync + 'static {
+    /// Check if the given capability is allowed
+    fn is_allowed(&self, capability: &str) -> bool;
+    
+    /// Get all allowed capabilities
+    fn allowed_capabilities(&self) -> Vec<String>;
+}
+
+/// Basic implementation of an execution context
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BasicContext {
+    /// Unique ID for this context
+    pub id: String,
+    
+    /// Parent context ID, if any
+    pub parent_id: Option<String>,
+    
+    /// Domain ID, if any
+    pub domain_id: Option<DomainId>,
+    
+    /// Working directory for local filesystem operations
+    pub working_dir: Option<PathBuf>,
+    
+    /// Allowed capabilities
+    pub capabilities: HashMap<String, bool>,
+}
+
+impl InvocationContextTrait for BasicContext {
+    fn context_type(&self) -> &str {
+        "basic"
+    }
+    
+    fn domain_id(&self) -> Option<&DomainId> {
+        self.domain_id.as_ref()
+    }
+    
+    fn context_id(&self) -> &str {
+        &self.id
+    }
+    
+    fn parent_id(&self) -> Option<&str> {
+        self.parent_id.as_ref().map(|s| s.as_str())
+    }
+    
+    fn with_id(&self, id: &str) -> Self {
+        let mut new_context = self.clone();
+        new_context.id = id.to_string();
+        new_context
+    }
+    
+    fn has_capability(&self, capability: &str) -> bool {
+        self.capabilities.get(capability).copied().unwrap_or(false)
+    }
+    
+    fn security_policy(&self) -> Arc<dyn SecurityPolicy> {
+        Arc::new(ContextSecurityPolicy::new(self.clone()))
+    }
+}
+
+impl BasicContext {
+    /// Create a new basic context
+    pub fn new(id: &str) -> Self {
+        BasicContext {
+            id: id.to_string(),
+            parent_id: None,
+            domain_id: None,
+            working_dir: None,
+            capabilities: HashMap::new(),
+        }
+    }
+    
+    /// Set the parent context ID
+    pub fn with_parent(mut self, parent_id: &str) -> Self {
+        self.parent_id = Some(parent_id.to_string());
+        self
+    }
+    
+    /// Set the domain ID
+    pub fn with_domain(mut self, domain_id: DomainId) -> Self {
+        self.domain_id = Some(domain_id);
+        self
+    }
+    
+    /// Set the working directory
+    pub fn with_working_dir(mut self, dir: PathBuf) -> Self {
+        self.working_dir = Some(dir);
+        self
+    }
+    
+    /// Add a capability
+    pub fn with_capability(mut self, capability: &str) -> Self {
+        self.capabilities.insert(capability.to_string(), true);
+        self
+    }
+    
+    /// Remove a capability
+    pub fn without_capability(mut self, capability: &str) -> Self {
+        self.capabilities.insert(capability.to_string(), false);
+        self
+    }
+}
+
+/// Security policy based on context capabilities
+#[derive(Clone)]
+pub struct ContextSecurityPolicy {
+    context: BasicContext,
+}
+
+impl ContextSecurityPolicy {
+    /// Create a new security policy from a context
+    pub fn new(context: BasicContext) -> Self {
+        ContextSecurityPolicy {
+            context,
+        }
+    }
+}
+
+impl SecurityPolicy for ContextSecurityPolicy {
+    fn is_allowed(&self, capability: &str) -> bool {
+        self.context.has_capability(capability)
+    }
+    
+    fn allowed_capabilities(&self) -> Vec<String> {
+        self.context.capabilities.iter()
+            .filter_map(|(cap, allowed)| if *allowed { Some(cap.clone()) } else { None })
+            .collect()
+    }
+}
+
+/// Physical context for interacting with the real world
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PhysicalContext {
+    /// Base context
+    pub base: BasicContext,
+    
+    /// Time map snapshot
+    pub time_map: TimeMap,
+}
+
+impl InvocationContextTrait for PhysicalContext {
+    fn context_type(&self) -> &str {
+        "physical"
+    }
+    
+    fn domain_id(&self) -> Option<&DomainId> {
+        self.base.domain_id()
+    }
+    
+    fn context_id(&self) -> &str {
+        self.base.context_id()
+    }
+    
+    fn parent_id(&self) -> Option<&str> {
+        self.base.parent_id()
+    }
+    
+    fn with_id(&self, id: &str) -> Self {
+        let mut new_context = self.clone();
+        new_context.base = self.base.with_id(id);
+        new_context
+    }
+    
+    fn has_capability(&self, capability: &str) -> bool {
+        self.base.has_capability(capability)
+    }
+    
+    fn security_policy(&self) -> Arc<dyn SecurityPolicy> {
+        self.base.security_policy()
+    }
+}
+
+impl PhysicalContext {
+    /// Create a new physical context
+    pub fn new(id: &str, domain_id: DomainId) -> Self {
+        let base = BasicContext::new(id)
+            .with_domain(domain_id);
+        
+        let time_map = TimeMap::new();
+        
+        PhysicalContext {
+            base,
+            time_map,
+        }
+    }
+    
+    /// Get the domain ID
+    pub fn domain_id(&self) -> EngineResult<&DomainId> {
+        self.base.domain_id.as_ref().ok_or_else(|| 
+            EngineError::InvalidArgument("Domain ID required for physical context".to_string())
+        )
+    }
+    
+    /// Add a capability
+    pub fn with_capability(mut self, capability: &str) -> Self {
+        self.base = self.base.with_capability(capability);
+        self
+    }
+    
+    /// Remove a capability
+    pub fn without_capability(mut self, capability: &str) -> Self {
+        self.base = self.base.without_capability(capability);
+        self
+    }
+    
+    /// Set the parent context ID
+    pub fn with_parent(mut self, parent_id: &str) -> Self {
+        self.base = self.base.with_parent(parent_id);
+        self
+    }
+    
+    /// Set the time map
+    pub fn with_time_map(mut self, time_map: TimeMap) -> Self {
+        self.time_map = time_map;
+        self
+    }
+}
+
+/// Invocation state tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InvocationState {
     /// Invocation has been created but not started
     Created,
@@ -36,393 +279,139 @@ pub enum InvocationState {
     WaitingForFact(String),
 }
 
-/// Track resource acquisition during invocation
-#[derive(Debug, Clone)]
-pub struct ResourceAcquisition {
-    /// The resource ID
-    pub resource_id: ContentId,
-    /// When the resource was acquired
-    pub acquired_at: DateTime<Utc>,
-    /// Whether this is a read-only acquisition
-    pub read_only: bool,
-    /// Reason for acquiring this resource
-    pub reason: String,
-}
-
-/// Track an external fact that was observed during invocation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FactObservation {
-    /// Domain where the fact was observed
-    pub domain_id: DomainId,
-    /// Unique identifier for the fact
-    pub fact_id: String,
-    /// The observed fact
-    pub fact: FactType,
-    /// When the fact was observed
-    pub observed_at: DateTime<Utc>,
-    /// Whether this fact has been verified
-    pub verified: bool,
-}
-
-/// Invocation context for tracking execution state
-#[derive(Debug, Clone)]
+/// Context for an invocation
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InvocationContext {
-    /// Unique identifier for this invocation
-    pub invocation_id: String,
+    /// Unique ID for this context
+    id: String,
+    
     /// Trace ID for tracking related invocations
-    pub trace_id: TraceId,
-    /// Parent invocation ID if this is a child invocation
-    pub parent_id: Option<String>,
-    /// Current state of the invocation
-    pub state: InvocationState,
-    /// Time map snapshot at the start of invocation
-    pub time_map: TimeMap,
-    /// When the invocation was created
-    pub created_at: DateTime<Utc>,
-    /// When the invocation started execution
-    pub started_at: Option<DateTime<Utc>>,
-    /// When the invocation completed execution
-    pub completed_at: Option<DateTime<Utc>>,
-    /// Resources acquired during this invocation
-    pub acquired_resources: Vec<ResourceAcquisition>,
-    /// External facts observed during this invocation
-    pub observed_facts: Vec<FactObservation>,
-    /// Execution metadata (arbitrary key-value pairs)
-    pub metadata: HashMap<String, String>,
-    /// Child invocations spawned by this invocation
-    pub children: HashSet<String>,
+    trace_id: Option<TraceId>,
+    
+    /// Parent context ID
+    parent_id: Option<String>,
+    
+    /// Context ID for execution
+    execution_context_id: Option<String>,
+    
+    /// Time map for tracking operation timing
+    time_map: TimeMap,
+    
+    /// Additional context data
+    data: HashMap<String, String>,
 }
 
 impl InvocationContext {
-    /// Create a new invocation context with a given ID and trace ID
-    pub fn new(invocation_id: String, trace_id: TraceId, time_map: TimeMap) -> Self {
+    /// Create a new invocation context
+    pub fn new(
+        id: impl Into<String>,
+        trace_id: Option<TraceId>,
+        parent_id: Option<String>,
+        time_map: TimeMap,
+    ) -> Self {
         InvocationContext {
-            invocation_id,
+            id: id.into(),
             trace_id,
-            parent_id: None,
-            state: InvocationState::Created,
+            parent_id,
+            execution_context_id: None,
             time_map,
-            created_at: Utc::now(),
-            started_at: None,
-            completed_at: None,
-            acquired_resources: Vec::new(),
-            observed_facts: Vec::new(),
-            metadata: HashMap::new(),
-            children: HashSet::new(),
+            data: HashMap::new(),
         }
     }
     
-    /// Create a child invocation context from this context
-    pub fn create_child(&self, invocation_id: String) -> Self {
+    /// Get the context ID
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+    
+    /// Get the trace ID
+    pub fn trace_id(&self) -> Option<&TraceId> {
+        self.trace_id.as_ref()
+    }
+    
+    /// Get the parent context ID
+    pub fn parent_id(&self) -> Option<&str> {
+        self.parent_id.as_ref().map(|s| s.as_str())
+    }
+    
+    /// Get the execution context ID
+    pub fn execution_context_id(&self) -> Option<&str> {
+        self.execution_context_id.as_ref().map(|s| s.as_str())
+    }
+    
+    /// Set the execution context ID
+    pub fn set_execution_context_id(&mut self, id: String) {
+        self.execution_context_id = Some(id);
+    }
+    
+    /// Get the time map
+    pub fn time_map(&self) -> &TimeMap {
+        &self.time_map
+    }
+    
+    /// Get a value from the context data
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.data.get(key).map(|s| s.as_str())
+    }
+    
+    /// Set a value in the context data
+    pub fn set(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.data.insert(key.into(), value.into());
+    }
+    
+    /// Get all context data
+    pub fn data(&self) -> &HashMap<String, String> {
+        &self.data
+    }
+    
+    /// Create a child context
+    pub fn create_child(&self, id: impl Into<String>) -> Self {
         InvocationContext {
-            invocation_id,
+            id: id.into(),
             trace_id: self.trace_id.clone(),
-            parent_id: Some(self.invocation_id.clone()),
-            state: InvocationState::Created,
+            parent_id: Some(self.id.clone()),
+            execution_context_id: None,
             time_map: self.time_map.clone(),
-            created_at: Utc::now(),
-            started_at: None,
-            completed_at: None,
-            acquired_resources: Vec::new(),
-            observed_facts: self.observed_facts.clone(),
-            metadata: HashMap::new(),
-            children: HashSet::new(),
+            data: HashMap::new(),
         }
-    }
-    
-    /// Mark the invocation as started
-    pub fn start(&mut self) -> Result<()> {
-        if self.state != InvocationState::Created {
-            return Err(causality_types::Error::InvocationStateError(
-                format!("Cannot start invocation in state: {:?}", self.state)
-            ));
-        }
-        
-        self.state = InvocationState::Running;
-        self.started_at = Some(Utc::now());
-        
-        Ok(())
-    }
-    
-    /// Mark the invocation as completed
-    pub fn complete(&mut self) -> Result<()> {
-        if self.state != InvocationState::Running {
-            return Err(causality_types::Error::InvocationStateError(
-                format!("Cannot complete invocation in state: {:?}", self.state)
-            ));
-        }
-        
-        self.state = InvocationState::Completed;
-        self.completed_at = Some(Utc::now());
-        
-        Ok(())
-    }
-    
-    /// Mark the invocation as failed with a reason
-    pub fn fail(&mut self, reason: &str) -> Result<()> {
-        self.state = InvocationState::Failed(reason.to_string());
-        self.completed_at = Some(Utc::now());
-        
-        Ok(())
-    }
-    
-    /// Mark the invocation as waiting for a resource
-    pub fn wait_for_resource(&mut self, resource_id: ContentId) -> Result<()> {
-        if self.state != InvocationState::Running {
-            return Err(causality_types::Error::InvocationStateError(
-                format!("Cannot wait for resource in state: {:?}", self.state)
-            ));
-        }
-        
-        self.state = InvocationState::Waiting(resource_id);
-        
-        Ok(())
-    }
-    
-    /// Mark the invocation as waiting for a fact
-    pub fn wait_for_fact(&mut self, fact_id: &str) -> Result<()> {
-        if self.state != InvocationState::Running {
-            return Err(causality_types::Error::InvocationStateError(
-                format!("Cannot wait for fact in state: {:?}", self.state)
-            ));
-        }
-        
-        self.state = InvocationState::WaitingForFact(fact_id.to_string());
-        
-        Ok(())
-    }
-    
-    /// Resume the invocation from a waiting state
-    pub fn resume(&mut self) -> Result<()> {
-        match self.state {
-            InvocationState::Waiting(_) | InvocationState::WaitingForFact(_) => {
-                self.state = InvocationState::Running;
-                Ok(())
-            },
-            _ => Err(causality_types::Error::InvocationStateError(
-                format!("Cannot resume invocation in state: {:?}", self.state)
-            )),
-        }
-    }
-    
-    /// Track a resource acquisition
-    pub fn acquire_resource(&mut self, 
-        resource_id: ContentId, 
-        read_only: bool,
-        reason: &str
-    ) -> Result<()> {
-        let acquisition = ResourceAcquisition {
-            resource_id,
-            acquired_at: Utc::now(),
-            read_only,
-            reason: reason.to_string(),
-        };
-        
-        self.acquired_resources.push(acquisition);
-        
-        Ok(())
-    }
-    
-    /// Track an observed fact
-    pub fn observe_fact(&mut self, 
-        domain_id: DomainId, 
-        fact_id: &str,
-        fact: FactType,
-        verified: bool
-    ) -> Result<()> {
-        let observation = FactObservation {
-            domain_id,
-            fact_id: fact_id.to_string(),
-            fact,
-            observed_at: Utc::now(),
-            verified,
-        };
-        
-        self.observed_facts.push(observation);
-        
-        Ok(())
-    }
-    
-    /// Add a child invocation
-    pub fn add_child(&mut self, invocation_id: &str) -> Result<()> {
-        self.children.insert(invocation_id.to_string());
-        
-        Ok(())
-    }
-    
-    /// Add metadata to the invocation
-    pub fn add_metadata(&mut self, key: &str, value: &str) -> Result<()> {
-        self.metadata.insert(key.to_string(), value.to_string());
-        
-        Ok(())
-    }
-    
-    /// Get invocation duration in milliseconds
-    pub fn duration_ms(&self) -> Option<u64> {
-        match (self.started_at, self.completed_at) {
-            (Some(start), Some(end)) => {
-                let duration = end.timestamp_millis() - start.timestamp_millis();
-                Some(duration as u64)
-            },
-            _ => None,
-        }
-    }
-    
-    /// Check if the invocation is in a final state
-    pub fn is_final(&self) -> bool {
-        matches!(self.state, 
-            InvocationState::Completed | 
-            InvocationState::Failed(_) | 
-            InvocationState::Canceled
-        )
-    }
-    
-    /// Check if the invocation is active
-    pub fn is_active(&self) -> bool {
-        matches!(self.state, 
-            InvocationState::Running | 
-            InvocationState::Waiting(_) | 
-            InvocationState::WaitingForFact(_)
-        )
     }
 }
 
-/// Context propagation module for invocation contexts
-pub mod propagation;
+impl fmt::Debug for InvocationContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InvocationContext")
+            .field("id", &self.id)
+            .field("trace_id", &self.trace_id)
+            .field("parent_id", &self.parent_id)
+            .field("execution_context_id", &self.execution_context_id)
+            .field("data_size", &self.data.len())
+            .finish()
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     
-    fn create_test_context() -> InvocationContext {
-        let time_map = TimeMap::new();
-        let trace_id = TraceId::new();
-        
-        InvocationContext::new(
-            "test_invocation".to_string(),
-            trace_id,
-            time_map,
-        )
+    #[test]
+    fn test_basic_context() {
+        let ctx = BasicContext::new("test-context")
+            .with_capability("fs.read")
+            .with_capability("network.connect");
+            
+        assert!(ctx.has_capability("fs.read"));
+        assert!(ctx.has_capability("network.connect"));
+        assert!(!ctx.has_capability("fs.write"));
     }
     
     #[test]
-    fn test_invocation_lifecycle() -> Result<()> {
-        let mut context = create_test_context();
-        
-        // Check initial state
-        assert_eq!(context.state, InvocationState::Created);
-        assert!(context.started_at.is_none());
-        assert!(context.completed_at.is_none());
-        
-        // Start the invocation
-        context.start()?;
-        assert_eq!(context.state, InvocationState::Running);
-        assert!(context.started_at.is_some());
-        assert!(context.completed_at.is_none());
-        
-        // Track resource acquisition
-        let resource_id = ContentId::new("test_resource");
-        context.acquire_resource(resource_id, true, "Testing")?;
-        assert_eq!(context.acquired_resources.len(), 1);
-        
-        // Track observed fact
-        let domain_id = DomainId::new("test_domain");
-        context.observe_fact(domain_id, "test_fact", FactType::new("test_fact_type"), true)?;
-        assert_eq!(context.observed_facts.len(), 1);
-        
-        // Add metadata
-        context.add_metadata("test_key", "test_value")?;
-        assert_eq!(context.metadata.get("test_key"), Some(&"test_value".to_string()));
-        
-        // Complete the invocation
-        context.complete()?;
-        assert_eq!(context.state, InvocationState::Completed);
-        assert!(context.completed_at.is_some());
-        assert!(context.duration_ms().is_some());
-        assert!(context.is_final());
-        assert!(!context.is_active());
-        
-        Ok(())
-    }
-    
-    #[test]
-    fn test_child_invocation() -> Result<()> {
-        let mut parent = create_test_context();
-        
-        // Create a child invocation
-        let child = parent.create_child("child_invocation".to_string());
-        
-        // Check child properties
-        assert_eq!(child.parent_id, Some(parent.invocation_id.clone()));
-        assert_eq!(child.trace_id, parent.trace_id);
-        assert_eq!(child.state, InvocationState::Created);
-        
-        // Add the child to the parent
-        parent.add_child(&child.invocation_id)?;
-        assert!(parent.children.contains(&child.invocation_id));
-        
-        Ok(())
-    }
-    
-    #[test]
-    fn test_wait_and_resume() -> Result<()> {
-        let mut context = create_test_context();
-        
-        // Start the invocation
-        context.start()?;
-        
-        // Wait for a resource
-        let resource_id = ContentId::new("test_resource");
-        context.wait_for_resource(resource_id)?;
-        
-        match &context.state {
-            InvocationState::Waiting(waiting_resource_id) => {
-                assert_eq!(*waiting_resource_id, resource_id);
-            },
-            _ => panic!("Expected Waiting state"),
-        }
-        
-        // Resume the invocation
-        context.resume()?;
-        assert_eq!(context.state, InvocationState::Running);
-        
-        // Wait for a fact
-        context.wait_for_fact("test_fact")?;
-        
-        match &context.state {
-            InvocationState::WaitingForFact(fact_id) => {
-                assert_eq!(fact_id, "test_fact");
-            },
-            _ => panic!("Expected WaitingForFact state"),
-        }
-        
-        // Resume the invocation
-        context.resume()?;
-        assert_eq!(context.state, InvocationState::Running);
-        
-        Ok(())
-    }
-    
-    #[test]
-    fn test_failure() -> Result<()> {
-        let mut context = create_test_context();
-        
-        // Start the invocation
-        context.start()?;
-        
-        // Fail the invocation
-        context.fail("Test failure")?;
-        
-        match &context.state {
-            InvocationState::Failed(reason) => {
-                assert_eq!(reason, "Test failure");
-            },
-            _ => panic!("Expected Failed state"),
-        }
-        
-        assert!(context.completed_at.is_some());
-        assert!(context.is_final());
-        
-        Ok(())
+    fn test_physical_context() {
+        let ctx = PhysicalContext::new("test-context", "domain1".to_string())
+            .with_capability("fs.read")
+            .with_capability("network.connect");
+            
+        assert!(ctx.has_capability("fs.read"));
+        assert!(ctx.has_capability("network.connect"));
+        assert!(!ctx.has_capability("fs.write"));
     }
 } 

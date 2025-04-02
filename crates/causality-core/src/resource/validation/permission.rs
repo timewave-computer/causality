@@ -8,7 +8,7 @@ use thiserror::Error;
 use serde::{Serialize, Deserialize};
 
 use crate::resource_types::{ResourceId, ResourceTypeId};
-use crate::capability::{Capability, CapabilitySet};
+use crate::capability::Capability;
 
 use super::context::ValidationContext;
 use super::result::{ValidationResult, ValidationIssue, ValidationError, ValidationSeverity};

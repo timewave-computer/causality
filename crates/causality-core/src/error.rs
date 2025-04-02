@@ -7,11 +7,28 @@
 use std::fmt;
 use std::error::Error as StdError;
 use thiserror::Error;
-use serde::{Serialize, Deserialize};
 
-use crate::resource::types::{ResourceId, ResourceType};
-use crate::resource::StateTransitionError;
-use crate::resource::ResourceError;
+/// Resource error type (placeholder)
+#[derive(Error, Debug)]
+pub enum ResourceError {
+    #[error("Invalid state transition: {0}")]
+    InvalidStateTransition(String),
+    
+    #[error("Invalid resource: {0}")]
+    InvalidResource(String),
+    
+    #[error("Resource not found: {0}")]
+    NotFound(String),
+    
+    #[error("Resource already exists: {0}")]
+    AlreadyExists(String),
+    
+    #[error("Permission denied: {0}")]
+    PermissionDenied(String),
+    
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
 
 /// Core error type incorporating all possible error categories
 #[derive(Error, Debug)]
@@ -147,13 +164,6 @@ where
             let msg = format!("{}: {}", context, e);
             Error::Unknown(msg)
         })
-    }
-}
-
-/// From conversion from StateTransitionError
-impl From<StateTransitionError> for Error {
-    fn from(err: StateTransitionError) -> Self {
-        Self::ResourceError(ResourceError::InvalidStateTransition(err.to_string()))
     }
 }
 

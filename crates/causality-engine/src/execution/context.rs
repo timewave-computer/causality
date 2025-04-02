@@ -13,19 +13,30 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Serialize, Deserialize};
 use borsh::{BorshSerialize, BorshDeserialize};
+use rand;
+use hex;
+use sha2;
 
-use causality_types::{Error, Result};
-use crate::effect::EffectType;
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::ContentHash;
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime;
-use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashFactory, HashError};
+use causality_error::{Error, Result};
+// Import ContentId from causality_types
+use causality_types::ContentId;
+// Import ContentHash from causality-types
+use causality_types::crypto_primitives::ContentHash;
+// Import Effect and EffectType from causality-core
+use causality_core::effect::{Effect, EffectType};
+// Import ContentAddressed trait from causality_types
+use causality_types::crypto_primitives::ContentAddressed;
+// Import crate modules
+use crate::repository;
+use crate::resource;
+use causality_core::resource::types::ResourceId;
 
 /// A unique identifier for an execution context
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ContextId(String);
 
-/// Content type for generating context IDs
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+/// Context ID content for hashing
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ContextIdContent {
     /// Optional parent context ID
     parent: Option<String>,
@@ -38,8 +49,8 @@ struct ContextIdContent {
 }
 
 impl ContentAddressed for ContextIdContent {
-    fn content_hash(&self) -> HashOutput {
-        let hash_factory = HashFactory::default();
+    fn content_hash(&self) -> causality_types::crypto_primitives::HashOutput {
+        let hash_factory = causality_crypto::hash::HashFactory::default();
         let hasher = hash_factory.create_hasher().unwrap();
         let data = self.try_to_vec().unwrap();
         hasher.hash(&data)
@@ -49,7 +60,7 @@ impl ContentAddressed for ContextIdContent {
         let hash = self.content_hash();
         let serialized = self.to_bytes();
         
-        let hash_factory = HashFactory::default();
+        let hash_factory = causality_crypto::hash::HashFactory::default();
         let hasher = hash_factory.create_hasher().unwrap();
         hasher.hash(&serialized) == hash
     }
@@ -58,9 +69,9 @@ impl ContentAddressed for ContextIdContent {
         self.try_to_vec().unwrap()
     }
     
-    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+    fn from_bytes(bytes: &[u8]) -> Result<Self, causality_types::crypto_primitives::HashError> {
         BorshDeserialize::try_from_slice(bytes)
-            .map_err(|e| HashError::SerializationError(e.to_string()))
+            .map_err(|e| causality_types::crypto_primitives::HashError::SerializationError(e.to_string()))
     }
 }
 
@@ -74,8 +85,15 @@ impl ContextId {
             description: None,
         };
         
-        let content_id = content.content_id();
-        ContextId(format!("ctx:{}", content_id))
+        // Create a content hash for the ID
+        let serialized = serde_json::to_vec(&content).unwrap_or_default();
+        let mut hasher = sha2::Sha256::new();
+        use sha2::Digest;
+        hasher.update(&serialized);
+        let hash = hasher.finalize();
+        
+        // Format as a context ID
+        ContextId(format!("ctx:{}", hex::encode(hash)))
     }
     
     /// Create a context ID for a child of an existing context
@@ -87,8 +105,15 @@ impl ContextId {
             description,
         };
         
-        let content_id = content.content_id();
-        ContextId(format!("ctx:{}", content_id))
+        // Create a content hash for the ID
+        let serialized = serde_json::to_vec(&content).unwrap_or_default();
+        let mut hasher = sha2::Sha256::new();
+        use sha2::Digest;
+        hasher.update(&serialized);
+        let hash = hasher.finalize();
+        
+        // Format as a context ID
+        ContextId(format!("ctx:{}", hex::encode(hash)))
     }
     
     /// Create a context ID from a string
@@ -222,7 +247,7 @@ impl CallFrame {
     }
 }
 
-/// Events recorded during execution
+/// Various execution events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExecutionEvent {
     /// A function was called
@@ -518,16 +543,55 @@ impl fmt::Debug for ExecutionContext {
 mod tests {
     use super::*;
     use std::sync::Arc;
+    use async_trait::async_trait;
     
-    // Mock implementations for testing
+    // Mock implementation for testing
+    #[derive(Debug)]
     struct MockCodeRepository;
-    impl repository::CodeRepository for MockCodeRepository {
-        // Implement required methods here
+    
+    #[async_trait]
+    impl crate::repository::CodeRepository for MockCodeRepository {
+        async fn get_code(&self, _hash: &ContentHash) -> causality_error::Result<Option<Vec<u8>>> {
+            Ok(None)
+        }
+        
+        async fn store_code(&self, _code: &[u8]) -> causality_error::Result<ContentHash> {
+            unimplemented!("Not needed for test")
+        }
+        
+        async fn has_code(&self, _hash: &ContentHash) -> causality_error::Result<bool> {
+            Ok(false)
+        }
+        
+        async fn remove_code(&self, _hash: &ContentHash) -> causality_error::Result<bool> {
+            Ok(false)
+        }
     }
     
+    #[derive(Debug)]
     struct MockResourceAllocator;
+    
+    #[async_trait]
     impl crate::resource::ResourceAllocator for MockResourceAllocator {
-        // Implement required methods here
+        async fn allocate(&self, _resource_type: &str, _data: &[u8]) -> causality_error::Result<ResourceId> {
+            unimplemented!("Not needed for test")
+        }
+        
+        async fn get_resource(&self, _id: &ResourceId) -> causality_error::Result<Option<Vec<u8>>> {
+            Ok(None)
+        }
+        
+        async fn has_resource(&self, _id: &ResourceId) -> causality_error::Result<bool> {
+            Ok(false)
+        }
+        
+        async fn release(&self, _id: &ResourceId) -> causality_error::Result<bool> {
+            Ok(false)
+        }
+        
+        async fn get_resource_type(&self, _id: &ResourceId) -> causality_error::Result<Option<String>> {
+            Ok(None)
+        }
     }
     
     #[test]

@@ -5,16 +5,17 @@
 // 1. Memory: An in-memory database for testing and development
 // 2. RocksDB: A persistent disk-based database for production use
 
-use causality_storage::{
-    Database, DbError, DbConfig, BatchOp, DbIterator,
-};
+// Define our own database interface
+// Re-defining locally to avoid circular dependency with causality-storage
+pub use crate::types::*;
+
+mod types;
 
 #[cfg(feature = "rocks")]
 use rocksdb::{DB, Options, IteratorMode, Direction, ReadOptions, WriteBatch};
 
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock, Mutex};
-use std::path::Path;
+// For local implementation
+// No unused imports here
 
 /// Module containing the in-memory database implementation
 #[cfg(feature = "memory")]
@@ -48,10 +49,10 @@ impl DbFactory {
     }
     
     /// Create a default database (depends on enabled features)
-    pub fn create_default_db(path: &str) -> Result<Box<dyn Database>, DbError> {
+    pub fn create_default_db(_path: &str) -> Result<Box<dyn Database>, DbError> {
         #[cfg(feature = "rocks")]
         {
-            Self::create_rocksdb(path)
+            Self::create_rocksdb(_path)
         }
         
         #[cfg(all(feature = "memory", not(feature = "rocks")))]

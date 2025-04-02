@@ -189,13 +189,21 @@ impl QueryBuilder {
     
     /// Add an AND filter expression
     pub fn and(self, expressions: Vec<FilterExpression>) -> Self {
-        let filter = FilterExpression::And(expressions);
+        if expressions.is_empty() {
+            return self;
+        }
+        
+        let filter = combine_with_and(expressions);
         self.add_filter(filter)
     }
     
     /// Add an OR filter expression
     pub fn or(self, expressions: Vec<FilterExpression>) -> Self {
-        let filter = FilterExpression::Or(expressions);
+        if expressions.is_empty() {
+            return self;
+        }
+        
+        let filter = combine_with_or(expressions);
         self.add_filter(filter)
     }
     
@@ -207,15 +215,23 @@ impl QueryBuilder {
     
     /// Add a filter to the query, handling AND combinations
     fn add_filter(mut self, filter: FilterExpression) -> Self {
-        match self.query.filter {
+        match &self.query.filter {
             None => {
                 self.query.filter = Some(filter);
             },
-            Some(FilterExpression::And(ref mut expressions)) => {
-                expressions.push(filter);
+            Some(FilterExpression::And(left, right)) => {
+                // Already an AND expression, add another one
+                let existing = FilterExpression::And(left.clone(), right.clone());
+                self.query.filter = Some(FilterExpression::And(
+                    Box::new(existing),
+                    Box::new(filter)
+                ));
             },
             Some(existing) => {
-                self.query.filter = Some(FilterExpression::And(vec![existing, filter]));
+                self.query.filter = Some(FilterExpression::And(
+                    Box::new(existing.clone()),
+                    Box::new(filter)
+                ));
             }
         }
         
@@ -225,6 +241,64 @@ impl QueryBuilder {
     /// Build the final query
     pub fn build(self) -> ResourceQuery {
         self.query
+    }
+
+    /// Add multiple conditions with AND logic
+    pub fn and_where(mut self, field: &str, operator: &str, value: &str) -> Self {
+        let condition = FilterExpression::condition_str(field, operator, value);
+        
+        match &self.query.filter {
+            Some(FilterExpression::And(left, right)) => {
+                // Already an AND expression, add another one
+                let existing = FilterExpression::And(left.clone(), right.clone());
+                self.query.filter = Some(FilterExpression::And(
+                    Box::new(existing),
+                    Box::new(condition)
+                ));
+            }
+            Some(existing) => {
+                // Convert to AND
+                self.query.filter = Some(FilterExpression::And(
+                    Box::new(existing.clone()),
+                    Box::new(condition)
+                ));
+            }
+            None => {
+                // First condition
+                self.query.filter = Some(condition);
+            }
+        }
+        
+        self
+    }
+
+    /// Add multiple conditions with OR logic
+    pub fn or_where(mut self, field: &str, operator: &str, value: &str) -> Self {
+        let condition = FilterExpression::condition_str(field, operator, value);
+        
+        match &self.query.filter {
+            Some(FilterExpression::Or(left, right)) => {
+                // Already an OR expression, add another one
+                let existing = FilterExpression::Or(left.clone(), right.clone());
+                self.query.filter = Some(FilterExpression::Or(
+                    Box::new(existing),
+                    Box::new(condition)
+                ));
+            }
+            Some(existing) => {
+                // Convert to OR
+                self.query.filter = Some(FilterExpression::Or(
+                    Box::new(existing.clone()),
+                    Box::new(condition)
+                ));
+            }
+            None => {
+                // First condition
+                self.query.filter = Some(condition);
+            }
+        }
+        
+        self
     }
 }
 
@@ -459,4 +533,44 @@ impl SortBuilder {
     pub fn build(self) -> ResourceQuery {
         self.query_builder.build()
     }
+}
+
+/// Helper function to combine expressions with AND
+fn combine_with_and(expressions: Vec<FilterExpression>) -> FilterExpression {
+    if expressions.is_empty() {
+        // Return a default condition that matches everything
+        return FilterExpression::condition_str("true", "=", "true");
+    }
+    
+    if expressions.len() == 1 {
+        return expressions[0].clone();
+    }
+    
+    // Recursively build a tree of AND operations
+    let mut result = expressions[0].clone();
+    for expr in expressions.iter().skip(1) {
+        result = FilterExpression::And(Box::new(result), Box::new(expr.clone()));
+    }
+    
+    result
+}
+
+/// Helper function to combine expressions with OR
+fn combine_with_or(expressions: Vec<FilterExpression>) -> FilterExpression {
+    if expressions.is_empty() {
+        // Return a default condition that matches nothing
+        return FilterExpression::condition_str("false", "=", "true");
+    }
+    
+    if expressions.len() == 1 {
+        return expressions[0].clone();
+    }
+    
+    // Recursively build a tree of OR operations
+    let mut result = expressions[0].clone();
+    for expr in expressions.iter().skip(1) {
+        result = FilterExpression::Or(Box::new(result), Box::new(expr.clone()));
+    }
+    
+    result
 } 

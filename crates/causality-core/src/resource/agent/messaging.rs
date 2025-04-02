@@ -9,10 +9,10 @@ use crate::resource::ResourceType;
 use causality_types::{ContentId, ContentHash as TypesContentHash};
 use crate::resource::AgentType;
 use super::types::{AgentId, AgentError};
-use crate::effect::Effect;
+use crate::capability::effect::EffectCapability;
 use crate::id_utils;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::fmt;
 use chrono::{DateTime, Utc};
@@ -22,44 +22,52 @@ use async_trait::async_trait;
 use blake3;
 use hex;
 use rand;
+use futures::stream::{self, StreamExt};
+use rand::Rng;
+use causality_types::ContentHash;
+use crate::serialization::Serializable;
 
-/// A content hash value for a message
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Message hash for calculating content hashes
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MessageHash(String);
 
 impl MessageHash {
-    /// Calculate a content hash for the given data
-    pub fn calculate(data: &[u8]) -> Self {
-        let hash = blake3::hash(data);
-        Self(format!("blake3:{}", hex::encode(hash.as_bytes())))
+    /// Calculate a new message hash from content
+    pub fn calculate(content: &[u8]) -> Self {
+        // Hash the content using blake3
+        let hash_bytes = blake3::hash(content).as_bytes().to_vec();
+        let hash = ContentHash::new("blake3", hash_bytes);
+        
+        // Use the hex representation for display
+        Self(format!("message:{}", hash.to_hex()))
     }
     
-    /// Create a new content hash from a string
-    pub fn new(hash: impl Into<String>) -> Self {
-        Self(hash.into())
+    /// Get the string representation
+    pub fn as_string(&self) -> String {
+        self.0.clone()
     }
     
-    /// Get the hash string
+    /// Get the string slice representation
     pub fn as_str(&self) -> &str {
         &self.0
-    }
-    
-    /// Verify data against this hash
-    pub fn verify(&self, data: &[u8]) -> bool {
-        // Parse the algorithm and hash value
-        if let Some(hash_value) = self.0.strip_prefix("blake3:") {
-            if let Ok(expected_bytes) = hex::decode(hash_value) {
-                let actual_hash = blake3::hash(data);
-                return actual_hash.as_bytes() == expected_bytes.as_slice();
-            }
-        }
-        false
     }
 }
 
 impl fmt::Display for MessageHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl From<&str> for MessageHash {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+impl From<String> for MessageHash {
+    fn from(s: String) -> Self {
+        Self(s)
     }
 }
 
@@ -143,8 +151,8 @@ pub enum MessagingError {
 /// A result type for messaging operations
 pub type MessagingResult<T> = Result<T, MessagingError>;
 
-/// Unique identifier for a message
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// Message identifier type
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct MessageId(ContentId);
 
 impl MessageId {
@@ -153,14 +161,14 @@ impl MessageId {
         Self(id)
     }
     
-    /// Generate a new random message ID based on content addressing
+    /// Generate a unique message ID
     pub fn generate() -> Self {
         generate_message_id()
     }
     
-    /// Get the string representation of the message ID
-    pub fn as_str(&self) -> &str {
-        self.0.as_ref()
+    /// Get string representation of the message ID
+    pub fn as_string(&self) -> String {
+        self.0.to_string()
     }
 }
 
@@ -178,13 +186,15 @@ impl From<ContentId> for MessageId {
 
 impl From<&str> for MessageId {
     fn from(s: &str) -> Self {
-        Self(ContentId::from(s))
+        let content_input = format!("message:{}", s);
+        Self(ContentId::new(content_input))
     }
 }
 
 impl From<String> for MessageId {
     fn from(s: String) -> Self {
-        Self(ContentId::from(s.as_str()))
+        let content_input = format!("message:{}", s);
+        Self(ContentId::new(content_input))
     }
 }
 
@@ -1079,11 +1089,11 @@ impl MessageFactory {
         let capability_id = capability_id.into();
         let reason = reason.into();
         
-        let content = serde_json::json!({
+        let content = ToString::to_string(&serde_json::json!({
             "capability_id": capability_id,
             "reason": reason,
             "requested_at": Utc::now().to_rfc3339(),
-        }).to_string();
+        }));
         
         self.create_message(
             sender_id,
@@ -1105,11 +1115,11 @@ impl MessageFactory {
         let service_type = service_type.into();
         let service_info = service_info.into();
         
-        let content = serde_json::json!({
+        let content = ToString::to_string(&serde_json::json!({
             "service_type": service_type,
             "service_info": service_info,
             "announced_at": Utc::now().to_rfc3339(),
-        }).to_string();
+        }));
         
         // Service announcements are broadcast
         let broadcast_id = AgentId::from_content_hash(MessageHash::calculate(b"broadcast").as_str().as_bytes(), AgentType::Operator);
@@ -1309,7 +1319,7 @@ impl MessageRouter {
     /// Queue a message for delivery
     pub async fn queue_message(&self, message: Message) -> MessagingResult<MessageId> {
         // Store the message
-        let message_id = message.id.clone();
+        let message_id = message.id().clone();
         
         {
             let mut messages = self.messages.write().map_err(|e| 
@@ -1363,70 +1373,97 @@ impl MessageRouter {
         Ok(message_id)
     }
     
-    /// Route a message to its destination
+    /// Route a message to its recipient
     pub async fn route_message(&self, message: Message) -> MessagingResult<MessageRoutingResult> {
-        // Direct messages
-        if message.message_type == MessageType::Direct ||
-           matches!(message.message_type, MessageType::ActionResponse { .. }) ||
-           matches!(message.message_type, MessageType::CapabilityResponse { .. }) {
-            let message_id = self.queue_message(message).await?;
+        // Check that the message has a valid recipient
+        let recipient_id = message.recipient_id().clone();
+        
+        // Check if recipient ID is empty (using a check for an empty string)
+        let recipient_str = format!("{}", recipient_id);
+        if recipient_str.is_empty() {
+            return Err(MessagingError::ValidationError(
+                "Message has no recipient ID".to_string()
+            ));
+        }
+        
+        let message_id = message.id().clone();
+        
+        // Handle broadcast messages
+        if recipient_str == "*" || recipient_str == "broadcast" {
+            return self.broadcast_message(message).await;
+        }
+        
+        // Check if the recipient is registered
+        if !self.is_agent_registered(&recipient_id).await? {
+            // Queue message anyway but mark as pending until agent registers
+            // Create a clone since queue_message takes ownership
+            let message_clone = message.clone();
+            self.queue_message(message_clone).await?;
             
-            Ok(MessageRoutingResult {
+            return Ok(MessageRoutingResult {
                 message_id,
                 recipient_count: 1,
-                delivery_ids: vec![message_id.clone()],
-                errors: Vec::new(),
-            })
+                delivery_ids: Vec::new(),  // No delivery IDs since agent isn't registered
+                errors: vec![MessagingError::RoutingError(
+                    format!("Recipient not registered: {}", recipient_id)
+                )],
+            });
         }
-        // Broadcast and announcements
-        else if message.message_type == MessageType::Broadcast ||
-                message.message_type == MessageType::SystemNotification ||
-                message.message_type == MessageType::ServiceAnnouncement {
-            let message_id = message.id.clone();
-            let mut delivery_ids = Vec::new();
-            let mut errors = Vec::new();
-            
-            let queues = self.queues.read().map_err(|e| 
-                MessagingError::InternalError(format!("Failed to acquire lock: {}", e))
-            )?;
-            
-            let recipient_count = queues.len();
-            
-            // Create a copy of the message for each recipient
-            for (agent_id, _) in queues.iter() {
-                // Don't send to self
-                if agent_id == message.sender_id() {
-                    continue;
-                }
-                
-                let mut recipient_message = message.clone();
-                recipient_message.id = MessageId::generate();
-                recipient_message.recipient_id = agent_id.clone();
-                
-                match self.queue_message(recipient_message).await {
-                    Ok(id) => delivery_ids.push(id),
-                    Err(e) => errors.push(e),
-                }
+        
+        // Queue the message for the recipient
+        let delivery_id = self.queue_message(message).await?;
+        
+        Ok(MessageRoutingResult {
+            message_id,
+            recipient_count: 1,
+            delivery_ids: vec![delivery_id],
+            errors: Vec::new(),
+        })
+    }
+    
+    /// Broadcast a message to all registered agents
+    async fn broadcast_message(&self, message: Message) -> MessagingResult<MessageRoutingResult> {
+        let message_id = message.id().clone();
+        let mut recipient_count = 0;
+        let mut delivery_ids = Vec::new();
+        let mut errors = Vec::new();
+        
+        // Get list of all registered agents
+        let queues = self.queues.read().map_err(|e| 
+            MessagingError::InternalError(format!("Failed to acquire lock: {}", e))
+        )?;
+        
+        let agent_ids: Vec<AgentId> = queues.keys().cloned().collect();
+        
+        // Send to each agent
+        for agent_id in agent_ids {
+            // Skip sending to the original sender
+            if agent_id == *message.sender_id() {
+                continue;
             }
             
-            Ok(MessageRoutingResult {
-                message_id,
-                recipient_count,
-                delivery_ids,
-                errors,
-            })
-        }
-        // Other message types
-        else {
-            let message_id = self.queue_message(message).await?;
+            // Create a copy of the message for this recipient
+            let agent_message = message.clone();
+            // We would update recipient ID here if needed
             
-            Ok(MessageRoutingResult {
-                message_id,
-                recipient_count: 1,
-                delivery_ids: vec![message_id.clone()],
-                errors: Vec::new(),
-            })
+            // Try to deliver
+            match self.queue_message(agent_message).await {
+                Ok(delivery_id) => {
+                    recipient_count += 1;
+                    delivery_ids.push(delivery_id);
+                }
+                Err(err) => {
+                    errors.push(err);
+                }
+            }
         }
+        
+        Ok(MessageRoutingResult {
+            message_id,
+            recipient_count,
+            delivery_ids,
+            errors,
+        })
     }
     
     /// Get pending messages for an agent
@@ -1446,7 +1483,7 @@ impl MessageRouter {
     }
     
     /// Mark a message as delivered
-    pub async fn mark_delivered(&self, agent_id: &AgentId, message_id: &MessageId) -> MessagingResult<()> {
+    pub async fn mark_delivered(&self, _agent_id: &AgentId, message_id: &MessageId) -> MessagingResult<()> {
         // Update delivery status
         self.update_delivery_status(message_id, MessageDeliveryStatus::Delivered).await?;
         
@@ -1454,7 +1491,7 @@ impl MessageRouter {
     }
     
     /// Mark a message as read
-    pub async fn mark_read(&self, agent_id: &AgentId, message_id: &MessageId) -> MessagingResult<()> {
+    pub async fn mark_read(&self, _agent_id: &AgentId, message_id: &MessageId) -> MessagingResult<()> {
         // Update delivery status
         self.update_delivery_status(message_id, MessageDeliveryStatus::Read).await?;
         
@@ -1690,27 +1727,44 @@ impl MessageEffect {
 
 /// Generate a random message ID based on content addressing
 pub fn generate_message_id() -> MessageId {
-    let timestamp = Utc::now().timestamp_nanos();
-    let mut random_bytes = [0u8; 16];
-    rand::thread_rng().fill(&mut random_bytes);
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
+        .to_be_bytes();
     
-    let mut input = Vec::with_capacity(4 + 8 + 16);
-    input.extend_from_slice(b"msg:");
-    input.extend_from_slice(&timestamp.to_be_bytes());
+    let mut random_bytes = [0u8; 16];
+    rand::thread_rng().try_fill(&mut random_bytes).expect("Failed to generate random bytes");
+    
+    let mut input = Vec::with_capacity(timestamp.len() + random_bytes.len());
+    input.extend_from_slice(&timestamp);
     input.extend_from_slice(&random_bytes);
     
+    // Create a content hash of the data
     let hash = blake3::hash(&input);
-    MessageId::from(ContentId::from_bytes(hash.as_bytes()))
+    // Create a content id with a prefixed string containing the message type and hash
+    let content_input = format!("message:{}", hex::encode(hash.as_bytes()));
+    MessageId::from(ContentId::new(content_input))
+}
+
+/// Create a ContentHash from content
+fn hash_content(content: &[u8]) -> ContentHash {
+    // Hash the content directly
+    let hash_bytes = blake3::hash(content).as_bytes().to_vec();
+    ContentHash::new("blake3", hash_bytes)
 }
 
 /// Agent messaging system tests
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::ContentHash;
+    use blake3;
 
     fn create_test_agent_id(name: &str) -> AgentId {
-        AgentId::from_content_hash(ContentHash::calculate(name.as_bytes()).as_bytes(), AgentType::Operator)
+        AgentId::from_content_hash(
+            blake3::hash(name.as_bytes()).as_bytes(),
+            AgentType::Operator
+        )
     }
     
     #[tokio::test]
@@ -1868,7 +1922,10 @@ mod tests {
         router.register_agent(recipient3.clone()).await.unwrap();
         
         // Broadcast agent ID (special agent for broadcasts)
-        let broadcast_id = AgentId::from_content_hash(MessageHash::calculate(b"broadcast").as_str().as_bytes(), AgentType::Operator);
+        let broadcast_id = AgentId::from_content_hash(
+            blake3::hash(b"broadcast").as_bytes(),
+            AgentType::Operator
+        );
         
         // Create a broadcast message
         let broadcast_message = Message::new(

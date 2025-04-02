@@ -1,11 +1,12 @@
 // CosmWasm Query Effect
 //
 // This module provides the implementation of the CosmWasm query effect,
-// which allows querying contract state on CosmWasm-based chains.
+// which allows querying contracts and state on CosmWasm-based chains.
 
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
+use std::any::Any;
 
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
@@ -13,11 +14,14 @@ use serde_json::Value;
 
 use causality_core::effect::{
     Effect, EffectContext, EffectId, EffectOutcome, EffectResult, EffectError,
-    DomainEffect, ResourceEffect, ResourceOperation, EffectTypeId
+    DomainEffect, ResourceEffect, ResourceOperation, EffectTypeId, EffectType
 };
 use causality_core::resource::ContentId;
 
-use super::{CosmWasmEffect, CosmWasmEffectType, COSMWASM_DOMAIN_ID};
+use causality_types::content::ContentId as CausalityContentId;
+use causality_core::effect::domain::DomainEffect as CausalityDomainEffect;
+
+use super::{CosmWasmEffect, CosmWasmEffectType, CosmWasmGasParams, CosmWasmEffectHandler, COSMWASM_DOMAIN_ID};
 
 /// Query target type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +36,10 @@ pub enum QueryTarget {
     Staking,
     /// Chain info query
     ChainInfo,
+    /// Contract query
+    Contract { contract_address: String },
+    /// System query
+    System,
 }
 
 /// Parameters for CosmWasm query effect
@@ -124,22 +132,23 @@ impl fmt::Debug for CosmWasmQueryEffect {
     }
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 impl Effect for CosmWasmQueryEffect {
-    fn id(&self) -> &EffectId {
-        &self.id
-    }
-    
-    fn type_id(&self) -> EffectTypeId {
-        EffectTypeId::new("cosmwasm.query")
-    }
-    
-    fn display_name(&self) -> String {
-        "CosmWasm Query".to_string()
+    fn effect_type(&self) -> EffectType {
+        EffectType::Custom("cosmwasm.query".to_string())
     }
     
     fn description(&self) -> String {
         match &self.params.target {
+            QueryTarget::Contract { contract_address } => {
+                format!("CosmWasm Query: Contract {} on {}", 
+                        contract_address, 
+                        self.params.chain_id)
+            }
+            QueryTarget::System => {
+                format!("CosmWasm Query: System on {}", 
+                        self.params.chain_id)
+            }
             QueryTarget::SmartContract => {
                 format!(
                     "Query contract {} on chain {}",
@@ -175,51 +184,36 @@ impl Effect for CosmWasmQueryEffect {
         }
     }
     
-    fn display_parameters(&self) -> HashMap<String, String> {
-        let mut params = HashMap::new();
-        params.insert("chain_id".to_string(), self.params.chain_id.clone());
-        
-        if let Some(contract) = &self.params.contract_address {
-            params.insert("contract_address".to_string(), contract.clone());
-        }
-        
-        params.insert("target".to_string(), format!("{:?}", self.params.target));
-        
-        // Add query type if available
-        if let Some(query_type) = self.params.query_msg.get("type").and_then(|v| v.as_str()) {
-            params.insert("query_type".to_string(), query_type.to_string());
-        }
-        
-        if let Some(height) = self.params.height {
-            params.insert("height".to_string(), height.to_string());
-        }
-        
-        params
-    }
-    
-    async fn execute(&self, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        // In a real implementation, this would call out to the CosmWasm chain
-        // For now, we'll just return a success outcome with mock data
-        
-        // Check capabilities
-        if !context.has_capability(&self.resource_id, &causality_core::capability::Right::Read) {
-            return Err(EffectError::CapabilityError(
-                format!("Missing read capability for resource: {}", self.resource_id)
+    async fn execute(&self, context: &dyn EffectContext) -> EffectResult {
+        // Verify capability for resource access
+        if !context.has_capability(&format!("cosmwasm.query.{}", self.params.chain_id)) {
+            return Err(EffectError::PermissionDenied(
+                format!("Missing capability to query chain: {}", self.params.chain_id)
             ));
         }
         
-        // Create outcome data
+        // For contract queries, verify additional permission
+        if let QueryTarget::Contract { contract_address } = &self.params.target {
+            if !context.has_capability(&format!("cosmwasm.contract.{}", contract_address)) {
+                return Err(EffectError::PermissionDenied(
+                    format!("Missing capability to query contract: {}", contract_address)
+                ));
+            }
+        }
+        
+        // Prepare outcome data
         let mut outcome_data = HashMap::new();
         outcome_data.insert("chain_id".to_string(), self.params.chain_id.clone());
         
-        if let Some(contract) = &self.params.contract_address {
-            outcome_data.insert("contract_address".to_string(), contract.clone());
-        }
-        
-        outcome_data.insert("target".to_string(), format!("{:?}", self.params.target));
-        
-        // Add mock query result
-        match self.params.target {
+        // Add target information
+        match &self.params.target {
+            QueryTarget::Contract { contract_address } => {
+                outcome_data.insert("target_type".to_string(), "contract".to_string());
+                outcome_data.insert("contract_address".to_string(), contract_address.clone());
+            }
+            QueryTarget::System => {
+                outcome_data.insert("target_type".to_string(), "system".to_string());
+            }
             QueryTarget::SmartContract => {
                 outcome_data.insert("result".to_string(), r#"{"success":true,"data":{"value":"sample_data"}}"#.to_string());
             },
@@ -237,9 +231,19 @@ impl Effect for CosmWasmQueryEffect {
             },
         }
         
-        // Return success outcome
-        Ok(EffectOutcome::success(outcome_data)
-            .with_affected_resource(self.resource_id.clone()))
+        outcome_data.insert("query_msg".to_string(), self.params.query_msg.to_string());
+        
+        // In a real implementation, we would execute the query here
+        // For now, we'll just return a simulated result
+        
+        Ok(EffectOutcome::Success {
+            result: Some("query_executed".to_string()),
+            data: outcome_data,
+        })
+    }
+    
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -277,7 +281,11 @@ impl CosmWasmEffect for CosmWasmQueryEffect {
         &self.params.chain_id
     }
     
-    fn is_read_only(&self) -> bool {
-        true
+    fn gas_params(&self) -> Option<CosmWasmGasParams> {
+        None // Queries don't use gas
+    }
+    
+    async fn handle_with_handler(&self, handler: &dyn CosmWasmEffectHandler, context: &dyn EffectContext) -> EffectResult {
+        handler.handle_cosmwasm_effect(self, context).await
     }
 } 

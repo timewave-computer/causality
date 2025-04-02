@@ -14,11 +14,10 @@ use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 
 use causality_types::{Error, Result};
-use :EffectRuntime:causality_core::effect::runtime::EffectRuntime::ContentHash;
+use causality_crypto::ContentHash;
 use causality_engine::ExecutionContext;
 use causality_engine::{CallFrame, ContextId};
-use :ResourceRegister:causality_core::resource::Resource::ResourceUsage;
-use :ResourceRegister:causality_core::resource::Resource::GrantId;
+use causality_core::resource::types::{ResourceUsage, GrantId};
 use crate::effect::{EffectContext, random::{RandomEffectFactory, RandomType}};
 
 /// A unique identifier for a snapshot

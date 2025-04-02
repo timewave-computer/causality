@@ -15,7 +15,7 @@ use tokio::time;
 use serde::{Serialize, Deserialize};
 use log::{debug, info, warn, error};
 
-use causality_types::{Error, Result};
+use causality_error::{EngineResult, EngineError, CausalityError, Result as CausalityResult};
 use crate::log::{LogEntry, LogStorage, LogSegment};
 
 /// Configuration for log synchronization
@@ -215,19 +215,19 @@ enum SyncCommand {
 /// Trait for log synchronization protocol implementations
 pub trait SyncProtocol: Send + Sync {
     /// Get a list of segments from a peer
-    fn get_segment_list(&self, peer_id: &str) -> Result<Vec<SegmentMetadata>>;
+    fn get_segment_list(&self, peer_id: &str) -> EngineResult<Vec<SegmentMetadata>>;
     
     /// Get a specific segment from a peer
-    fn get_segment(&self, peer_id: &str, segment_id: &str) -> Result<LogSegment>;
+    fn get_segment(&self, peer_id: &str, segment_id: &str) -> EngineResult<LogSegment>;
     
     /// Send a segment to a peer
-    fn send_segment(&self, peer_id: &str, segment: &LogSegment) -> Result<()>;
+    fn send_segment(&self, peer_id: &str, segment: &LogSegment) -> EngineResult<()>;
     
     /// Get the log diff between local and remote
-    fn get_log_diff(&self, peer_id: &str) -> Result<LogDiff>;
+    fn get_log_diff(&self, peer_id: &str) -> EngineResult<LogDiff>;
     
     /// Resolve conflicts between logs
-    fn resolve_conflicts(&self, peer_id: &str, conflicts: &[String]) -> Result<Vec<LogEntry>>;
+    fn resolve_conflicts(&self, peer_id: &str, conflicts: &[String]) -> EngineResult<Vec<LogEntry>>;
 }
 
 /// HTTP-based implementation of the sync protocol
@@ -252,31 +252,31 @@ impl HttpSyncProtocol {
 }
 
 impl SyncProtocol for HttpSyncProtocol {
-    fn get_segment_list(&self, peer_id: &str) -> Result<Vec<SegmentMetadata>> {
+    fn get_segment_list(&self, peer_id: &str) -> EngineResult<Vec<SegmentMetadata>> {
         // Implementation would use HTTP to request segment list from peer
         // This is a placeholder for the actual implementation
         todo!("Implement HTTP segment list request")
     }
     
-    fn get_segment(&self, peer_id: &str, segment_id: &str) -> Result<LogSegment> {
+    fn get_segment(&self, peer_id: &str, segment_id: &str) -> EngineResult<LogSegment> {
         // Implementation would use HTTP to download segment from peer
         // This is a placeholder for the actual implementation
         todo!("Implement HTTP segment download")
     }
     
-    fn send_segment(&self, peer_id: &str, segment: &LogSegment) -> Result<()> {
+    fn send_segment(&self, peer_id: &str, segment: &LogSegment) -> EngineResult<()> {
         // Implementation would use HTTP to upload segment to peer
         // This is a placeholder for the actual implementation
         todo!("Implement HTTP segment upload")
     }
     
-    fn get_log_diff(&self, peer_id: &str) -> Result<LogDiff> {
+    fn get_log_diff(&self, peer_id: &str) -> EngineResult<LogDiff> {
         // Implementation would use HTTP to get log differences
         // This is a placeholder for the actual implementation
         todo!("Implement HTTP log diff")
     }
     
-    fn resolve_conflicts(&self, peer_id: &str, conflicts: &[String]) -> Result<Vec<LogEntry>> {
+    fn resolve_conflicts(&self, peer_id: &str, conflicts: &[String]) -> EngineResult<Vec<LogEntry>> {
         // Implementation would use HTTP to resolve conflicts
         // This is a placeholder for the actual implementation
         todo!("Implement HTTP conflict resolution")
@@ -329,7 +329,7 @@ impl SyncManager {
     }
     
     /// Start the sync manager
-    pub fn start(&mut self) -> Result<()> {
+    pub fn start(&mut self) -> EngineResult<()> {
         if self.running.load(std::sync::atomic::Ordering::SeqCst) {
             return Ok(());
         }
@@ -342,7 +342,7 @@ impl SyncManager {
         let event_tx = self.event_tx.clone();
         
         let mut command_rx = self.command_rx.take().ok_or_else(|| 
-            Error::InternalError("Command receiver already taken".to_string()))?;
+            EngineError::InternalError("Command receiver already taken".to_string()))?;
         
         running.store(true, std::sync::atomic::Ordering::SeqCst);
         
@@ -459,7 +459,7 @@ impl SyncManager {
     }
     
     /// Stop the sync manager
-    pub fn stop(&mut self) -> Result<()> {
+    pub fn stop(&mut self) -> EngineResult<()> {
         if !self.running.load(std::sync::atomic::Ordering::SeqCst) {
             return Ok(());
         }
@@ -482,46 +482,46 @@ impl SyncManager {
     }
     
     /// Add a peer to the sync network
-    pub fn add_peer(&self, peer_info: PeerInfo) -> Result<()> {
+    pub fn add_peer(&self, peer_info: PeerInfo) -> EngineResult<()> {
         if let Some(tx) = &self.command_tx {
             tx.try_send(SyncCommand::AddPeer(peer_info))
-                .map_err(|e| Error::InternalError(format!("Failed to send AddPeer command: {}", e)))?;
+                .map_err(|e| EngineError::InternalError(format!("Failed to send AddPeer command: {}", e)))?;
             Ok(())
         } else {
-            Err(Error::InternalError("Sync manager not running".to_string()))
+            Err(EngineError::InternalError("Sync manager not running".to_string()))
         }
     }
     
     /// Remove a peer from the sync network
-    pub fn remove_peer(&self, peer_id: &str) -> Result<()> {
+    pub fn remove_peer(&self, peer_id: &str) -> EngineResult<()> {
         if let Some(tx) = &self.command_tx {
             tx.try_send(SyncCommand::RemovePeer(peer_id.to_string()))
-                .map_err(|e| Error::InternalError(format!("Failed to send RemovePeer command: {}", e)))?;
+                .map_err(|e| EngineError::InternalError(format!("Failed to send RemovePeer command: {}", e)))?;
             Ok(())
         } else {
-            Err(Error::InternalError("Sync manager not running".to_string()))
+            Err(EngineError::InternalError("Sync manager not running".to_string()))
         }
     }
     
     /// Manually trigger a sync with a specific peer
-    pub fn sync_with_peer(&self, peer_id: &str) -> Result<()> {
+    pub fn sync_with_peer(&self, peer_id: &str) -> EngineResult<()> {
         if let Some(tx) = &self.command_tx {
             tx.try_send(SyncCommand::SyncWithPeer(peer_id.to_string()))
-                .map_err(|e| Error::InternalError(format!("Failed to send SyncWithPeer command: {}", e)))?;
+                .map_err(|e| EngineError::InternalError(format!("Failed to send SyncWithPeer command: {}", e)))?;
             Ok(())
         } else {
-            Err(Error::InternalError("Sync manager not running".to_string()))
+            Err(EngineError::InternalError("Sync manager not running".to_string()))
         }
     }
     
     /// Sync with all peers
-    pub fn sync_all(&self) -> Result<()> {
+    pub fn sync_all(&self) -> EngineResult<()> {
         if let Some(tx) = &self.command_tx {
             tx.try_send(SyncCommand::SyncAll)
-                .map_err(|e| Error::InternalError(format!("Failed to send SyncAll command: {}", e)))?;
+                .map_err(|e| EngineError::InternalError(format!("Failed to send SyncAll command: {}", e)))?;
             Ok(())
         } else {
-            Err(Error::InternalError("Sync manager not running".to_string()))
+            Err(EngineError::InternalError("Sync manager not running".to_string()))
         }
     }
     
@@ -531,10 +531,10 @@ impl SyncManager {
     }
     
     /// Get a list of known peers
-    pub fn list_peers(&self) -> Result<Vec<PeerInfo>> {
+    pub fn list_peers(&self) -> EngineResult<Vec<PeerInfo>> {
         match self.peers.read() {
             Ok(peers) => Ok(peers.values().cloned().collect()),
-            Err(_) => Err(Error::InternalError("Failed to read peers".to_string())),
+            Err(_) => Err(EngineError::InternalError("Failed to read peers".to_string())),
         }
     }
     
@@ -657,16 +657,16 @@ impl SyncManager {
 /// Extension trait for LogStorage to support synchronization
 pub trait SyncableStorage: LogStorage {
     /// Get metadata for segments in the storage
-    fn get_segment_metadata(&self) -> Result<Vec<SegmentMetadata>>;
+    fn get_segment_metadata(&self) -> EngineResult<Vec<SegmentMetadata>>;
     
     /// Import a segment from a peer
-    fn import_segment(&self, segment: LogSegment) -> Result<()>;
+    fn import_segment(&self, segment: LogSegment) -> EngineResult<()>;
     
     /// Export a segment to send to a peer
-    fn export_segment(&self, segment_id: &str) -> Result<LogSegment>;
+    fn export_segment(&self, segment_id: &str) -> EngineResult<LogSegment>;
     
     /// Get log differences between local and a list of remote segments
-    fn get_log_differences(&self, remote_segments: &[SegmentMetadata]) -> Result<LogDiff>;
+    fn get_log_differences(&self, remote_segments: &[SegmentMetadata]) -> EngineResult<LogDiff>;
 }
 
 #[cfg(test)]
@@ -687,23 +687,23 @@ mod tests {
     }
     
     impl SyncProtocol for MockSyncProtocol {
-        fn get_segment_list(&self, _peer_id: &str) -> Result<Vec<SegmentMetadata>> {
+        fn get_segment_list(&self, _peer_id: &str) -> EngineResult<Vec<SegmentMetadata>> {
             todo!()
         }
         
-        fn get_segment(&self, _peer_id: &str, _segment_id: &str) -> Result<LogSegment> {
+        fn get_segment(&self, _peer_id: &str, _segment_id: &str) -> EngineResult<LogSegment> {
             todo!()
         }
         
-        fn send_segment(&self, _peer_id: &str, _segment: &LogSegment) -> Result<()> {
+        fn send_segment(&self, _peer_id: &str, _segment: &LogSegment) -> EngineResult<()> {
             todo!()
         }
         
-        fn get_log_diff(&self, _peer_id: &str) -> Result<LogDiff> {
+        fn get_log_diff(&self, _peer_id: &str) -> EngineResult<LogDiff> {
             todo!()
         }
         
-        fn resolve_conflicts(&self, _peer_id: &str, _conflicts: &[String]) -> Result<Vec<LogEntry>> {
+        fn resolve_conflicts(&self, _peer_id: &str, _conflicts: &[String]) -> EngineResult<Vec<LogEntry>> {
             todo!()
         }
     }
