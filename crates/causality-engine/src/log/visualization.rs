@@ -151,8 +151,6 @@ impl VisualizationFilter {
                 EntryData::Operation(operation) => operation.operation_type.to_lowercase().contains(&search_str),
                 EntryData::SystemEvent(event) => event.event_type.to_lowercase().contains(&search_str),
                 EntryData::Custom(data) => data.to_string().to_lowercase().contains(&search_str),
-                // Handle other variants as needed
-                _ => false,
             };
             
             if !contains_in_data {
@@ -336,8 +334,7 @@ impl CausalityGraph {
     /// Recursively visualize a node and its children
     fn visualize_node(&self, output: &mut String, node: &CausalityNode, depth: usize) {
         // Format timestamp
-        let dt = NaiveDateTime::from_timestamp_opt(node.timestamp.0 as i64 / 1000, 0)
-            .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc))
+        let dt = DateTime::<Utc>::from_timestamp(node.timestamp.0 as i64 / 1000, 0)
             .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
             .unwrap_or_else(|| format!("Invalid: {}", node.timestamp.0));
         
@@ -560,8 +557,7 @@ impl LogVisualizer {
     /// Helper for HTML visualization
     fn html_visualize_node(&self, html: &mut String, graph: &CausalityGraph, node: &CausalityNode) {
         // Format timestamp
-        let dt = NaiveDateTime::from_timestamp_opt(node.timestamp.0 as i64 / 1000, 0)
-            .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc))
+        let dt = DateTime::<Utc>::from_timestamp(node.timestamp.0 as i64 / 1000, 0)
             .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
             .unwrap_or_else(|| format!("Invalid: {}", node.timestamp.0));
         

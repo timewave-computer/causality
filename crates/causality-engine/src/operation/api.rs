@@ -221,7 +221,7 @@ impl OperationManager {
         resource_id: ContentId,
         from: &str,
         to: &str,
-        domain_id: Option<DomainId>,
+        _domain_id: Option<DomainId>,
         identity: IdentityId,
     ) -> Result<OperationResult> {
         let effect = crate::effect::factory::create_transfer_effect(
