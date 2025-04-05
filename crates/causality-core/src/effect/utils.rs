@@ -8,15 +8,12 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 
 use crate::effect::{
-    Effect, EffectContext, EffectError, EffectOutcome, 
-    EffectRegistry, BasicEffectRegistry, handler::HandlerResult,
-    registry::EffectRegistrar
+    Effect, EffectContext, EffectError, EffectOutcome, BasicEffectRegistry, handler::HandlerResult
 };
 use crate::effect::handler::EffectHandler;
 use crate::effect::types::EffectTypeId;
 use crate::resource::ResourceManager;
 
-use crate::effect::domain::{DomainEffect, DomainEffectHandler, DomainEffectOutcome};
 
 /// Represents a simple effect handler that always returns a successful outcome.
 #[derive(Debug)]
@@ -105,6 +102,8 @@ pub fn effect_error_to_map(error: &EffectError) -> HashMap<String, String> {
         &EffectError::SystemError(_) => "system_error",
         &EffectError::PermissionDenied(_) => "permission_denied",
         &EffectError::RegistryError(_) => "registry_error",
+        &EffectError::InvalidArgument(_) => "invalid_argument",
+        &EffectError::AlreadyExists(_) => "already_exists",
     };
     
     map.insert("error_type".to_string(), error_type.to_string());
@@ -158,6 +157,12 @@ pub fn effect_error_to_map(error: &EffectError) -> HashMap<String, String> {
         },
         &EffectError::RegistryError(ref msg) => {
             map.insert("registry_details".to_string(), msg.clone());
+        },
+        &EffectError::InvalidArgument(ref msg) => {
+            map.insert("argument".to_string(), msg.clone());
+        },
+        &EffectError::AlreadyExists(ref msg) => {
+            map.insert("object".to_string(), msg.clone());
         }
     }
     

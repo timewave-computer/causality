@@ -6,17 +6,32 @@
 // This module provides functionality for managing log segments,
 // which are chunks of log entries organized by time or other criteria.
 
-use std::fmt;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
-use causality_error::{EngineResult as Result, EngineError as Error};
-use crate::log::LogEntry;
+use causality_error::{Result, EngineError};
+use causality_types::Timestamp;
 use crate::log::storage::StorageConfig;
+use crate::log::types::LogEntry;
+
+/// Status of a segment
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SegmentStatus {
+    /// Active and writable
+    Active,
+    
+    /// Closed and read-only
+    Closed,
+    
+    /// Archived for long-term storage
+    Archived,
+    
+    /// Being compacted
+    Compacting,
+}
 
 /// Information about a log segment
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,11 +39,11 @@ pub struct SegmentInfo {
     /// The unique ID of the segment
     pub id: String,
     /// The creation timestamp
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// The start timestamp for entries in this segment
-    pub start_time: DateTime<Utc>,
+    pub start_time: Timestamp,
     /// The end timestamp for entries in this segment
-    pub end_time: Option<DateTime<Utc>>,
+    pub end_time: Option<Timestamp>,
     /// The number of entries in this segment
     pub entry_count: usize,
     /// The size of the segment in bytes
@@ -38,24 +53,38 @@ pub struct SegmentInfo {
     /// The path to the segment file, if stored on disk
     #[serde(skip)]
     pub path: Option<PathBuf>,
+    /// Additional metadata for the segment
+    pub metadata: HashMap<String, String>,
+    /// The status of the segment
+    pub status: SegmentStatus,
 }
 
 impl SegmentInfo {
     /// Create a new segment info
     pub fn new(
         id: String,
-        start_time: DateTime<Utc>,
+        start_time: Timestamp,
     ) -> Self {
         SegmentInfo {
             id,
-            created_at: Utc::now(),
+            created_at: Timestamp::now(),
             start_time,
             end_time: None,
             entry_count: 0,
             size_bytes: 0,
             read_only: false,
             path: None,
+            metadata: HashMap::new(),
+            status: SegmentStatus::Active,
         }
+    }
+    
+    /// Create a new segment info from DateTime
+    pub fn from_datetime(
+        id: String,
+        start_time: DateTime<Utc>,
+    ) -> Self {
+        Self::new(id, Timestamp::from_datetime(&start_time))
     }
     
     /// Set the path for this segment
@@ -80,12 +109,21 @@ impl SegmentInfo {
     }
     
     /// Set the end time
-    pub fn set_end_time(&mut self, end_time: DateTime<Utc>) {
+    pub fn set_end_time(&mut self, end_time: Timestamp) {
         self.end_time = Some(end_time);
+    }
+    
+    /// Mark this segment as closed
+    pub fn mark_closed(&mut self, end_time: Timestamp, entry_count: usize, size_bytes: usize) {
+        self.end_time = Some(end_time);
+        self.entry_count = entry_count;
+        self.size_bytes = size_bytes as u64;
+        self.status = SegmentStatus::Closed;
     }
 }
 
 /// A segment of log entries
+#[derive(Serialize, Deserialize)]
 pub struct LogSegment {
     /// The segment info
     info: SegmentInfo,
@@ -100,7 +138,7 @@ pub struct LogSegment {
 impl LogSegment {
     /// Create a new log segment with the given ID
     pub fn new(id: String) -> Self {
-        let now = Utc::now();
+        let now = Timestamp::now();
         Self {
             info: SegmentInfo::new(id, now),
             entries: Vec::new(),
@@ -109,20 +147,29 @@ impl LogSegment {
         }
     }
     
-    /// Create a new log segment from existing entries
+    /// Create a segment from existing entries
     pub fn from_entries(id: String, entries: Vec<LogEntry>) -> Result<Self> {
         if entries.is_empty() {
-            return Err(Error::InvalidArgument("Cannot create segment with no entries".to_string()));
+            return Err(Box::new(EngineError::InvalidArgument("Cannot create segment with no entries".to_string())));
         }
         
-        let start_time = entries.first().unwrap().timestamp().clone();
-        let end_time = entries.last().unwrap().timestamp().clone();
+        let first_entry_time = entries.first().unwrap().timestamp;
+        let last_entry_time = entries.last().unwrap().timestamp;
         
-        let mut info = SegmentInfo::new(id, start_time);
-        info.set_end_time(end_time);
-        info.update_entry_count(entries.len());
+        let info = SegmentInfo {
+            id,
+            created_at: Timestamp::now(),
+            start_time: first_entry_time,
+            end_time: Some(last_entry_time),
+            entry_count: entries.len(),
+            size_bytes: 0, // Size will be calculated during serialization
+            read_only: true,
+            path: None,
+            metadata: HashMap::new(),
+            status: SegmentStatus::Closed,
+        };
         
-        Ok(LogSegment {
+        Ok(Self {
             info,
             entries,
             modified: false,
@@ -152,14 +199,17 @@ impl LogSegment {
     }
     
     /// Add an entry to this segment
-    pub fn add_entry(&mut self, entry: LogEntry) -> Result<()> {
+    pub fn add_entry(&mut self, entry: LogEntry) -> causality_error::Result<()> {
         // Check if the segment is read-only
         if self.info.read_only {
-            return Err(Error::OperationFailed("Segment is read-only".to_string()));
+            return Err(EngineError::ExecutionFailed("Segment is read-only".to_string()).into());
         }
         
-        // Update the end time if needed
-        let entry_time = entry.timestamp().clone();
+        // Update segment info
+        self.modified = true;
+        self.info.update_entry_count(self.entries.len() + 1);
+        
+        let entry_time = entry.timestamp.clone();
         if let Some(end_time) = self.info.end_time {
             if entry_time > end_time {
                 self.info.set_end_time(entry_time);
@@ -170,8 +220,6 @@ impl LogSegment {
         
         // Add the entry
         self.entries.push(entry);
-        self.info.update_entry_count(self.entries.len());
-        self.modified = true;
         
         Ok(())
     }
@@ -209,26 +257,56 @@ impl LogSegment {
     /// Check if this segment is full according to configured limits
     pub fn is_full(&self, config: &StorageConfig) -> bool {
         // Check if the entry count exceeds the maximum
-        if let Some(max_entries) = config.max_entries_per_segment {
-            if self.entries.len() >= max_entries {
+        if config.max_entries_per_segment > 0 {
+            if self.entries.len() >= config.max_entries_per_segment {
                 return true;
             }
         }
         
         // Check if the time span exceeds the maximum
-        if let (Some(max_segment_hours), Some(end_time)) = (config.max_segment_hours, self.info.end_time) {
-            let duration = end_time.signed_duration_since(self.info.start_time);
-            if duration.num_hours() >= max_segment_hours as i64 {
-                return true;
+        if config.max_segment_size > 0 {
+            if let Some(end_time) = self.info.end_time {
+                // Calculate time difference in hours
+                let hours_diff = end_time.difference(&self.info.start_time) / 3600; // Convert seconds to hours
+                
+                if hours_diff >= (config.max_segment_size / (1024 * 1024)) as u64 {  // Convert to MB and then to hours
+                    return true;
+                }
             }
+        }
+        
+        // Check if the size exceeds the maximum
+        if self.info.size_bytes >= config.max_segment_size as u64 {
+            return true;
         }
         
         false
     }
     
     /// Append an entry to this segment
-    pub fn append(&mut self, entry: LogEntry) -> Result<()> {
-        self.add_entry(entry)
+    pub fn append(&mut self, entry: LogEntry) -> causality_error::Result<()> {
+        if self.info.read_only {
+            return Err(EngineError::ExecutionFailed("Segment is read-only".to_string()).into());
+        }
+        
+        // Update segment info
+        let info = &mut self.info;
+        info.entry_count += 1;
+        
+        // Update end time if the new entry has a newer timestamp
+        if let Some(end_time) = info.end_time {
+            if entry.timestamp > end_time {
+                info.end_time = Some(entry.timestamp);
+            }
+        } else {
+            info.end_time = Some(entry.timestamp);
+        }
+        
+        // Add the entry
+        self.entries.push(entry);
+        self.modified = true;
+        
+        Ok(())
     }
     
     /// Flush the segment to ensure changes are persisted

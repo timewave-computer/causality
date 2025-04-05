@@ -7,15 +7,13 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::time::{Duration, SystemTime};
 use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 
-use causality_types::{ContentId, ContentAddressed};
+use causality_types::ContentId;
 
 /// Resource state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

@@ -9,11 +9,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::any::Any;
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
-use causality_error::{EngineResult as Result, EngineError as Error};
+use causality_error::{EngineResult as Result, EngineError};
 use causality_core::effect::{Effect, EffectType, EffectOutcome, EffectResult, EffectContext, EffectId};
 use async_trait::async_trait;
+
+use causality_core::resource::{Operation, OperationType};
+use causality_core::serialization::SerializationError;
 
 // FIXME: Placeholder types for ZK-related types that are missing
 #[derive(Debug, Clone)]
@@ -81,12 +84,7 @@ pub trait Circuit: Send + Sync {
 }
 
 // Placeholder for UnifiedProof
-use super::verification::UnifiedProof;
 
-use super::{
-    Operation, OperationType, ExecutionContext, ExecutionPhase, 
-    AbstractContext, ZkContext
-};
 
 /// Error during ZK proof generation
 #[derive(Debug, thiserror::Error)]
@@ -107,15 +105,21 @@ pub enum ZkProofError {
     MissingParameters(String),
 }
 
-impl From<ZkProofError> for Error {
+impl From<ZkProofError> for EngineError {
     fn from(err: ZkProofError) -> Self {
         match err {
-            ZkProofError::UnsupportedOperationType(msg) => Error::InvalidArgument(format!("Unsupported operation type: {}", msg)),
-            ZkProofError::ProofGenerationFailed(msg) => Error::ExecutionFailed(format!("Proof generation failed: {}", msg)),
-            ZkProofError::ProofVerificationFailed(msg) => Error::ValidationError(format!("Proof verification failed: {}", msg)),
-            ZkProofError::InvalidCircuit(msg) => Error::InvalidArgument(format!("Invalid circuit: {}", msg)),
-            ZkProofError::MissingParameters(msg) => Error::InvalidArgument(format!("Missing parameters: {}", msg)),
+            ZkProofError::UnsupportedOperationType(msg) => EngineError::InvalidArgument(format!("Unsupported operation type: {}", msg)),
+            ZkProofError::ProofGenerationFailed(msg) => EngineError::ExecutionFailed(format!("Proof generation failed: {}", msg)),
+            ZkProofError::ProofVerificationFailed(msg) => EngineError::ValidationError(format!("Proof verification failed: {}", msg)),
+            ZkProofError::InvalidCircuit(msg) => EngineError::InvalidArgument(format!("Invalid circuit: {}", msg)),
+            ZkProofError::MissingParameters(msg) => EngineError::InvalidArgument(format!("Missing parameters: {}", msg)),
         }
+    }
+}
+
+impl From<SerializationError> for ZkProofError {
+    fn from(err: SerializationError) -> Self {
+        ZkProofError::MissingParameters(format!("Serialization error (e.g., getting op ID): {}", err))
     }
 }
 
@@ -141,168 +145,148 @@ impl OperationProofGenerator {
     pub async fn generate_proof(&self, request: ProofRequest) -> Result<Proof> {
         self.proof_system.generate_proof(request)
             .await
-            .map_err(|e| Error::ExecutionFailed(format!("Proof generation failed: {}", e.to_string())))
+            .map_err(|e| EngineError::ExecutionFailed(format!("Proof generation failed: {}", e.to_string())))
     }
     
-    /// Transform an abstract operation into a ZK operation
-    pub async fn transform_to_zk_operation(
+    /// Generates a ZK proof for an operation and potentially updates its metadata.
+    /// Returns the generated proof.
+    pub async fn generate_and_apply_zk_proof(
         &self,
-        operation: &Operation<AbstractContext>,
-    ) -> Result<Operation<ZkContext>> {
-        // Create a ZK context
-        let zk_context = ZkContext::new(
-            ExecutionPhase::Verification,
-            "default_circuit"
-        );
+        operation: &mut Operation, // Takes mutable ref to core Operation
+        // We might need ZkContext info passed in, or determined internally
+        circuit_id_override: Option<String>, // Allow specifying circuit
+    ) -> Result<Proof> { // Returns the generated Proof
         
-        // Select the appropriate circuit
-        let circuit = self.circuit_selector.select_circuit_by_type(&operation.op_type)
-            .ok_or_else(|| Error::InvalidArgument(format!("Unsupported operation type: {}", operation.op_type.clone().to_string())))?;
+        // Select the appropriate circuit based on OperationType
+        let circuit = self.circuit_selector.select_circuit_by_type(&operation.operation_type)
+            .ok_or_else(|| EngineError::InvalidArgument(format!("No ZK circuit found for operation type: {:?}", operation.operation_type)))?;
             
-        // Generate the ZK proof
+        let circuit_id = circuit_id_override.unwrap_or_else(|| circuit.id().to_string());
+
+        // Generate the ZK proof request
         let proof_request = ProofRequest {
-            circuit_id: circuit.id().to_string(),
+            circuit_id: circuit_id.clone(),
+            // Pass core Operation to helpers
             public_inputs: self.generate_public_inputs(operation, circuit.as_ref())?,
             private_inputs: self.generate_private_inputs(operation, circuit.as_ref())?,
         };
         
+        // Generate the proof using the proof system
         let zk_proof = self.generate_proof(proof_request).await?;
         
-        // Create a unified proof wrapper
-        let unified_proof = super::UnifiedProof::ZeroKnowledge(
-            zk_proof.data.clone()
+        // --- Start: Modify Operation Metadata (Example) ---
+        // Decide how to store proof info. Store CID? Store full proof data?
+        // For now, let's assume we store a placeholder ID.
+        operation.metadata.insert(
+            "zk_proof_id".to_string(), 
+            zk_proof.id.clone()
         );
-        
-        // Clone abstract representation - using a placeholder since Box<dyn Effect> doesn't implement Clone
-        let abstract_rep = if let Some(effect) = &operation.abstract_representation {
-            let effect_type = effect.effect_type().to_string();
-            let effect_id = EffectId::from_string("placeholder");
-            
-            Box::new(PlaceholderEffect::new(&effect_type, effect_id)) as Box<dyn causality_core::effect::Effect>
-        } else {
-            // Create a default placeholder effect if there is no abstract representation
-            Box::new(PlaceholderEffect::new("default", EffectId::from_string("default"))) as Box<dyn causality_core::effect::Effect>
-        };
-        
-        // Create the ZK operation
-        let zk_operation = Operation {
-            id: operation.id.clone(),
-            op_type: operation.op_type.clone(),
-            abstract_representation: abstract_rep,
-            concrete_implementation: operation.concrete_implementation.clone(),
-            physical_execution: operation.physical_execution.clone(),
-            context: zk_context,
-            inputs: operation.inputs.clone(),
-            outputs: operation.outputs.clone(),
-            authorization: operation.authorization.clone(),
-            proof: Some(unified_proof),
-            zk_proof: Some(super::Proof {
-                data: zk_proof.data.clone(),
-                proof_type: "zk".to_string(),
-                verification_key: None,
-            }),
-            conservation: operation.conservation.clone(),
-            metadata: operation.metadata.clone(),
-        };
-        
-        Ok(zk_operation)
+         operation.metadata.insert(
+            "zk_circuit_id".to_string(), 
+            circuit_id
+        );
+        // --- End: Modify Operation Metadata --- 
+
+        // Return the generated proof object
+        Ok(zk_proof) 
     }
     
     /// Generate public inputs for an operation proof
-    fn generate_public_inputs<C: ExecutionContext>(
+    fn generate_public_inputs(
         &self,
-        operation: &Operation<C>,
+        operation: &Operation, // Use core Operation
         circuit: &dyn Circuit,
-    ) -> std::result::Result<HashMap<String, String>, Error> {
-        let mut public_inputs = HashMap::new();
-        
-        // Add operation ID
-        public_inputs.insert("operation_id".to_string(), operation.id.to_string());
-        
-        // Add operation type
-        public_inputs.insert("operation_type".to_string(), format!("{:?}", operation.op_type));
-        
-        // Add resource IDs for inputs
-        for (i, input) in operation.inputs.iter().enumerate() {
-            public_inputs.insert(
-                format!("input_{}_id", i),
-                input.resource_id.to_string(),
-            );
-        }
-        
-        // Add resource IDs for outputs
-        for (i, output) in operation.outputs.iter().enumerate() {
-            public_inputs.insert(
-                format!("output_{}_id", i),
-                output.resource_id.to_string(),
-            );
-        }
-        
-        // Validate that we have the required public inputs for this circuit
-        for required_input in circuit.required_public_inputs() {
-            if !public_inputs.contains_key(&required_input) {
-                return Err(Error::from(ZkProofError::MissingParameters(required_input)));
+    ) -> std::result::Result<HashMap<String, String>, EngineError> {
+        let mut inputs = HashMap::new();
+        let required_inputs = circuit.required_public_inputs();
+
+        for required_input in required_inputs {
+            match required_input.as_str() {
+                "operation_id" => {
+                    let op_id = operation.id()
+                        .map_err(|e| EngineError::InternalError(format!("Failed to get operation ID for ZK inputs: {}", e)))?;
+                    inputs.insert("operation_id".to_string(), op_id.to_string());
+                }
+                "operation_type" => {
+                    inputs.insert("operation_type".to_string(), format!("{:?}", operation.operation_type));
+                }
+                // Updated to check parameters map
+                key if key.starts_with("param.") => {
+                    let param_key = &key["param.".len()..];
+                    if let Some(value) = operation.parameters.get(param_key) {
+                        inputs.insert(required_input.clone(), value.clone());
+                    } else {
+                        return Err(EngineError::from(ZkProofError::MissingParameters(required_input)));
+                    }
+                }
+                 // Updated to check metadata map
+                key if key.starts_with("meta.") => {
+                    let meta_key = &key["meta.".len()..];
+                    if let Some(value) = operation.metadata.get(meta_key) {
+                        inputs.insert(required_input.clone(), value.clone());
+                    } else {
+                         // Non-critical for public inputs? Or error?
+                        inputs.insert(required_input.clone(), "".to_string()); 
+                    }
+                }
+                // Add other extraction logic if needed (e.g., from identity, target, effects)
+                _ => {
+                    // Default or error for unhandled required inputs
+                    return Err(EngineError::from(ZkProofError::MissingParameters(format!("Unhandled required public input: {}", required_input))));
+                }
             }
         }
         
-        Ok(public_inputs)
+        Ok(inputs)
     }
     
     /// Generate private inputs for an operation proof
-    fn generate_private_inputs<C: ExecutionContext>(
+    fn generate_private_inputs(
         &self,
-        operation: &Operation<C>,
+        operation: &Operation, // Use core Operation
         circuit: &dyn Circuit,
-    ) -> std::result::Result<HashMap<String, String>, Error> {
-        let mut private_inputs = HashMap::new();
-        
-        // Add resource state information for inputs
-        for (i, input) in operation.inputs.iter().enumerate() {
-            if let Some(state) = &input.before_state {
-                private_inputs.insert(
-                    format!("input_{}_state", i),
-                    state.clone(),
-                );
+    ) -> std::result::Result<HashMap<String, String>, EngineError> {
+        let mut inputs = HashMap::new();
+        let required_inputs = circuit.required_private_inputs();
+
+        // Similar logic to public inputs, potentially accessing different fields
+        // or requiring all parameters to exist.
+        for required_input in required_inputs {
+             match required_input.as_str() {
+                // Updated to check parameters map
+                key if key.starts_with("param.") => {
+                    let param_key = &key["param.".len()..];
+                    if let Some(value) = operation.parameters.get(param_key) {
+                        inputs.insert(required_input.clone(), value.clone());
+                    } else {
+                        // Private inputs are usually mandatory
+                        return Err(EngineError::from(ZkProofError::MissingParameters(required_input)));
+                    }
+                }
+                 // Updated to check metadata map
+                key if key.starts_with("meta.") => {
+                    let meta_key = &key["meta.".len()..];
+                    if let Some(value) = operation.metadata.get(meta_key) {
+                        inputs.insert(required_input.clone(), value.clone());
+                    } else {
+                         // Private inputs are usually mandatory
+                        return Err(EngineError::from(ZkProofError::MissingParameters(required_input)));
+                    }
+                }
+                 // Add other extraction logic if needed (e.g., from identity, target, effects)
+                 // Example: extract effect data if needed for proof
+                "effect_data" => {
+                     // Placeholder: Logic to serialize or extract relevant effect data
+                     inputs.insert("effect_data".to_string(), "serialized_effect_data_placeholder".to_string());
+                }
+                _ => {
+                     // Default or error for unhandled required inputs
+                    return Err(EngineError::from(ZkProofError::MissingParameters(format!("Unhandled required private input: {}", required_input))));
+                }
             }
         }
-        
-        // Add resource state information for outputs
-        for (i, output) in operation.outputs.iter().enumerate() {
-            if let Some(state) = &output.after_state {
-                private_inputs.insert(
-                    format!("output_{}_state", i),
-                    state.clone(),
-                );
-            }
-        }
-        
-        // Add authorization data
-        private_inputs.insert(
-            "authorization_type".to_string(),
-            format!("{:?}", operation.authorization.auth_type),
-        );
-        
-        private_inputs.insert(
-            "authorization_data".to_string(),
-            hex::encode(&operation.authorization.data),
-        );
-        
-        // Add additional metadata
-        for (key, value) in &operation.metadata {
-            private_inputs.insert(
-                format!("metadata_{}", key),
-                value.clone(),
-            );
-        }
-        
-        // Validate that we have the required private inputs for this circuit
-        for required_input in circuit.required_private_inputs() {
-            if !private_inputs.contains_key(&required_input) {
-                return Err(Error::from(ZkProofError::MissingParameters(required_input)));
-            }
-        }
-        
-        Ok(private_inputs)
+
+        Ok(inputs)
     }
 }
 
@@ -316,9 +300,17 @@ pub trait CircuitSelector: Debug + Send + Sync {
 }
 
 /// Default implementation of CircuitSelector
-#[derive(Debug)]
 pub struct DefaultCircuitSelector {
     circuits: HashMap<String, Arc<dyn Circuit>>,
+}
+
+// Manual Debug implementation
+impl Debug for DefaultCircuitSelector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DefaultCircuitSelector")
+         .field("circuits_count", &self.circuits.len()) // Print count instead of map
+         .finish()
+    }
 }
 
 impl DefaultCircuitSelector {
@@ -419,8 +411,8 @@ mod tests {
     use super::*;
     use crate::effect::EmptyEffect;
     use causality_types::ContentId;
+    use causality_core::resource::{ResourceRef, ResourceRefType};
     use super::{Circuit, ProofRequest, ProofSystem};
-    use super::super::{ResourceRef, ResourceRefType};
     use async_trait::async_trait;
     
     #[tokio::test]
@@ -429,18 +421,14 @@ mod tests {
         let context = AbstractContext::new(ExecutionPhase::Planning);
         let effect = Box::new(EmptyEffect::new("test_effect"));
         
-        let operation = Operation::new(
+        let identity = IdentityId::new(); // Use core IdentityId
+        let target = ResourceId::from_string("test:resource:1").expect("Valid ResourceId");
+        let mut operation = causality_core::resource::Operation::new( 
+            identity.clone(),
             OperationType::Create,
-            effect,
-            context
-        )
-        .with_output(ResourceRef {
-            resource_id: ContentId::from_str("test:resource:123").unwrap(),
-            domain_id: None,
-            ref_type: ResourceRefType::Output,
-            before_state: None,
-            after_state: Some("created".to_string()),
-        });
+            target.clone(),
+            vec![effect]
+        );
         
         // Create proof generator
         let proof_system = Arc::new(MockProofSystem {});
@@ -466,18 +454,14 @@ mod tests {
         let context = AbstractContext::new(ExecutionPhase::Planning);
         let effect = Box::new(EmptyEffect::new("test_effect"));
         
-        let operation = Operation::new(
+        let identity = IdentityId::new(); // Use core IdentityId
+        let target = ResourceId::from_string("test:resource:1").expect("Valid ResourceId");
+        let mut operation = causality_core::resource::Operation::new( 
+            identity.clone(),
             OperationType::Create,
-            effect,
-            context
-        )
-        .with_output(ResourceRef {
-            resource_id: ContentId::from_str("test:resource:123").unwrap(),
-            domain_id: None,
-            ref_type: ResourceRefType::Output,
-            before_state: None,
-            after_state: Some("created".to_string()),
-        });
+            target.clone(),
+            vec![effect]
+        );
         
         // Create proof generator
         let proof_system = Arc::new(MockProofSystem {});

@@ -1,0 +1,14 @@
+--- crates/causality-core/src/resource/query/mod.rs
++++ crates/causality-core/src/resource/query/mod.rs
+@@ -44,4 +44,10 @@ pub enum QueryError {
+     #[error("Resource type mismatch: {0}")]
+     TypeMismatch(String),
+     
++    #[error("Invalid argument: {0}")]
++    InvalidArgument(String),
++    
++    #[error("Conversion error: {0}")]
++    ConversionError(String),
++    
+     #[error("Storage error: {0}")]
+     StorageError(String),

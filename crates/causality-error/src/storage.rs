@@ -2,7 +2,8 @@
 // These errors are specifically for the causality-storage crate
 
 use thiserror::Error;
-use crate::{CausalityError, ErrorCode, ErrorDomain};
+use crate::CausalityError;
+use std::any::Any;
 
 /// Storage-specific error codes
 pub mod codes {
@@ -51,22 +52,19 @@ pub enum StorageError {
 }
 
 impl CausalityError for StorageError {
-    fn code(&self) -> ErrorCode {
-        use codes::*;
+    fn error_code(&self) -> &'static str {
         match self {
-            StorageError::DatabaseError(_) => DATABASE_ERROR,
-            StorageError::KeyNotFound(_) => KEY_NOT_FOUND,
-            StorageError::SerializationError(_) => SERIALIZATION_ERROR,
-            StorageError::TransactionError(_) => TRANSACTION_ERROR,
-            StorageError::ConnectionError(_) => CONNECTION_ERROR,
-            StorageError::SchemaError(_) => SCHEMA_ERROR,
-            StorageError::ConstraintError(_) => CONSTRAINT_ERROR,
+            StorageError::DatabaseError(_) => "STORAGE_DATABASE_ERROR",
+            StorageError::KeyNotFound(_) => "STORAGE_KEY_NOT_FOUND",
+            StorageError::SerializationError(_) => "STORAGE_SERIALIZATION_ERROR",
+            StorageError::TransactionError(_) => "STORAGE_TRANSACTION_ERROR",
+            StorageError::ConnectionError(_) => "STORAGE_CONNECTION_ERROR",
+            StorageError::SchemaError(_) => "STORAGE_SCHEMA_ERROR",
+            StorageError::ConstraintError(_) => "STORAGE_CONSTRAINT_ERROR",
         }
     }
-    
-    fn domain(&self) -> ErrorDomain {
-        ErrorDomain::Storage
-    }
+
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 /// Convenient Result type for storage operations

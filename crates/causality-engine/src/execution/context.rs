@@ -17,26 +17,30 @@ use rand;
 use hex;
 use sha2;
 
-use causality_error::{Error, Result};
+use causality_error::{EngineError as Error, EngineResult as Result};
 // Import ContentId from causality_types
 use causality_types::ContentId;
 // Import ContentHash from causality-types
 use causality_types::crypto_primitives::ContentHash;
 // Import Effect and EffectType from causality-core
-use causality_core::effect::{Effect, EffectType};
+use causality_core::effect::EffectType;
 // Import ContentAddressed trait from causality_types
 use causality_types::crypto_primitives::ContentAddressed;
+// Replace HashAlgorithm import with HashFactory since we can't directly use HashAlgorithm
 // Import crate modules
 use crate::repository;
 use crate::resource;
 use causality_core::resource::types::ResourceId;
+
+// Re-import the SerializableEffectType from the replay module
+use crate::execution::replay::SerializableEffectType;
 
 /// A unique identifier for an execution context
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ContextId(String);
 
 /// Context ID content for hashing
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 struct ContextIdContent {
     /// Optional parent context ID
     parent: Option<String>,
@@ -49,29 +53,27 @@ struct ContextIdContent {
 }
 
 impl ContentAddressed for ContextIdContent {
-    fn content_hash(&self) -> causality_types::crypto_primitives::HashOutput {
+    fn content_hash(&self) -> std::result::Result<causality_types::crypto_primitives::HashOutput, causality_types::HashError> {
         let hash_factory = causality_crypto::hash::HashFactory::default();
-        let hasher = hash_factory.create_hasher().unwrap();
+        // Use default content hasher instead of explicitly referencing the private HashAlgorithm
+        let hasher = hash_factory.default_content_hasher().unwrap();
         let data = self.try_to_vec().unwrap();
-        hasher.hash(&data)
+        Ok(hasher.hash(&data))
     }
     
-    fn verify(&self) -> bool {
-        let hash = self.content_hash();
-        let serialized = self.to_bytes();
-        
-        let hash_factory = causality_crypto::hash::HashFactory::default();
-        let hasher = hash_factory.create_hasher().unwrap();
-        hasher.hash(&serialized) == hash
+    fn verify(&self, hash: &causality_types::crypto_primitives::HashOutput) -> std::result::Result<bool, causality_types::HashError> {
+        let computed_hash = self.content_hash()?;
+        Ok(computed_hash == *hash)
     }
     
-    fn to_bytes(&self) -> Vec<u8> {
-        self.try_to_vec().unwrap()
+    fn to_bytes(&self) -> std::result::Result<Vec<u8>, causality_types::HashError> {
+        self.try_to_vec()
+            .map_err(|e| causality_types::HashError::SerializationError(e.to_string()))
     }
     
-    fn from_bytes(bytes: &[u8]) -> Result<Self, causality_types::crypto_primitives::HashError> {
+    fn from_bytes(bytes: &[u8]) -> std::result::Result<ContextIdContent, causality_types::HashError> {
         BorshDeserialize::try_from_slice(bytes)
-            .map_err(|e| causality_types::crypto_primitives::HashError::SerializationError(e.to_string()))
+            .map_err(|e| causality_types::HashError::SerializationError(e.to_string()))
     }
 }
 
@@ -273,7 +275,7 @@ pub enum ExecutionEvent {
     /// An effect was applied
     EffectApplied {
         /// The type of effect
-        effect_type: EffectType,
+        effect_type: SerializableEffectType,
         /// Parameters for the effect
         parameters: HashMap<String, Value>,
         /// The result of the effect
@@ -317,8 +319,11 @@ impl ExecutionEvent {
         parameters: HashMap<String, Value>,
         result: Value,
     ) -> Self {
+        // Convert EffectType to SerializableEffectType
+        let serializable_effect_type = SerializableEffectType::Custom(format!("{:?}", effect_type));
+        
         ExecutionEvent::EffectApplied {
-            effect_type,
+            effect_type: serializable_effect_type,
             parameters,
             result,
             timestamp: SystemTime::now()
@@ -347,7 +352,7 @@ impl ExecutionEvent {
     }
 }
 
-/// A context for code execution
+/// Represents the execution context for a program or process.
 pub struct ExecutionContext {
     /// Unique identifier for this context
     pub context_id: ContextId,
@@ -420,7 +425,7 @@ impl ExecutionContext {
     pub fn get_variable(&self, name: &str) -> Result<Option<Value>> {
         // Check in this context first
         {
-            let variables = self.variables.read().map_err(|_| Error::LockError)?;
+            let variables = self.variables.read().map_err(|_| Error::SyncError("Failed to acquire read lock on variables".to_string()))?;
             if let Some(value) = variables.get(name) {
                 return Ok(Some(value.clone()));
             }
@@ -436,7 +441,7 @@ impl ExecutionContext {
     
     /// Set a variable value
     pub fn set_variable(&self, name: String, value: Value) -> Result<()> {
-        let mut variables = self.variables.write().map_err(|_| Error::LockError)?;
+        let mut variables = self.variables.write().map_err(|_| Error::SyncError("Failed to acquire write lock on variables".to_string()))?;
         variables.insert(name, value);
         Ok(())
     }
@@ -451,34 +456,34 @@ impl ExecutionContext {
         ))?;
         
         // Push the frame
-        let mut call_stack = self.call_stack.write().map_err(|_| Error::LockError)?;
+        let mut call_stack = self.call_stack.write().map_err(|_| Error::SyncError("Failed to acquire write lock on call stack".to_string()))?;
         call_stack.push(frame);
         Ok(())
     }
     
     /// Pop a call frame from the stack
     pub fn pop_call_frame(&self) -> Result<Option<CallFrame>> {
-        let mut call_stack = self.call_stack.write().map_err(|_| Error::LockError)?;
+        let mut call_stack = self.call_stack.write().map_err(|_| Error::SyncError("Failed to acquire write lock on call stack".to_string()))?;
         let frame = call_stack.pop();
         Ok(frame)
     }
     
     /// Record an execution event
     pub fn record_event(&self, event: ExecutionEvent) -> Result<()> {
-        let mut trace = self.execution_trace.write().map_err(|_| Error::LockError)?;
+        let mut trace = self.execution_trace.write().map_err(|_| Error::SyncError("Failed to acquire write lock on execution trace".to_string()))?;
         trace.push(event);
         Ok(())
     }
     
     /// Get the current execution trace
     pub fn execution_trace(&self) -> Result<Vec<ExecutionEvent>> {
-        let trace = self.execution_trace.read().map_err(|_| Error::LockError)?;
+        let trace = self.execution_trace.read().map_err(|_| Error::SyncError("Failed to read execution trace".to_string()))?;
         Ok(trace.clone())
     }
     
     /// Get the current call stack
     pub fn call_stack(&self) -> Result<Vec<CallFrame>> {
-        let stack = self.call_stack.read().map_err(|_| Error::LockError)?;
+        let stack = self.call_stack.read().map_err(|_| Error::SyncError("Failed to read call stack".to_string()))?;
         Ok(stack.clone())
     }
     
@@ -486,7 +491,7 @@ impl ExecutionContext {
     pub fn record_return(&self, result: Value) -> Result<()> {
         // Pop the call frame
         let frame = self.pop_call_frame()?
-            .ok_or_else(|| Error::RuntimeError("Call stack underflow".to_string()))?;
+            .ok_or_else(|| Error::ExecutionFailed("Call stack underflow".to_string()))?;
         
         // Record the return event
         self.record_event(ExecutionEvent::function_return(
@@ -510,11 +515,33 @@ impl ExecutionContext {
     }
 }
 
+impl Default for ExecutionContext {
+    fn default() -> Self {
+        // Create empty context with minimal implementations for repository and resource allocator
+        let repository = Arc::new(Self::create_no_op_repository());
+        let resource_allocator = Arc::new(Self::create_no_op_allocator());
+        
+        Self::new_with_random_id(repository, resource_allocator, None)
+    }
+}
+
 impl Clone for ExecutionContext {
     fn clone(&self) -> Self {
-        let variables = self.variables.read().unwrap_or_default().clone();
-        let call_stack = self.call_stack.read().unwrap_or_default().clone();
-        let execution_trace = self.execution_trace.read().unwrap_or_default().clone();
+        // Fix the RwLock cloning issue by first reading the values
+        let variables = match self.variables.read() {
+            Ok(guard) => guard.clone(),
+            Err(_) => HashMap::new(), // Fallback to empty if can't acquire lock
+        };
+        
+        let call_stack = match self.call_stack.read() {
+            Ok(guard) => guard.clone(),
+            Err(_) => Vec::new(), // Fallback to empty if can't acquire lock
+        };
+        
+        let execution_trace = match self.execution_trace.read() {
+            Ok(guard) => guard.clone(),
+            Err(_) => Vec::new(), // Fallback to empty if can't acquire lock
+        };
         
         ExecutionContext {
             context_id: self.context_id.clone(),
@@ -539,6 +566,73 @@ impl fmt::Debug for ExecutionContext {
     }
 }
 
+// Add helper methods to create the mock implementations
+impl ExecutionContext {
+    // Create a no-op code repository implementation
+    fn create_no_op_repository() -> impl repository::CodeRepository {
+        
+        use async_trait::async_trait;
+        
+        #[derive(Debug)]
+        struct NoOpRepository;
+        
+        #[async_trait]
+        impl repository::CodeRepository for NoOpRepository {
+            async fn get_code(&self, _hash: &ContentHash) -> causality_types::Result<Option<Vec<u8>>, Box<dyn causality_error::CausalityError>> {
+                Ok(None)
+            }
+            
+            async fn store_code(&self, _code: &[u8]) -> causality_types::Result<ContentHash, Box<dyn causality_error::CausalityError>> {
+                Err(Box::new(causality_error::EngineError::execution_failed("NoOp implementation".to_string())))
+            }
+            
+            async fn has_code(&self, _hash: &ContentHash) -> causality_types::Result<bool, Box<dyn causality_error::CausalityError>> {
+                Ok(false)
+            }
+            
+            async fn remove_code(&self, _hash: &ContentHash) -> causality_types::Result<bool, Box<dyn causality_error::CausalityError>> {
+                Ok(false)
+            }
+        }
+        
+        NoOpRepository
+    }
+    
+    // Create a no-op resource allocator implementation
+    fn create_no_op_allocator() -> impl resource::ResourceAllocator {
+        
+        use async_trait::async_trait;
+        
+        #[derive(Debug)]
+        struct NoOpAllocator;
+        
+        #[async_trait]
+        impl resource::ResourceAllocator for NoOpAllocator {
+            async fn allocate(&self, _resource_type: &str, _data: &[u8]) -> causality_types::Result<ResourceId, Box<dyn causality_error::CausalityError>> {
+                Err(Box::new(causality_error::EngineError::execution_failed("NoOp implementation".to_string())))
+            }
+            
+            async fn get_resource(&self, _id: &ResourceId) -> causality_types::Result<Option<Vec<u8>>, Box<dyn causality_error::CausalityError>> {
+                Ok(None)
+            }
+            
+            async fn has_resource(&self, _id: &ResourceId) -> causality_types::Result<bool, Box<dyn causality_error::CausalityError>> {
+                Ok(false)
+            }
+            
+            async fn release(&self, _id: &ResourceId) -> causality_types::Result<bool, Box<dyn causality_error::CausalityError>> {
+                Ok(false)
+            }
+            
+            async fn get_resource_type(&self, _id: &ResourceId) -> causality_types::Result<Option<String>, Box<dyn causality_error::CausalityError>> {
+                Ok(None)
+            }
+        }
+        
+        NoOpAllocator
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -547,49 +641,49 @@ mod tests {
     
     // Mock implementation for testing
     #[derive(Debug)]
-    struct MockCodeRepository;
+    pub struct MockCodeRepository;
     
     #[async_trait]
     impl crate::repository::CodeRepository for MockCodeRepository {
-        async fn get_code(&self, _hash: &ContentHash) -> causality_error::Result<Option<Vec<u8>>> {
+        async fn get_code(&self, _hash: &ContentHash) -> causality_error::EngineResult<Option<Vec<u8>>> {
             Ok(None)
         }
         
-        async fn store_code(&self, _code: &[u8]) -> causality_error::Result<ContentHash> {
+        async fn store_code(&self, _code: &[u8]) -> causality_error::EngineResult<ContentHash> {
             unimplemented!("Not needed for test")
         }
         
-        async fn has_code(&self, _hash: &ContentHash) -> causality_error::Result<bool> {
+        async fn has_code(&self, _hash: &ContentHash) -> causality_error::EngineResult<bool> {
             Ok(false)
         }
         
-        async fn remove_code(&self, _hash: &ContentHash) -> causality_error::Result<bool> {
+        async fn remove_code(&self, _hash: &ContentHash) -> causality_error::EngineResult<bool> {
             Ok(false)
         }
     }
     
     #[derive(Debug)]
-    struct MockResourceAllocator;
+    pub struct MockResourceAllocator;
     
     #[async_trait]
     impl crate::resource::ResourceAllocator for MockResourceAllocator {
-        async fn allocate(&self, _resource_type: &str, _data: &[u8]) -> causality_error::Result<ResourceId> {
+        async fn allocate(&self, _resource_type: &str, _data: &[u8]) -> causality_error::EngineResult<ResourceId> {
             unimplemented!("Not needed for test")
         }
         
-        async fn get_resource(&self, _id: &ResourceId) -> causality_error::Result<Option<Vec<u8>>> {
+        async fn get_resource(&self, _id: &ResourceId) -> causality_error::EngineResult<Option<Vec<u8>>> {
             Ok(None)
         }
         
-        async fn has_resource(&self, _id: &ResourceId) -> causality_error::Result<bool> {
+        async fn has_resource(&self, _id: &ResourceId) -> causality_error::EngineResult<bool> {
             Ok(false)
         }
         
-        async fn release(&self, _id: &ResourceId) -> causality_error::Result<bool> {
+        async fn release(&self, _id: &ResourceId) -> causality_error::EngineResult<bool> {
             Ok(false)
         }
         
-        async fn get_resource_type(&self, _id: &ResourceId) -> causality_error::Result<Option<String>> {
+        async fn get_resource_type(&self, _id: &ResourceId) -> causality_error::EngineResult<Option<String>> {
             Ok(None)
         }
     }

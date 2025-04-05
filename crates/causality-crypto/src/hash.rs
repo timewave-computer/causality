@@ -18,7 +18,7 @@ use lazy_static;
 // Import core crypto types from causality-types
 // These types define the structure and basic methods (like new, as_bytes, algorithm).
 // The actual hashing logic (traits and implementations) resides in *this* crate.
-use causality_types::crypto_primitives::{HashAlgorithm, HashError, HashOutput, ContentHash};
+use causality_types::crypto_primitives::{HashAlgorithm, HashError, HashOutput};
 
 // --- Local definitions and impls for HashError, HashAlgorithm, HashOutput, ContentHash REMOVED --- 
 // --- The canonical definitions and their impls are in causality-types::crypto_primitives --- 
@@ -61,50 +61,54 @@ pub trait ContentHasher: Send + Sync {
     fn reset_copy(&self) -> Box<dyn ContentHasher>;
 }
 
-/// Factory for creating instances of hash functions and hashers based on algorithm.
+/// Factory for creating hash functions and content hashers
+#[derive(Debug, Clone)]
 pub struct HashFactory {
-    /// The default algorithm to use when none is specified.
     default_algorithm: HashAlgorithm,
 }
 
 impl HashFactory {
-    /// Create a new HashFactory with the specified default algorithm.
+    /// Create a new hash factory with a default algorithm
     pub fn new(default_algorithm: HashAlgorithm) -> Self {
         Self { default_algorithm }
     }
-    
-    /// Create a hash function instance for the specified algorithm.
+
+    /// Create a hash function for the specified algorithm
     pub fn create_hash_function(&self, algorithm: HashAlgorithm) -> Result<Box<dyn HashFunction>, HashError> {
         match algorithm {
             HashAlgorithm::Blake3 => Ok(Box::new(Blake3HashFunction::new())),
-            #[cfg(feature = "poseidon")]
-            HashAlgorithm::Poseidon => Ok(Box::new(PoseidonHashFunction::new())), // Assuming PoseidonHashFunction::new() exists in poseidon_impl
-            #[cfg(not(feature = "poseidon"))]
-            HashAlgorithm::Poseidon => Err(HashError::UnsupportedAlgorithm("Poseidon feature not enabled".to_string())),
-            // Note: This match might become non-exhaustive if HashAlgorithm enum changes in types crate
+            // Remove Poseidon arm, handle Sha256/512/Custom later
+            _ => Err(HashError::UnsupportedAlgorithm(format!(
+                "Algorithm {} not supported for hash function creation",
+                algorithm
+            ))),
         }
     }
     
-    /// Create a content hasher instance for the specified algorithm.
+    /// Create a content hasher for the specified algorithm
     pub fn create_content_hasher(&self, algorithm: HashAlgorithm) -> Result<Box<dyn ContentHasher>, HashError> {
         match algorithm {
             HashAlgorithm::Blake3 => Ok(Box::new(Blake3Hasher::new())),
-            #[cfg(feature = "poseidon")]
-            HashAlgorithm::Poseidon => Ok(Box::new(PoseidonHasher::new())), // Assuming PoseidonHasher::new() exists in poseidon_impl
-            #[cfg(not(feature = "poseidon"))]
-            HashAlgorithm::Poseidon => Err(HashError::UnsupportedAlgorithm("Poseidon feature not enabled".to_string())),
-             // Note: This match might become non-exhaustive if HashAlgorithm enum changes in types crate
-       }
+             // Remove Poseidon arm, handle Sha256/512/Custom later
+            _ => Err(HashError::UnsupportedAlgorithm(format!(
+                "Content hashing not supported for algorithm {}",
+                algorithm
+            ))),
+        }
     }
-    
+
     /// Create a hash function instance using the factory's default algorithm.
-    pub fn create_default_hash_function(&self) -> Result<Box<dyn HashFunction>, HashError> {
-        self.create_hash_function(self.default_algorithm)
+    // Renamed from create_default_hash_function for clarity
+    pub fn default_hash_function(&self) -> Result<Box<dyn HashFunction>, HashError> {
+        // Clone the algorithm here
+        self.create_hash_function(self.default_algorithm.clone())
     }
-    
+
     /// Create a content hasher instance using the factory's default algorithm.
-    pub fn create_default_content_hasher(&self) -> Result<Box<dyn ContentHasher>, HashError> {
-        self.create_content_hasher(self.default_algorithm)
+    // Renamed from create_default_content_hasher for clarity
+    pub fn default_content_hasher(&self) -> Result<Box<dyn ContentHasher>, HashError> {
+        // Clone the algorithm here
+        self.create_content_hasher(self.default_algorithm.clone())
     }
 }
 
@@ -193,101 +197,8 @@ impl ContentHasher for Blake3Hasher {
 }
 
 
-// --- Poseidon Implementation (Conditional) ---
-
-#[cfg(feature = "poseidon")]
-mod poseidon_impl {
-    // Import necessary types from parent module and types crate
-    use super::{HashFunction, ContentHasher}; // Import traits from parent
-    use causality_types::crypto_primitives::{HashAlgorithm, HashError, HashOutput};
-    // Assuming a Poseidon library/module exists, e.g., within crate::zk::poseidon
-    // use crate::zk::poseidon::{RealPoseidonHash, RealPoseidonHasher, PoseidonParameters};
-    use std::sync::Arc;
-
-    /// Poseidon hash function implementation (Placeholder)
-    #[derive(Debug, Clone, Default)] // Added derive Default
-    pub struct PoseidonHashFunction {
-        // Placeholder: In a real implementation, might hold parameters
-        // params: Arc<PoseidonParameters>,
-    }
-    
-    impl PoseidonHashFunction {
-        /// Create a new Poseidon hash function instance.
-        pub fn new() -> Self {
-            // Placeholder: Load/initialize parameters if needed
-            Self::default()
-        }
-    }
-    
-    // Implement the trait from the parent module
-    impl super::HashFunction for PoseidonHashFunction {
-        fn hash(&self, data: &[u8]) -> HashOutput {
-            // Placeholder: Implement actual Poseidon hashing logic here.
-            let placeholder_hash = blake3::hash(data); // Temporary
-            HashOutput::new(*placeholder_hash.as_bytes(), HashAlgorithm::Poseidon)
-        }
-        
-        fn algorithm(&self) -> HashAlgorithm {
-            HashAlgorithm::Poseidon
-        }
-        
-        fn create_hasher(&self) -> Box<dyn super::ContentHasher> {
-            Box::new(PoseidonHasher::new())
-        }
-    }
-    
-    /// Poseidon content hasher implementation (Placeholder)
-    #[derive(Debug, Clone)] // Added derive
-    pub struct PoseidonHasher {
-        // Placeholder: Internal state for Poseidon hashing
-        state: Vec<u8>, // Example state, real implementation depends on Poseidon library
-    }
-    
-    impl PoseidonHasher {
-        /// Create a new Poseidon hasher instance.
-        pub fn new() -> Self {
-            Self { state: Vec::new() } // Initialize state as needed
-        }
-    }
-
-    impl Default for PoseidonHasher {
-        fn default() -> Self {
-            Self::new()
-        }
-    }
-    
-    // Implement the trait from the parent module
-    impl super::ContentHasher for PoseidonHasher {
-        fn update(&mut self, data: &[u8]) {
-            // Placeholder: Update internal Poseidon state based on `data`.
-            self.state.extend_from_slice(data); // Simple placeholder logic
-        }
-        
-        fn finalize(&self) -> HashOutput {
-            // Placeholder: Finalize Poseidon hash based on internal state.
-            let placeholder_hash = blake3::hash(&self.state); // Temporary
-            HashOutput::new(*placeholder_hash.as_bytes(), HashAlgorithm::Poseidon)
-        }
-        
-        fn algorithm(&self) -> HashAlgorithm {
-            HashAlgorithm::Poseidon
-        }
-        
-        fn reset(&mut self) {
-            // Placeholder: Reset internal Poseidon state.
-            self.state.clear(); // Simple placeholder logic
-        }
-        
-        fn reset_copy(&self) -> Box<dyn super::ContentHasher> {
-            // Create a fresh PoseidonHasher instance.
-            Box::new(PoseidonHasher::new())
-        }
-    }
-}
-
-// Conditionally export the Poseidon implementations if the feature is enabled.
-#[cfg(feature = "poseidon")]
-pub use poseidon_impl::{PoseidonHashFunction, PoseidonHasher};
+// --- Sha256/Sha512/Poseidon Implementations (Potentially conditional based on features) --- 
+// ... (placeholder for future implementations) ...
 
 // --- Default Hash Implementations ---
 
@@ -295,9 +206,9 @@ lazy_static::lazy_static! {
     /// Default hash factory instance (uses Blake3 by default).
     pub static ref DEFAULT_HASH_FACTORY: HashFactory = HashFactory::default();
     /// Default hash function instance (Blake3).
-    pub static ref DEFAULT_HASH_FUNCTION: Box<dyn HashFunction> = DEFAULT_HASH_FACTORY.create_default_hash_function().expect("Failed to create default hash function");
+    pub static ref DEFAULT_HASH_FUNCTION: Box<dyn HashFunction> = DEFAULT_HASH_FACTORY.default_hash_function().expect("Failed to create default hash function");
     /// Default content hasher instance (Blake3).
-    pub static ref DEFAULT_CONTENT_HASHER: Box<dyn ContentHasher> = DEFAULT_HASH_FACTORY.create_default_content_hasher().expect("Failed to create default content hasher");
+    pub static ref DEFAULT_CONTENT_HASHER: Box<dyn ContentHasher> = DEFAULT_HASH_FACTORY.default_content_hasher().expect("Failed to create default content hasher");
 }
 
 /// Convenience function to hash data using the default hash function (Blake3).
@@ -504,6 +415,7 @@ mod tests {
     use std::collections::HashSet;
     // Use the imported types directly from causality_types
     use causality_types::crypto_primitives::{HashAlgorithm, HashOutput, ContentHash, HashError};
+    use hex;
 
     // Test cryptographic hashing (using imported types)
     #[test]
@@ -720,4 +632,126 @@ mod tests {
         // ... This test would need to use the canonical ContentHash from types ...
     }
     */
+
+    #[test]
+    fn test_blake3_hashing() {
+        let data = b"hello world";
+        let expected_hash = blake3::hash(data);
+
+        // Using the HashFunction trait
+        let func = Blake3HashFunction::new();
+        let hash_output_func = func.hash(data);
+        assert_eq!(hash_output_func.as_bytes(), expected_hash.as_bytes());
+        assert_eq!(*hash_output_func.algorithm(), HashAlgorithm::Blake3); // Dereference
+
+        // Using the ContentHasher trait
+        let mut hasher = Blake3Hasher::new();
+        hasher.update(b"hello ");
+        hasher.update(b"world");
+        let hash_output_hasher = hasher.finalize();
+        assert_eq!(hash_output_hasher.as_bytes(), expected_hash.as_bytes());
+        assert_eq!(*hash_output_hasher.algorithm(), HashAlgorithm::Blake3); // Dereference
+
+        // Using the convenience function
+        let hash_output_default = default_hash(data);
+        assert_eq!(hash_output_default.as_bytes(), expected_hash.as_bytes());
+        assert_eq!(*hash_output_default.algorithm(), HashAlgorithm::Blake3); // Dereference
+    }
+
+    #[test]
+    fn test_hash_factory() {
+        let factory = HashFactory::new(HashAlgorithm::Blake3);
+        
+        // Test creating Blake3 function and hasher
+        let blake3_func = factory.create_hash_function(HashAlgorithm::Blake3).unwrap();
+        assert_eq!(blake3_func.algorithm(), HashAlgorithm::Blake3); 
+        let blake3_hasher = factory.create_content_hasher(HashAlgorithm::Blake3).unwrap();
+        assert_eq!(blake3_hasher.algorithm(), HashAlgorithm::Blake3);
+
+        // Test default creation
+        let default_func = factory.default_hash_function().unwrap();
+        assert_eq!(default_func.algorithm(), HashAlgorithm::Blake3);
+        let default_hasher = factory.default_content_hasher().unwrap();
+        assert_eq!(default_hasher.algorithm(), HashAlgorithm::Blake3);
+
+        // Test unsupported algorithm (assuming Sha256 is not implemented yet)
+        assert!(factory.create_hash_function(HashAlgorithm::Sha256).is_err());
+        assert!(factory.create_content_hasher(HashAlgorithm::Sha256).is_err());
+    }
+
+    #[test]
+    fn test_hash_output_display_and_fromstr() {
+        let data = b"some data";
+        let hash_output = default_hash(data);
+        let hex_string = hash_output.to_string(); // Uses Display trait (hex)
+        
+        // Check length (Blake3 is 32 bytes -> 64 hex chars)
+        assert_eq!(hex_string.len(), 64);
+        
+        // Convert back using FromStr
+        let hash_output_from_str: HashOutput = hex_string.parse().unwrap();
+        assert_eq!(hash_output_from_str, hash_output);
+
+        // Test invalid hex string
+        assert!("invalid-hex".parse::<HashOutput>().is_err());
+        assert!("12345".parse::<HashOutput>().is_err()); // Odd length
+    }
+
+    #[test]
+    fn test_hash_output_hex_conversion() {
+        let data = b"more data";
+        let hash_output = default_hash(data);
+        let hex_string = hash_output.to_hex();
+        let hash_output_from_hex = HashOutput::from_hex(&hex_string).unwrap();
+        assert_eq!(hash_output_from_hex, hash_output);
+
+        // Test invalid hex input
+        assert!(HashOutput::from_hex("invalid").is_err());
+    }
+
+    #[test]
+    fn test_random_hash() {
+        let hash1 = random_hash();
+        let hash2 = random_hash();
+        assert_ne!(hash1.as_bytes(), hash2.as_bytes());
+        assert_eq!(hash1.algorithm(), HashAlgorithm::default());
+    }
+
+    #[test]
+    fn test_hash_from_string() {
+        let s = "deterministic string";
+        let hash1 = hash_from_string(s);
+        let hash2 = hash_from_string(s);
+        let hash3 = hash_from_string("different string");
+
+        assert_eq!(hash1, hash2);
+        assert_ne!(hash1, hash3);
+        assert_eq!(hash1.algorithm(), HashAlgorithm::default());
+    }
+
+    #[test]
+    fn test_checksum_output() {
+        let data = vec![1, 2, 3, 4, 5];
+        let checksum = ChecksumOutput::new(data.clone());
+        assert_eq!(checksum.as_bytes(), data.as_slice());
+    }
+
+    #[test]
+    fn test_checksum_output_hex_conversion() {
+        // Example MD5 hash (hex)
+        let md5_hex = "d8e8fca2dc0f896fd7cb4cb0031ba249"; 
+        let checksum_from_hex = ChecksumOutput::from_hex(md5_hex).unwrap();
+        
+        // Check bytes length
+        assert_eq!(checksum_from_hex.as_bytes().len(), 16);
+        
+        // Convert back to hex
+        let hex_from_checksum = checksum_from_hex.to_hex();
+        
+        // Should be the same as the original hex (lowercase)
+        assert_eq!(hex_from_checksum, md5_hex);
+        
+        // Test invalid hex
+        assert!(matches!(ChecksumOutput::from_hex("invalid hex string"), Err(HashError::InvalidFormat)));
+    }
 } 

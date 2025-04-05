@@ -4,7 +4,7 @@
 // and implements the CausalityError trait for these types.
 
 use thiserror::Error;
-use causality_error::{CausalityError, ErrorCode, ErrorDomain, BoxError};
+use causality_error::{CausalityError, ErrorCode, BoxError};
 
 /// Error codes for domain-related errors
 pub const DOMAIN_NOT_FOUND: ErrorCode = ErrorCode(7001);
@@ -124,35 +124,35 @@ pub enum Error {
 }
 
 impl CausalityError for Error {
-    fn code(&self) -> ErrorCode {
+    fn error_code(&self) -> &'static str {
         match self {
-            Error::DomainNotFound(_) => DOMAIN_NOT_FOUND,
-            Error::UnsupportedOperation(_) => UNSUPPORTED_OPERATION,
-            Error::ConnectionError(_) => CONNECTION_ERROR,
-            Error::InvalidArgument(_) => INVALID_ARGUMENT,
-            Error::TransactionError(_) => TRANSACTION_ERROR,
-            Error::TimeMapError(_) => TIME_MAP_ERROR,
-            Error::SyncManagerError(_) => SYNC_MANAGER_ERROR,
-            Error::LockError(_) => LOCK_ERROR,
-            Error::DomainAdapter(_) => ADAPTER_ERROR,
-            Error::FactError(_) => FACT_ERROR,
-            Error::InvalidFact(_) => INVALID_FACT,
-            Error::FactVerification(_) => FACT_VERIFICATION,
-            Error::ObserverError(_) => OBSERVER_ERROR,
-            Error::VerificationError(_) => VERIFICATION_ERROR,
-            Error::SystemError(_) => SYSTEM_ERROR,
-            Error::TimeoutError(_) => TIMEOUT_ERROR,
-            Error::AccessDenied(_) => ACCESS_DENIED,
-            Error::DomainDataError(_) => DOMAIN_DATA_ERROR,
-            Error::DomainAdapterNotFound(_) => DOMAIN_ADAPTER_NOT_FOUND,
-            Error::UnsupportedDomainType(_) => UNSUPPORTED_DOMAIN_TYPE,
-            Error::DomainError(_) => DOMAIN_NOT_FOUND, // Using existing code
-            Error::Other(_) => ErrorCode(7999),
+            Error::DomainNotFound(_) => "DOMAIN_NOT_FOUND",
+            Error::UnsupportedOperation(_) => "UNSUPPORTED_OPERATION",
+            Error::ConnectionError(_) => "CONNECTION_ERROR",
+            Error::InvalidArgument(_) => "INVALID_ARGUMENT",
+            Error::TransactionError(_) => "TRANSACTION_ERROR",
+            Error::TimeMapError(_) => "TIME_MAP_ERROR",
+            Error::SyncManagerError(_) => "SYNC_MANAGER_ERROR",
+            Error::LockError(_) => "LOCK_ERROR",
+            Error::DomainAdapter(_) => "ADAPTER_ERROR",
+            Error::FactError(_) => "FACT_ERROR",
+            Error::InvalidFact(_) => "INVALID_FACT",
+            Error::FactVerification(_) => "FACT_VERIFICATION",
+            Error::ObserverError(_) => "OBSERVER_ERROR",
+            Error::VerificationError(_) => "VERIFICATION_ERROR",
+            Error::SystemError(_) => "SYSTEM_ERROR",
+            Error::TimeoutError(_) => "TIMEOUT_ERROR",
+            Error::AccessDenied(_) => "ACCESS_DENIED",
+            Error::DomainDataError(_) => "DOMAIN_DATA_ERROR",
+            Error::DomainAdapterNotFound(_) => "DOMAIN_ADAPTER_NOT_FOUND",
+            Error::UnsupportedDomainType(_) => "UNSUPPORTED_DOMAIN_TYPE",
+            Error::DomainError(_) => "DOMAIN_ERROR",
+            Error::Other(_) => "OTHER_DOMAIN_ERROR",
         }
     }
 
-    fn domain(&self) -> ErrorDomain {
-        ErrorDomain::Domain
+    fn as_any(&self) -> &(dyn std::any::Any + 'static) {
+        self
     }
 }
 
@@ -243,29 +243,29 @@ pub enum DomainError {
 }
 
 impl CausalityError for DomainError {
-    fn code(&self) -> ErrorCode {
+    fn error_code(&self) -> &'static str {
         match self {
-            DomainError::DomainNotFound(_) => DOMAIN_NOT_FOUND,
-            DomainError::UnsupportedOperation(_) => UNSUPPORTED_OPERATION,
-            DomainError::ConnectionError(_) => CONNECTION_ERROR,
-            DomainError::InvalidArgument(_) => INVALID_ARGUMENT,
-            DomainError::TransactionError(_) => TRANSACTION_ERROR,
-            DomainError::TimeMapError(_) => TIME_MAP_ERROR,
-            DomainError::SyncManagerError(_) => SYNC_MANAGER_ERROR,
-            DomainError::LockError(_) => LOCK_ERROR,
-            DomainError::AdapterError(_) => ADAPTER_ERROR,
-            DomainError::FactError(_) => FACT_ERROR,
-            DomainError::ObserverError(_) => OBSERVER_ERROR,
-            DomainError::VerificationError(_) => VERIFICATION_ERROR,
-            DomainError::SystemError(_) => SYSTEM_ERROR,
-            DomainError::TimeoutError(_) => TIMEOUT_ERROR,
-            DomainError::DomainSpecificError { code, .. } => ErrorCode(*code),
-            DomainError::Other(_) => ErrorCode(7999),
+            DomainError::DomainNotFound(_) => "DOMAIN_NOT_FOUND",
+            DomainError::UnsupportedOperation(_) => "UNSUPPORTED_OPERATION",
+            DomainError::ConnectionError(_) => "CONNECTION_ERROR",
+            DomainError::InvalidArgument(_) => "INVALID_ARGUMENT",
+            DomainError::TransactionError(_) => "TRANSACTION_ERROR",
+            DomainError::TimeMapError(_) => "TIME_MAP_ERROR",
+            DomainError::SyncManagerError(_) => "SYNC_MANAGER_ERROR",
+            DomainError::LockError(_) => "LOCK_ERROR",
+            DomainError::AdapterError(_) => "ADAPTER_ERROR",
+            DomainError::FactError(_) => "FACT_ERROR",
+            DomainError::ObserverError(_) => "OBSERVER_ERROR",
+            DomainError::VerificationError(_) => "VERIFICATION_ERROR",
+            DomainError::SystemError(_) => "SYSTEM_ERROR",
+            DomainError::TimeoutError(_) => "TIMEOUT_ERROR",
+            DomainError::DomainSpecificError { .. } => "DOMAIN_SPECIFIC_ERROR",
+            DomainError::Other(_) => "OTHER_DOMAIN_ERROR",
         }
     }
 
-    fn domain(&self) -> ErrorDomain {
-        ErrorDomain::Domain
+    fn as_any(&self) -> &(dyn std::any::Any + 'static) {
+        self
     }
 }
 
@@ -298,19 +298,19 @@ pub enum AdapterError {
 }
 
 impl CausalityError for AdapterError {
-    fn code(&self) -> ErrorCode {
+    fn error_code(&self) -> &'static str {
         match self {
-            AdapterError::DomainNotFound(_) => DOMAIN_NOT_FOUND,
-            AdapterError::UnsupportedOperation(_) => UNSUPPORTED_OPERATION,
-            AdapterError::ConnectionError(_) => CONNECTION_ERROR,
-            AdapterError::InvalidArgument(_) => INVALID_ARGUMENT,
-            AdapterError::TransactionError(_) => TRANSACTION_ERROR,
-            AdapterError::Other(_) => ADAPTER_ERROR,
+            AdapterError::DomainNotFound(_) => "DOMAIN_NOT_FOUND",
+            AdapterError::UnsupportedOperation(_) => "UNSUPPORTED_OPERATION",
+            AdapterError::ConnectionError(_) => "CONNECTION_ERROR",
+            AdapterError::InvalidArgument(_) => "INVALID_ARGUMENT",
+            AdapterError::TransactionError(_) => "TRANSACTION_ERROR",
+            AdapterError::Other(_) => "OTHER_ADAPTER_ERROR",
         }
     }
 
-    fn domain(&self) -> ErrorDomain {
-        ErrorDomain::Domain
+    fn as_any(&self) -> &(dyn std::any::Any + 'static) {
+        self
     }
 }
 

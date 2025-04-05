@@ -3,7 +3,7 @@
 // This module provides pagination capabilities for resource queries,
 // allowing results to be split into pages.
 
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 
 /// Pagination specification for queries

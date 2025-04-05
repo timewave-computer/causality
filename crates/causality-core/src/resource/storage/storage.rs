@@ -4,23 +4,18 @@
 // using content addressing principles. It includes support for versioning,
 // indexing, and efficient retrieval.
 
-use std::fmt::{self, Debug};
-use std::collections::{HashMap, HashSet, BTreeMap};
-use std::sync::{Arc, Mutex, RwLock};
+use crate::resource::Resource;
+
+use std::fmt::{Debug};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use thiserror::Error;
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
-use serde_json::Value;
-use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
-use std::future::Future;
-use std::pin::Pin;
-use tokio::sync::{Mutex as TokioMutex, RwLock as TokioRwLock};
-use hex;
 
-use crate::resource::{ResourceId, ResourceTypeId, ResourceSchema};
-use crate::serialization::{SerializationError, to_bytes, from_bytes};
-use crate::resource_types::ContentAddressedStorageError;
+use crate::resource::{ResourceId, ResourceTypeId};
+use crate::serialization::{to_bytes, from_bytes};
 use crate::utils::content_addressing::{content_hash_to_id};
 
 // Make consistent imports from causality_types
@@ -30,14 +25,10 @@ use causality_types::content_addressing::storage::{
     ContentAddressedStorage, ContentAddressedStorageExt, StorageError
 };
 use causality_types::ContentHash;
-use causality_types::crypto_primitives::{HashOutput, HashAlgorithm};
+use causality_types::crypto_primitives::HashOutput;
 use causality_crypto::HashError;
 use crate::id_utils::{convert_to_types_content_id, convert_from_types_content_id};
-use crate::resource::types::ResourceId as ResourceIdType;
 // Alias TypesContentId for clarity
-use causality_types::ContentId as TypesContentId;
-use causality_types::crypto_primitives::ContentId as CryptoPrimitivesContentId;
-use causality_types::content_addressing::STANDARD_HASH_ALGORITHM;
 
 /// Errors that can occur during resource storage operations
 #[derive(Error, Debug)]
@@ -196,7 +187,7 @@ pub trait ResourceStorage: Send + Sync + Debug {
 
 /// Convert a HashOutput into ContentId
 fn hash_output_to_content_id(hash: &HashOutput) -> ContentId {
-    ContentId::from(*hash)
+    ContentId::from(hash.clone())
 }
 
 /// Content-addressed resource storage implementation
@@ -335,7 +326,7 @@ impl ResourceStorage for ContentAddressedResourceStorage {
         )?;
         
         // Create resource ID directly from the HashOutput
-        let content_id = ContentId::from(hash_output);
+        let content_id = ContentId::from(hash_output.clone());
         let resource_id = ResourceId::from_content_id(&content_id)
             .expect("Failed to create ResourceId from ContentId");
         
@@ -1097,6 +1088,34 @@ fn hash_bytes(bytes: &[u8]) -> ContentHash {
     
     // Create a properly formatted ContentHash using the string value of the algorithm
     ContentHash::new("blake3", hash_bytes)
+}
+
+// Re-add the impl block and implement missing methods with errors
+impl ContentAddressed for Box<dyn Resource> {
+    fn content_hash(&self) -> Result<HashOutput, HashError> {
+        // Ideally, Box<dyn Resource> should not need its own content_hash.
+        // The underlying resource should provide it.
+        // Returning an error or a default hash might be options.
+        // For now, let's assume there's a method to get the underlying hash
+        // This might need refinement based on how Box<dyn Resource> is used.
+        Err(HashError::SerializationError("Cannot calculate content hash for Box<dyn Resource> directly".to_string()))
+        // Or perhaps delegate if the Resource trait had content_hash?
+        // (**self).content_hash() 
+    }
+
+    fn content_id(&self) -> Result<ContentId, HashError> {
+        let hash = self.content_hash()?;
+        Ok(ContentId::from(hash.clone()))
+    }
+
+    // Implement missing methods
+    fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+        Err(HashError::SerializationError("Cannot serialize Box<dyn Resource>".to_string()))
+    }
+
+    fn from_bytes(_bytes: &[u8]) -> Result<Self, HashError> where Self: Sized {
+        Err(HashError::SerializationError("Cannot deserialize Box<dyn Resource>".to_string()))
+    }
 }
 
 #[cfg(test)]

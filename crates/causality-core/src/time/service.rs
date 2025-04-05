@@ -5,32 +5,23 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::fmt::Debug;
-use std::time::Duration;
 use chrono::{DateTime, Utc};
-use std::collections::HashSet;
-use serde::{Serialize, Deserialize};
 
 use async_trait::async_trait;
 use thiserror::Error;
 use anyhow::Result;
 
-use crate::effect::{EffectContext, EffectExecutor, EffectRegistry, EffectOutcome, EffectResult};
+use crate::effect::{EffectContext, EffectOutcome};
 use crate::time::{
     TimeMap,
 };
-use crate::time::map::TimeMapSnapshot;
-use crate::time::duration::TimeDelta;
-use crate::time::timestamp::Timestamp;
-use crate::time::clock::ClockTime;
 use crate::time::event::Timer;
 use crate::id_utils::FactId;
 use super::effect::{
-    TimeEffect, TimeEffectHandler, TimeEffectType, TimeAttestation, AttestationSource,
-    BasicTimeEffectHandler, CausalTimeEffect, ClockTimeEffect, TimeError,
+    TimeEffectHandler, TimeAttestation, AttestationSource, CausalTimeEffect, ClockTimeEffect, TimeError,
 };
 
 // Import the TimeEffectResult from causality-types
-use causality_types::time_snapshot::TimeEffectResult;
 // Import TimeProvider from the top-level time module
 use super::provider::TimeProvider;
 use crate::resource::types::ResourceId;

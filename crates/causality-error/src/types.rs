@@ -2,7 +2,8 @@
 // These errors are specifically for the causality-types crate
 
 use thiserror::Error;
-use crate::{CausalityError, ErrorCode, ErrorDomain};
+use crate::CausalityError;
+use std::any::Any;
 
 /// Types-specific error codes
 pub mod codes {
@@ -51,22 +52,20 @@ pub enum TypesError {
 }
 
 impl CausalityError for TypesError {
-    fn code(&self) -> ErrorCode {
-        use codes::*;
+    fn error_code(&self) -> &'static str {
+        
         match self {
-            TypesError::ParseError(_) => PARSE_ERROR,
-            TypesError::ConversionError(_) => CONVERSION_ERROR,
-            TypesError::ValidationError(_) => VALIDATION_ERROR,
-            TypesError::IncompatibleType(_) => INCOMPATIBLE_TYPE,
-            TypesError::SerializationError(_) => SERIALIZATION_ERROR,
-            TypesError::ResourceError(_) => RESOURCE_ERROR,
-            TypesError::RegisterError(_) => REGISTER_ERROR,
+            TypesError::ParseError(_) => "TYPES_PARSE_ERROR",
+            TypesError::ConversionError(_) => "TYPES_CONVERSION_ERROR",
+            TypesError::ValidationError(_) => "TYPES_VALIDATION_ERROR",
+            TypesError::IncompatibleType(_) => "TYPES_INCOMPATIBLE_TYPE",
+            TypesError::SerializationError(_) => "TYPES_SERIALIZATION_ERROR",
+            TypesError::ResourceError(_) => "TYPES_RESOURCE_ERROR",
+            TypesError::RegisterError(_) => "TYPES_REGISTER_ERROR",
         }
     }
-    
-    fn domain(&self) -> ErrorDomain {
-        ErrorDomain::Types
-    }
+
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 /// Convenient Result type for types operations

@@ -1,0 +1,39 @@
+{
+  "name": "EthereumAdapter",
+  "version": "1.0.0",
+  "language": "rust",
+  "effects": [
+    {
+      "name": "Transfer",
+      "function": "transfer",
+      "documentation": "Transfer ETH or tokens between accounts",
+      "parameters": [
+        {
+          "name": "from",
+          "type_name": "String",
+          "required": true,
+          "documentation": "Source address"
+        },
+        {
+          "name": "to",
+          "type_name": "String",
+          "required": true,
+          "documentation": "Destination address"
+        },
+        {
+          "name": "amount",
+          "type_name": "String",
+          "required": true,
+          "documentation": "Amount to transfer"
+        },
+        {
+          "name": "token",
+          "type_name": "String",
+          "required": false,
+          "default_value": "ETH",
+          "documentation": "Token to transfer (default: ETH)"
+        }
+      ]
+    }
+  ]
+} 

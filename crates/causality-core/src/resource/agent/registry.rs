@@ -2,21 +2,16 @@
 //
 // This file implements the agent registry for managing agents in the system.
 
-use crate::resource_types::{ResourceId, ResourceType};
 use crate::resource::ResourceError;
-use crate::capability::Capability;
-use causality_types::ContentHash;
-use crate::serialization::{Serializable, SerializationError};
+use crate::serialization::Serializable;
 
-use super::types::{AgentId, AgentType, AgentState, AgentError};
-use super::agent::{Agent, AgentImpl};
-use super::authorization::{Authorization, AuthorizationError, CapabilityRegistry};
+use super::types::{AgentId, AgentType, AgentError};
+use super::agent::Agent;
+use super::authorization::{AuthorizationError, CapabilityRegistry};
 
 use std::collections::{HashMap, HashSet};
-use std::fmt;
-use std::sync::{Arc, RwLock, Mutex};
+use std::sync::Arc;
 use async_trait::async_trait;
-use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use tokio::sync::RwLock as AsyncRwLock;
 

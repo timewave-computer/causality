@@ -11,7 +11,7 @@ use serde::{Serialize, Deserialize};
 use causality_types::{ContentId, DomainId};
 
 /// The severity level of an event
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub enum EventSeverity {
     /// Debug-level event (lowest importance)
     Debug,
@@ -200,19 +200,19 @@ impl EventEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+    use serde_json::json;
+
     #[test]
     fn test_event_entry_creation() {
         let event_name = "test_event".to_string();
-        let severity = EventSeverity::Info;
         let component = "test".to_string();
         let details = serde_json::json!({"message": "test message"});
-        let resources = Some(vec![ContentId::new(1)]);
-        let domains = Some(vec![DomainId::new(1)]);
+        let resources = Some(vec![ContentId::new("resource-id-1")]);  // Use string ID
+        let domains = Some(vec![DomainId::new("domain-id-1")]);  // Use string ID
         
         let entry = EventEntry::new(
             event_name.clone(),
-            severity,
+            EventSeverity::Info,
             component.clone(),
             details.clone(),
             resources.clone(),
@@ -220,26 +220,32 @@ mod tests {
         );
         
         assert_eq!(entry.event_name, event_name);
-        assert_eq!(entry.severity, severity);
+        assert_eq!(entry.severity, EventSeverity::Info);
         assert_eq!(entry.component, component);
         assert_eq!(entry.details, details);
         assert_eq!(entry.resources, resources);
         assert_eq!(entry.domains, domains);
         
+        // Test getters
+        assert_eq!(entry.event_name(), event_name);
+        assert_eq!(entry.severity(), &EventSeverity::Info);
+        assert_eq!(entry.component(), component);
+        assert_eq!(entry.details(), &details);
+        
         // Test convenience methods
         let debug = EventEntry::debug("test", "debug_event", serde_json::json!({}))
-            .with_resources(vec![ContentId::new(1)]);
+            .with_resources(vec![ContentId::new("resource-id-1")]);  // Use string ID
         assert_eq!(debug.severity, EventSeverity::Debug);
         assert_eq!(debug.component, "test");
         assert_eq!(debug.event_name, "debug_event");
-        assert_eq!(debug.resources.unwrap()[0], ContentId::new(1));
+        assert_eq!(debug.resources.unwrap()[0], ContentId::new("resource-id-1"));  // Use string ID
         
         let info = EventEntry::info("test", "info_event", serde_json::json!({}))
-            .with_domains(vec![DomainId::new(1)]);
+            .with_domains(vec![DomainId::new("domain-id-1")]);  // Use string ID
         assert_eq!(info.severity, EventSeverity::Info);
         assert_eq!(info.component, "test");
         assert_eq!(info.event_name, "info_event");
-        assert_eq!(info.domains.unwrap()[0], DomainId::new(1));
+        assert_eq!(info.domains.unwrap()[0], DomainId::new("domain-id-1"));  // Use string ID
         
         let warning = EventEntry::warning("test", "warning_event", serde_json::json!({}));
         assert_eq!(warning.severity, EventSeverity::Warning);

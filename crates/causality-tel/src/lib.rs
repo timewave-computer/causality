@@ -13,9 +13,11 @@ pub mod handlers;
 pub mod error;
 pub mod types;
 pub mod effect;
-pub mod adapter;
 pub mod resource;
-pub mod builder;
+
+// Temporarily disable problematic modules that depend on missing functionality
+// pub mod adapter;
+// pub mod builder;
 
 // Re-export key components
 pub use script::{TelScript, TelOperation, TelOperationType};
@@ -23,8 +25,11 @@ pub use handlers::{
     TelHandler, ConstraintTelHandler, TransferTelHandler, 
     StorageTelHandler, QueryTelHandler, TelHandlerRegistry,
     TransferParams, StorageParams, QueryParams,
-    TelCompiler, StandardTelCompiler
+    TelCompiler, StandardTelCompiler, EffectContext, EffectOutcome, Effect
 };
+pub use resource::{ResourceId, Quantity};
+pub use error::{TelError, TelResult, ExecutionStatus};
+pub use effect::{TransferEffect, StorageEffect, QueryEffect, EffectError, EffectResult};
 
 /// A parser for TEL scripts
 pub struct TelParser;
@@ -79,8 +84,8 @@ pub fn parse_tel(source: &str) -> Result<TelScript, anyhow::Error> {
 pub async fn compile_tel(
     source: &str,
     compiler: &dyn TelCompiler,
-    context: &crate::effect::EffectContext,
-) -> Result<Vec<std::sync::Arc<dyn crate::effect::Effect>>, anyhow::Error> {
+    context: &EffectContext,
+) -> Result<Vec<std::sync::Arc<dyn Effect>>, anyhow::Error> {
     let script = parse_tel(source)?;
     compiler.compile(&script, context).await
 }
@@ -89,8 +94,8 @@ pub async fn compile_tel(
 pub async fn execute_tel(
     source: &str,
     compiler: &dyn TelCompiler,
-    context: crate::effect::EffectContext,
-) -> Result<Vec<crate::effect::EffectOutcome>, anyhow::Error> {
+    context: EffectContext,
+) -> Result<Vec<EffectOutcome>, anyhow::Error> {
     let script = parse_tel(source)?;
     compiler.execute(&script, context).await
 }

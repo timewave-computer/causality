@@ -1,6 +1,5 @@
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::crypto_primitives::ContentAddressed;
 use crate::verification::error::{VerificationError, VerificationResult};

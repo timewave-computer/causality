@@ -5,15 +5,13 @@
 //
 // This module provides the content-addressable executor for code execution.
 
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use causality_error::{EngineError, EngineResult};
+use causality_error::EngineResult;
 use causality_types::ContentId;
 
-use crate::execution::trace::ExecutionEvent;
+use crate::execution::ExecutionEvent;
 use crate::execution::context::ExecutionContext;
 use crate::effect::content_addressable_executor::ExecutionValue;
 

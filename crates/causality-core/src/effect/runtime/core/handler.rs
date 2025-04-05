@@ -8,7 +8,7 @@ use std::fmt::Debug;
 use async_trait::async_trait;
 
 use crate::effect::runtime::context::Context;
-use crate::effect::runtime::error::{EffectError, EffectResult};
+use crate::effect::runtime::error::EffectError;
 use crate::effect::runtime::types::id::EffectTypeId;
 
 /// Interface for handling effects

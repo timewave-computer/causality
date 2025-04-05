@@ -3,7 +3,7 @@
 //! This module provides serialization and deserialization
 //! utilities for ContentHash values.
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serializer};
 use causality_types::ContentHash;
 
 /// Serialize a ContentHash as a hex string
@@ -35,7 +35,7 @@ where
 /// A module providing serde with_attr functions for ContentHash
 pub mod with {
     use super::*;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{Deserializer, Serializer};
     
     /// Serde wrapper for serializing ContentHash as hex string
     pub fn serialize<S>(hash: &ContentHash, serializer: S) -> Result<S::Ok, S::Error>

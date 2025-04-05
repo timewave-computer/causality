@@ -2,14 +2,12 @@ use async_trait::async_trait;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
-use std::fmt;
 
 use crate::effect::{
-    Effect, EffectContext, EffectError, EffectOutcome, EffectResult, EffectType, HandlerResult, EffectHandler
+    Effect, EffectContext, EffectOutcome, EffectResult, EffectType, HandlerResult, EffectHandler
 };
 use crate::effect::types::EffectTypeId;
-use crate::resource::{Resource, ResourceState, ResourceError, ResourceResult, ResourceId, ResourceType};
+use crate::resource::Resource;
 
 /// An operation on a resource
 #[derive(Debug, Clone)]

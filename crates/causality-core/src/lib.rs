@@ -46,11 +46,6 @@ pub use causality_crypto::hash::ContentHasher;
 pub use causality_error::{CausalityError, ErrorCode, ErrorDomain, Result};
 
 // Standard library dependencies
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
 
 // Version of the library
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

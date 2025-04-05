@@ -7,19 +7,14 @@
 // a point-in-time collection of facts that effects depend on.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::fmt;
 
 use serde::{Serialize, Deserialize};
-use borsh::{BorshSerialize, BorshDeserialize};
 
-use causality_types::{DomainId, Timestamp, FactType, RegisterFact, ZKProofFact, ContentId, TraceId};
-use causality_types::crypto_primitives::ContentHash;
-use causality_types::crypto_primitives::HashOutput;
+use causality_types::{DomainId, Timestamp, ContentId};
+// Import FactType from our own module instead of causality_types
+use crate::log::fact_types::FactType;
 
-use crate::resource::register::ContentId;
-use crate::log::entry::{LogEntry, EntryType, EntryData};
+// ContentId is already imported from causality_types
 
 /// A unique identifier for a fact
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

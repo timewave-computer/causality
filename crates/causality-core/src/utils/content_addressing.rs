@@ -6,7 +6,7 @@
 use anyhow::Result;
 use serde_json;
 use hex;
-use causality_types::crypto_primitives::{ContentHash, ContentId, HashOutput};
+use causality_types::crypto_primitives::ContentId;
 use causality_crypto;
 use blake3;
 

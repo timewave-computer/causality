@@ -3,14 +3,11 @@
 // This file implements the service status system that allows agents to advertise
 // services they offer to other agents in the system.
 
-use crate::resource_types::{ResourceId, ResourceType};
+use crate::resource_types::ResourceId;
 use crate::utils::content_addressing;
-use crate::resource::operation::Capability;
-use causality_types::ContentHash;
-use crate::resource::{Resource, ResourceError};
-use crate::serialization::{SerializationError, Serializable, Serializer};
-use causality_error::Error as CoreError;
-use crate::resource::agent::types::{AgentId, AgentType, AgentError};
+use crate::resource::Resource;
+use crate::serialization::{SerializationError, Serializable};
+use crate::resource::agent::types::{AgentId, AgentError};
 use super::agent::Agent;
 
 use std::collections::{HashMap, HashSet};
@@ -19,7 +16,6 @@ use tokio::sync::RwLock;
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
-use blake3;
 
 /// Service status error types
 #[derive(Error, Debug)]

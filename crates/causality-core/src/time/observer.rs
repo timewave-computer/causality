@@ -2,7 +2,7 @@
 //
 // This module provides abstractions for observing time-related events and changes.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use async_trait::async_trait;
 
 use super::timestamp::Timestamp;

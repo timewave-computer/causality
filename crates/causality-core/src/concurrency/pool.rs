@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::Hash;
 use std::sync::Arc;
 
-use super::lock::{DeterministicMutex, SharedMutex};
+use super::lock::DeterministicMutex;
 
 /// A resource pool that manages a collection of resources
 #[derive(Debug)]

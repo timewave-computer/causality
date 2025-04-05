@@ -5,18 +5,18 @@ use std::fmt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::path::PathBuf;
-
-use serde::{Serialize, Deserialize};
-
-use causality_error::{Error, Result, EngineError};
+use chrono::{DateTime, Utc};
 use causality_types::{ContentId, DomainId, TraceId};
 use causality_core::time::TimeMap;
+use causality_error::EngineError;
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
 // Import EngineResult and other error types
-use causality_error::{EngineResult, CausalityError, Result as CausalityResult};
+use causality_error::{EngineResult, CausalityError};
 
 // Import ExecutionEvent from execution context
-use crate::execution::context::ExecutionEvent;
+
+// Ensure correct import path for ResourceId
 
 /// Context trait for invocation contexts
 pub trait InvocationContextTrait: Clone + fmt::Debug + Send + Sync + 'static {
@@ -260,120 +260,244 @@ impl PhysicalContext {
     }
 }
 
-/// Invocation state tracking
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// State of an invocation
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InvocationState {
-    /// Invocation has been created but not started
+    /// The invocation has been created but not started
     Created,
-    /// Invocation is currently running
+    /// The invocation is running
     Running,
-    /// Invocation has completed successfully
+    /// The invocation has completed successfully
     Completed,
-    /// Invocation has failed
-    Failed(String),
-    /// Invocation has been canceled
+    /// The invocation has failed
+    Failed,
+    /// The invocation has been canceled
     Canceled,
-    /// Invocation is waiting for a resource
-    Waiting(ContentId),
-    /// Invocation is waiting for an external fact
-    WaitingForFact(String),
+    /// The invocation is waiting for a resource
+    Waiting,
+    /// The invocation is waiting for a fact
+    WaitingForFact,
 }
 
-/// Context for an invocation
-#[derive(Clone, Serialize, Deserialize)]
+/// Invocation context
+#[derive(Clone)]
 pub struct InvocationContext {
-    /// Unique ID for this context
+    /// Invocation ID
     id: String,
-    
-    /// Trace ID for tracking related invocations
+    /// Trace ID
     trace_id: Option<TraceId>,
-    
-    /// Parent context ID
+    /// Parent invocation ID
     parent_id: Option<String>,
-    
-    /// Context ID for execution
+    /// Execution context ID
     execution_context_id: Option<String>,
-    
-    /// Time map for tracking operation timing
+    /// Time map for tracking progress
     time_map: TimeMap,
-    
-    /// Additional context data
-    data: HashMap<String, String>,
+    /// Context data
+    data: HashMap<String, serde_json::Value>,
+    /// Invocation state
+    state: InvocationState,
+    /// Child invocation IDs
+    children: Vec<String>,
+    /// Observed facts
+    observed_facts: HashMap<String, serde_json::Value>,
+    /// Metadata
+    metadata: HashMap<String, serde_json::Value>,
+    /// Creation timestamp
+    created_at: DateTime<Utc>,
+    /// Start timestamp
+    started_at: Option<DateTime<Utc>>,
+    /// Completion timestamp
+    completed_at: Option<DateTime<Utc>>,
 }
 
 impl InvocationContext {
     /// Create a new invocation context
     pub fn new(
-        id: impl Into<String>,
+        id: String,
         trace_id: Option<TraceId>,
         parent_id: Option<String>,
         time_map: TimeMap,
     ) -> Self {
         InvocationContext {
-            id: id.into(),
+            id,
             trace_id,
             parent_id,
             execution_context_id: None,
             time_map,
             data: HashMap::new(),
+            created_at: Utc::now(),
+            started_at: None,
+            completed_at: None,
+            state: InvocationState::Created,
+            children: Vec::new(),
+            observed_facts: HashMap::new(),
+            metadata: HashMap::new(),
         }
     }
-    
-    /// Get the context ID
+
+    /// Get the invocation ID
     pub fn id(&self) -> &str {
         &self.id
     }
-    
+
     /// Get the trace ID
     pub fn trace_id(&self) -> Option<&TraceId> {
         self.trace_id.as_ref()
     }
-    
-    /// Get the parent context ID
+
+    /// Get the parent ID
     pub fn parent_id(&self) -> Option<&str> {
-        self.parent_id.as_ref().map(|s| s.as_str())
+        self.parent_id.as_ref().map(|id| id.as_str())
     }
-    
+
     /// Get the execution context ID
     pub fn execution_context_id(&self) -> Option<&str> {
-        self.execution_context_id.as_ref().map(|s| s.as_str())
+        self.execution_context_id.as_ref().map(|id| id.as_str())
     }
-    
+
     /// Set the execution context ID
     pub fn set_execution_context_id(&mut self, id: String) {
         self.execution_context_id = Some(id);
     }
-    
+
+    /// Get a value from the context
+    pub fn get<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
+        self.data.get(key).and_then(|value| {
+            serde_json::from_value(value.clone()).ok()
+        })
+    }
+
+    /// Set a value in the context
+    pub fn set<T: Serialize>(&mut self, key: &str, value: T) -> EngineResult<()> {
+        let value = serde_json::to_value(value).map_err(|e| 
+            EngineError::SerializationFailed(format!("Failed to serialize value: {}", e)))?;
+        self.data.insert(key.to_string(), value);
+        Ok(())
+    }
+
+    /// Create a child context
+    pub fn create_child(&self, id: String) -> Self {
+        let trace_id = self.trace_id.clone();
+        let parent_id = Some(self.id.clone());
+        let time_map = self.time_map.clone();
+        
+        InvocationContext::new(id, trace_id, parent_id, time_map)
+    }
+
+    /// Check if the invocation is in an active state
+    pub fn is_active(&self) -> bool {
+        matches!(self.state, InvocationState::Running | InvocationState::Waiting | InvocationState::WaitingForFact)
+    }
+
+    /// Check if the invocation is in a final state
+    pub fn is_final(&self) -> bool {
+        matches!(self.state, InvocationState::Completed | InvocationState::Failed | InvocationState::Canceled)
+    }
+
+    /// Start the invocation
+    pub fn start(&mut self) -> EngineResult<()> {
+        if matches!(self.state, InvocationState::Created) {
+            self.state = InvocationState::Running;
+            self.started_at = Some(Utc::now());
+            Ok(())
+        } else {
+            Err(EngineError::ContextError(format!("Cannot start invocation in state {:?}", self.state)))
+        }
+    }
+
+    /// Mark the invocation as complete
+    pub fn complete(&mut self) -> EngineResult<()> {
+        if self.is_active() {
+            self.state = InvocationState::Completed;
+            self.completed_at = Some(Utc::now());
+            Ok(())
+        } else {
+            Err(EngineError::ContextError(format!("Cannot complete invocation in state {:?}", self.state)))
+        }
+    }
+
+    /// Mark the invocation as failed
+    pub fn fail(&mut self, reason: &str) -> EngineResult<()> {
+        if self.is_active() {
+            self.state = InvocationState::Failed;
+            self.completed_at = Some(Utc::now());
+            self.metadata.insert("failure_reason".to_string(), 
+                serde_json::Value::String(reason.to_string()));
+            Ok(())
+        } else {
+            Err(EngineError::ContextError(format!("Cannot fail invocation in state {:?}", self.state)))
+        }
+    }
+
+    /// Mark the invocation as waiting for a resource
+    pub fn wait_for_resource(&mut self, _resource_id: ContentId) -> EngineResult<()> {
+        if self.is_active() {
+            self.state = InvocationState::Waiting;
+            Ok(())
+        } else {
+            Err(EngineError::ContextError(format!("Cannot wait in state {:?}", self.state)))
+        }
+    }
+
+    /// Mark the invocation as waiting for a fact
+    pub fn wait_for_fact(&mut self, _fact_key: &str) -> EngineResult<()> {
+        if self.is_active() {
+            self.state = InvocationState::WaitingForFact;
+            Ok(())
+        } else {
+            Err(EngineError::ContextError(format!("Cannot wait for fact in state {:?}", self.state)))
+        }
+    }
+
+    /// Resume a waiting invocation
+    pub fn resume(&mut self) -> EngineResult<()> {
+        if matches!(self.state, InvocationState::Waiting | InvocationState::WaitingForFact) {
+            self.state = InvocationState::Running;
+            Ok(())
+        } else {
+            Err(EngineError::ContextError(format!("Cannot resume invocation in state {:?}", self.state)))
+        }
+    }
+
+    /// Add a child invocation ID
+    pub fn add_child(&mut self, child_id: &str) -> EngineResult<()> {
+        self.children.push(child_id.to_string());
+        Ok(())
+    }
+
+    /// Get the invocation state
+    pub fn state(&self) -> &InvocationState {
+        &self.state
+    }
+
     /// Get the time map
     pub fn time_map(&self) -> &TimeMap {
         &self.time_map
     }
-    
-    /// Get a value from the context data
-    pub fn get(&self, key: &str) -> Option<&str> {
-        self.data.get(key).map(|s| s.as_str())
+
+    /// Get the observed facts
+    pub fn observed_facts(&self) -> &HashMap<String, serde_json::Value> {
+        &self.observed_facts
     }
-    
-    /// Set a value in the context data
-    pub fn set(&mut self, key: impl Into<String>, value: impl Into<String>) {
-        self.data.insert(key.into(), value.into());
+
+    /// Add a fact to the context
+    pub fn add_fact(&mut self, key: &str, value: serde_json::Value) {
+        self.observed_facts.insert(key.to_string(), value);
     }
-    
-    /// Get all context data
-    pub fn data(&self) -> &HashMap<String, String> {
-        &self.data
+
+    /// Get the metadata
+    pub fn metadata(&self) -> &HashMap<String, serde_json::Value> {
+        &self.metadata
     }
-    
-    /// Create a child context
-    pub fn create_child(&self, id: impl Into<String>) -> Self {
-        InvocationContext {
-            id: id.into(),
-            trace_id: self.trace_id.clone(),
-            parent_id: Some(self.id.clone()),
-            execution_context_id: None,
-            time_map: self.time_map.clone(),
-            data: HashMap::new(),
-        }
+
+    /// Add metadata to the context
+    pub fn add_metadata(&mut self, key: &str, value: serde_json::Value) {
+        self.metadata.insert(key.to_string(), value);
+    }
+
+    /// Get the children invocation IDs
+    pub fn children(&self) -> &[String] {
+        &self.children
     }
 }
 
@@ -383,7 +507,11 @@ impl fmt::Debug for InvocationContext {
             .field("id", &self.id)
             .field("trace_id", &self.trace_id)
             .field("parent_id", &self.parent_id)
+            .field("state", &self.state)
             .field("execution_context_id", &self.execution_context_id)
+            .field("children", &self.children)
+            .field("observed_facts", &self.observed_facts.len())
+            .field("metadata", &self.metadata.len())
             .field("data_size", &self.data.len())
             .finish()
     }
@@ -406,7 +534,7 @@ mod tests {
     
     #[test]
     fn test_physical_context() {
-        let ctx = PhysicalContext::new("test-context", "domain1".to_string())
+        let ctx = PhysicalContext::new("test-context", DomainId::from("domain1"))
             .with_capability("fs.read")
             .with_capability("network.connect");
             

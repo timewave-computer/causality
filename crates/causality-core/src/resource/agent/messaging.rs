@@ -4,15 +4,11 @@
 // It provides secure message exchange between agents with support for
 // different message types, routing, and delivery guarantees.
 
-use crate::resource_types::ResourceId;
-use crate::resource::ResourceType;
-use causality_types::{ContentId, ContentHash as TypesContentHash};
+use causality_types::ContentId;
 use crate::resource::AgentType;
 use super::types::{AgentId, AgentError};
-use crate::capability::effect::EffectCapability;
-use crate::id_utils;
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::fmt;
 use chrono::{DateTime, Utc};
@@ -22,7 +18,7 @@ use async_trait::async_trait;
 use blake3;
 use hex;
 use rand;
-use futures::stream::{self, StreamExt};
+use futures::stream::{StreamExt};
 use rand::Rng;
 use causality_types::ContentHash;
 use crate::serialization::Serializable;
@@ -1027,7 +1023,7 @@ impl MessageFactory {
         let format = format.unwrap_or(self.default_format.clone());
         let message_type = message_type.unwrap_or(self.default_message_type.clone());
         
-        let mut builder = MessageBuilder::new()
+        let builder = MessageBuilder::new()
             .sender_id(sender_id)
             .recipient_id(recipient_id)
             .subject(subject)

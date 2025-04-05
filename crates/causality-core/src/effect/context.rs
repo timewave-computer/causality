@@ -4,11 +4,11 @@
 //! resources, and metadata.
 
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
 use std::fmt::Debug;
 use std::sync::Arc;
 use thiserror::Error;
 use std::any::Any;
+use serde::{Serialize, Deserialize};
 
 use super::types::{EffectId, Right, ExecutionBoundary};
 use causality_types::ContentId;
@@ -16,7 +16,7 @@ use super::registry::EffectExecutor;
 use crate::resource::ResourceId;
 
 /// A capability represents permission to access a resource in a specific way
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Capability {
     /// The resource ID the capability applies to
     pub resource_id: ContentId,
@@ -33,6 +33,25 @@ impl Capability {
     /// Convert to string representation
     pub fn to_string(&self) -> String {
         format!("{}:{}", self.resource_id, self.right)
+    }
+}
+
+impl std::str::FromStr for Capability {
+    type Err = CapabilityError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 2 {
+            return Err(CapabilityError::InvalidFormat(format!("Invalid capability format: {}", s)));
+        }
+        
+        let resource_id = parts[0].parse::<ContentId>()
+            .map_err(|_| CapabilityError::InvalidFormat(format!("Invalid ContentId in capability: {}", parts[0])))?;
+        
+        let right = parts[1].parse::<Right>()
+            .map_err(|_| CapabilityError::InvalidFormat(format!("Invalid Right in capability: {}", parts[1])))?;
+        
+        Ok(Self::new(resource_id, right))
     }
 }
 
@@ -77,7 +96,7 @@ pub enum EffectContextError {
 /// Result type for effect context operations
 pub type EffectContextResult<T> = Result<T, EffectContextError>;
 
-/// Context for effect execution
+/// Trait representing the execution context for effects.
 pub trait EffectContext: Send + Sync + Debug {
     /// Get the effect ID
     fn effect_id(&self) -> &EffectId;

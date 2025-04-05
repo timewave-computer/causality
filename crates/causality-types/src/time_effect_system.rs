@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::fmt::Debug;
 
-use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 
 use crate::time_snapshot::{TimeEffect, TimeEffectResult, AttestationSource, TimeMapSnapshot};
@@ -160,7 +159,7 @@ pub trait TimeEffectHandler: Send + Sync {
     fn handle_causal_update(
         &self, 
         operations: Vec<String>, 
-        ordering: Vec<(String, String)>
+        _ordering: Vec<(String, String)>
     ) -> anyhow::Result<TimeEffectResult>;
     
     /// Handle a clock time attestation
@@ -176,7 +175,7 @@ pub trait TimeEffectHandler: Send + Sync {
     fn handle_time_map_update(
         &self,
         positions: HashMap<String, u64>,
-        proofs: HashMap<String, String>,
+        _proofs: HashMap<String, String>,
     ) -> anyhow::Result<TimeEffectResult>;
 }
 
@@ -234,7 +233,7 @@ impl TimeEffectHandler for TimeService {
     fn handle_causal_update(
         &self, 
         operations: Vec<String>, 
-        ordering: Vec<(String, String)>
+        _ordering: Vec<(String, String)>
     ) -> anyhow::Result<TimeEffectResult> {
         // In a real implementation, we would update a causal graph here
         // For now, we'll just return a placeholder result
@@ -293,7 +292,7 @@ impl TimeEffectHandler for TimeService {
     fn handle_time_map_update(
         &self,
         positions: HashMap<String, u64>,
-        proofs: HashMap<String, String>,
+        _proofs: HashMap<String, String>,
     ) -> anyhow::Result<TimeEffectResult> {
         let mut time_map = self.time_map.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock time map"))?;
@@ -343,10 +342,35 @@ impl TimeEffectHandlerWrapper {
     }
 }
 
+/// Represents a logical clock state update
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct LogicalClockUpdate {
+    /// Source of the update
+    pub source_id: String,
+    /// New timestamp
+    pub timestamp: u64,
+    /// Optional causal ordering information (pairs of event IDs)
+    pub _ordering: Vec<(String, String)>, // Prefixed with _
+}
+
+/// Represents a proof of system state or properties
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SystemStateProof {
+    /// Type of proof
+    pub proof_type: String,
+    /// Proof data (serialized)
+    pub data: Vec<u8>,
+    /// Signatures or attestations
+    pub _proofs: HashMap<String, String>, // Prefixed with _
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+    use crate::time_effect_system::{TimeMap, DomainPosition}; // Add necessary imports if missing
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
     #[test]
     fn test_time_effect_handler() {
         // Create a time service
@@ -388,5 +412,38 @@ mod tests {
         if let Some(ts) = timestamp {
             assert_eq!(ts, 1234567890);
         }
+    }
+
+    // Add other tests if they were present before
+    #[test]
+    fn test_time_map_update_position() {
+        let mut time_map = TimeMap::new();
+        assert!(time_map.update_position("domain1", 100).is_none());
+        assert_eq!(time_map.get_position("domain1"), Some(DomainPosition::new(100, 0)));
+        assert!(time_map.update_position("domain1", 150).is_some());
+        assert_eq!(time_map.get_position("domain1"), Some(DomainPosition::new(150, 0)));
+        assert!(time_map.update_position("domain2", 100).is_none());
+        assert_eq!(time_map.get_position("domain2"), Some(DomainPosition::new(100, 0)));
+    }
+
+    #[test]
+    fn test_time_map_comparisons() {
+        let mut time_map = TimeMap::new();
+        time_map.update_position("domain1", 100);
+        time_map.update_position("domain2", 150);
+        time_map.update_position("domain3", 100);
+
+        assert!(!time_map.are_comparable("domain1", "domain2"));
+        time_map.mark_comparable("domain1", "domain2");
+        assert!(time_map.are_comparable("domain1", "domain2"));
+
+        let pos1 = time_map.get_position("domain1").unwrap();
+        let pos2 = time_map.get_position("domain2").unwrap();
+        assert!(pos1.is_before(&pos2));
+        assert!(pos2.is_after(&pos1));
+
+        let pos3 = time_map.get_position("domain3").unwrap();
+        assert_eq!(pos1.get_timestamp(), pos3.get_timestamp());
+        assert!(pos1.get_index() != pos3.get_index()); // Indices should differ for same timestamp
     }
 } 

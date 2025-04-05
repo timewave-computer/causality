@@ -1,32 +1,8 @@
 // Error handling traits
 // Core traits for the error handling system
 
-use std::error::Error;
-use crate::{ErrorCode, ErrorDomain, ErrorMessage, BoxError};
-
-/// Core trait that all Causality errors must implement
-pub trait CausalityError: Error + Send + Sync + 'static {
-    /// Get the unique error code
-    fn code(&self) -> ErrorCode;
-    
-    /// Get the error domain
-    fn domain(&self) -> ErrorDomain;
-    
-    /// Convert to a standard error message format
-    fn to_error_message(&self) -> ErrorMessage {
-        ErrorMessage {
-            code: self.code(),
-            domain: self.domain(),
-            message: self.to_string(),
-            details: None,
-        }
-    }
-    
-    /// Get a unique identifier for the error (domain:code)
-    fn error_id(&self) -> String {
-        format!("{}:{}", self.domain(), self.code())
-    }
-}
+use crate::{BoxError, ErrorCode, ErrorDomain};
+use crate::CausalityError;
 
 /// Trait for error types that can provide error details
 pub trait WithDetails: CausalityError {

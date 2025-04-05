@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 use causality_types::{ContentId, DomainId, Timestamp, TraceId};
-use crate::log::entry::{LogEntry, EntryType};
+use crate::log::types::{LogEntry, EntryType, EntryData};
 
 /// Filter for log entries
 #[derive(Debug, Clone, Default)]
@@ -75,46 +75,65 @@ impl LogFilter {
     pub fn matches(&self, entry: &LogEntry) -> bool {
         // Check entry type
         if let Some(entry_types) = &self.entry_types {
-            if !entry_types.contains(&entry.entry_type()) {
+            if !entry_types.contains(&entry.entry_type) {
                 return false;
             }
         }
         
         // Check resource ID if available
         if let Some(resource_ids) = &self.resource_ids {
-            if let Some(id) = entry.resource_id() {
-                if !resource_ids.contains(id) {
-                    return false;
-                }
-            } else {
-                // Entry has no resource ID but filter requires one
+            let has_resource = match &entry.data {
+                EntryData::Fact(fact) => fact.resources.as_ref().map(|resources| 
+                    resources.iter().any(|id| resource_ids.contains(id))).unwrap_or(false),
+                EntryData::Effect(effect) => effect.resources.as_ref().map(|resources| 
+                    resources.iter().any(|id| resource_ids.contains(id))).unwrap_or(false),
+                EntryData::Operation(op) => op.resources.as_ref().map(|resources| 
+                    resources.iter().any(|id| resource_ids.contains(id))).unwrap_or(false),
+                _ => false,
+            };
+            
+            if !has_resource {
                 return false;
             }
         }
         
-        // Check domain ID
+        // Check domain ID if available
         if let Some(domain_ids) = &self.domain_ids {
-            if !domain_ids.contains(&entry.domain_id()) {
+            let has_domain = match &entry.data {
+                EntryData::Fact(fact) => domain_ids.contains(&fact.domain_id),
+                EntryData::Effect(effect) => effect.domains.as_ref().map(|domains| 
+                    domains.iter().any(|id| domain_ids.contains(id))).unwrap_or(false),
+                EntryData::Operation(op) => op.domains.as_ref().map(|domains| 
+                    domains.iter().any(|id| domain_ids.contains(id))).unwrap_or(false),
+                _ => false,
+            };
+            
+            if !has_domain {
                 return false;
             }
         }
         
         // Check trace ID
         if let Some(trace_ids) = &self.trace_ids {
-            if !trace_ids.contains(&entry.trace_id()) {
+            if let Some(trace_id) = &entry.trace_id {
+                if !trace_ids.contains(trace_id) {
+                    return false;
+                }
+            } else {
+                // Entry has no trace ID but filter requires one
                 return false;
             }
         }
         
         // Check time range
         if let Some(start) = &self.start_time {
-            if entry.timestamp() < start {
+            if &entry.timestamp < start {
                 return false;
             }
         }
         
         if let Some(end) = &self.end_time {
-            if entry.timestamp() > end {
+            if &entry.timestamp > end {
                 return false;
             }
         }

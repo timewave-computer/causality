@@ -25,6 +25,7 @@ hex = "0.4"
 tracing = { workspace = true }
 tokio = { workspace = true }
 chrono = { workspace = true }
+anyhow = { workspace = true }
 
 # Internal dependencies
 causality-types = { path = "../causality-types" }

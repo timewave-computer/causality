@@ -7,10 +7,9 @@
 // including rotation, indexing, and retrieval.
 
 use std::collections::{HashMap, BTreeMap};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock, Mutex};
 use std::fs;
-use std::io;
 use chrono::{DateTime, Utc, Duration};
 
 use causality_error::{EngineResult as Result, EngineError as Error};
@@ -18,17 +17,19 @@ use crate::log::LogEntry;
 use crate::log::segment::{LogSegment, SegmentInfo, generate_segment_id};
 use crate::log::storage::StorageConfig;
 use causality_types::Timestamp;
+use crate::error_conversions::convert_boxed_error;
 
 /// Criteria for rotating log segments
+#[derive(Clone)]
 pub enum RotationCriteria {
-    /// Rotate based on entry count
+    /// Rotate after a certain number of entries
     EntryCount(usize),
-    /// Rotate based on segment size in bytes
-    Size(u64),
-    /// Rotate based on time interval
+    /// Rotate after reaching a certain size (in bytes)
+    Size(usize),
+    /// Rotate after a certain time interval
     TimeInterval(Duration),
     /// Custom rotation function
-    Custom(Box<dyn Fn(&LogSegment) -> bool + Send + Sync>),
+    Custom(Arc<dyn Fn(&LogSegment) -> bool + Send + Sync>),
 }
 
 /// Options for segment manager
@@ -148,11 +149,11 @@ impl LogSegmentManager {
             Error::Other("Failed to acquire lock on active segment".to_string())
         })?;
         
-        active.append(entry)?;
+        active.append(entry).map_err(convert_boxed_error)?;
         
         // Auto-flush if configured
         if self.options.auto_flush {
-            active.flush()?;
+            active.flush().map_err(convert_boxed_error)?;
         }
         
         Ok(())
@@ -165,7 +166,7 @@ impl LogSegmentManager {
             Error::Other("Failed to acquire lock on active segment".to_string())
         })?;
         
-        active.flush()?;
+        active.flush().map_err(convert_boxed_error)?;
         
         // Flush all cached segments
         let cached = self.cached_segments.read().map_err(|_| {
@@ -177,7 +178,7 @@ impl LogSegmentManager {
                 Error::Other("Failed to acquire lock on cached segment".to_string())
             })?;
             
-            segment.flush()?;
+            segment.flush().map_err(convert_boxed_error)?;
         }
         
         Ok(())
@@ -195,12 +196,14 @@ impl LogSegmentManager {
                 match criteria {
                     RotationCriteria::EntryCount(max_entries) => {
                         if active.entry_count() >= *max_entries {
-                            return Ok(true);
+                            self.rotate_segment()?;
+                            return Ok(());
                         }
                     },
                     RotationCriteria::Size(_) => {
                         if active.is_full(&self.storage_config) {
-                            return Ok(true);
+                            self.rotate_segment()?;
+                            return Ok(());
                         }
                     },
                     RotationCriteria::TimeInterval(duration) => {
@@ -210,25 +213,23 @@ impl LogSegmentManager {
                         
                         let now = Utc::now();
                         if now.signed_duration_since(*last_rotation) >= *duration {
-                            return Ok(true);
+                            self.rotate_segment()?;
+                            return Ok(());
                         }
                     },
                     RotationCriteria::Custom(func) => {
                         if func(&active) {
-                            return Ok(true);
+                            self.rotate_segment()?;
+                            return Ok(());
                         }
                     },
                 }
             }
             
-            false
+            Ok(())
         };
         
-        if should_rotate {
-            self.rotate_segment()?;
-        }
-        
-        Ok(())
+        should_rotate
     }
     
     /// Rotate the active segment
@@ -249,7 +250,7 @@ impl LogSegmentManager {
             active_lock.mark_readonly();
             
             // Flush the old segment
-            active_lock.flush()?;
+            active_lock.flush().map_err(convert_boxed_error)?;
             
             // Update the index with the old segment info
             let old_info = active_lock.info().clone();
@@ -469,8 +470,8 @@ impl LogSegmentManager {
             Error::Other("Failed to acquire lock on active segment".to_string())
         })?;
         
-        let active_start = active.entries().first().map(|e| e.timestamp).unwrap_or(0);
-        let active_end = active.entries().last().map(|e| e.timestamp).unwrap_or(0);
+        let active_start = active.entries().first().map(|e| e.timestamp).unwrap_or(causality_types::Timestamp(0));
+        let active_end = active.entries().last().map(|e| e.timestamp).unwrap_or(causality_types::Timestamp(0));
         
         if active_start <= end_time && active_end >= start_time {
             segments.push(self.active_segment.clone());
@@ -486,8 +487,8 @@ impl LogSegmentManager {
                 Error::Other("Failed to acquire lock on segment".to_string())
             })?;
             
-            let segment_start = segment.entries().first().map(|e| e.timestamp).unwrap_or(0);
-            let segment_end = segment.entries().last().map(|e| e.timestamp).unwrap_or(0);
+            let segment_start = segment.entries().first().map(|e| e.timestamp).unwrap_or(causality_types::Timestamp(0));
+            let segment_end = segment.entries().last().map(|e| e.timestamp).unwrap_or(causality_types::Timestamp(0));
             
             if segment_start <= end_time && segment_end >= start_time {
                 segments.push(segment_arc.clone());
@@ -560,12 +561,12 @@ impl LogSegmentManager {
         
         // Add entries to the merged segment
         for entry in entries {
-            merged_segment.append(entry)?;
+            merged_segment.append(entry).map_err(convert_boxed_error)?;
         }
         
         // Mark as read-only and flush
         merged_segment.mark_readonly();
-        merged_segment.flush()?;
+        merged_segment.flush().map_err(convert_boxed_error)?;
         
         // Add to cache
         self.add_to_cache(merged_segment)?;

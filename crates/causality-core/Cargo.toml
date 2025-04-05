@@ -42,3 +42,6 @@ hex = "0.4"
 
 [features]
 default = [] 
+
+[dev-dependencies]
+typetag = "0.2"

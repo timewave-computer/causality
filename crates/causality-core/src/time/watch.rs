@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::cell::Cell;
 
 use super::clock::{Clock, ClockSource};
-use super::clock::SystemClock;
 use super::timestamp::Timestamp;
 use super::duration::TimeDelta;
 

@@ -1,69 +1,72 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/causality-types",
-    "crates/causality-crypto",
-    "crates/causality-core",
-    # DEPRECATED: Legacy crates pending removal
-    # "crates/causality-resource",
-    # "crates/causality-effects",
-    "crates/causality-storage",
-    "crates/causality-db",
     "crates/causality-engine",
-    "crates/causality-tel",
-    "crates/causality-boundary",
-    "crates/causality-domain",
+    "crates/causality-types",
     "crates/causality-patterns",
+    "crates/causality-tel",
+    "crates/causality-domain",
+    "crates/causality-error",
+    "crates/causality-core",
+    "crates/causality-boundary",
     "crates/causality-tools",
-    "domains/causality-domain-evm",
-    "domains/causality-domain-cosmwasm",
-    "domains/causality-domain-succinct",
-    "domains/causality-domain-sdk",
-    "examples/token-transfer",
-    "examples/token-bridge",
+    "crates/causality-crypto",
+    "crates/causality-db",
+    "crates/causality-storage",
+    "crates/minimal_effect_test",
+    "crates/effect-test",
 ]
 
+[workspace.metadata.examples]
+verification_system = { path = "examples/verification_system", enabled = false, reason = "Deprecated" }
+cross_domain_verification = { path = "examples/cross_domain_verification", enabled = false, reason = "Temporarily disabled" }
+
 [workspace.dependencies]
-# Common dependencies
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "1.0"
+# Workspace dependencies are listed here.
+# Crates in the workspace can reference these dependencies with { workspace = true }
 anyhow = "1.0"
-tracing = "0.1"
 async-trait = "0.1"
-tokio = { version = "1.25", features = ["full"] }
-rocksdb = "0.20"
-sha2 = "0.10"
-borsh = "0.10"
-rand = "0.8"
+bincode = "1.3"
+borsh = "0.10.4"
 chrono = "0.4"
 hex = "0.4"
+rand = "0.8"
+reqwest = { version = "0.11.27", features = ["json"] }
+rocksdb = "0.20"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+thiserror = "1.0"
+tokio = { version = "1", features = ["full"] }
+toml = "0.7.8"
+tracing = "0.1"
+windows-sys = "0.52"
+zerocopy = "0.8.24"
+# Dependencies causing conflicts
+winreg = "0.55"
+native-tls = "0.2.14"
+wasi = "0.14.2+wasi-0.2.4"
 
 # Internal dependencies
-causality-types = { path = "crates/causality-types" }
-causality-crypto = { path = "crates/causality-crypto" }
 causality-core = { path = "crates/causality-core" }
-# DEPRECATED: Legacy crates pending removal
-# causality-resource = { path = "crates/causality-resource" }
-# causality-effects = { path = "crates/causality-effects" }
-causality-storage = { path = "crates/causality-storage" }
+causality-crypto = { path = "crates/causality-crypto" }
 causality-db = { path = "crates/causality-db" }
-causality-engine = { path = "crates/causality-engine" }
-causality-tel = { path = "crates/causality-tel" }
-causality-boundary = { path = "crates/causality-boundary" }
 causality-domain = { path = "crates/causality-domain" }
-causality-patterns = { path = "crates/causality-patterns" }
-causality-tools = { path = "crates/causality-tools" }
-causality-domain-evm = { path = "domains/causality-domain-evm" }
 causality-domain-cosmwasm = { path = "domains/causality-domain-cosmwasm" }
-causality-domain-succinct = { path = "domains/causality-domain-succinct" }
+causality-domain-evm = { path = "domains/causality-domain-evm" }
 causality-domain-sdk = { path = "domains/causality-domain-sdk" }
+causality-domain-succinct = { path = "domains/causality-domain-succinct" }
+causality-engine = { path = "crates/causality-engine" }
+causality-error = { path = "crates/causality-error" }
+causality-storage = { path = "crates/causality-storage" }
+causality-tel = { path = "crates/causality-tel" }
+causality-types = { path = "crates/causality-types" }
+uuid = { version = "1.6", features = ["v4", "serde"] }
 
-[workspace.metadata.examples]
-capability_content_addressing = { path = "examples/capability_content_addressing.rs" }
-content_normalization = { path = "examples/content_normalization.rs" }
-deferred_hashing = { path = "examples/deferred_hashing.rs" }
-sparse_merkle_tree = { path = "examples/sparse_merkle_tree.rs" }
-smt_integration = { path = "examples/smt_integration.rs" }
-verification_system = { path = "examples/verification_system.rs" }
-cross_domain_verification = { path = "examples/cross_domain_verification.rs" }
+# This section is used by cargo-workspaces
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+homepage = "https://github.com/timewave-computer/causality"
+repository = "https://github.com/timewave-computer/causality"

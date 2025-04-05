@@ -3,11 +3,9 @@
 // Represents the concept of a domain in Causality.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use causality_types::{ContentId, Timestamp};
 
 /// Unique identifier for a domain
 #[derive(Clone, Eq, Serialize, Deserialize)]

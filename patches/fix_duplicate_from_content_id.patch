@@ -1,0 +1,28 @@
+--- crates/causality-core/src/resource/types.rs
++++ crates/causality-core/src/resource/types.rs
+@@ -66,11 +66,24 @@
+         Self::with_name(hash, String::new())
+     }
+ 
+-    /// Create a ResourceId from a ContentId
+-    pub fn from_content_id(content_id: &ContentId) -> Self {
+-        let hash = ContentHash::new(content_id.algorithm(), content_id.value().as_bytes().to_vec());
+-        Self::new(hash)
++    /// Create a ResourceId from a legacy ContentId (deprecated)
++    /// Will be removed after the transition to TypesContentId is complete
++    pub fn from_legacy_content_id(content_id: &ContentId) -> Self {
++        let hash_str = content_id.value();
++        let hash_bytes = if hash_str.len() % 2 == 0 {
++            match hex::decode(hash_str) {
++                Ok(bytes) => bytes,
++                Err(_) => hash_str.as_bytes().to_vec(),
++            }
++        } else {
++            hash_str.as_bytes().to_vec()
++        };
++        
++        let algorithm = content_id.algorithm();
++        let hash = ContentHash::new(algorithm, hash_bytes);
++        
++        ResourceId::new(hash)
+     }

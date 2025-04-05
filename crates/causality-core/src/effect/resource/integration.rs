@@ -3,7 +3,6 @@
 // This module provides integration between the effect system and resource management.
 
 use async_trait::async_trait;
-use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;

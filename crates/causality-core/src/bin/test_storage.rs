@@ -1,5 +1,4 @@
 use causality_types::content_addressing::storage::{ContentAddressedStorage, InMemoryStorage};
-use causality_types::ContentId;
 
 fn main() {
     println!("Testing InMemoryStorage implementation...");

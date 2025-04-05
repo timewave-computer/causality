@@ -12,7 +12,15 @@ pub mod resource;
 pub mod factory;
 
 /// Re-export all public items from submodules
-pub use runtime::{EngineEffectRuntime, EngineCapabilityVerifier, EngineEffectRuntimeFactory};
+pub use runtime::{
+    EngineEffectRuntime, 
+    EngineEffectRuntimeFactory,
+    Runtime,
+    RuntimeBase,
+    get_effect_runtime,
+    set_effect_runtime,
+    create_runtime_factory,
+};
 pub use registry::EffectRegistry;
 pub use capability::CapabilityManager;
 pub use executor::EffectExecutor;
@@ -29,8 +37,7 @@ pub use content_addressable_executor::{
     ExecutionEvent,
 };
 pub use resource::{
-    ResourceEffectManager,
-    ResourceCapabilityVerifier,
+    ResourceEffectError,
     ResourceQueryEffect,
     ResourceStoreEffect,
     ResourceGetEffect,

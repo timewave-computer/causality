@@ -3,14 +3,10 @@
 // This module provides utility functions for working with resource effects.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use crate::effect::{
-    Effect, EffectContext, EffectType, EffectError, 
-    EffectResult, EffectOutcome, EffectRegistry, BasicEffectRegistry
+    EffectError, EffectOutcome
 };
-use crate::resource::{Resource, ResourceManager};
-use crate::resource_types::ResourceId;
 use super::resource::{ResourceEffect, ResourceOperation};
 
 /// Create a resource effect for reading a resource

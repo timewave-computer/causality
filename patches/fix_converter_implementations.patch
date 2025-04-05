@@ -1,0 +1,88 @@
+--- crates/causality-core/src/resource/types.rs
++++ crates/causality-core/src/resource/types.rs
+@@ -1374,47 +1374,51 @@
+ 
+ impl From<ResourceId> for TypesContentId {
+     fn from(resource_id: ResourceId) -> Self {
+-        TypesContentId::new(
+-            resource_id.hash.algorithm.as_str(),
+-            hex::encode(&resource_id.hash.bytes)
+-        )
++        // Create a content ID using the algorithm and hash bytes
++        let algorithm = resource_id.hash.algorithm().to_string();
++        let value = hex::encode(resource_id.hash.bytes());
++        TypesContentId::new(&algorithm, &value)
+     }
+ }
+ 
+ impl TryFrom<TypesContentId> for ResourceId {
+     type Error = crate::resource::ResourceError;
+     
+     fn try_from(content_id: TypesContentId) -> Result<Self, Self::Error> {
++        Self::from_content_id(&content_id)
++    }
++}
++
++impl ResourceId {
++    pub fn to_content_id(&self) -> TypesContentId {
++        // Create a content ID using the algorithm and hash bytes
++        let algorithm = self.hash.algorithm().to_string();
++        let value = hex::encode(self.hash.bytes());
++        TypesContentId::new(&algorithm, &value)
++    }
++    
++    pub fn from_content_id(content_id: &TypesContentId) -> Result<Self, crate::resource::ResourceError> {
+         // Parse the content ID value as hex and create a ContentHash
+         let bytes = hex::decode(&content_id.value)
+-            .map_err(|e| crate::resource::ResourceError::InvalidArgument(
++            .map_err(|e| crate::resource::ResourceError::InvalidInput(
+                 format!("Invalid content ID format: {}", e)
+             ))?;
+         
+-        let content_hash = ContentHash::new(&content_id.algorithm, bytes);
++        // Create a ContentHash with the parsed bytes
++        let content_hash = ContentHash::new(content_id.algorithm.clone(), bytes);
+         Ok(ResourceId::new(content_hash))
+     }
+ }
++EOF
+ 
+-impl ResourceId {
+-    pub fn to_content_id(&self) -> TypesContentId {
+-        TypesContentId::new(
+-            self.hash.algorithm.as_str(),
+-            hex::encode(&self.hash.bytes)
+-        )
+-    }
+-    
+-    pub fn from_content_id(content_id: &TypesContentId) -> Result<Self, crate::resource::ResourceError> {
+-        // Parse the content ID value as hex and create a ContentHash
+-        let bytes = hex::decode(&content_id.value)
+-            .map_err(|e| crate::resource::ResourceError::InvalidArgument(
+-                format!("Invalid content ID format: {}", e)
+-            ))?;
+-        
+-        let content_hash = ContentHash::new(&content_id.algorithm, bytes);
+-        Ok(ResourceId::new(content_hash))
+-    }
++# Fix the QueryEngine implementation
++cat > patches/fix_query_engine.patch << 'EOF'
++--- crates/causality-core/src/resource/query/engine.rs
+++++ crates/causality-core/src/resource/query/engine.rs
++@@ -461,7 +461,7 @@
++     {
++         // Convert ContentId to ResourceId using the new conversion function
++         let resource_id = ResourceId::from_content_id(resource_id)
++-            .map_err(|e| QueryError::InvalidArgument(e.to_string()))?;
+++            .map_err(|e| QueryError::ConversionError(e.to_string()))?;
++         
++         self.resource_retrievers.get_resource_by_id(&resource_id)
++             .await
++@@ -299,7 +299,7 @@
++     fn apply_sorting<R>(&self, resources: Vec<R>, sorts: &[Sort]) -> QueryResult<Vec<R>>
++     where
++-        R: Resource + Send + Sync + Serialize,
+++        R: Resource + Send + Sync,
++     {
++         if sorts.is_empty() {
++             return Ok(resources);

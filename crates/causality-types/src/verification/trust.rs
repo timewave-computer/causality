@@ -2,9 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::crypto_primitives::{ContentAddressed, ContentId, HashOutput};
+use crate::crypto_primitives::ContentAddressed;
 use crate::verification::error::{VerificationError, VerificationResult};
-use crate::verification::metrics::VerificationMetric;
 use crate::verification::registry::VerificationRegistry;
 
 /// Trust boundary for verification

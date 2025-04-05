@@ -5,10 +5,8 @@
 
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
-use std::sync::Arc;
 
 use serde::{Serialize, Deserialize};
-use thiserror::Error;
 
 use super::types::EffectId;
 use causality_types::ContentId;

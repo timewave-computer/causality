@@ -6,8 +6,12 @@
 use std::fmt;
 use std::sync::Arc;
 
-use causality_core::effect::context::EffectContext as Context;
-use causality_core::effect::{EffectError, EffectResult, Effect};
+// Use direct imports from causality_core and fixed error handling imports
+use causality_core::effect::context::EffectContext;
+// Fix error imports to use available types/modules
+use causality_core::effect::{EffectError, EffectResult};
+use causality_core::effect::Effect;
+use causality_core::effect::EffectTypeId;
 
 // Define CapabilityId locally since the import is problematic
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -29,29 +33,17 @@ impl From<String> for CapabilityId {
     }
 }
 
-// Define EffectTypeId locally for simplified implementation
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct EffectTypeId(String);
-
-impl EffectTypeId {
-    pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
-    }
-    
-    pub fn to_string(&self) -> String {
-        self.0.clone()
-    }
-}
+// Don't redefine EffectTypeId, use the one from causality_core
 
 // Define simplified version of MissingCapability error since the imported one is problematic
 // Instead of implementing on the foreign type EffectError, create a helper function
 pub fn missing_capability_error(effect_type: EffectTypeId, capability: String) -> EffectError {
-    EffectError::Capability(format!("Missing capability: {} for effect type: {}", 
-        capability, effect_type.to_string()))
+    EffectError::InvalidArgument(format!("Missing capability: {} for effect type: {}", 
+        capability, effect_type.0))
 }
 
 pub fn invalid_capability_error(message: impl Into<String>) -> EffectError {
-    EffectError::Capability(message.into())
+    EffectError::InvalidArgument(message.into())
 }
 
 // Re-export from core capability system - simplified
@@ -98,7 +90,7 @@ pub trait EffectsCapabilityVerifier {
     async fn verify_requirements<T: RequiresCapabilities + Send + Sync>(
         &self,
         object: &T,
-        context: &dyn Context,
+        context: &dyn EffectContext,
     ) -> EffectResult<()>;
 }
 
@@ -135,7 +127,7 @@ pub trait CapabilityVerifier: Send + Sync {
     async fn verify_capability(
         &self,
         capability_id: &CapabilityId,
-        context: &dyn Context,
+        context: &dyn causality_core::effect::context::EffectContext,
     ) -> EffectResult<()>;
 }
 
@@ -163,7 +155,7 @@ impl CapabilityManager {
     pub async fn verify_capabilities<E: Effect + RequiresCapabilities>(
         &self,
         effect: &E,
-        context: &Context,
+        context: &dyn causality_core::effect::context::EffectContext,
     ) -> EffectResult<()> {
         // Get the capability IDs required by this effect
         let required_capabilities = effect.required_capabilities();
@@ -171,8 +163,8 @@ impl CapabilityManager {
         // Verify each required capability
         for (resource_id, rights) in &required_capabilities {
             for right in rights {
-                // Then check the context
-                if !context.has_capability(&CapabilityId::from(resource_id.clone())) {
+                // resource_id is already a String
+                if !context.has_capability(&causality_core::effect::Capability::new(causality_types::ContentId::new(resource_id.to_string()), causality_core::effect::types::Right::Read)) {
                     return Err(missing_capability_error(
                         EffectTypeId::new(effect.effect_type().to_string()),
                         format!("{:?} for {:?}", right, resource_id)
@@ -182,7 +174,8 @@ impl CapabilityManager {
         }
         
         // Finally, run all registered verifiers
-        for capability_id in get_capability_ids(effect) {
+        for capability_str in get_capability_ids(effect) {
+            let capability_id = CapabilityId::from(capability_str.clone());
             for verifier in &self.verifiers {
                 verifier.verify_capability(&capability_id, context).await?;
             }
@@ -194,12 +187,10 @@ impl CapabilityManager {
 
 /// Get the capability IDs required by an effect
 ///
-/// This function extracts CapabilityId instances from an effect.
-fn get_capability_ids<E: Effect>(effect: &E) -> Vec<CapabilityId> {
-    // For now, we just return a basic extraction
-    // In a real implementation, this would use the RequiresCapabilities trait
-    // and convert all resource IDs to capability IDs
-    vec![CapabilityId::from(effect.effect_type().to_string())]
+/// This function extracts capability string IDs from an effect.
+fn get_capability_ids<E: Effect>(effect: &E) -> Vec<String> {
+    // Return the effect type string directly
+    vec![effect.effect_type().to_string()]
 }
 
 impl fmt::Debug for CapabilityManager {
@@ -211,13 +202,20 @@ impl fmt::Debug for CapabilityManager {
     }
 }
 
+// Implement std::fmt::Display for CapabilityId at the top of file after the struct definition
+impl fmt::Display for CapabilityId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Implementation of the CapabilityVerifier interface from causality-effects
 #[async_trait::async_trait]
 impl EffectsCapabilityVerifier for CapabilityManager {
     async fn verify_requirements<T: RequiresCapabilities + Send + Sync>(
         &self,
         object: &T,
-        context: &dyn Context,
+        context: &dyn causality_core::effect::context::EffectContext,
     ) -> EffectResult<()> {
         // Convert requirements to capability types
         let requirements = object.required_capabilities();
@@ -230,16 +228,16 @@ impl EffectsCapabilityVerifier for CapabilityManager {
         // Verify capabilities in the context
         for (resource_id, rights) in &requirements {
             for right in rights {
-                let capability_id = CapabilityId::from(resource_id.clone());
-                
-                if !context.has_capability(&capability_id) {
+                // Check if the context has the capability string directly
+                if !context.has_capability(&causality_core::effect::Capability::new(causality_types::ContentId::new(resource_id.to_string()), causality_core::effect::types::Right::Read)) {
                     return Err(missing_capability_error(
-                        EffectTypeId::default(),
+                        EffectTypeId::new("unknown"),
                         format!("{:?} for {:?}", right, resource_id)
                     ));
                 }
                 
                 // Run verifiers on this capability
+                let capability_id = CapabilityId::from(resource_id.clone());
                 for verifier in &self.verifiers {
                     verifier.verify_capability(&capability_id, context).await?;
                 }
@@ -270,7 +268,7 @@ mod tests {
             "Test effect".to_string()
         }
         
-        async fn execute(&self, _context: &dyn causality_core::effect::EffectContext) -> causality_core::effect::EffectResult<causality_core::effect::EffectOutcome> {
+        async fn execute(&self, _context: &dyn causality_core::effect::context::EffectContext) -> causality_core::effect::EffectResult<causality_core::effect::EffectOutcome> {
             Ok(causality_core::effect::EffectOutcome::Success)
         }
         
@@ -287,7 +285,7 @@ mod tests {
         async fn verify_capability(
             &self,
             capability_id: &CapabilityId,
-            _context: &Context,
+            _context: &dyn causality_core::effect::context::EffectContext,
         ) -> EffectResult<()> {
             // Just check if this is a test capability
             if capability_id.to_string() == "test_capability" {

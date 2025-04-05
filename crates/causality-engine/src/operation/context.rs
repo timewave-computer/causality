@@ -9,33 +9,34 @@
 use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 
-use causality_error::{EngineResult, EngineError, CausalityError, Result as CausalityResult};
+use causality_error::{EngineResult, EngineError};
 use causality_types::DomainId;
 use causality_core::effect::context::Capability;
-use causality_types::ContentId;
 
-/// Trait for operation execution contexts
-pub trait ExecutionContext: Clone + Debug + Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static {
-    /// The environment this context operates in
+use crate::operation::types::Context;
+
+/// Trait for execution contexts
+pub trait ExecutionContext: Debug + Send + Sync + 'static {
+    /// Get the environment for this context
     fn environment(&self) -> ExecutionEnvironment;
     
-    /// The domain this context is associated with (if any)
+    /// Get the domain for this context, if any
     fn domain(&self) -> Option<DomainId>;
     
-    /// The execution phase this context represents
+    /// Get the execution phase
     fn phase(&self) -> ExecutionPhase;
     
-    /// Whether this context requires a ZK proof
-    fn requires_proof(&self) -> bool;
+    /// Check if proof is required for this context
+    fn proof_required(&self) -> bool;
     
-    /// Get capability requirements for this context
-    fn capability_requirements(&self) -> Vec<Capability>;
+    /// Get capabilities required for this context
+    fn required_capabilities(&self) -> Vec<String>;
     
-    /// Get the default environment for this context type
-    fn default_environment() -> ExecutionEnvironment where Self: Sized;
+    /// Create a context from a previous context
+    fn from_previous_context(previous: &Context) -> EngineResult<Self> where Self: Sized;
     
-    /// Create this context from a previous context
-    fn from_previous_context(previous: &dyn ExecutionContext) -> EngineResult<Self> where Self: Sized;
+    /// Clone the context into a boxed trait object
+    fn clone_context(&self) -> Box<dyn ExecutionContext>;
 }
 
 /// Execution phases for operations
@@ -113,6 +114,28 @@ impl AbstractContext {
         self.required_capabilities.push(capability);
         self
     }
+    
+    /// Create a new abstract context from a previous context
+    pub fn from_previous_context(previous: &Context) -> EngineResult<Self> {
+        match previous {
+            Context::Abstract(ctx) => Ok(ctx.clone()),
+            Context::Register(ctx) => Ok(AbstractContext {
+                phase: ctx.phase(),
+                proof_required: ctx.proof_required(),
+                required_capabilities: ctx.required_capabilities().iter().map(|s| s.parse().unwrap()).collect(),
+            }),
+            Context::Physical(ctx) => Ok(AbstractContext {
+                phase: ctx.phase(),
+                proof_required: ctx.proof_required(),
+                required_capabilities: ctx.required_capabilities().iter().map(|s| s.parse().unwrap()).collect(),
+            }),
+            Context::Zk(ctx) => Ok(AbstractContext {
+                phase: ctx.phase(),
+                proof_required: true,
+                required_capabilities: ctx.required_capabilities().iter().map(|s| s.parse().unwrap()).collect(),
+            }),
+        }
+    }
 }
 
 impl ExecutionContext for AbstractContext {
@@ -128,24 +151,20 @@ impl ExecutionContext for AbstractContext {
         self.phase.clone()
     }
     
-    fn requires_proof(&self) -> bool {
+    fn proof_required(&self) -> bool {
         self.proof_required
     }
     
-    fn capability_requirements(&self) -> Vec<Capability> {
-        self.required_capabilities.clone()
+    fn required_capabilities(&self) -> Vec<String> {
+        self.required_capabilities.iter().map(|c| c.to_string()).collect()
     }
     
-    fn default_environment() -> ExecutionEnvironment {
-        ExecutionEnvironment::Abstract
+    fn from_previous_context(previous: &Context) -> EngineResult<Self> {
+        Self::from_previous_context(previous)
     }
     
-    fn from_previous_context(previous: &dyn ExecutionContext) -> EngineResult<Self> {
-        Ok(AbstractContext {
-            phase: previous.phase(),
-            proof_required: previous.requires_proof(),
-            required_capabilities: previous.capability_requirements(),
-        })
+    fn clone_context(&self) -> Box<dyn ExecutionContext> {
+        Box::new(self.clone())
     }
 }
 
@@ -202,25 +221,23 @@ impl ExecutionContext for RegisterContext {
         self.phase.clone()
     }
     
-    fn requires_proof(&self) -> bool {
+    fn proof_required(&self) -> bool {
         self.proof_required
     }
     
-    fn capability_requirements(&self) -> Vec<Capability> {
-        self.required_capabilities.clone()
+    fn required_capabilities(&self) -> Vec<String> {
+        self.required_capabilities.iter().map(|c| c.to_string()).collect()
     }
     
-    fn default_environment() -> ExecutionEnvironment {
-        ExecutionEnvironment::Register
+    fn from_previous_context(previous: &Context) -> EngineResult<Self> {
+        match previous {
+            Context::Register(ctx) => Ok(ctx.clone()),
+            _ => Err(EngineError::InvalidArgument("Expected RegisterContext".to_string())),
+        }
     }
     
-    fn from_previous_context(previous: &dyn ExecutionContext) -> EngineResult<Self> {
-        Ok(RegisterContext {
-            phase: previous.phase(),
-            proof_required: previous.requires_proof(),
-            required_capabilities: previous.capability_requirements(),
-            namespace: "default".to_string(), // Default namespace
-        })
+    fn clone_context(&self) -> Box<dyn ExecutionContext> {
+        Box::new(self.clone())
     }
 }
 
@@ -277,33 +294,23 @@ impl ExecutionContext for PhysicalContext {
         self.phase.clone()
     }
     
-    fn requires_proof(&self) -> bool {
+    fn proof_required(&self) -> bool {
         self.proof_required
     }
     
-    fn capability_requirements(&self) -> Vec<Capability> {
-        self.required_capabilities.clone()
+    fn required_capabilities(&self) -> Vec<String> {
+        self.required_capabilities.iter().map(|c| c.to_string()).collect()
     }
     
-    fn default_environment() -> ExecutionEnvironment {
-        // We need a placeholder domain ID for the default environment
-        ExecutionEnvironment::OnChain(DomainId::from("default"))
+    fn from_previous_context(previous: &Context) -> EngineResult<Self> {
+        match previous {
+            Context::Physical(ctx) => Ok(ctx.clone()),
+            _ => Err(EngineError::InvalidArgument("Expected PhysicalContext".to_string())),
+        }
     }
     
-    fn from_previous_context(previous: &dyn ExecutionContext) -> EngineResult<Self> {
-        // For physical context, we need a domain ID
-        let domain_id = if let Some(domain) = previous.domain() {
-            domain
-        } else {
-            return Err(EngineError::InvalidArgument("Domain ID required for physical context".to_string()));
-        };
-        
-        Ok(PhysicalContext {
-            phase: previous.phase(),
-            domain_id,
-            proof_required: previous.requires_proof(),
-            required_capabilities: previous.capability_requirements(),
-        })
+    fn clone_context(&self) -> Box<dyn ExecutionContext> {
+        Box::new(self.clone())
     }
 }
 
@@ -360,26 +367,93 @@ impl ExecutionContext for ZkContext {
         self.phase.clone()
     }
     
-    fn requires_proof(&self) -> bool {
+    fn proof_required(&self) -> bool {
         true // ZK context always requires a proof
     }
     
-    fn capability_requirements(&self) -> Vec<Capability> {
-        self.required_capabilities.clone()
+    fn required_capabilities(&self) -> Vec<String> {
+        self.required_capabilities.iter().map(|c| c.to_string()).collect()
     }
     
-    fn default_environment() -> ExecutionEnvironment {
-        ExecutionEnvironment::ZkVm
+    fn from_previous_context(previous: &Context) -> EngineResult<Self> {
+        match previous {
+            Context::Zk(ctx) => Ok(ctx.clone()),
+            _ => Err(EngineError::InvalidArgument("Expected ZkContext".to_string())),
+        }
     }
     
-    fn from_previous_context(previous: &dyn ExecutionContext) -> EngineResult<Self> {
-        Ok(ZkContext {
-            phase: previous.phase(),
-            domain_id: previous.domain(),
-            required_capabilities: previous.capability_requirements(),
-            circuit_id: "default".to_string(), // Default circuit ID
-        })
+    fn clone_context(&self) -> Box<dyn ExecutionContext> {
+        Box::new(self.clone())
     }
+}
+
+/// Extension trait for context conversion
+pub trait ContextConversion: ExecutionContext {
+    /// Convert this context to a Context enum
+    fn to_context(&self) -> Context;
+    
+    /// Create this context from a Context enum
+    fn from_context(context: &Context) -> EngineResult<Self> where Self: Sized;
+}
+
+// Implement ContextConversion for AbstractContext
+impl ContextConversion for AbstractContext {
+    fn to_context(&self) -> Context {
+        Context::Abstract(self.clone())
+    }
+    
+    fn from_context(context: &Context) -> EngineResult<Self> {
+        match context {
+            Context::Abstract(ctx) => Ok(ctx.clone()),
+            _ => Err(EngineError::InvalidArgument("Expected AbstractContext".to_string())),
+        }
+    }
+}
+
+// Implement ContextConversion for RegisterContext
+impl ContextConversion for RegisterContext {
+    fn to_context(&self) -> Context {
+        Context::Register(self.clone())
+    }
+    
+    fn from_context(context: &Context) -> EngineResult<Self> {
+        match context {
+            Context::Register(ctx) => Ok(ctx.clone()),
+            _ => Err(EngineError::InvalidArgument("Expected RegisterContext".to_string())),
+        }
+    }
+}
+
+// Implement ContextConversion for PhysicalContext
+impl ContextConversion for PhysicalContext {
+    fn to_context(&self) -> Context {
+        Context::Physical(self.clone())
+    }
+    
+    fn from_context(context: &Context) -> EngineResult<Self> {
+        match context {
+            Context::Physical(ctx) => Ok(ctx.clone()),
+            _ => Err(EngineError::InvalidArgument("Expected PhysicalContext".to_string())),
+        }
+    }
+}
+
+// Implement ContextConversion for ZkContext
+impl ContextConversion for ZkContext {
+    fn to_context(&self) -> Context {
+        Context::Zk(self.clone())
+    }
+    
+    fn from_context(context: &Context) -> EngineResult<Self> {
+        match context {
+            Context::Zk(ctx) => Ok(ctx.clone()),
+            _ => Err(EngineError::InvalidArgument("Expected ZkContext".to_string())),
+        }
+    }
+}
+
+pub fn context_to_enum(ctx: &Context) -> Context {
+    ctx.clone()
 }
 
 #[cfg(test)]
@@ -403,8 +477,8 @@ mod tests {
         assert_eq!(context.environment(), ExecutionEnvironment::Abstract);
         assert_eq!(context.phase(), ExecutionPhase::Planning);
         assert_eq!(context.domain(), None);
-        assert!(context.requires_proof());
-        assert_eq!(context.capability_requirements().len(), 1);
+        assert!(context.proof_required());
+        assert_eq!(context.required_capabilities().len(), 1);
     }
     
     #[test]
@@ -422,8 +496,8 @@ mod tests {
         assert_eq!(context.environment(), ExecutionEnvironment::Register);
         assert_eq!(context.phase(), ExecutionPhase::Execution);
         assert_eq!(context.domain(), None);
-        assert!(context.requires_proof());
-        assert_eq!(context.capability_requirements().len(), 1);
+        assert!(context.proof_required());
+        assert_eq!(context.required_capabilities().len(), 1);
     }
     
     #[test]
@@ -443,7 +517,7 @@ mod tests {
         assert_eq!(context.environment(), ExecutionEnvironment::OnChain(domain_id.clone()));
         assert_eq!(context.phase(), ExecutionPhase::Execution);
         assert_eq!(context.domain(), Some(domain_id));
-        assert!(context.requires_proof());
-        assert_eq!(context.capability_requirements().len(), 1);
+        assert!(context.proof_required());
+        assert_eq!(context.required_capabilities().len(), 1);
     }
 } 

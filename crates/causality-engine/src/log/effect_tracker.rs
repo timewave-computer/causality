@@ -7,10 +7,11 @@
 // facts and effects in the Causality system.
 
 use std::collections::{HashMap, HashSet, BTreeMap};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::fmt::Debug;
 
-use causality_error::{Result, Error};
+// Import necessary error types and traits
+use causality_error::{Result, EngineError, CausalityError};
 use causality_types::{Timestamp, DomainId, TraceId, ContentId};
 
 // Import fact-related types from our own crate
@@ -81,9 +82,13 @@ impl FactEffectTracker {
                     let fact_id = FactId(fact.fact_id.clone());
                     
                     // Register in time index
-                    let mut time_index = self.time_indexed_facts.write().map_err(|e| 
-                        Box::new(Error::Unavailable(format!("Failed to acquire write lock on time_indexed_facts: {}", e)))
-                    )?;
+                    let mut time_index = match self.time_indexed_facts.write() {
+                        Ok(index) => index,
+                        Err(e) => {
+                            let err = EngineError::SyncError(format!("Failed to acquire write lock on time_indexed_facts: {}", e));
+                            return Err(Box::new(err));
+                        }
+                    };
                     
                     time_index
                         .entry(entry.timestamp)
@@ -95,13 +100,20 @@ impl FactEffectTracker {
                 // Register the effect and its fact dependencies
                 if let EntryData::Effect(effect) = &entry.data {
                     // Find dependencies in effect metadata or attached fact snapshots
-                    let dependencies = self.extract_dependencies(entry)?;
+                    let dependencies = match self.extract_dependencies(entry) {
+                        Ok(deps) => deps,
+                        Err(e) => return Err(e)
+                    };
                     
                     if !dependencies.is_empty() {
                         // Register effect-to-fact relationships
-                        let mut effect_facts = self.effect_to_facts.write().map_err(|e| 
-                            Box::new(Error::Unavailable(format!("Failed to acquire write lock on effect_to_facts: {}", e)))
-                        )?;
+                        let mut effect_facts = match self.effect_to_facts.write() {
+                            Ok(facts) => facts,
+                            Err(e) => {
+                                let err = EngineError::SyncError(format!("Failed to acquire write lock on effect_to_facts: {}", e));
+                                return Err(Box::new(err));
+                            }
+                        };
                         
                         let fact_ids: HashSet<FactId> = dependencies
                             .iter()
@@ -111,9 +123,13 @@ impl FactEffectTracker {
                         effect_facts.insert(entry.id.clone(), fact_ids.clone());
                         
                         // Register fact-to-effect relationships
-                        let mut fact_effects = self.fact_to_effects.write().map_err(|e| 
-                            Box::new(Error::Unavailable(format!("Failed to acquire write lock on fact_to_effects: {}", e)))
-                        )?;
+                        let mut fact_effects = match self.fact_to_effects.write() {
+                            Ok(effects) => effects,
+                            Err(e) => {
+                                let err = EngineError::SyncError(format!("Failed to acquire write lock on fact_to_effects: {}", e));
+                                return Err(Box::new(err));
+                            }
+                        };
                         
                         for dep in &dependencies {
                             fact_effects
@@ -123,12 +139,19 @@ impl FactEffectTracker {
                         }
                         
                         // Register detailed relations
-                        self.register_relations(entry, &dependencies)?;
+                        match self.register_relations(entry, &dependencies) {
+                            Ok(_) => {},
+                            Err(e) => return Err(e)
+                        }
                         
                         // Register in time index
-                        let mut time_index = self.time_indexed_effects.write().map_err(|e| 
-                            Box::new(Error::Unavailable(format!("Failed to acquire write lock on time_indexed_effects: {}", e)))
-                        )?;
+                        let mut time_index = match self.time_indexed_effects.write() {
+                            Ok(index) => index,
+                            Err(e) => {
+                                let err = EngineError::SyncError(format!("Failed to acquire write lock on time_indexed_effects: {}", e));
+                                return Err(Box::new(err));
+                            }
+                        };
                         
                         time_index
                             .entry(entry.timestamp)
@@ -191,19 +214,19 @@ impl FactEffectTracker {
     fn register_relations(&self, entry: &LogEntry, dependencies: &[FactDependency]) -> Result<()> {
         if let EntryData::Effect(effect) = &entry.data {
             let mut relations = self.relations.write().map_err(|e| 
-                Box::new(Error::Unavailable(format!("Failed to acquire write lock on relations: {}", e)))
+                Box::new(EngineError::SyncError(format!("Failed to acquire write lock on relations: {}", e))) as Box<dyn CausalityError>
             )?;
             
             let mut resource_rels = self.resource_relations.write().map_err(|e| 
-                Box::new(Error::Unavailable(format!("Failed to acquire write lock on resource_relations: {}", e)))
+                Box::new(EngineError::SyncError(format!("Failed to acquire write lock on resource_relations: {}", e))) as Box<dyn CausalityError>
             )?;
             
             let mut domain_rels = self.domain_relations.write().map_err(|e| 
-                Box::new(Error::Unavailable(format!("Failed to acquire write lock on domain_relations: {}", e)))
+                Box::new(EngineError::SyncError(format!("Failed to acquire write lock on domain_relations: {}", e))) as Box<dyn CausalityError>
             )?;
             
             let mut trace_rels = self.trace_relations.write().map_err(|e| 
-                Box::new(Error::Unavailable(format!("Failed to acquire write lock on trace_relations: {}", e)))
+                Box::new(EngineError::SyncError(format!("Failed to acquire write lock on trace_relations: {}", e))) as Box<dyn CausalityError>
             )?;
             
             // Extract resources and domains
@@ -262,7 +285,7 @@ impl FactEffectTracker {
     /// Get all effects that depend on a fact
     pub fn get_dependent_effects(&self, fact_id: &FactId) -> Result<HashSet<String>> {
         let fact_effects = self.fact_to_effects.read().map_err(|e| 
-            Box::new(Error::Unavailable(format!("Failed to acquire read lock on fact_to_effects: {}", e)))
+            Box::new(EngineError::SyncError(format!("Failed to acquire read lock on fact_to_effects: {}", e))) as Box<dyn CausalityError>
         )?;
         
         Ok(fact_effects.get(fact_id).cloned().unwrap_or_default())
@@ -271,7 +294,7 @@ impl FactEffectTracker {
     /// Get all facts that an effect depends on
     pub fn get_effect_dependencies(&self, effect_id: &str) -> Result<HashSet<FactId>> {
         let effect_facts = self.effect_to_facts.read().map_err(|e| 
-            Box::new(Error::Unavailable(format!("Failed to acquire read lock on effect_to_facts: {}", e)))
+            Box::new(EngineError::SyncError(format!("Failed to acquire read lock on effect_to_facts: {}", e))) as Box<dyn CausalityError>
         )?;
         
         Ok(effect_facts.get(effect_id).cloned().unwrap_or_default())
@@ -284,7 +307,7 @@ impl FactEffectTracker {
         end_time: Timestamp
     ) -> Result<HashSet<FactId>> {
         let time_index = self.time_indexed_facts.read().map_err(|e| 
-            Box::new(Error::Unavailable(format!("Failed to acquire read lock on time_indexed_facts: {}", e)))
+            Box::new(EngineError::SyncError(format!("Failed to acquire read lock on time_indexed_facts: {}", e))) as Box<dyn CausalityError>
         )?;
         
         let mut result = HashSet::new();
@@ -303,7 +326,7 @@ impl FactEffectTracker {
         end_time: Timestamp
     ) -> Result<HashSet<String>> {
         let time_index = self.time_indexed_effects.read().map_err(|e| 
-            Box::new(Error::Unavailable(format!("Failed to acquire read lock on time_indexed_effects: {}", e)))
+            Box::new(EngineError::SyncError(format!("Failed to acquire read lock on time_indexed_effects: {}", e))) as Box<dyn CausalityError>
         )?;
         
         let mut result = HashSet::new();
@@ -318,11 +341,11 @@ impl FactEffectTracker {
     /// Get all relations for a resource
     pub fn get_resource_relations(&self, resource_id: &ContentId) -> Result<Vec<FactEffectRelation>> {
         let resource_rels = self.resource_relations.read().map_err(|e| 
-            Box::new(Error::Unavailable(format!("Failed to acquire read lock on resource_relations: {}", e)))
+            Box::new(EngineError::SyncError(format!("Failed to acquire read lock on resource_relations: {}", e))) as Box<dyn CausalityError>
         )?;
         
         let relations = self.relations.read().map_err(|e| 
-            Box::new(Error::Unavailable(format!("Failed to acquire read lock on relations: {}", e)))
+            Box::new(EngineError::SyncError(format!("Failed to acquire read lock on relations: {}", e))) as Box<dyn CausalityError>
         )?;
         
         let mut result = Vec::new();
@@ -341,11 +364,11 @@ impl FactEffectTracker {
     /// Get all relations for a domain
     pub fn get_domain_relations(&self, domain_id: &DomainId) -> Result<Vec<FactEffectRelation>> {
         let domain_rels = self.domain_relations.read().map_err(|e| 
-            Box::new(Error::Unavailable(format!("Failed to acquire read lock on domain_relations: {}", e)))
+            Box::new(EngineError::SyncError(format!("Failed to acquire read lock on domain_relations: {}", e))) as Box<dyn CausalityError>
         )?;
         
         let relations = self.relations.read().map_err(|e| 
-            Box::new(Error::Unavailable(format!("Failed to acquire read lock on relations: {}", e)))
+            Box::new(EngineError::SyncError(format!("Failed to acquire read lock on relations: {}", e))) as Box<dyn CausalityError>
         )?;
         
         let mut result = Vec::new();
@@ -364,11 +387,11 @@ impl FactEffectTracker {
     /// Get all relations for a trace
     pub fn get_trace_relations(&self, trace_id: &TraceId) -> Result<Vec<FactEffectRelation>> {
         let trace_rels = self.trace_relations.read().map_err(|e| 
-            Box::new(Error::Unavailable(format!("Failed to acquire read lock on trace_relations: {}", e)))
+            Box::new(EngineError::SyncError(format!("Failed to acquire read lock on trace_relations: {}", e))) as Box<dyn CausalityError>
         )?;
         
         let relations = self.relations.read().map_err(|e| 
-            Box::new(Error::Unavailable(format!("Failed to acquire read lock on relations: {}", e)))
+            Box::new(EngineError::SyncError(format!("Failed to acquire read lock on relations: {}", e))) as Box<dyn CausalityError>
         )?;
         
         let mut result = Vec::new();

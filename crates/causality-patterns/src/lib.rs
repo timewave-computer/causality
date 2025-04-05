@@ -1,13 +1,9 @@
-// Pattern matching and AST functionality for the Causality system
-// Original file: src/ast.rs and related modules
+// Causality Patterns
+// Common patterns for working with the Causality log system
 
-// Re-export modules
-pub mod ast;
-pub mod capabilities;
 pub mod integration;
-pub mod relationship {
-    pub mod cross_domain_query;
-}
+pub mod ast;
+pub mod relationship; // Stub module for now - real code moved to backup directory
 
 /// Version of the library
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

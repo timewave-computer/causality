@@ -5,7 +5,6 @@
 use std::fmt;
 use causality_types::crypto_primitives::ContentId;
 use blake3;
-use std::sync::OnceLock;
 use crate::serialization::Serializable;
 
 /// Generate a content-addressed ID string

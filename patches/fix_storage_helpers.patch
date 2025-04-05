@@ -1,0 +1,30 @@
+--- crates/causality-core/src/resource/storage/storage.rs
++++ crates/causality-core/src/resource/storage/storage.rs
+@@ -33,8 +33,7 @@
+ use tokio::sync::RwLock;
+ use causality_types::{ContentId, content::ContentHash as TypesContentHash};
+ use causality_crypto::HashError;
+-use crate::id_utils::{convert_to_types_content_id, convert_from_types_content_id, 
+-                      convert_to_crypto_primitives_content_id, convert_from_crypto_primitives_content_id};
++use crate::id_utils::{convert_to_types_content_id, convert_from_types_content_id};
+ 
+ /// Errors that can occur during resource storage operations
+ #[derive(Error, Debug)]
+@@ -304,13 +303,15 @@
+ 
+     async fn get_bytes_internal(&self, content_hash: &ContentHash) -> ResourceStorageResult<Vec<u8>> {
+         // Convert ContentHash to ContentId for storage access
+-        let content_id = content_hash.to_content_id();
++        let resource_id = ResourceId::new(content_hash.clone());
++        let content_id: TypesContentId = resource_id.into();
+         self.storage.get_bytes(&content_id)
+             .map_err(|e| ResourceStorageError::StorageError(e.to_string()))
+     }
+ 
+     async fn contains_internal(&self, content_hash: &ContentHash) -> ResourceStorageResult<bool> {
+         // Convert ContentHash to ContentId for storage check
+-        let content_id = content_hash.to_content_id();
++        let resource_id = ResourceId::new(content_hash.clone());
++        let content_id: TypesContentId = resource_id.into();
+         Ok(self.storage.contains(&content_id))
+     }

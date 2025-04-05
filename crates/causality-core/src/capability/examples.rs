@@ -4,10 +4,9 @@
 // safety system with content addressing.
 
 use super::{
-    ResourceId, IdentityId, Capability, CapabilityGrants, ResourceRegistry,
-    ContentRef, ResourceGuard, CapabilityError
+    Capability, CapabilityGrants, ResourceRegistry,
+    ContentRef, CapabilityError
 };
-use super::utils;
 use std::marker::PhantomData;
 use serde;
 

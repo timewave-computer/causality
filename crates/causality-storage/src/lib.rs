@@ -10,7 +10,6 @@
 
 use std::fmt::{Debug, Display};
 use std::error::Error;
-use std::sync::Arc;
 
 // Re-export the database interface types
 pub use causality_db::*;
@@ -182,7 +181,7 @@ struct DbAdapter {
 impl Database for DbAdapter {
     fn open(config: DbConfig) -> Result<Self, DbError> where Self: Sized {
         // Convert the config
-        let db_config = causality_db::DbConfig::new(&config.path)
+        let _db_config = causality_db::DbConfig::new(&config.path)
             .create_if_missing(config.create_if_missing)
             .read_only(config.read_only);
             

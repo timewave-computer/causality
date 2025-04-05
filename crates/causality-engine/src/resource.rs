@@ -6,7 +6,6 @@
 use std::fmt::Debug;
 use async_trait::async_trait;
 use causality_error::Result;
-use causality_types::crypto_primitives::ContentHash;
 use causality_core::resource::types::ResourceId;
 
 /// A resource allocator for managing system resources
@@ -32,7 +31,6 @@ pub trait ResourceAllocator: Debug + Send + Sync {
 #[cfg(test)]
 pub mod memory {
     use super::*;
-    use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use causality_core::resource::types::ResourceId;
     

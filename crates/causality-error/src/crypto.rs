@@ -2,7 +2,8 @@
 // These errors are specifically for the causality-crypto crate
 
 use thiserror::Error;
-use crate::{CausalityError, ErrorCode, ErrorDomain};
+use crate::CausalityError;
+use std::any::Any;
 
 /// Crypto-specific error codes
 pub mod codes {
@@ -51,22 +52,20 @@ pub enum CryptoError {
 }
 
 impl CausalityError for CryptoError {
-    fn code(&self) -> ErrorCode {
-        use codes::*;
+    fn error_code(&self) -> &'static str {
+        
         match self {
-            CryptoError::HashError(_) => HASH_ERROR,
-            CryptoError::SignatureError(_) => SIGNATURE_ERROR,
-            CryptoError::VerificationError(_) => VERIFICATION_ERROR,
-            CryptoError::KeyError(_) => KEY_ERROR,
-            CryptoError::RandomError(_) => RANDOM_ERROR,
-            CryptoError::EncodingError(_) => ENCODING_ERROR,
-            CryptoError::ContentIdError(_) => CONTENT_ID_ERROR,
+            CryptoError::HashError(_) => "CRYPTO_HASH_ERROR",
+            CryptoError::SignatureError(_) => "CRYPTO_SIGNATURE_ERROR",
+            CryptoError::VerificationError(_) => "CRYPTO_VERIFICATION_ERROR",
+            CryptoError::KeyError(_) => "CRYPTO_KEY_ERROR",
+            CryptoError::RandomError(_) => "CRYPTO_RANDOM_ERROR",
+            CryptoError::EncodingError(_) => "CRYPTO_ENCODING_ERROR",
+            CryptoError::ContentIdError(_) => "CRYPTO_CONTENT_ID_ERROR",
         }
     }
-    
-    fn domain(&self) -> ErrorDomain {
-        ErrorDomain::Crypto
-    }
+
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 /// Convenient Result type for crypto operations

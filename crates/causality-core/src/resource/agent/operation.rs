@@ -3,30 +3,26 @@
 // This file defines the Operation struct and related types for executing
 // operations on resources through agents.
 
-use crate::resource::{ResourceId, ResourceError, ResourceType, Resource};
+use crate::resource::{ResourceId, Resource};
 use crate::utils::content_addressing;
-use crate::effect::{Effect, EffectContext, EffectOutcome, EffectType, EffectResult};
+use crate::effect::{Effect, EffectContext, EffectOutcome, EffectType};
 use crate::serialization::{Serializable, SerializationError};
 use causality_types::ContentHash;
 use anyhow::{Result, anyhow};
 
-use super::types::{AgentId, AgentType, AgentState, AgentError};
+use super::types::{AgentId, AgentError};
 use super::agent::Agent;
 
-use std::collections::{HashMap, HashSet};
-use std::fmt;
-use std::sync::Arc;
-use async_trait::async_trait;
-use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use std::marker::PhantomData;
-use crate::effect::info;
 
 use hex;
 
 // Define the serde module for ContentHash compatibility
 mod content_hash_serde {
-    use serde::{Serialize, Serializer, Deserialize, Deserializer};
+    use serde::{Serializer, Deserialize, Deserializer};
     use causality_types::ContentHash;
 
     pub fn serialize<S>(hash: &ContentHash, serializer: S) -> Result<S::Ok, S::Error>
@@ -747,20 +743,19 @@ pub struct RequiredCapabilities {
 
 impl Clone for RequiredCapabilities {
     fn clone(&self) -> Self {
+        let cloned_capabilities = self.required_capabilities.iter()
+            .map(|cap| {
+                // Create a new capability with the same properties
+                Box::new(Capability::new(
+                    cap.id(),
+                    &cap.grants,
+                    Some(&cap.origin),
+                ))
+            })
+            .collect();
+        
         Self {
-            required_capabilities: self.required_capabilities.iter()
-                .map(|cap| {
-                    // Create a new capability with the same properties
-                    let cap_clone = Box::new(Capability {
-                        id: cap.id.clone(),
-                        grants: cap.grants.clone(),
-                        origin: cap.origin.clone(),
-                        content_hash: cap.content_hash.clone(),
-                        _phantom: PhantomData,
-                    });
-                    cap_clone
-                })
-                .collect()
+            required_capabilities: cloned_capabilities
         }
     }
 }

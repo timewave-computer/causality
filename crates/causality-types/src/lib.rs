@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use borsh;
 use rand;
+use chrono::{DateTime, TimeZone, Utc};
 
 // Export crypto_primitives module
 pub mod crypto_primitives;
@@ -27,6 +28,8 @@ pub mod time_snapshot;
 pub mod time_effect_system;
 // Export content module
 pub mod content;
+// Export error module
+pub mod error;
 
 // Export core types from crypto_primitives module
 pub use crypto_primitives::{
@@ -38,6 +41,8 @@ pub use crypto_primitives::{
 // Re-export core types
 pub use crypto_primitives::{ContentId, ContentHash, HashOutput};
 pub use content::{ContentAddressingError}; 
+// Re-export Error type
+pub use error::Error;
 
 // Export utility functions
 pub use utils::{
@@ -45,6 +50,14 @@ pub use utils::{
     display_format,
     truncate_str,
     truncate_lines,
+};
+
+// Export content addressing and storage types
+pub use content_addressing::storage::{
+    ContentAddressedStorage,
+    ContentAddressedStorageExt,
+    StorageError,
+    StorageResult,
 };
 
 // Export verification types
@@ -207,6 +220,12 @@ pub mod domain {
         /// Get the string representation
         pub fn as_str(&self) -> &str {
             &self.0
+        }
+    }
+    
+    impl Default for DomainId {
+        fn default() -> Self {
+            Self("default-domain".to_string())
         }
     }
     
@@ -395,6 +414,24 @@ pub mod timestamp {
             self.0 as i64
         }
         
+        /// Convert milliseconds to a Timestamp (seconds)
+        pub fn from_millis(millis: u64) -> Self {
+            Timestamp(millis / 1000)
+        }
+        
+        /// Convert from DateTime<Utc> to Timestamp
+        pub fn from_datetime(datetime: &DateTime<Utc>) -> Self {
+            Timestamp(datetime.timestamp() as u64)
+        }
+        
+        /// Convert Timestamp to DateTime<Utc>
+        pub fn to_datetime(&self) -> DateTime<Utc> {
+            match Utc.timestamp_opt(self.0 as i64, 0) {
+                chrono::LocalResult::Single(dt) => dt,
+                _ => Utc::now() // Fallback to current time if conversion fails
+            }
+        }
+        
         /// Check if this timestamp is older than the given seconds
         pub fn is_older_than(&self, seconds: u64) -> bool {
             let now = Self::now();
@@ -413,6 +450,11 @@ pub mod timestamp {
         /// Get the timestamp value in milliseconds
         pub fn as_millis(&self) -> u64 {
             self.0 * 1000
+        }
+        
+        /// Get the timestamp value as milliseconds (alias for as_millis for compatibility)
+        pub fn to_millis(&self) -> u64 {
+            self.as_millis()
         }
     }
     

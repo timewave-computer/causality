@@ -2,7 +2,8 @@
 // Provides tools for converting between different error types
 
 use thiserror::Error;
-use crate::{CausalityError, ErrorCode, ErrorDomain, BoxError};
+use crate::{CausalityError, BoxError};
+use std::any::Any;
 
 /// Trait for converting any error type to a BoxError
 pub trait IntoBoxError {
@@ -61,17 +62,15 @@ pub enum ExternalError {
 }
 
 impl CausalityError for ExternalError {
-    fn code(&self) -> ErrorCode {
+    fn error_code(&self) -> &'static str {
         match self {
-            ExternalError::Io(_) => ErrorCode(8001),
-            ExternalError::Serde(_) => ErrorCode(8002),
-            ExternalError::Other(_) => ErrorCode(8000),
+            ExternalError::Io(_) => "EXTERNAL_IO",
+            ExternalError::Serde(_) => "EXTERNAL_SERDE",
+            ExternalError::Other(_) => "EXTERNAL_OTHER",
         }
     }
-    
-    fn domain(&self) -> ErrorDomain {
-        ErrorDomain::External
-    }
+
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 // Implement for serde_json::Error
