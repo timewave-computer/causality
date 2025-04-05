@@ -600,7 +600,7 @@ impl LogVisualizer {
     /// Find causality relationships for a specific entry
     pub async fn find_causality(&self, entry_id: &str) -> Result<CausalityGraph> {
         // Create a filter for this entry and its related entries
-        let filter = VisualizationFilter::new();
+        let _filter = VisualizationFilter::new();
         
         // First, get this specific entry
         let mut entry_ids = HashSet::new();
@@ -666,7 +666,7 @@ impl EntryType {
             EntryType::Event => "Event",
             EntryType::SystemEvent => "System Event",
             EntryType::Operation => "Operation",
-            EntryType::Custom(name) => "Custom", // Can't return the string inside name because it's not static
+            EntryType::Custom(_name) => "Custom", // Can't return the string inside name because it's not static
         }
     }
 }
