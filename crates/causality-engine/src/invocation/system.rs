@@ -98,7 +98,7 @@ impl InvocationSystem {
     pub async fn execute_with_trace<P: InvocationPatternTrait>(
         &self,
         pattern: &P,
-        trace_id: TraceId,
+        _trace_id: TraceId,
     ) -> Result<HandlerOutput> {
         // TODO: Implement trace handling
         self.execute(pattern).await

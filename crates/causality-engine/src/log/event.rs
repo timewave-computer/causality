@@ -7,11 +7,13 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use futures::FutureExt;
-use uuid::Uuid;
+use std::fmt::Debug;
+
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use uuid::Uuid;
 
 use causality_error::EngineError;
 use causality_types::{Timestamp, ContentId, TraceId, DomainId};
@@ -20,7 +22,6 @@ use crate::log::types::{LogEntry, EntryType, EntryData, SystemEventEntry};
 use crate::log::LogStorage;
 use crate::log::event_entry::{EventEntry, EventSeverity};
 use crate::error_conversions::convert_boxed_error;
-use futures::TryFutureExt;
 use causality_error::CausalityError;
 use causality_error::Result as CausalityResult;
 
@@ -732,6 +733,52 @@ pub fn create_event_entry(
         metadata: HashMap::new(),
         entry_hash: None,
     }
+}
+
+/// Create a fact observation event
+pub fn create_fact_observation(
+    event_name: &str,
+    fact_id: &str,
+    domains: Option<Vec<String>>,
+    _metadata: Option<EventMetadata>,
+) -> LogEntry {
+    let mut entry = LogEntry::new();
+    // Implementation would go here
+    entry
+}
+
+/// Create a resource access event
+pub fn create_resource_access(
+    event_name: &str,
+    resource_id: &str,
+    domains: Option<Vec<String>>,
+    _metadata: Option<EventMetadata>,
+) -> LogEntry {
+    let mut entry = LogEntry::new();
+    // Implementation would go here
+    entry
+}
+
+/// Create a system event
+pub fn create_system_event(
+    event_name: &str,
+    domains: Option<Vec<String>>,
+    _metadata: Option<EventMetadata>,
+) -> LogEntry {
+    let mut entry = LogEntry::new();
+    // Implementation would go here
+    entry
+}
+
+/// Create a domain event
+pub fn create_domain_event(
+    event_name: &str,
+    domains: Option<Vec<String>>,
+    _metadata: Option<EventMetadata>,
+) -> LogEntry {
+    let mut entry = LogEntry::new();
+    // Implementation would go here
+    entry
 }
 
 #[cfg(test)]

@@ -604,7 +604,7 @@ impl ExecutionReplayer {
     /// Apply an event to a context
     fn apply_event(&self, context: &mut ExecutionContext, event: &ExecutionEvent) -> EngineResult<()> {
         match event {
-            ExecutionEvent::FunctionCall { hash, name, arguments, timestamp } => {
+            ExecutionEvent::FunctionCall { hash, name, arguments: _arguments, timestamp } => {
                 // Create a call frame
                 let frame = CallFrame {
                     function_name: name.clone(),
@@ -621,7 +621,7 @@ impl ExecutionReplayer {
                 // Record the event in the context's trace
                 context.record_event(event.clone())?;
             },
-            ExecutionEvent::FunctionReturn { hash, result, timestamp } => {
+            ExecutionEvent::FunctionReturn { hash, result, timestamp: _timestamp } => {
                 // Pop a call frame
                 if let Some(frame) = context.pop_call_frame()? {
                     // Validate hash if enabled
@@ -639,7 +639,7 @@ impl ExecutionReplayer {
                 // Record the event in the context's trace
                 context.record_event(event.clone())?;
             },
-            ExecutionEvent::EffectApplied { effect_type, parameters, result, timestamp: _ } => {
+            ExecutionEvent::EffectApplied { effect_type: _effect_type, parameters: _parameters, result, timestamp: _ } => {
                 // Apply effect if enabled
                 if self.options.apply_effects {
                     // This would apply the actual effect in a real implementation
@@ -652,13 +652,13 @@ impl ExecutionReplayer {
                 // Record the event in the context's trace
                 context.record_event(event.clone())?;
             },
-            ExecutionEvent::Error(error) => {
+            ExecutionEvent::Error(_error) => {
                 // Record the error event
                 context.record_event(event.clone())?;
             },
-            ExecutionEvent::Return { value, timestamp } => {
+            ExecutionEvent::Return { value: _value, timestamp } => {
                 // Get the current call frame
-                let frame = if let Some(frame) = context.call_stack.last() {
+                let _frame = if let Some(frame) = context.call_stack.last() {
                     frame.clone()
                 } else {
                     // Create a default frame if none exists
@@ -674,7 +674,7 @@ impl ExecutionReplayer {
                 
                 // ... handle return value ...
             },
-            ExecutionEvent::Call { function_name, args, timestamp } => {
+            ExecutionEvent::Call { function_name, args: _args, timestamp } => {
                 // Handle legacy call event
                 let frame = CallFrame {
                     function_name: function_name.clone(),
@@ -688,7 +688,7 @@ impl ExecutionReplayer {
                 context.push_call_frame(frame)?;
                 context.record_event(event.clone())?;
             },
-            ExecutionEvent::Custom { name, data, timestamp: _ } => {
+            ExecutionEvent::Custom { name: _name, data: _data, timestamp: _ } => {
                 // Handle custom event
                 context.record_event(event.clone())?;
             },

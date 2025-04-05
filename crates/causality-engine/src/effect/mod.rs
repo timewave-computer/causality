@@ -52,7 +52,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 
-use causality_core::{ContentId, Effect as CoreEffect, EffectOutcome as CoreEffectOutcome};
+use causality_core::{ContentId, EffectOutcome as CoreEffectOutcome};
 use causality_error::{EngineResult as Result, EngineError as Error};
 use causality_types::DomainId;
 
