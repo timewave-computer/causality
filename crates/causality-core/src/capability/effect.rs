@@ -4,16 +4,15 @@
 // that integrate with the core capability system.
 
 use std::any::Any;
-use std::fmt;
 use std::sync::Arc;
 use std::collections::HashSet;
 
 use thiserror::Error;
 
 // Fix imports to use the correct types
-use crate::capability::{ResourceId, IdentityId, ContentAddressingError, ContentRef};
+use crate::capability::{ResourceId, IdentityId, ContentRef};
 use crate::capability::utils;
-use causality_types::{ContentHash, ContentId};
+use causality_types::ContentHash;
 use std::marker::PhantomData;
 
 // Temporary imported types until we restructure - matched with resource.rs

@@ -1,513 +1,207 @@
-//! Resource integration for the Effect System
-//!
-//! This module integrates the resource system from causality-core with the
-//! effect system in the engine. It provides effects for querying, storing,
-//! and managing resources.
-
-use std::fmt;
+// Resource-related effects
 use std::sync::Arc;
-use std::collections::HashMap;
-
-use async_trait::async_trait;
-use thiserror::Error;
 use serde::{Serialize, Deserialize};
+use causality_error::EngineResult;
+use causality_core::effect::{Effect, EffectError, EffectOutcome, EffectType, EffectContext};
+use std::any::Any;
+use async_trait::async_trait;
 
-use causality_core::resource::{
-    ResourceManager, ResourceResult, ResourceError, ResourceConfig,
-    ResourceQuery, QueryEngine, QueryResult, QueryError, QueryOptions,
-    ResourceInterface, Resource, ResourceType
-};
-use causality_types::ContentId;
-
-use causality_core::effect::{Effect, EffectResult};
-use causality_core::effect::context::EffectContext as Context;
-use causality_core::effect::{EffectOutcome, EffectType, EffectError};
-// Create a local definition for EffectTypeId
-use crate::effect::capability::EffectTypeId;
+use super::EffectRegistry;
 
 /// Resource effect error
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ResourceEffectError {
-    /// Resource error from core
-    #[error("Resource error: {0}")]
-    ResourceError(#[from] ResourceError),
-    
-    /// Query error from core
     #[error("Query error: {0}")]
-    QueryError(#[from] QueryError),
+    QueryError(String),
     
-    /// Resource integration error
-    #[error("Resource integration error: {0}")]
+    #[error("Integration error: {0}")]
     IntegrationError(String),
+    
+    #[error("Resource not found")]
+    NotFound,
+    
+    #[error("Resource already exists")]
+    AlreadyExists,
+    
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Resource transfer error: {0}")]
+    ResourceTransferError(String),
+    
+    #[error("Storage error: {0}")]
+    StorageError(Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("Access denied")]
+    AccessDenied,
+    
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
 }
 
 impl From<ResourceEffectError> for EffectError {
-    fn from(err: ResourceEffectError) -> Self {
-        match err {
-            ResourceEffectError::ResourceError(e) => EffectError::Internal(e.to_string()),
-            ResourceEffectError::QueryError(e) => EffectError::Internal(e.to_string()),
-            ResourceEffectError::IntegrationError(e) => EffectError::Internal(e),
+    fn from(e: ResourceEffectError) -> Self {
+        match e {
+            ResourceEffectError::QueryError(e) => EffectError::InvalidArgument(e),
+            ResourceEffectError::IntegrationError(e) => EffectError::InvalidArgument(e.to_string()),
+            ResourceEffectError::NotFound => EffectError::NotFound("Resource not found".to_string()),
+            ResourceEffectError::AlreadyExists => EffectError::AlreadyExists("Resource already exists".to_string()),
+            ResourceEffectError::ValidationError(e) => EffectError::InvalidArgument(e),
+            ResourceEffectError::SerializationError(e) => EffectError::InvalidArgument(e),
+            ResourceEffectError::ResourceTransferError(e) => EffectError::InvalidArgument(e),
+            ResourceEffectError::StorageError(e) => EffectError::InvalidArgument(e.to_string()),
+            ResourceEffectError::AccessDenied => EffectError::InvalidArgument("Access denied".to_string()),
+            ResourceEffectError::InvalidOperation(e) => EffectError::InvalidArgument(e.to_string()),
         }
     }
 }
 
-/// Manager for resource effects
-pub struct ResourceEffectManager {
-    /// Resource manager from core
-    resource_manager: Arc<dyn ResourceManager>,
-}
-
-impl ResourceEffectManager {
-    /// Create a new resource effect manager
-    pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
-        Self { resource_manager }
-    }
-    
-    /// Get the underlying resource manager
-    pub fn resource_manager(&self) -> &Arc<dyn ResourceManager> {
-        &self.resource_manager
-    }
-    
-    /// Get the resource interface for direct operations
-    pub async fn get_resource_interface(&self) -> ResourceResult<Arc<dyn ResourceInterface>> {
-        self.resource_manager.get_resource_interface().await
-    }
-    
-    /// Register all resource effects with the registry
-    pub fn register_effects(&self, registry: &mut super::registry::EffectRegistry) {
-        // Create handlers
-        let query_handler = Arc::new(ResourceQueryHandler::new(self.resource_manager.clone()));
-        let store_handler = Arc::new(ResourceStoreHandler::new(self.resource_manager.clone()));
-        let get_handler = Arc::new(ResourceGetHandler::new(self.resource_manager.clone()));
-        let delete_handler = Arc::new(ResourceDeleteHandler::new(self.resource_manager.clone()));
-        
-        // Register with the registry
-        registry.register(ResourceQueryEffect::type_id(), query_handler);
-        registry.register(ResourceStoreEffect::type_id(), store_handler);
-        registry.register(ResourceGetEffect::type_id(), get_handler);
-        registry.register(ResourceDeleteEffect::type_id(), delete_handler);
-    }
-}
-
-impl fmt::Debug for ResourceEffectManager {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ResourceEffectManager")
-            .finish_non_exhaustive()
-    }
-}
-
-/// Effect for querying resources
-#[derive(Debug)]
-pub struct ResourceQueryEffect;
-
-impl ResourceQueryEffect {
-    /// Get the effect type ID
-    pub fn type_id() -> EffectTypeId {
-        EffectTypeId::new("resource.query")
-    }
-}
-
-/// Parameters for resource query effect
+// Serializable resource representation for effects
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceQueryParams {
-    /// The query to execute
-    pub query: ResourceQuery,
-    
-    /// Query options
-    pub options: Option<QueryOptions>,
+pub struct SerializableResource {
+    pub id: String,
+    pub resource_type: String,
+    pub data: Vec<u8>,
 }
 
-/// Outcome of resource query effect
+// Query effect structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceQueryOutcome {
-    /// Query result data
-    pub data: Vec<Box<dyn Resource>>,
-    
-    /// Pagination information
-    pub pagination: Option<causality_core::resource::query::PaginationResult>,
-    
-    /// Query statistics
-    pub stats: Option<QueryExecutionStats>,
+    pub resources: Vec<SerializableResource>,
 }
 
-/// Statistics about query execution
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueryExecutionStats {
-    /// Time taken in milliseconds
-    pub execution_time_ms: u64,
-    
-    /// Number of resources matched
-    pub resources_matched: usize,
-    
-    /// Number of resources returned
-    pub resources_returned: usize,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResourceQueryEffect {
+    pub query: String,
 }
 
 #[async_trait]
 impl Effect for ResourceQueryEffect {
     fn effect_type(&self) -> EffectType {
-        EffectType::Custom(Self::type_id().to_string())
+        EffectType::Custom("resource.query".to_string())
     }
     
     fn description(&self) -> String {
-        "Query resources from the resource database".to_string()
+        format!("Query resources with filter: {}", self.query)
     }
     
-    async fn execute(&self, context: &dyn causality_core::effect::EffectContext) -> EffectResult<EffectOutcome> {
-        // Simplified implementation - normally would parse params from context
-        // and execute the query, but for now we just return success
-        Ok(EffectOutcome::success(HashMap::new()))
-    }
-    
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
-}
-
-/// Handler for resource query effects
-pub struct ResourceQueryHandler {
-    /// Resource manager
-    resource_manager: Arc<dyn ResourceManager>,
-}
-
-impl ResourceQueryHandler {
-    /// Create a new query handler
-    pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
-        Self { resource_manager }
-    }
-}
-
-impl fmt::Debug for ResourceQueryHandler {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ResourceQueryHandler").finish()
-    }
-}
-
-impl causality_core::effect::handler::EffectHandler for ResourceQueryHandler {
-    fn supported_effect_types(&self) -> Vec<causality_core::effect::EffectTypeId> {
-        vec![ResourceQueryEffect::type_id()]
-    }
     
-    async fn handle(
-        &self,
-        effect: &dyn causality_core::Effect,
-        context: &dyn causality_core::effect::context::EffectContext,
-    ) -> causality_core::effect::outcome::EffectResult<causality_core::effect::outcome::EffectOutcome> {
-        // Simplified implementation
-        Ok(causality_core::effect::outcome::EffectOutcome {
-            effect_id: Some(causality_core::effect::EffectId(effect.effect_type().to_string())),
-            status: causality_core::effect::outcome::EffectStatus::Success,
-            data: std::collections::HashMap::new(),
-            result: causality_core::effect::outcome::ResultData::None,
-            error_message: None,
-            affected_resources: vec![],
-            child_outcomes: vec![],
-            content_hash: None,
-        })
+    async fn execute(&self, _context: &dyn EffectContext) -> Result<EffectOutcome, EffectError> {
+        // Placeholder implementation
+        Ok(EffectOutcome::success(std::collections::HashMap::new()))
     }
 }
 
-/// Effect for storing resources
-#[derive(Debug)]
-pub struct ResourceStoreEffect;
-
-impl ResourceStoreEffect {
-    /// Get the effect type ID
-    pub fn type_id() -> EffectTypeId {
-        EffectTypeId::new("resource.store")
-    }
-}
-
-/// Parameters for resource store effect
+// Store effect structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceStoreParams {
-    /// The resource to store
-    pub resource: Box<dyn Resource>,
-    
-    /// Whether to update if exists
-    pub update: bool,
+    pub resource: SerializableResource,
 }
 
-/// Outcome of resource store effect
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceStoreOutcome {
-    /// Stored resource ID
-    pub resource_id: ContentId,
-    
-    /// Whether the resource was created or updated
-    pub was_updated: bool,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResourceStoreEffect {
+    pub params: ResourceStoreParams,
 }
 
 #[async_trait]
 impl Effect for ResourceStoreEffect {
     fn effect_type(&self) -> EffectType {
-        EffectType::Custom(Self::type_id().to_string())
+        EffectType::Custom("resource.store".to_string())
     }
     
     fn description(&self) -> String {
-        "Store a resource in the resource database".to_string()
+        format!("Store resource of type: {}", self.params.resource.resource_type)
     }
     
-    async fn execute(&self, context: &dyn causality_core::effect::EffectContext) -> EffectResult<EffectOutcome> {
-        // Simplified implementation
-        Ok(EffectOutcome::success(HashMap::new()))
-    }
-    
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
-}
-
-/// Handler for resource store effects
-pub struct ResourceStoreHandler {
-    /// Resource manager
-    resource_manager: Arc<dyn ResourceManager>,
-}
-
-impl ResourceStoreHandler {
-    /// Create a new store handler
-    pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
-        Self { resource_manager }
-    }
-}
-
-impl fmt::Debug for ResourceStoreHandler {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ResourceStoreHandler").finish()
-    }
-}
-
-impl causality_core::effect::handler::EffectHandler for ResourceStoreHandler {
-    fn supported_effect_types(&self) -> Vec<causality_core::effect::EffectTypeId> {
-        vec![ResourceStoreEffect::type_id()]
-    }
     
-    async fn handle(
-        &self,
-        effect: &dyn causality_core::Effect,
-        context: &dyn causality_core::effect::context::EffectContext,
-    ) -> causality_core::effect::outcome::EffectResult<causality_core::effect::outcome::EffectOutcome> {
-        // Simplified implementation
-        Ok(causality_core::effect::outcome::EffectOutcome {
-            effect_id: Some(causality_core::effect::EffectId(effect.effect_type().to_string())),
-            status: causality_core::effect::outcome::EffectStatus::Success,
-            data: std::collections::HashMap::new(),
-            result: causality_core::effect::outcome::ResultData::None,
-            error_message: None,
-            affected_resources: vec![],
-            child_outcomes: vec![],
-            content_hash: None,
-        })
+    async fn execute(&self, _context: &dyn EffectContext) -> Result<EffectOutcome, EffectError> {
+        // Placeholder implementation
+        Ok(EffectOutcome::success(std::collections::HashMap::new()))
     }
 }
 
-/// Effect for getting a resource
-#[derive(Debug)]
-pub struct ResourceGetEffect;
-
-impl ResourceGetEffect {
-    /// Get the effect type ID
-    pub fn type_id() -> EffectTypeId {
-        EffectTypeId::new("resource.get")
-    }
-}
-
-/// Parameters for resource get effect
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceGetParams {
-    /// The resource ID to get
-    pub resource_id: ContentId,
-    
-    /// Resource type (optional for validation)
-    pub resource_type: Option<ResourceType>,
-}
-
-/// Outcome of resource get effect
+// Get effect structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceGetOutcome {
-    /// The resource (if found)
-    pub resource: Option<Box<dyn Resource>>,
+    pub resource: Option<SerializableResource>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResourceGetEffect {
+    pub resource_id: String,
+    pub resource_type: String,
 }
 
 #[async_trait]
 impl Effect for ResourceGetEffect {
     fn effect_type(&self) -> EffectType {
-        EffectType::Custom(Self::type_id().to_string())
+        EffectType::Custom("resource.get".to_string())
     }
     
     fn description(&self) -> String {
-        "Get a resource from the resource database".to_string()
+        format!("Get resource of type: {} with ID: {}", self.resource_type, self.resource_id)
     }
     
-    async fn execute(&self, context: &dyn causality_core::effect::EffectContext) -> EffectResult<EffectOutcome> {
-        // Simplified implementation
-        Ok(EffectOutcome::success(HashMap::new()))
-    }
-    
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
-}
-
-/// Handler for resource get effects
-pub struct ResourceGetHandler {
-    /// Resource manager
-    resource_manager: Arc<dyn ResourceManager>,
-}
-
-impl ResourceGetHandler {
-    /// Create a new get handler
-    pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
-        Self { resource_manager }
-    }
-}
-
-impl fmt::Debug for ResourceGetHandler {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ResourceGetHandler").finish()
-    }
-}
-
-impl causality_core::effect::handler::EffectHandler for ResourceGetHandler {
-    fn supported_effect_types(&self) -> Vec<causality_core::effect::EffectTypeId> {
-        vec![ResourceGetEffect::type_id()]
-    }
     
-    async fn handle(
-        &self,
-        effect: &dyn causality_core::Effect,
-        context: &dyn causality_core::effect::context::EffectContext,
-    ) -> causality_core::effect::outcome::EffectResult<causality_core::effect::outcome::EffectOutcome> {
-        // Simplified implementation
-        Ok(causality_core::effect::outcome::EffectOutcome {
-            effect_id: Some(causality_core::effect::EffectId(effect.effect_type().to_string())),
-            status: causality_core::effect::outcome::EffectStatus::Success,
-            data: std::collections::HashMap::new(),
-            result: causality_core::effect::outcome::ResultData::None,
-            error_message: None,
-            affected_resources: vec![],
-            child_outcomes: vec![],
-            content_hash: None,
-        })
+    async fn execute(&self, _context: &dyn EffectContext) -> Result<EffectOutcome, EffectError> {
+        // Placeholder implementation
+        Ok(EffectOutcome::success(std::collections::HashMap::new()))
     }
 }
 
-/// Effect for deleting a resource
-#[derive(Debug)]
-pub struct ResourceDeleteEffect;
-
-impl ResourceDeleteEffect {
-    /// Get the effect type ID
-    pub fn type_id() -> EffectTypeId {
-        EffectTypeId::new("resource.delete")
-    }
-}
-
-/// Parameters for resource delete effect
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceDeleteParams {
-    /// The resource ID to delete
-    pub resource_id: ContentId,
-}
-
-/// Outcome of resource delete effect
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceDeleteOutcome {
-    /// Whether the resource was deleted
-    pub deleted: bool,
+// Delete effect structures
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResourceDeleteEffect {
+    pub resource_id: String,
+    pub resource_type: String,
 }
 
 #[async_trait]
 impl Effect for ResourceDeleteEffect {
     fn effect_type(&self) -> EffectType {
-        EffectType::Custom(Self::type_id().to_string())
+        EffectType::Custom("resource.delete".to_string())
     }
     
     fn description(&self) -> String {
-        "Delete a resource from the resource database".to_string()
+        format!("Delete resource of type: {} with ID: {}", self.resource_type, self.resource_id)
     }
     
-    async fn execute(&self, context: &dyn causality_core::effect::EffectContext) -> EffectResult<EffectOutcome> {
-        // Simplified implementation
-        Ok(EffectOutcome::success(HashMap::new()))
-    }
-    
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
-}
-
-/// Handler for resource delete effects
-pub struct ResourceDeleteHandler {
-    /// Resource manager
-    resource_manager: Arc<dyn ResourceManager>,
-}
-
-impl ResourceDeleteHandler {
-    /// Create a new delete handler
-    pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
-        Self { resource_manager }
-    }
-}
-
-impl fmt::Debug for ResourceDeleteHandler {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ResourceDeleteHandler").finish()
-    }
-}
-
-impl causality_core::effect::handler::EffectHandler for ResourceDeleteHandler {
-    fn supported_effect_types(&self) -> Vec<causality_core::effect::EffectTypeId> {
-        vec![ResourceDeleteEffect::type_id()]
-    }
     
-    async fn handle(
-        &self,
-        effect: &dyn causality_core::Effect,
-        context: &dyn causality_core::effect::context::EffectContext,
-    ) -> causality_core::effect::outcome::EffectResult<causality_core::effect::outcome::EffectOutcome> {
-        // Simplified implementation
-        Ok(causality_core::effect::outcome::EffectOutcome {
-            effect_id: Some(causality_core::effect::EffectId(effect.effect_type().to_string())),
-            status: causality_core::effect::outcome::EffectStatus::Success,
-            data: std::collections::HashMap::new(),
-            result: causality_core::effect::outcome::ResultData::None,
-            error_message: None,
-            affected_resources: vec![],
-            child_outcomes: vec![],
-            content_hash: None,
-        })
+    async fn execute(&self, _context: &dyn EffectContext) -> Result<EffectOutcome, EffectError> {
+        // Placeholder implementation
+        Ok(EffectOutcome::success(std::collections::HashMap::new()))
     }
 }
 
-/// Verifier for resource capabilities
-pub struct ResourceCapabilityVerifier {
-    /// Resource manager
-    resource_manager: Arc<dyn ResourceManager>,
-}
+// Handler structures
+pub struct ResourceQueryHandler {}
+pub struct ResourceStoreHandler {}
+pub struct ResourceGetHandler {}
+pub struct ResourceDeleteHandler {}
 
-impl ResourceCapabilityVerifier {
-    /// Create a new resource capability verifier
-    pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
-        Self { resource_manager }
-    }
-}
-
-impl fmt::Debug for ResourceCapabilityVerifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ResourceCapabilityVerifier").finish()
-    }
-}
-
-// Simplified implementation of the capability verification
-#[async_trait]
-impl super::capability::CapabilityVerifier for ResourceCapabilityVerifier {
-    async fn verify_capability(
-        &self,
-        capability_id: &super::capability::CapabilityId,
-        context: &dyn causality_core::effect::context::EffectContext,
-    ) -> EffectResult<()> {
-        // Simplified implementation
-        Ok(())
-    }
+// Register resource effect handlers
+pub fn register_resource_handlers(
+    _registry: &mut EffectRegistry,
+    _query_handler: Arc<ResourceQueryHandler>,
+    _store_handler: Arc<ResourceStoreHandler>,
+    _get_handler: Arc<ResourceGetHandler>,
+    _delete_handler: Arc<ResourceDeleteHandler>,
+) -> EngineResult<()> {
+    // Placeholder implementation 
+    Ok(())
 } 

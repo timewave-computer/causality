@@ -3,15 +3,9 @@
 // This file implements the AgentObligation type, which represents
 // obligations that agents need to fulfill.
 
-use crate::resource_types::{ResourceId, ResourceType};
-use crate::resource::operation::Capability;
-use crate::utils::content_addressing;
-use crate::resource::{Resource, ResourceState, ResourceResult};
-use crate::resource::ResourceError;
-use causality_types::ContentHash;
+use crate::resource::Resource;
 
-use super::types::{AgentId, AgentType, AgentState, AgentError};
-use super::authorization::Authorization;
+use super::types::{AgentId, AgentError};
 use super::agent::Agent;
 
 use std::collections::{HashMap, HashSet};
@@ -23,7 +17,6 @@ use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use tokio::sync::RwLock;
 use chrono::{DateTime, Utc};
-use blake3;
 
 /// Obligation error types
 #[derive(Error, Debug)]
@@ -347,9 +340,9 @@ impl Obligation {
     pub fn has_deadline(&self) -> bool {
         match &self.obligation_type {
             ObligationType::UseWithinTime(_) => true,
-            ObligationType::ReportUsage { due, .. } => true,
+            ObligationType::ReportUsage {  .. } => true,
             ObligationType::RevokeAt(time) => true,
-            ObligationType::PayForUsage { deadline, .. } => true,
+            ObligationType::PayForUsage {  .. } => true,
             ObligationType::Custom { parameters, .. } => parameters.contains_key("deadline"),
             _ => false,
         }

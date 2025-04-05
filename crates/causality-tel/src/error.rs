@@ -2,7 +2,6 @@
 // Original file: src/tel/error.rs
 
 // Error definitions for the Temporal Effect Language
-use std::fmt;
 use thiserror::Error;
 
 /// Error types for TEL operations

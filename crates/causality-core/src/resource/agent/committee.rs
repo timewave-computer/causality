@@ -3,24 +3,18 @@
 // This file implements the specialized CommitteeAgent type, representing a multi-agent 
 // decision-making body for validating external facts and messages.
 
-use crate::resource_types::{ResourceId, ResourceType};
-use crate::resource::{Resource, ResourceState, ResourceResult, ResourceError};
+use crate::resource_types::ResourceId;
+use crate::resource::{Resource, ResourceError};
 use crate::resource::operation::Capability;
-use crate::utils::content_addressing;
 
-use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
-use chrono::Utc;
 
-use causality_types::ContentHash;
-use crate::serialization::SerializationError;
 
 use super::agent::{Agent, AgentImpl};
-use super::types::{AgentId, AgentState, AgentType, AgentRelationship, RelationshipType, AgentError};
-use super::messaging::Message;
+use super::types::{AgentId, AgentState, AgentType, AgentRelationship, AgentError};
 
 /// Committee-specific error types
 #[derive(Debug, Error)]

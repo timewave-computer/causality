@@ -8,7 +8,8 @@
 
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-use serde_json::Value;
+use serde_json::{json, Value};
+use anyhow::anyhow;
 
 use causality_types::domain::DomainId;
 
@@ -87,7 +88,7 @@ impl TelScript {
         
         // Check that we have at least one operation
         if self.operations.is_empty() {
-            return Err(anyhow::anyhow!("Script contains no operations"));
+            return Err(anyhow!("Script contains no operations"));
         }
         
         // For more complex scripts, we would validate operations and relationships
@@ -254,6 +255,19 @@ impl TelOperation {
         operation
     }
     
+    /// Create a sequence of operations
+    pub fn sequence(operations: Vec<TelOperation>) -> Self {
+        TelOperation {
+            operation_type: TelOperationType::Sequence,
+            function_name: "sequence".to_string(),
+            parameters: json!({
+                "operations": operations,
+            }),
+            domain_id: None,
+            children: operations,
+        }
+    }
+    
     /// Try to create an operation from JSON value
     pub fn from_json(value: Value) -> Result<Self, anyhow::Error> {
         if let Value::Object(map) = &value {
@@ -261,10 +275,10 @@ impl TelOperation {
                 if let Value::String(s) = op_type {
                     TelOperationType::from_string(s)
                 } else {
-                    return Err(anyhow::anyhow!("Operation type must be a string"));
+                    return Err(anyhow!("Operation type must be a string"));
                 }
             } else {
-                return Err(anyhow::anyhow!("Missing operation type"));
+                return Err(anyhow!("Missing operation type"));
             };
             
             let function_name = if let Some(name) = map.get("function") {
@@ -320,7 +334,7 @@ impl TelOperation {
             
             Ok(operation)
         } else {
-            Err(anyhow::anyhow!("Operation must be a JSON object"))
+            Err(anyhow!("Operation must be a JSON object"))
         }
     }
 }

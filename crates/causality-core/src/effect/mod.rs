@@ -1,7 +1,5 @@
 use std::any::Any;
-use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::Arc;
 use thiserror::Error;
 use async_trait::async_trait;
 
@@ -17,6 +15,8 @@ pub mod registry;
 pub mod context;
 pub mod outcome;
 pub mod runtime;
+pub mod error;
+pub mod logging;
 
 // Import from domain for convenience 
 pub use domain::DomainEffect;
@@ -77,6 +77,12 @@ pub enum EffectError {
 
     #[error("Registry error: {0}")]
     RegistryError(String),
+    
+    #[error("Invalid argument: {0}")]
+    InvalidArgument(String),
+    
+    #[error("Object already exists: {0}")]
+    AlreadyExists(String),
 }
 
 impl From<registry::EffectRegistryError> for EffectError {
@@ -140,6 +146,26 @@ impl std::fmt::Display for EffectType {
             EffectType::Delete => write!(f, "delete"),
             EffectType::Custom(name) => write!(f, "{}", name),
         }
+    }
+}
+
+impl std::str::FromStr for EffectType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "read" => Ok(EffectType::Read),
+            "write" => Ok(EffectType::Write),
+            "create" => Ok(EffectType::Create),
+            "delete" => Ok(EffectType::Delete),
+            _ => Ok(EffectType::Custom(s.to_string())),
+        }
+    }
+}
+
+impl From<&str> for EffectType {
+    fn from(s: &str) -> Self {
+        s.parse().unwrap_or_else(|_| EffectType::Custom(s.to_string()))
     }
 }
 
@@ -214,4 +240,8 @@ impl EffectRegistry for DefaultEffectRegistry {
 // Keep the re-exports
 // Remove this duplicate export
 // pub use registry::EffectExecutor;
+// ... rest of file ... 
+
+// Re-export resource module types
+pub use resource::*;
 // ... rest of file ... 

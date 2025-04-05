@@ -4,9 +4,8 @@
 // including resource identifiers, types, and tags.
 
 use std::fmt::{self, Display, Debug};
-use crate::utils::content_addressing;
 use std::str::FromStr;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::hash::{Hash, Hasher};
 
@@ -25,12 +24,9 @@ use causality_types::content_addressing::storage::{
 use causality_types::crypto_primitives::{ContentAddressed, HashError, HashOutput, HashAlgorithm};
 use causality_crypto::hash::ContentHasher;
 use crate::resource::*;
-use crate::effect::EffectContext;
-use crate::serialization::{SerializationError, to_bytes, from_bytes};
-use crate::resource::operation::Capability;
+use crate::serialization::{to_bytes, from_bytes};
 use causality_types::ContentId as TypesContentId;
-use causality_types::content_addressing::STANDARD_HASH_ALGORITHM;
-use crate::id_utils::{convert_to_types_content_id, convert_from_types_content_id};
+use crate::id_utils::convert_from_types_content_id;
 
 /// Resource identifier type
 ///

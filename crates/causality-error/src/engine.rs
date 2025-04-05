@@ -2,7 +2,8 @@
 // These errors are specifically for the causality-engine crate
 
 use thiserror::Error;
-use crate::{CausalityError, ErrorCode, ErrorDomain};
+use crate::CausalityError;
+use std::any::Any;
 
 /// Engine-specific error codes
 pub mod codes {
@@ -107,35 +108,33 @@ pub enum EngineError {
 }
 
 impl CausalityError for EngineError {
-    fn code(&self) -> ErrorCode {
-        use codes::*;
+    fn error_code(&self) -> &'static str {
+        
         match self {
-            EngineError::HandlerNotFound(_) => HANDLER_NOT_FOUND,
-            EngineError::InvalidInvocation(_) => INVALID_INVOCATION,
-            EngineError::ExecutionFailed(_) => EXECUTION_FAILED,
-            EngineError::ExecutionTimeout(_) => EXECUTION_FAILED,
-            EngineError::InternalError(_) => EXECUTION_FAILED,
-            EngineError::ContextError(_) => CONTEXT_ERROR,
-            EngineError::RegistryError(_) => REGISTRY_ERROR,
-            EngineError::LogError(_) => LOG_ERROR,
-            EngineError::PatternError(_) => PATTERN_ERROR,
-            EngineError::StorageError(_) => STORAGE_ERROR,
-            EngineError::SegmentError(_) => SEGMENT_ERROR,
-            EngineError::SyncError(_) => SYNC_ERROR,
-            EngineError::CapabilityError(_) => CAPABILITY_ERROR,
-            EngineError::SerializationFailed(_) => STORAGE_ERROR,
-            EngineError::DeserializationFailed(_) => STORAGE_ERROR,
-            EngineError::IoError(_) => STORAGE_ERROR,
-            EngineError::InvalidArgument(_) => INVALID_INVOCATION,
-            EngineError::NotFound(_) => STORAGE_ERROR,
-            EngineError::ValidationError(_) => EXECUTION_FAILED,
-            EngineError::Other(_) => EXECUTION_FAILED,
+            EngineError::HandlerNotFound(_) => "ENGINE_HANDLER_NOT_FOUND",
+            EngineError::InvalidInvocation(_) => "ENGINE_INVALID_INVOCATION",
+            EngineError::ExecutionFailed(_) => "ENGINE_EXECUTION_FAILED",
+            EngineError::ExecutionTimeout(_) => "ENGINE_EXECUTION_TIMEOUT",
+            EngineError::InternalError(_) => "ENGINE_INTERNAL_ERROR",
+            EngineError::ContextError(_) => "ENGINE_CONTEXT_ERROR",
+            EngineError::RegistryError(_) => "ENGINE_REGISTRY_ERROR",
+            EngineError::LogError(_) => "ENGINE_LOG_ERROR",
+            EngineError::PatternError(_) => "ENGINE_PATTERN_ERROR",
+            EngineError::StorageError(_) => "ENGINE_STORAGE_ERROR",
+            EngineError::SegmentError(_) => "ENGINE_SEGMENT_ERROR",
+            EngineError::SyncError(_) => "ENGINE_SYNC_ERROR",
+            EngineError::CapabilityError(_) => "ENGINE_CAPABILITY_ERROR",
+            EngineError::SerializationFailed(_) => "ENGINE_SERIALIZATION_FAILED",
+            EngineError::DeserializationFailed(_) => "ENGINE_DESERIALIZATION_FAILED",
+            EngineError::IoError(_) => "ENGINE_IO_ERROR",
+            EngineError::InvalidArgument(_) => "ENGINE_INVALID_ARGUMENT",
+            EngineError::NotFound(_) => "ENGINE_NOT_FOUND",
+            EngineError::ValidationError(_) => "ENGINE_VALIDATION_ERROR",
+            EngineError::Other(_) => "ENGINE_OTHER",
         }
     }
-    
-    fn domain(&self) -> ErrorDomain {
-        ErrorDomain::Engine
-    }
+
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 /// Convenient Result type for engine operations
@@ -152,6 +151,13 @@ impl From<EngineError> for Box<dyn CausalityError> {
 impl From<crate::StorageError> for EngineError {
     fn from(err: crate::StorageError) -> Self {
         EngineError::StorageError(err.to_string())
+    }
+}
+
+/// Convert from io::Error to EngineError
+impl From<std::io::Error> for EngineError {
+    fn from(err: std::io::Error) -> Self {
+        EngineError::IoError(err.to_string())
     }
 }
 

@@ -9,8 +9,9 @@ use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use causality_types::*;
-use crate::crypto::ContentId;
-use crate::{EffectEntry, FactEntry};
+use causality_types::ContentId;
+use crate::log::EffectEntry;
+use crate::log::FactEntry;
 
 /// The state reconstructed during replay
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,21 +57,28 @@ impl ReplayState {
     /// Get facts for a specific resource
     pub fn get_facts_for_resource(&self, resource_id: &ContentId) -> Vec<&FactEntry> {
         self.facts.iter()
-            .filter(|fact| fact.resources.contains(resource_id))
+            .filter(|fact| match &fact.resources {
+                Some(resources) => resources.contains(resource_id),
+                None => false,
+            })
             .collect()
     }
     
     /// Get effects of a specific type
-    pub fn get_effects_by_type(&self, effect_type: &crate::effect::EffectType) -> Vec<&EffectEntry> {
-        self.effects.iter()
-            .filter(|effect| &effect.effect_type == effect_type)
+    pub fn get_effects_by_type(&self, effect_type: &causality_core::EffectType) -> Vec<&EffectEntry> {
+        self.effects
+            .iter()
+            .filter(|effect| effect.effect_type.to_string() == effect_type.to_string())
             .collect()
     }
     
     /// Get effects for a specific resource
     pub fn get_effects_for_resource(&self, resource_id: &ContentId) -> Vec<&EffectEntry> {
         self.effects.iter()
-            .filter(|effect| effect.resources.contains(resource_id))
+            .filter(|effect| match &effect.resources {
+                Some(resources) => resources.contains(resource_id),
+                None => false,
+            })
             .collect()
     }
     
@@ -78,6 +86,26 @@ impl ReplayState {
     pub fn is_resource_locked(&self, resource_id: &ContentId) -> bool {
         self.resources.get(resource_id)
             .map_or(false, |state| state.locked)
+    }
+
+    pub fn facts_containing_resource(&self, resource_id: &ContentId) -> Vec<&FactEntry> {
+        self.facts
+            .iter()
+            .filter(|fact| match &fact.resources {
+                Some(resources) => resources.contains(resource_id),
+                None => false, // No resources in this fact
+            })
+            .collect()
+    }
+
+    pub fn effects_containing_resource(&self, resource_id: &ContentId) -> Vec<&EffectEntry> {
+        self.effects
+            .iter()
+            .filter(|effect| match &effect.resources {
+                Some(resources) => resources.contains(resource_id),
+                None => false, // No resources in this effect
+            })
+            .collect()
     }
 }
 

@@ -23,9 +23,12 @@ sha2 = { workspace = true }
 serde_bytes = "0.11"
 blake3 = "1.5"
 lazy_static = "1.4"
+bincode = "1.3"
 
 # Internal dependencies (if any)
 # causality-error = { workspace = true } # Example if needed
+
+log = "0.4"
 
 [features]
 default = []

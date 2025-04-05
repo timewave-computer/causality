@@ -5,17 +5,14 @@
 use crate::resource_types::{ResourceId, ResourceType};
 use crate::resource::{Resource, ResourceState, ResourceResult, ResourceError};
 use crate::resource::operation::Capability;
-use crate::utils::content_addressing;
 
 use super::types::{AgentId, AgentType, AgentState, AgentRelationship, AgentError};
 use super::agent::{Agent, AgentImpl};
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
-use chrono::Utc;
 
 /// User-specific error types
 #[derive(Error, Debug)]

@@ -5,15 +5,13 @@
 
 use std::any::Any;
 use std::collections::{HashSet, HashMap};
-use std::fmt;
-use std::sync::Arc;
 
 use thiserror::Error;
 
 // Fix imports to use the correct types
-use crate::capability::{ResourceId, ContentAddressingError, ContentRef, CapabilityGrants, Capability, ResourceGuard, ResourceRegistry, CapabilityError, IdentityId};
+use crate::capability::{ResourceId, ContentRef, CapabilityGrants, Capability, ResourceGuard, ResourceRegistry, CapabilityError, IdentityId};
 use crate::capability::utils;
-use causality_types::{ContentHash, ContentId};
+use causality_types::ContentHash;
 use std::marker::PhantomData;
 
 // Domain-specific capability that can be supported by domain adapters

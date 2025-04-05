@@ -11,12 +11,10 @@ use thiserror::Error;
 use serde::{Serialize, Deserialize};
 use causality_types::ContentId;
 use causality_types::domain::DomainId;
-use crate::capability::resource::{ResourceCapability, ResourceCapabilityType, CapabilityGrants, Capability};
-use crate::identity::IdentityId;
+use crate::capability::resource::Capability;
 use crate::effect::EffectContext;
 use crate::resource::types::{ResourceTypeId, ResourceTypeRegistry, ResourceTypeRegistryError};
 use crate::resource::Resource;
-use std::sync::RwLock;
 
 /// Unique identifier for a cross-domain resource reference
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

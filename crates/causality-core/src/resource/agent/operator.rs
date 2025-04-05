@@ -5,16 +5,11 @@
 use crate::resource_types::{ResourceId, ResourceType};
 use crate::resource::{Resource, ResourceState, ResourceResult};
 use crate::resource::operation::Capability;
-use crate::resource::ResourceError;
-use crate::utils::content_addressing;
 
 use super::types::{AgentId, AgentType, AgentState, AgentError, AgentRelationship};
 use super::agent::{Agent, AgentImpl};
 
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use async_trait::async_trait;
-use serde::{Serialize, Deserialize};
 use thiserror::Error;
 
 /// Operator-specific error types

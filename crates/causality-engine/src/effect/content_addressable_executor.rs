@@ -4,15 +4,13 @@
 //! comprehensive tracing, sandboxing, and security features.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use borsh::{BorshSerialize, BorshDeserialize};
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
-use serde_json::Value;
 
 use causality_error::{EngineResult as Result, EngineError as Error};
 use causality_types::ContentId;
@@ -124,8 +122,7 @@ pub struct ContextIdContentData {
 impl ContentAddressed for ContextIdContentData {
     fn content_hash(&self) -> Result<ContentId> {
         let bytes = self.to_bytes()?;
-        ContentId::from_bytes(&bytes)
-            .map_err(|e| Error::SerializationFailed(format!("Failed to create ContentId: {}", e)))
+        Ok(ContentId::from_bytes(&bytes))
     }
     
     fn verify(&self, content_id: &ContentId) -> Result<bool> {

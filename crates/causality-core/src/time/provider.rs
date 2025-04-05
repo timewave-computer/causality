@@ -8,14 +8,11 @@ use std::fmt::Debug;
 use async_trait::async_trait;
 use anyhow::Result;
 use std::sync::Mutex;
-use std::collections::HashMap;
-use std::time::Duration;
 
 use super::{Timestamp, TimeMap};
 use super::duration::TimeDelta;
-use super::types::{DomainId, DomainPosition};
+use super::types::DomainPosition;
 use super::map::TimeMapSnapshot;
-use super::timestamp::now;
 
 /// Error type for time provider operations
 #[derive(Debug, thiserror::Error)]

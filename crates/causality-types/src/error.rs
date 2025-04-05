@@ -3,12 +3,12 @@
 
 // Error types for the Causality system
 
-use std::fmt;
 use thiserror::Error;
+use bincode;
 
-use causality_types::{*};
-use causality_crypto::ContentId;;
-use crate::resource::RegisterId;
+// Remove circular import and import specific types
+use crate::domain::DomainId;
+// Use the correct path for ContentId
 
 /// The main error type for the Causality system
 #[derive(Error, Debug, Clone)]
@@ -43,16 +43,16 @@ pub enum Error {
 
     // Resource errors
     #[error("Resource not found: {0}")]
-    ResourceNotFound(ResourceId),
+    ResourceNotFound(String),
 
     #[error("Resource already locked: {0}")]
-    ResourceAlreadyLocked(ResourceId),
+    ResourceAlreadyLocked(String),
 
     #[error("Resource deadlock detected")]
     ResourceDeadlock,
 
     #[error("Resource timeout: {0}")]
-    ResourceTimeout(ResourceId),
+    ResourceTimeout(String),
 
     // AST and Resource Graph errors
     #[error("AST node not found: {0}")]
@@ -157,10 +157,10 @@ pub enum Error {
 
     // Register errors
     #[error("Register not found: {0}")]
-    RegisterNotFound(RegisterId),
+    RegisterNotFound(String),
 
     #[error("Register access denied: {0}")]
-    RegisterAccessDenied(RegisterId),
+    RegisterAccessDenied(String),
 
     #[error("Register operation failed: {0}")]
     RegisterOperationFailed(String),

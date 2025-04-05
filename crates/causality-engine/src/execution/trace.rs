@@ -7,20 +7,17 @@
 // allowing for detailed understanding of execution flow and time-travel debugging.
 
 use std::collections::HashMap;
-use std::fmt;
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Serialize, Deserialize};
 
-use causality_core::effect::runtime::EffectRuntime;
 use causality_core::ContentHash;
-use causality_types::{Error, Result};
+use causality_error::EngineError as Error;
 use crate::execution::{ContextId, ExecutionEvent};
-use crate::Value;
 
 /// Metadata for an execution trace
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,14 +152,14 @@ impl ExecutionTrace {
             .collect()
     }
     
-    /// Serialize the trace to JSON
-    pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string_pretty(self).map_err(|e| Error::SerializationError(e.to_string()))
+    /// Serialize to JSON
+    pub fn to_json(&self) -> std::result::Result<String, Error> {
+        serde_json::to_string_pretty(self).map_err(|e| Error::SerializationFailed(e.to_string()))
     }
     
-    /// Deserialize the trace from JSON
-    pub fn from_json(json: &str) -> Result<Self> {
-        serde_json::from_str(json).map_err(|e| Error::DeserializationError(e.to_string()))
+    /// Deserialize from JSON
+    pub fn from_json(json: &str) -> std::result::Result<Self, Error> {
+        serde_json::from_str(json).map_err(|e| Error::DeserializationFailed(e.to_string()))
     }
 }
 
@@ -176,7 +173,7 @@ pub struct ExecutionTracer {
 
 impl ExecutionTracer {
     /// Create a new execution tracer
-    pub fn new<P: AsRef<Path>>(trace_dir: P) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(trace_dir: P) -> std::result::Result<Self, Error> {
         let trace_dir = trace_dir.as_ref().to_path_buf();
         fs::create_dir_all(&trace_dir)?;
         
@@ -187,36 +184,36 @@ impl ExecutionTracer {
     }
     
     /// Start a new trace
-    pub fn start_trace(&self, context_id: ContextId) -> Result<()> {
+    pub fn start_trace(&self, context_id: ContextId) -> std::result::Result<(), Error> {
         let trace = ExecutionTrace::new(context_id.clone());
         
-        let mut active_traces = self.active_traces.write().map_err(|_| Error::LockError)?;
+        let mut active_traces = self.active_traces.write().map_err(|_| Error::SyncError("Failed to acquire write lock for active traces".to_string()))?;
         active_traces.insert(context_id, trace);
         
         Ok(())
     }
     
     /// Record an event
-    pub fn record_event(&self, context_id: &ContextId, event: ExecutionEvent) -> Result<()> {
-        let mut active_traces = self.active_traces.write().map_err(|_| Error::LockError)?;
+    pub fn record_event(&self, context_id: &ContextId, event: ExecutionEvent) -> std::result::Result<(), Error> {
+        let mut active_traces = self.active_traces.write().map_err(|_| Error::SyncError("Failed to acquire write lock for active traces".to_string()))?;
         
         if let Some(trace) = active_traces.get_mut(context_id) {
             trace.add_event(event);
             Ok(())
         } else {
-            Err(Error::TraceNotFound(context_id.to_string()))
+            Err(Error::NotFound(format!("Execution trace for context ID {} not found", context_id)))
         }
     }
     
     /// Complete a trace and save it
-    pub fn complete_trace(&self, context_id: &ContextId) -> Result<PathBuf> {
+    pub fn complete_trace(&self, context_id: &ContextId) -> std::result::Result<PathBuf, Error> {
         let mut trace = {
-            let mut active_traces = self.active_traces.write().map_err(|_| Error::LockError)?;
+            let mut active_traces = self.active_traces.write().map_err(|_| Error::SyncError("Failed to acquire write lock for active traces".to_string()))?;
             
             if let Some(trace) = active_traces.remove(context_id) {
                 trace
             } else {
-                return Err(Error::TraceNotFound(context_id.to_string()));
+                return Err(Error::NotFound(format!("Execution trace for context ID {} not found", context_id)));
             }
         };
         
@@ -228,7 +225,7 @@ impl ExecutionTracer {
     }
     
     /// Save a trace to disk
-    pub fn save_trace(&self, trace: &ExecutionTrace) -> Result<PathBuf> {
+    pub fn save_trace(&self, trace: &ExecutionTrace) -> std::result::Result<PathBuf, Error> {
         let context_id = &trace.metadata.context_id;
         let timestamp = trace.metadata.start_time;
         
@@ -244,7 +241,7 @@ impl ExecutionTracer {
     }
     
     /// Load a trace from disk
-    pub fn load_trace<P: AsRef<Path>>(&self, path: P) -> Result<ExecutionTrace> {
+    pub fn load_trace<P: AsRef<Path>>(&self, path: P) -> std::result::Result<ExecutionTrace, Error> {
         let mut file = File::open(path)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
@@ -253,7 +250,7 @@ impl ExecutionTracer {
     }
     
     /// List all available traces
-    pub fn list_traces(&self) -> Result<Vec<TraceMetadata>> {
+    pub fn list_traces(&self) -> std::result::Result<Vec<TraceMetadata>, Error> {
         let mut traces = Vec::new();
         
         for entry in fs::read_dir(&self.trace_dir)? {
@@ -279,7 +276,7 @@ impl ExecutionTracer {
     }
     
     /// Query traces by criteria
-    pub fn query_traces(&self, query: &TraceQuery) -> Result<Vec<TraceMetadata>> {
+    pub fn query_traces(&self, query: &TraceQuery) -> std::result::Result<Vec<TraceMetadata>, Error> {
         let all_traces = self.list_traces()?;
         
         let filtered = all_traces
@@ -379,6 +376,7 @@ impl Default for TraceQuery {
     }
 }
 
+/// Test module
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,7 +394,7 @@ mod tests {
     }
     
     #[test]
-    fn test_tracer_creation() -> Result<()> {
+    fn test_tracer_creation() -> std::result::Result<(), Error> {
         let temp_dir = tempdir()?;
         let tracer = ExecutionTracer::new(temp_dir.path())?;
         
@@ -405,13 +403,20 @@ mod tests {
     }
     
     #[test]
-    fn test_trace_serialization() -> Result<()> {
+    fn test_trace_serialization() -> std::result::Result<(), Error> {
         let context_id = ContextId::new();
         let mut trace = ExecutionTrace::new(context_id);
         
+        // Create a sample ContentHash for testing
+        let mut hash_bytes = [0u8; 32];
+        for i in 0..32 {
+            hash_bytes[i] = i as u8;
+        }
+        let hash = ContentHash::new("blake3", hash_bytes.to_vec());
+        
         // Add an event
         trace.add_event(ExecutionEvent::function_call(
-            ContentHash::from_str("blake3:0123456789abcdef0123456789abcdef").unwrap(),
+            hash,
             Some("test_function".to_string()),
             vec![Value::String("arg1".to_string())],
         ));

@@ -3,12 +3,10 @@
 // This module provides factory functions for creating standard effects
 // like transfer, deposit, and withdrawal operations.
 
-use std::sync::Arc;
 use std::fmt::Debug;
 use async_trait::async_trait;
 use causality_error::Result;
-use causality_core::effect::{Effect, EffectType, EffectOutcome, EffectContext, EffectResult};
-use causality_core::resource::types::ResourceId;
+use causality_core::effect::{Effect, EffectType, EffectOutcome, EffectResult};
 use std::collections::HashMap;
 
 /// Create a transfer effect

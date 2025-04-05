@@ -7,11 +7,12 @@
 pub mod context;
 pub mod patterns;
 pub mod registry;
+pub mod system;
 pub mod propagation;
 
 // Re-export key types
 pub use context::InvocationContext;
-pub use context::propagation::ContextPropagator;
+pub use propagation::ContextPropagator;
 pub use patterns::{
     InvocationPatternTrait,
     InvocationPatternEnum,
@@ -22,10 +23,10 @@ pub use patterns::{
     StreamingInvocation,
     BatchInvocation,
 };
-pub use registry::{EffectRegistry, HandlerOutput, HandlerInput};
-
-// Export the invocation system
-pub use self::system::InvocationSystem;
-
-// Add system implementation
-mod system; 
+pub use registry::{
+    EffectRegistry,
+    EffectHandler,
+    HandlerOutput,
+    HandlerInput,
+};
+pub use system::InvocationSystem; 

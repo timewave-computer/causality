@@ -4,7 +4,6 @@ use chrono::{DateTime, Utc, Duration};
 use serde::{Deserialize, Serialize};
 use crate::resource::ResourceId;
 use crate::effect::types::EffectId;
-use crate::utils::content_addressing::hash_string;
 use causality_types::crypto_primitives::ContentId;
 use blake3;
 use causality_types;

@@ -1,25 +1,18 @@
 // agent.rs - Core Agent trait and implementation
 
 use crate::resource_types::{ResourceId, ResourceType};
-use crate::resource::interface::{ResourceState, ResourceResult};
+use crate::resource::interface::ResourceState;
 use crate::resource::Resource;
 use crate::utils::content_addressing;
-use crate::serialization::{SerializationError, Serializable, Serializer};
-use causality_error::Error as CoreError;
+use crate::serialization::Serializable;
 use crate::resource::operation::Capability;
 
 use super::types::{AgentId, AgentType, AgentState, AgentRelationship, AgentError, SerializableAgentRelationship};
-use super::authorization::{Authorization, AuthorizationError};
-use super::operation::Operation;
 
-use std::collections::{HashMap, HashSet};
-use std::fmt::{self, Debug};
-use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
+use std::fmt::{Debug};
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
-use thiserror::Error;
-use std::any::Any;
-use causality_types::ContentId;
 use anyhow::Result;
 use causality_types::ContentHash;
 

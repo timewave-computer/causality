@@ -11,7 +11,7 @@ pub mod id;
 pub use id::EffectTypeId;
 
 use super::context::Context;
-use super::error::{EffectError, EffectResult};
+use super::error::EffectError;
 
 /// The core Effect trait for the runtime system
 #[async_trait]

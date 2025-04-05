@@ -2,7 +2,8 @@
 // These errors are specifically for the domain crates (causality-domain-*)
 
 use thiserror::Error;
-use crate::{CausalityError, ErrorCode, ErrorDomain};
+use crate::CausalityError;
+use std::any::Any;
 
 /// Domain-specific error codes
 pub mod codes {
@@ -51,22 +52,21 @@ pub enum DomainError {
 }
 
 impl CausalityError for DomainError {
-    fn code(&self) -> ErrorCode {
-        use codes::*;
+    fn error_code(&self) -> &'static str {
         match self {
-            DomainError::AdapterError(_) => ADAPTER_ERROR,
-            DomainError::ContractError(_) => CONTRACT_ERROR,
-            DomainError::TransactionError(_) => TRANSACTION_ERROR,
-            DomainError::ChainError(_) => CHAIN_ERROR,
-            DomainError::ProtocolError(_) => PROTOCOL_ERROR,
-            DomainError::VerificationError(_) => VERIFICATION_ERROR,
-            DomainError::BridgeError(_) => BRIDGE_ERROR,
+            DomainError::AdapterError(_) => "DOMAIN_ADAPTER_ERROR",
+            DomainError::ContractError(_) => "DOMAIN_CONTRACT_ERROR",
+            DomainError::TransactionError(_) => "DOMAIN_TRANSACTION_ERROR",
+            DomainError::ChainError(_) => "DOMAIN_CHAIN_ERROR",
+            DomainError::ProtocolError(_) => "DOMAIN_PROTOCOL_ERROR",
+            DomainError::VerificationError(_) => "DOMAIN_VERIFICATION_ERROR",
+            DomainError::BridgeError(_) => "DOMAIN_BRIDGE_ERROR",
+            // Add other variants if they exist, or a default arm
+            // _ => "DOMAIN_UNKNOWN_ERROR",
         }
     }
-    
-    fn domain(&self) -> ErrorDomain {
-        ErrorDomain::Domain
-    }
+
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 /// Convenient Result type for domain operations

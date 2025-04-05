@@ -6,7 +6,6 @@
 use std::fmt;
 use serde::{Serialize, Deserialize};
 use causality_types::{DomainId, Timestamp, ContentId};
-use causality_error::Result;
 
 /// Type of fact in a log
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

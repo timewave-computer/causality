@@ -8,7 +8,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serde::{Serialize, Deserialize};
 
 /// Error type for hash operations
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum HashError {
     /// Invalid hash format
     #[error("Invalid hash format")]
@@ -31,13 +31,13 @@ pub enum HashError {
     SerializationError(String),
 }
 
-/// Hash algorithm options
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+/// Supported hash algorithms
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub enum HashAlgorithm {
-    /// BLAKE3 cryptographic hash function
     Blake3,
-    /// Poseidon hash function (ZK-friendly)
-    Poseidon,
+    Sha256,
+    Sha512,
+    Custom(String),
 }
 
 impl Default for HashAlgorithm {
@@ -50,25 +50,29 @@ impl fmt::Display for HashAlgorithm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Blake3 => write!(f, "Blake3"),
-            Self::Poseidon => write!(f, "Poseidon"),
+            Self::Sha256 => write!(f, "Sha256"),
+            Self::Sha512 => write!(f, "Sha512"),
+            Self::Custom(name) => write!(f, "Custom:{}", name),
         }
     }
 }
 
 impl FromStr for HashAlgorithm {
-    type Err = HashError;
+    type Err = String;
     
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "blake3" => Ok(Self::Blake3),
-            "poseidon" => Ok(Self::Poseidon),
-            _ => Err(HashError::UnsupportedAlgorithm(s.to_string())),
+            "sha256" => Ok(Self::Sha256),
+            "sha512" => Ok(Self::Sha512),
+            _ if s.starts_with("custom:") => Ok(Self::Custom(s[7..].to_string())),
+            _ => Err(format!("Unknown hash algorithm: {}", s)),
         }
     }
 }
 
 /// Output of a hash function with algorithm awareness
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct HashOutput {
     /// The raw bytes of the hash
     data: [u8; 32],
@@ -88,8 +92,8 @@ impl HashOutput {
     }
     
     /// Get the algorithm used to generate this hash
-    pub fn algorithm(&self) -> HashAlgorithm {
-        self.algorithm
+    pub fn algorithm(&self) -> &HashAlgorithm {
+        &self.algorithm
     }
     
     /// Convert the hash output to a hex string
@@ -131,13 +135,7 @@ impl HashOutput {
     
     /// Get a deterministic unique identifier for this hash
     pub fn to_content_id(&self) -> ContentId {
-        ContentId::from(*self)
-    }
-}
-
-impl fmt::Debug for HashOutput {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HashOutput({}, {})", self.algorithm, self.to_hex())
+        ContentId::from(self.clone())
     }
 }
 
@@ -253,7 +251,35 @@ impl From<&str> for ContentId {
 
 impl From<&[u8]> for ContentId {
     fn from(data: &[u8]) -> Self {
-        ContentId::from_bytes(data)
+        Self::from_bytes(data)
+    }
+}
+
+impl FromStr for ContentId {
+    type Err = HashError;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // If it looks like a properly formatted ContentId with the cid: prefix
+        if s.starts_with("cid:") {
+            return Self::parse(s);
+        }
+        
+        // Try to parse as a hash output string directly (algorithm:hex_string)
+        if s.contains(':') {
+            if let Ok(hash) = HashOutput::from_hex_string(s) {
+                return Ok(Self(hash));
+            }
+        }
+        
+        // Assume it's a raw hex string with the default algorithm
+        let bytes = hex::decode(s).map_err(|_| HashError::InvalidFormat)?;
+        if bytes.len() != 32 {
+            return Err(HashError::InvalidLength);
+        }
+        
+        let mut data = [0u8; 32];
+        data.copy_from_slice(&bytes);
+        Ok(Self(HashOutput::new(data, HashAlgorithm::default())))
     }
 }
 
@@ -368,4 +394,21 @@ impl<E> ContentIdResultExt<E> for Result<ContentId, E> {
             Err(_) => panic!("Failed to unwrap ContentId"),
         }
     }
+}
+
+/// Represents a digital signature.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+pub struct Signature {
+    /// The signature data.
+    pub data: Vec<u8>, // Assuming SignatureData is Vec<u8> or similar Borsh-compatible type
+    /// The algorithm used for the signature.
+    pub algorithm: SignatureAlgorithm,
+}
+
+/// Supported signature algorithms.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+pub enum SignatureAlgorithm {
+    Ed25519,
+    Secp256k1,
+    Custom(String),
 } 

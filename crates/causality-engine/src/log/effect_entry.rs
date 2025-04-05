@@ -11,11 +11,35 @@ use serde::{Serialize, Deserialize};
 use causality_types::{ContentId, DomainId};
 use causality_core::effect::EffectType;
 
+/// Wrapper for EffectType to implement Serialize and Deserialize
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableEffectType(String);
+
+impl From<EffectType> for SerializableEffectType {
+    fn from(effect_type: EffectType) -> Self {
+        SerializableEffectType(effect_type.to_string())
+    }
+}
+
+impl From<SerializableEffectType> for EffectType {
+    fn from(serializable: SerializableEffectType) -> Self {
+        serializable.0.parse().unwrap_or_else(|_| EffectType::Custom(serializable.0))
+    }
+}
+
+impl std::ops::Deref for SerializableEffectType {
+    type Target = String;
+    
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// An entry representing an effect operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EffectEntry {
     /// The type of effect
-    pub effect_type: EffectType,
+    pub effect_type: SerializableEffectType,
     /// The resources affected by this effect
     pub resources: Vec<ContentId>,
     /// The domains involved in this effect
@@ -45,7 +69,7 @@ impl EffectEntry {
         error: Option<String>,
     ) -> Self {
         Self {
-            effect_type,
+            effect_type: effect_type.into(),
             resources,
             domains,
             code_hash,
@@ -57,8 +81,8 @@ impl EffectEntry {
     }
     
     /// Get the effect type
-    pub fn effect_type(&self) -> &EffectType {
-        &self.effect_type
+    pub fn effect_type(&self) -> EffectType {
+        self.effect_type.clone().into()
     }
     
     /// Get the resources affected by this effect
@@ -142,25 +166,25 @@ mod tests {
             None,
         );
         
-        assert_eq!(entry.effect_type, EffectType::Transfer);
-        assert_eq!(entry.resources, resources);
-        assert_eq!(entry.domains, domains);
-        assert_eq!(entry.code_hash, code_hash);
-        assert_eq!(entry.parameters.get("amount").unwrap(), &serde_json::json!(100));
-        assert!(entry.result.is_none());
-        assert!(!entry.success);
-        assert!(entry.error.is_none());
+        assert_eq!(entry.effect_type(), EffectType::Transfer);
+        assert_eq!(entry.resources(), &resources);
+        assert_eq!(entry.domains(), &domains);
+        assert_eq!(entry.code_hash(), code_hash.as_deref());
+        assert_eq!(entry.parameters().get("amount").unwrap(), &serde_json::json!(100));
+        assert!(entry.result().is_none());
+        assert!(!entry.is_success());
+        assert!(entry.error().is_none());
         
         // Test with result
         let with_result = entry.clone().with_result(serde_json::json!("ok"), true);
-        assert_eq!(with_result.result.unwrap(), serde_json::json!("ok"));
-        assert!(with_result.success);
-        assert!(with_result.error.is_none());
+        assert_eq!(with_result.result().unwrap(), serde_json::json!("ok"));
+        assert!(with_result.is_success());
+        assert!(with_result.error().is_none());
         
         // Test with error
         let with_error = entry.with_error("failed".to_string());
-        assert!(with_error.result.is_none());
-        assert!(!with_error.success);
-        assert_eq!(with_error.error.unwrap(), "failed");
+        assert!(with_error.result().is_none());
+        assert!(!with_error.is_success());
+        assert_eq!(with_error.error().unwrap(), "failed");
     }
 } 

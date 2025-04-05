@@ -4,9 +4,10 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use causality_types::{TraceId, Timestamp, DomainId, ContentId};
+use crate::log::event_entry::EventEntry;
 
 /// Type of log entry
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum EntryType {
     /// A fact entry
     Fact,
@@ -16,6 +17,8 @@ pub enum EntryType {
     SystemEvent,
     /// An operation entry
     Operation,
+    /// An event entry
+    Event,
     /// A custom entry type
     Custom(String),
 }
@@ -31,6 +34,8 @@ pub enum EntryData {
     SystemEvent(SystemEventEntry),
     /// Operation data
     Operation(OperationEntry),
+    /// Event data
+    Event(EventEntry),
     /// Custom entry data (stored as JSON)
     Custom(serde_json::Value),
 }

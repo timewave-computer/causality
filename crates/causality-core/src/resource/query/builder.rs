@@ -2,8 +2,6 @@
 //
 // This module provides a fluent interface for building resource queries.
 
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 
 use crate::resource_types::ResourceType;
 use super::{

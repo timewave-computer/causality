@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use std::sync::RwLock;
-use serde_json::json;
 use lazy_static::lazy_static;
 
 lazy_static! {

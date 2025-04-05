@@ -5,14 +5,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
-use crate::domain::DomainId;
-use causality_types::{Error, Result};
+use causality_types::{Error, Result as CausalityResult, DomainId, ContentId, Timestamp};
 use crate::relationship::{
     RelationshipTracker, RelationshipPath, ResourceRelationship,
     RelationshipType, RelationshipFilter, RelationshipPathCacheKey
 };
-use crate::resource::ContentId;
-use crate::time::timestamp::Timestamp;
 
 /// Cache for relationship query results
 pub struct RelationshipQueryCache {
@@ -196,10 +193,10 @@ pub trait DomainRelationshipProvider: Send + Sync {
     async fn find_relationships_from(&self, 
         resource_id: &ContentId, 
         filter: &RelationshipFilter
-    ) -> Result<Vec<ResourceRelationship>>;
+    ) -> CausalityResult<Vec<ResourceRelationship>>;
     
     /// Checks if a resource exists in this domain
-    async fn resource_exists(&self, resource_id: &ContentId) -> Result<bool>;
+    async fn resource_exists(&self, resource_id: &ContentId) -> CausalityResult<bool>;
 }
 
 /// Executor for relationship queries
@@ -231,7 +228,7 @@ impl RelationshipQueryExecutor {
     }
 
     /// Executes a relationship query
-    pub async fn execute(&self, query: &RelationshipQuery) -> Result<Vec<RelationshipPath>> {
+    pub async fn execute(&self, query: &RelationshipQuery) -> CausalityResult<Vec<RelationshipPath>> {
         // Check cache first if target is specified
         if let Some(cache_key) = query.to_cache_key() {
             if let Some(cached_paths) = self.cache.get_paths(&cache_key).await {
@@ -251,7 +248,7 @@ impl RelationshipQueryExecutor {
     }
 
     /// Finds paths between resources
-    async fn find_paths(&self, query: &RelationshipQuery) -> Result<Vec<RelationshipPath>> {
+    async fn find_paths(&self, query: &RelationshipQuery) -> CausalityResult<Vec<RelationshipPath>> {
         match &query.target_id {
             Some(target_id) => {
                 // Specific target - use BFS to find paths
@@ -270,7 +267,7 @@ impl RelationshipQueryExecutor {
         source_id: &ContentId,
         target_id: &ContentId,
         query: &RelationshipQuery,
-    ) -> Result<Vec<RelationshipPath>> {
+    ) -> CausalityResult<Vec<RelationshipPath>> {
         let mut result_paths = Vec::new();
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
@@ -359,7 +356,7 @@ impl RelationshipQueryExecutor {
         &self,
         source_id: &ContentId,
         query: &RelationshipQuery,
-    ) -> Result<Vec<RelationshipPath>> {
+    ) -> CausalityResult<Vec<RelationshipPath>> {
         let mut result_paths = Vec::new();
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
@@ -443,7 +440,7 @@ impl RelationshipQueryExecutor {
         &self,
         resource_id: &ContentId,
         query: &RelationshipQuery,
-    ) -> Result<Vec<ResourceRelationship>> {
+    ) -> CausalityResult<Vec<ResourceRelationship>> {
         // Create a filter based on query parameters
         let filter = RelationshipFilter {
             relationship_types: query.relationship_types.clone(),
@@ -490,7 +487,7 @@ impl RelationshipQueryExecutor {
         target_id: &ContentId,
         source_domain: &DomainId,
         target_domain: &DomainId,
-    ) -> Result<Option<RelationshipPath>> {
+    ) -> CausalityResult<Option<RelationshipPath>> {
         // If domains are the same, use regular path finding
         if source_domain == target_domain {
             let query = RelationshipQuery::new(source_id.clone(), target_id.clone())
@@ -527,7 +524,7 @@ impl RelationshipQueryExecutor {
     pub async fn get_relationship_counts(&self, 
         resource_id: &ContentId, 
         relationship_types: Option<Vec<RelationshipType>>
-    ) -> Result<HashMap<RelationshipType, usize>> {
+    ) -> CausalityResult<HashMap<RelationshipType, usize>> {
         let mut result = HashMap::new();
         
         // Get local counts
@@ -592,7 +589,7 @@ impl ResourceStateTransitionHelper {
         resource_id: &ContentId,
         from_state: &str,
         to_state: &str
-    ) -> Result<bool> {
+    ) -> CausalityResult<bool> {
         // Example implementation - this would be expanded based on specific rules
         
         // Get all relationships for this resource
@@ -645,7 +642,7 @@ impl ResourceStateTransitionHelper {
         resource_id: &ContentId,
         from_state: &str,
         to_state: &str
-    ) -> Result<()> {
+    ) -> CausalityResult<()> {
         // Example implementation
         
         // Get all relationships for this resource

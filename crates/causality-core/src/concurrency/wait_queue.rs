@@ -14,7 +14,6 @@ use std::pin::Pin;
 use std::result::Result;
 use causality_types::ContentId;
 use super::task_id::TaskId;
-use super::error::WaitQueueError;
 
 /// A shared wait queue that can be cloned and shared between components
 pub type SharedWaitQueue = Arc<WaitQueue>;

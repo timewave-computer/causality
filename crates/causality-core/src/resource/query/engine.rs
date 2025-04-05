@@ -8,19 +8,17 @@ use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 
 use causality_types::ContentId;
-use crate::resource::{Resource, ResourceType, ResourceState, ResourceResult, ResourceError};
+use crate::resource::{Resource, ResourceType, ResourceState, ResourceResult};
 use crate::resource_types::ResourceId;
 use crate::resource::operation::Capability;
-use crate::capability::effect::EffectCapabilityType;
 
 use super::{
-    ResourceQuery, FilterExpression, FilterCondition, FilterOperator,
+    ResourceQuery, FilterExpression, FilterOperator,
     QueryError,
-    Sort, SortDirection, Pagination, PaginationResult,
+    Sort, Pagination, PaginationResult,
     ResourceIndex
 };
 // Direct import of QueryResult and the InMemoryResourceIndex

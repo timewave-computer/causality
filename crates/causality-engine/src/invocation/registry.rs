@@ -11,7 +11,7 @@ use std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 
-use causality_error::{Error, Result, EngineError};
+use causality_error::{Result, EngineError};
 use causality_types::{DomainId, ContentId};
 use crate::invocation::context::InvocationContext;
 
@@ -94,7 +94,7 @@ impl HandlerRegistration {
 }
 
 /// Handler input for effect invocation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct HandlerInput {
     /// Action to perform
     pub action: String,
@@ -140,7 +140,6 @@ pub trait EffectHandler: Send + Sync {
 }
 
 /// Registry for effect handlers
-#[derive(Debug)]
 pub struct EffectRegistry {
     /// Registered handlers by handler ID
     handlers: RwLock<HashMap<String, Arc<dyn EffectHandler>>>,
@@ -166,10 +165,10 @@ impl EffectRegistry {
         // Update the handlers map
         {
             let mut handlers = self.handlers.write().map_err(|_| 
-                EngineError::LockAcquisitionError("Failed to acquire write lock on handlers".to_string()))?;
+                EngineError::SyncError("Failed to acquire write lock on handlers".to_string()))?;
             
             if handlers.contains_key(&handler_id) {
-                return Err(Error::InvalidArgument(format!("Handler with ID '{}' already registered", handler_id)));
+                return Err(EngineError::InvalidArgument(format!("Handler with ID '{}' already registered", handler_id)).into());
             }
             
             handlers.insert(handler_id.clone(), handler);
@@ -178,7 +177,7 @@ impl EffectRegistry {
         // Update the domain handlers map
         {
             let mut domain_handlers = self.domain_handlers.write().map_err(|_| 
-                EngineError::LockAcquisitionError("Failed to acquire write lock on domain handlers".to_string()))?;
+                EngineError::SyncError("Failed to acquire write lock on domain handlers".to_string()))?;
             
             domain_handlers
                 .entry(domain_id)
@@ -194,7 +193,7 @@ impl EffectRegistry {
         // Remove from the handlers map
         let handler = {
             let mut handlers = self.handlers.write().map_err(|_| 
-                EngineError::LockAcquisitionError("Failed to acquire write lock on handlers".to_string()))?;
+                EngineError::SyncError("Failed to acquire write lock on handlers".to_string()))?;
             
             handlers.remove(handler_id)
         };
@@ -204,7 +203,7 @@ impl EffectRegistry {
             let domain_id = handler.get_registration().target_domain;
             
             let mut domain_handlers = self.domain_handlers.write().map_err(|_| 
-                EngineError::LockAcquisitionError("Failed to acquire write lock on domain handlers".to_string()))?;
+                EngineError::SyncError("Failed to acquire write lock on domain handlers".to_string()))?;
             
             if let Some(handlers) = domain_handlers.get_mut(&domain_id) {
                 handlers.retain(|id| id != handler_id);
@@ -217,7 +216,7 @@ impl EffectRegistry {
     /// Get a handler by ID
     pub fn get_handler(&self, handler_id: &str) -> Result<Option<Arc<dyn EffectHandler>>> {
         let handlers = self.handlers.read().map_err(|_| 
-            EngineError::LockAcquisitionError("Failed to acquire read lock on handlers".to_string()))?;
+            EngineError::SyncError("Failed to acquire read lock on handlers".to_string()))?;
         
         Ok(handlers.get(handler_id).cloned())
     }
@@ -225,10 +224,10 @@ impl EffectRegistry {
     /// Get all handlers for a domain
     pub fn get_handlers_for_domain(&self, domain_id: &DomainId) -> Result<Vec<Arc<dyn EffectHandler>>> {
         let domain_handlers = self.domain_handlers.read().map_err(|_| 
-            EngineError::LockAcquisitionError("Failed to acquire read lock on domain handlers".to_string()))?;
+            EngineError::SyncError("Failed to acquire read lock on domain handlers".to_string()))?;
         
         let handlers = self.handlers.read().map_err(|_| 
-            EngineError::LockAcquisitionError("Failed to acquire read lock on handlers".to_string()))?;
+            EngineError::SyncError("Failed to acquire read lock on handlers".to_string()))?;
         
         let handler_ids = match domain_handlers.get(domain_id) {
             Some(ids) => ids,
@@ -246,7 +245,7 @@ impl EffectRegistry {
     /// Get all registered handlers
     pub fn get_all_handlers(&self) -> Result<Vec<Arc<dyn EffectHandler>>> {
         let handlers = self.handlers.read().map_err(|_| 
-            EngineError::LockAcquisitionError("Failed to acquire read lock on handlers".to_string()))?;
+            EngineError::SyncError("Failed to acquire read lock on handlers".to_string()))?;
         
         let all_handlers = handlers.values().cloned().collect();
         
@@ -256,7 +255,7 @@ impl EffectRegistry {
     /// Count the number of registered handlers
     pub fn count_handlers(&self) -> Result<usize> {
         let handlers = self.handlers.read().map_err(|_| 
-            EngineError::LockAcquisitionError("Failed to acquire read lock on handlers".to_string()))?;
+            EngineError::SyncError("Failed to acquire read lock on handlers".to_string()))?;
         
         Ok(handlers.len())
     }
@@ -264,7 +263,7 @@ impl EffectRegistry {
     /// Get the registration information for all handlers
     pub fn get_all_registrations(&self) -> Result<Vec<HandlerRegistration>> {
         let handlers = self.handlers.read().map_err(|_| 
-            EngineError::LockAcquisitionError("Failed to acquire read lock on handlers".to_string()))?;
+            EngineError::SyncError("Failed to acquire read lock on handlers".to_string()))?;
         
         let registrations = handlers
             .values()
@@ -272,6 +271,15 @@ impl EffectRegistry {
             .collect();
         
         Ok(registrations)
+    }
+}
+
+impl std::fmt::Debug for EffectRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EffectRegistry")
+            .field("handlers_count", &self.handlers.read().map(|h| h.len()).unwrap_or(0))
+            .field("domains_count", &self.domain_handlers.read().map(|d| d.len()).unwrap_or(0))
+            .finish()
     }
 }
 
@@ -320,7 +328,7 @@ mod tests {
         assert_eq!(registry.count_handlers()?, 0);
         
         // Register a handler
-        let domain1 = DomainId::new();
+        let domain1 = DomainId::new("domain1");
         let handler1 = Arc::new(MockHandler::new("handler1", domain1.clone()));
         registry.register_handler(handler1.clone())?;
         
@@ -332,7 +340,7 @@ mod tests {
         registry.register_handler(handler2.clone())?;
         
         // Register a handler for a different domain
-        let domain2 = DomainId::new();
+        let domain2 = DomainId::new("domain2");
         let handler3 = Arc::new(MockHandler::new("handler3", domain2.clone()));
         registry.register_handler(handler3.clone())?;
         
@@ -372,9 +380,9 @@ mod tests {
     
     #[tokio::test]
     async fn test_handler_registration_builder() {
-        let domain = DomainId::new();
-        let resource1 = ContentId::new();
-        let resource2 = ContentId::new();
+        let domain = DomainId::new("test-domain");
+        let resource1 = ContentId::new("resource1");
+        let resource2 = ContentId::new("resource2");
         
         let registration = HandlerRegistration::new(
             "test-handler",

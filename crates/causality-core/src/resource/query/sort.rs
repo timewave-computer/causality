@@ -7,7 +7,7 @@ use std::cmp::Ordering;
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 
-use crate::resource::{Resource, ContentId};
+use crate::resource::Resource;
 use super::QueryError;
 
 /// Sort direction for query results

@@ -18,12 +18,11 @@ pub use pagination::{Pagination, PaginationOptions, PaginationResult};
 pub use index::{ResourceIndex, IndexKey, IndexType, IndexEntry};
 pub use builder::{QueryBuilder, FilterBuilder, SortBuilder};
 
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::collections::HashMap;
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
 
-use causality_types::ContentId;
 use crate::resource::Resource;
 use crate::resource_types::ResourceType;
 

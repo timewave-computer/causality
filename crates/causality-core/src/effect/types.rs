@@ -5,6 +5,7 @@
 use std::fmt::{self, Display, Formatter};
 use serde::{Serialize, Deserialize};
 use causality_types::crypto_primitives::ContentId;
+use std::str::FromStr;
 
 /// An effect identifier
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -108,6 +109,25 @@ impl Display for Right {
             Right::Delete => write!(f, "delete"),
             Right::Delegate => write!(f, "delegate"),
             Right::Custom(c) => write!(f, "custom:{}", c),
+        }
+    }
+}
+
+impl FromStr for Right {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "read" => Ok(Right::Read),
+            "write" => Ok(Right::Write),
+            "create" => Ok(Right::Create),
+            "delete" => Ok(Right::Delete),
+            "delegate" => Ok(Right::Delegate),
+            s if s.starts_with("custom:") => {
+                let custom = s.strip_prefix("custom:").unwrap().to_string();
+                Ok(Right::Custom(custom))
+            },
+            _ => Err(format!("Invalid right: {}", s)),
         }
     }
 }

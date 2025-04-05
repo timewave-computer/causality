@@ -8,30 +8,27 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+// async_trait import was unused, removing it.
+// use async_trait::async_trait; 
 
 use causality_error::{EngineResult as Result, EngineError as Error};
 use causality_core::effect::{Effect, EffectOutcome};
 use causality_types::ContentId;
 use causality_types::DomainId;
-// Remove problematic imports that are defined locally
-// use causality_types::verification::UnifiedProof;
-// use crate::interpreter::Interpreter;
-// use crate::resource::ResourceRegisterTrait;
-// use causality_types::verification::VerificationService;
 
+// Import only necessary types from super
 use super::{
-    Operation, OperationType, ExecutionContext, ExecutionPhase, ExecutionEnvironment,
-    AbstractContext, RegisterContext, PhysicalContext, ZkContext,
-    ResourceRef, RegisterOperation, PhysicalOperation, ResourceRefType,
-    RegisterOperationType, Authorization, AuthorizationType, ResourceConservation, ConservationDomain,
-    execution::{OperationExecutor, OperationResult, ExecutionError, AbstractExecutor, RegisterExecutor, 
-                ZkExecutor, execute_operation},
-    transformation::transform_operation,
-    zk::{OperationProofGenerator, CircuitSelector, DefaultCircuitSelector}
+    execution::{AbstractExecutor, RegisterExecutor, ZkExecutor, execute_operation, OperationResult}, // Use non-generic OperationResult
+    // transformation::transform_operation, // Remove unused import
+    zk::OperationProofGenerator,
+    verification::VerificationService
 };
+// Import core operation types
+use causality_core::resource::{Operation as CoreOperation, OperationType as CoreOperationType, ResourceId}; // Add ResourceId import
+use causality_core::resource::agent::operation::IdentityId;
 
 // Define local traits for this module
-#[async_trait::async_trait]
+#[async_trait::async_trait] // Re-add async_trait here as it's used by the traits
 pub trait ResourceRegisterTrait: Send + Sync {
     async fn create_register(&self, register_id: &str, data: &HashMap<String, String>) -> Result<()>;
     async fn update_register(&self, register_id: &str, data: &HashMap<String, String>) -> Result<()>;
@@ -42,24 +39,63 @@ pub trait ResourceRegisterTrait: Send + Sync {
     async fn archive_register(&self, register_id: &str) -> Result<()>;
 }
 
-// Simple mock verification service
-pub struct VerificationService {}
-
-impl VerificationService {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
 // Define Interpreter trait locally
-#[async_trait::async_trait]
+#[async_trait::async_trait] // Re-add async_trait here
 pub trait Interpreter: Send + Sync {
     async fn execute_effect(&self, effect: &dyn Effect) -> Result<EffectOutcome>;
 }
 
+/// Adapter from API Interpreter to execution Interpreter
+struct InterpreterAdapter {
+    inner: Arc<dyn Interpreter>,
+}
+
+#[async_trait::async_trait] // Re-add async_trait here
+impl crate::operation::execution::Interpreter for InterpreterAdapter {
+    async fn execute_effect(&self, effect: &dyn Effect) -> Result<EffectOutcome> {
+        self.inner.execute_effect(effect).await
+    }
+}
+
+/// Adapter from API ResourceRegisterTrait to execution ResourceRegisterTrait
+struct ResourceRegisterAdapter {
+    inner: Arc<dyn ResourceRegisterTrait>,
+}
+
+#[async_trait::async_trait] // Re-add async_trait here
+impl crate::operation::execution::ResourceRegisterTrait for ResourceRegisterAdapter {
+    async fn create_register(&self, register_id: &str, data: &HashMap<String, String>) -> Result<()> {
+        self.inner.create_register(register_id, data).await
+    }
+    
+    async fn update_register(&self, register_id: &str, data: &HashMap<String, String>) -> Result<()> {
+        self.inner.update_register(register_id, data).await
+    }
+    
+    async fn transfer_register(&self, register_id: &str, new_owner: &str) -> Result<()> {
+        self.inner.transfer_register(register_id, new_owner).await
+    }
+    
+    async fn lock_register(&self, register_id: &str) -> Result<()> {
+        self.inner.lock_register(register_id).await
+    }
+    
+    async fn unlock_register(&self, register_id: &str) -> Result<()> {
+        self.inner.unlock_register(register_id).await
+    }
+    
+    async fn freeze_register(&self, register_id: &str) -> Result<()> {
+        self.inner.freeze_register(register_id).await
+    }
+    
+    async fn archive_register(&self, register_id: &str) -> Result<()> {
+        self.inner.archive_register(register_id).await
+    }
+}
+
 /// High-level operation manager for creating and executing operations
 pub struct OperationManager {
-    interpreter: Arc<Interpreter>,
+    interpreter: Arc<dyn Interpreter>,
     resource_register: Arc<dyn ResourceRegisterTrait>,
     verification_service: Arc<VerificationService>,
     proof_generator: Option<Arc<OperationProofGenerator>>,
@@ -73,18 +109,27 @@ pub struct OperationManager {
 impl OperationManager {
     /// Create a new operation manager
     pub fn new(
-        interpreter: Arc<Interpreter>,
+        interpreter: Arc<dyn Interpreter>,
         resource_register: Arc<dyn ResourceRegisterTrait>,
         verification_service: Arc<VerificationService>,
     ) -> Self {
+        // Create adapters for the internal traits
+        let interpreter_adapter = Arc::new(InterpreterAdapter {
+            inner: interpreter.clone(),
+        });
+        
+        let register_adapter = Arc::new(ResourceRegisterAdapter {
+            inner: resource_register.clone(),
+        });
+        
         // Create executors
         let abstract_executor = Arc::new(AbstractExecutor::new(
-            interpreter.clone(),
-            verification_service.clone(),
+            interpreter_adapter,
+            // verification_service.clone(), // Remove second argument
         ));
         
         let register_executor = Arc::new(RegisterExecutor::new(
-            resource_register.clone(),
+            register_adapter,
             verification_service.clone(),
         ));
         
@@ -112,77 +157,62 @@ impl OperationManager {
     /// Create a new abstract operation
     pub fn create_operation(
         &self,
-        operation_type: OperationType,
+        operation_type: CoreOperationType,
         effect: Box<dyn Effect>,
-    ) -> Operation<AbstractContext> {
-        let context = AbstractContext::new(ExecutionPhase::Planning);
+        identity: IdentityId,
+        target: ResourceId,
+    ) -> CoreOperation {
         
-        Operation::new(
+        CoreOperation::new(
+            identity,
             operation_type,
-            effect,
-            context
+            target,
+            vec![effect], 
         )
     }
     
     /// Execute an operation in the abstract context
     pub async fn execute_abstract(
         &self,
-        operation: &Operation<AbstractContext>,
-    ) -> Result<OperationResult<AbstractContext>, ExecutionError> {
-        execute_operation(operation, &*self.abstract_executor).await
+        operation: &CoreOperation,
+    ) -> Result<OperationResult> {
+        execute_operation(operation, &*self.abstract_executor).await.map_err(|e| e.into())
     }
     
     /// Execute an operation in the register context
     pub async fn execute_register(
         &self,
-        operation: &Operation<RegisterContext>,
-    ) -> Result<OperationResult<RegisterContext>, ExecutionError> {
-        execute_operation(operation, &*self.register_executor).await
+        operation: &CoreOperation,
+    ) -> Result<OperationResult> {
+        execute_operation(operation, &*self.register_executor).await.map_err(|e| e.into())
     }
     
     /// Execute an operation in the ZK context
     pub async fn execute_zk(
         &self,
-        operation: &Operation<ZkContext>,
-    ) -> Result<OperationResult<ZkContext>, ExecutionError> {
+        operation: &CoreOperation,
+    ) -> Result<OperationResult> {
         if let Some(executor) = &self.zk_executor {
-            execute_operation(operation, &**executor).await
+            execute_operation(operation, &**executor).await.map_err(|e| e.into())
         } else {
-            Err(ExecutionError::InvalidContext(ExecutionEnvironment::ZkVm))
+            Err(Error::InvalidArgument("ZK executor not available".to_string()))
         }
     }
     
     /// Transform and execute an operation from abstract to register context
     pub async fn execute_as_register(
         &self,
-        operation: &Operation<AbstractContext>,
-    ) -> Result<OperationResult<RegisterContext>, ExecutionError> {
-        // Transform the operation to register context
-        let register_operation = transform_operation::<AbstractContext, RegisterContext>(operation)
-            .map_err(|e| ExecutionError::TransformationError(e.to_string()))?;
-        
-        // Execute in register context
-        self.execute_register(&register_operation).await
+        operation: &CoreOperation,
+    ) -> Result<OperationResult> {
+        self.execute_register(operation).await
     }
     
     /// Transform and execute an operation from abstract to ZK context
     pub async fn execute_as_zk(
         &self,
-        operation: &Operation<AbstractContext>,
-    ) -> Result<OperationResult<ZkContext>, ExecutionError> {
-        // Generate proof if we have a proof generator
-        let zk_operation = if let Some(generator) = &self.proof_generator {
-            generator.transform_to_zk_operation(operation)
-                .await
-                .map_err(|e| ExecutionError::TransformationError(e.to_string()))?
-        } else {
-            // Use regular transformation without proof
-            transform_operation::<AbstractContext, ZkContext>(operation)
-                .map_err(|e| ExecutionError::TransformationError(e.to_string()))?
-        };
-        
-        // Execute in ZK context
-        self.execute_zk(&zk_operation).await
+        operation: &CoreOperation,
+    ) -> Result<OperationResult> {
+        self.execute_zk(operation).await
     }
     
     /// Create and execute a transfer operation
@@ -192,37 +222,22 @@ impl OperationManager {
         from: &str,
         to: &str,
         domain_id: Option<DomainId>,
-    ) -> Result<OperationResult<RegisterContext>, ExecutionError> {
-        // Create a transfer effect
+        identity: IdentityId,
+    ) -> Result<OperationResult> {
         let effect = crate::effect::factory::create_transfer_effect(
             resource_id.to_string(),
             from.to_string(),
             to.to_string(),
-        ).map_err(|e| ExecutionError::EffectExecutionFailed(e.to_string()))?;
+        ).map_err(|e| Error::ExecutionFailed(format!("Effect creation failed: {}", e.to_string())))?;
         
-        // Create the operation
-        let mut operation = self.create_operation(OperationType::Transfer, effect);
+        let target_resource_id = ResourceId::from_legacy_content_id(&resource_id);
+        let operation = self.create_operation(
+            CoreOperationType::Custom("Transfer".to_string()),
+            effect,
+            identity,
+            target_resource_id, 
+        );
         
-        // Add input and output resources
-        let input_ref = ResourceRef {
-            resource_id: resource_id.clone(),
-            domain_id: domain_id.clone(),
-            ref_type: ResourceRefType::Input,
-            before_state: Some("owned_by_".to_string() + from),
-            after_state: None,
-        };
-        
-        let output_ref = ResourceRef {
-            resource_id,
-            domain_id,
-            ref_type: ResourceRefType::Output,
-            before_state: None,
-            after_state: Some("owned_by_".to_string() + to),
-        };
-        
-        operation = operation.with_input(input_ref).with_output(output_ref);
-        
-        // Execute as register operation
         self.execute_as_register(&operation).await
     }
     
@@ -232,30 +247,23 @@ impl OperationManager {
         resource_id: ContentId,
         owner: &str,
         initial_state: Option<&str>,
-        domain_id: Option<DomainId>,
-    ) -> Result<OperationResult<RegisterContext>, ExecutionError> {
-        // Create a deposit effect
+        _domain_id: Option<DomainId>,
+        identity: IdentityId,
+    ) -> Result<OperationResult> {
         let effect = crate::effect::factory::create_deposit_effect(
             resource_id.to_string(),
             owner.to_string(),
             initial_state.unwrap_or("").to_string(),
-        ).map_err(|e| ExecutionError::EffectExecutionFailed(e.to_string()))?;
+        ).map_err(|e| Error::ExecutionFailed(e.to_string()))?;
         
-        // Create the operation
-        let mut operation = self.create_operation(OperationType::Deposit, effect);
+        let target_resource_id = ResourceId::from_legacy_content_id(&resource_id);
+        let operation = self.create_operation(
+            CoreOperationType::Create,
+            effect,
+            identity,
+            target_resource_id,
+        );
         
-        // Add output resource
-        let output_ref = ResourceRef {
-            resource_id,
-            domain_id,
-            ref_type: ResourceRefType::Output,
-            before_state: None,
-            after_state: initial_state.map(|s| s.to_string()),
-        };
-        
-        operation = operation.with_output(output_ref);
-        
-        // Execute as register operation
         self.execute_as_register(&operation).await
     }
     
@@ -264,57 +272,58 @@ impl OperationManager {
         &self,
         resource_id: ContentId,
         owner: &str,
-        domain_id: Option<DomainId>,
-    ) -> Result<OperationResult<RegisterContext>, ExecutionError> {
-        // Create a withdrawal effect
+        _domain_id: Option<DomainId>,
+        identity: IdentityId,
+    ) -> Result<OperationResult> {
         let effect = crate::effect::factory::create_withdrawal_effect(
             resource_id.to_string(),
             owner.to_string(),
-        ).map_err(|e| ExecutionError::EffectExecutionFailed(e.to_string()))?;
+        ).map_err(|e| Error::ExecutionFailed(e.to_string()))?;
         
-        // Create the operation
-        let mut operation = self.create_operation(OperationType::Withdrawal, effect);
+        let target_resource_id = ResourceId::from_legacy_content_id(&resource_id);
+        let operation = self.create_operation(
+            CoreOperationType::Delete,
+            effect,
+            identity,
+            target_resource_id,
+        );
         
-        // Add input resource
-        let input_ref = ResourceRef {
-            resource_id,
-            domain_id,
-            ref_type: ResourceRefType::Input,
-            before_state: Some("owned_by_".to_string() + owner),
-            after_state: None,
-        };
-        
-        operation = operation.with_input(input_ref);
-        
-        // Execute as register operation
         self.execute_as_register(&operation).await
     }
 }
 
-// Convenience API for creating operations
+// Convenience API for creating operations (needs update for CoreOperation)
 pub mod builder {
     use super::*;
+    // ResourceId is already imported via causality_core::resource::*
+    // use causality_core::resource::ResourceId; 
     
-    /// Builder for creating operations
+    /// Builder for creating CoreOperations
     pub struct OperationBuilder {
-        operation_type: OperationType,
+        operation_type: CoreOperationType,
         effect: Option<Box<dyn Effect>>,
-        inputs: Vec<ResourceRef>,
-        outputs: Vec<ResourceRef>,
+        // inputs: Vec<ResourceRef>, // CoreOperation doesn't have inputs/outputs
+        // outputs: Vec<ResourceRef>,
         metadata: HashMap<String, String>,
-        authorization: Option<Authorization>,
+        parameters: HashMap<String, String>,
+        identity: Option<IdentityId>,
+        target: Option<ResourceId>,
+        // authorization: Option<Authorization>, // Authorization handling in CoreOperation TBD
     }
     
     impl OperationBuilder {
         /// Create a new operation builder
-        pub fn new(operation_type: OperationType) -> Self {
+        pub fn new(operation_type: CoreOperationType) -> Self {
             Self {
                 operation_type,
                 effect: None,
-                inputs: Vec::new(),
-                outputs: Vec::new(),
+                // inputs: Vec::new(),
+                // outputs: Vec::new(),
                 metadata: HashMap::new(),
-                authorization: None,
+                parameters: HashMap::new(),
+                identity: None,
+                target: None,
+                // authorization: None,
             }
         }
         
@@ -323,98 +332,82 @@ pub mod builder {
             self.effect = Some(effect);
             self
         }
-        
-        /// Add an input resource
-        pub fn with_input(mut self, resource_id: ContentId, domain_id: Option<DomainId>, state: Option<&str>) -> Self {
-            let resource_ref = ResourceRef {
-                resource_id,
-                domain_id,
-                ref_type: ResourceRefType::Input,
-                before_state: state.map(|s| s.to_string()),
-                after_state: None,
-            };
-            
-            self.inputs.push(resource_ref);
+
+        /// Set the identity for this operation
+        pub fn with_identity(mut self, identity: IdentityId) -> Self {
+            self.identity = Some(identity);
             self
         }
+
+        /// Set the target resource ID for this operation
+        pub fn with_target(mut self, target: ResourceId) -> Self {
+            self.target = Some(target);
+            self
+        }
+        
+        /* Input/Output methods removed as they don't map directly to CoreOperation
+        /// Add an input resource
+        pub fn with_input(mut self, resource_id: ContentId, domain_id: Option<DomainId>, state: Option<&str>) -> Self { ... }
         
         /// Add an output resource
-        pub fn with_output(mut self, resource_id: ContentId, domain_id: Option<DomainId>, state: Option<&str>) -> Self {
-            let resource_ref = ResourceRef {
-                resource_id,
-                domain_id,
-                ref_type: ResourceRefType::Output,
-                before_state: None,
-                after_state: state.map(|s| s.to_string()),
-            };
-            
-            self.outputs.push(resource_ref);
-            self
-        }
+        pub fn with_output(mut self, resource_id: ContentId, domain_id: Option<DomainId>, state: Option<&str>) -> Self { ... }
+        */
         
         /// Add metadata
         pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
             self.metadata.insert(key.to_string(), value.to_string());
             self
         }
-        
-        /// Set authorization
-        pub fn with_authorization(mut self, auth_type: AuthorizationType, data: Vec<u8>, authorizer: &str) -> Self {
-            self.authorization = Some(Authorization {
-                auth_type,
-                data,
-                authorizer: authorizer.to_string(),
-            });
-            
+
+        /// Add parameters
+        pub fn with_parameters(mut self, params: HashMap<String, String>) -> Self {
+            self.parameters = params;
             self
         }
         
-        /// Build the operation
-        pub fn build(self) -> Operation<AbstractContext> {
-            let context = AbstractContext::new(ExecutionPhase::Planning);
+        /* Authorization method removed - TBD for CoreOperation
+        /// Set authorization
+        pub fn with_authorization(mut self, auth_type: AuthorizationType, data: Vec<u8>, authorizer: &str) -> Self { ... }
+        */
+        
+        /// Build the CoreOperation
+        pub fn build(self) -> Result<CoreOperation> { // Return Result<CoreOperation>
             
             // Use the provided effect or create an empty one
             let effect = self.effect.unwrap_or_else(|| {
-                Box::new(crate::effect::EmptyEffect::new("empty_effect"))
+                Box::new(crate::effect::factory::EmptyEffect::new("empty_effect"))
             });
+
+            let identity = self.identity.ok_or_else(|| Error::InvalidArgument("Identity is required".to_string()))?;
+            let target = self.target.ok_or_else(|| Error::InvalidArgument("Target is required".to_string()))?;
             
-            let mut operation = Operation::new(
+            // Create the operation using the 4-argument constructor
+            let mut operation = CoreOperation::new(
+                identity,
                 self.operation_type,
-                effect,
-                context
+                target,
+                // Pass the Vec<Box<dyn Effect>> directly
+                vec![effect], 
+                // Remove parameters/metadata arguments
             );
+
+            // Assign parameters and metadata after creation
+            operation.parameters = self.parameters;
+            operation.metadata = self.metadata;
             
-            // Add inputs and outputs
-            for input in self.inputs {
-                operation = operation.with_input(input);
-            }
-            
-            for output in self.outputs {
-                operation = operation.with_output(output);
-            }
-            
-            // Add metadata
-            for (key, value) in self.metadata {
-                operation = operation.with_metadata(&key, &value);
-            }
-            
-            // Add authorization if provided
-            if let Some(auth) = self.authorization {
-                operation = operation.with_authorization(auth);
-            }
-            
-            operation
+            Ok(operation)
         }
     }
     
-    /// Create a transfer operation
+    /// Create a transfer operation builder
     pub fn transfer(
         resource_id: ContentId,
         from: &str,
         to: &str,
-        domain_id: Option<DomainId>
+        // domain_id: Option<DomainId> // Domain info might go in metadata/params
     ) -> OperationBuilder {
-        let mut builder = OperationBuilder::new(OperationType::Transfer);
+        let mut builder = OperationBuilder::new(CoreOperationType::Custom("Transfer".to_string()));
+        builder = builder.with_target(ResourceId::from_legacy_content_id(&resource_id));
         
         // Create a transfer effect
         if let Ok(effect) = crate::effect::factory::create_transfer_effect(
@@ -422,34 +415,32 @@ pub mod builder {
             from.to_string(),
             to.to_string(),
         ) {
-            // Add the effect
             builder = builder.with_effect(effect);
         }
         
-        // Add input and output resources
-        builder = builder.with_input(
-            resource_id.clone(),
-            domain_id.clone(),
-            Some(&format!("owned_by_{}", from))
-        );
-        
-        builder = builder.with_output(
-            resource_id,
-            domain_id,
-            Some(&format!("owned_by_{}", to))
-        );
+        // Store from/to in parameters or metadata
+        let mut params = HashMap::new();
+        params.insert("from".to_string(), from.to_string());
+        params.insert("to".to_string(), to.to_string());
+        builder = builder.with_parameters(params);
+
+        /* Input/Output resource state handling removed - use metadata/params
+        builder = builder.with_input( ... );
+        builder = builder.with_output( ... );
+        */
         
         builder
     }
     
-    /// Create a deposit operation
+    /// Create a deposit operation builder
     pub fn deposit(
         resource_id: ContentId,
         owner: &str,
         initial_state: Option<&str>,
-        domain_id: Option<DomainId>
+        // domain_id: Option<DomainId>
     ) -> OperationBuilder {
-        let mut builder = OperationBuilder::new(OperationType::Deposit);
+        let mut builder = OperationBuilder::new(CoreOperationType::Create);
+        builder = builder.with_target(ResourceId::from_legacy_content_id(&resource_id));
         
         // Create a deposit effect
         if let Ok(effect) = crate::effect::factory::create_deposit_effect(
@@ -457,43 +448,49 @@ pub mod builder {
             owner.to_string(),
             initial_state.unwrap_or("").to_string(),
         ) {
-            // Add the effect
             builder = builder.with_effect(effect);
         }
         
-        // Add output resource
-        builder = builder.with_output(
-            resource_id,
-            domain_id,
-            initial_state
-        );
+        // Store owner/state in parameters or metadata
+        let mut params = HashMap::new();
+        params.insert("owner".to_string(), owner.to_string());
+        if let Some(state) = initial_state {
+            params.insert("initial_state".to_string(), state.to_string());
+        }
+        builder = builder.with_parameters(params);
+
+        /* Output resource state handling removed
+        builder = builder.with_output( ... );
+        */
         
         builder
     }
     
-    /// Create a withdrawal operation
+    /// Create a withdrawal operation builder
     pub fn withdraw(
         resource_id: ContentId,
         owner: &str,
-        domain_id: Option<DomainId>
+        // domain_id: Option<DomainId>
     ) -> OperationBuilder {
-        let mut builder = OperationBuilder::new(OperationType::Withdrawal);
+        let mut builder = OperationBuilder::new(CoreOperationType::Delete);
+        builder = builder.with_target(ResourceId::from_legacy_content_id(&resource_id));
         
         // Create a withdrawal effect
         if let Ok(effect) = crate::effect::factory::create_withdrawal_effect(
             resource_id.to_string(),
             owner.to_string(),
         ) {
-            // Add the effect
             builder = builder.with_effect(effect);
         }
         
-        // Add input resource
-        builder = builder.with_input(
-            resource_id,
-            domain_id,
-            Some(&format!("owned_by_{}", owner))
-        );
+        // Store owner in parameters or metadata
+        let mut params = HashMap::new();
+        params.insert("owner".to_string(), owner.to_string());
+        builder = builder.with_parameters(params);
+
+        /* Input resource state handling removed
+        builder = builder.with_input( ... );
+        */
         
         builder
     }

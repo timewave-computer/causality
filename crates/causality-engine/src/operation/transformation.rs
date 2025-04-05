@@ -7,21 +7,44 @@
 // representation to another, e.g., from abstract to register operations.
 
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::fmt::Debug;
-use std::sync::Arc;
+use serde::{Serialize, Deserialize};
 
-use crate::effect::{Effect, EffectOutcome};
-use causality_error::{EngineResult, EngineError};
-use causality_types::ContentId;
-use causality_core::verification::proof::UnifiedProof;
+use causality_types::DomainId;
 
-use super::{
-    Operation, OperationType, ExecutionContext, ExecutionPhase, ExecutionEnvironment,
-    AbstractContext, RegisterContext, PhysicalContext, ZkContext,
-    ResourceRef, RegisterOperation, PhysicalOperation, ResourceRefType,
-    RegisterOperationType, Authorization
+// Import context-related items directly from context module
+use super::context::{
+    ExecutionContext, ExecutionEnvironment,
+    AbstractContext, PhysicalContext, ZkContext
 };
+
+// Import items from causality_core
+use causality_core::{
+    resource::{Operation, OperationType, ResourceId}, // Import EffectInfo and function
+    serialization::SerializationError // Import SerializationError
+};
+
+// Engine-specific types
+use crate::log::fact_types::RegisterOperationType; // Import engine-specific type
+
+// Import the Context enum wrapper from local types module
+
+
+// Define local structs needed for transformation output (if not imported)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterOperation {
+    pub register_id: ResourceId,
+    pub operation: RegisterOperationType,
+    pub data: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhysicalOperation {
+    pub domain_id: DomainId,
+    pub tx_hash: Option<String>,
+    pub block_height: Option<u64>,
+    pub data: Vec<u8>, // Assuming serialized data
+}
 
 /// Error when transforming operations between contexts
 #[derive(Debug, thiserror::Error)]
@@ -49,43 +72,37 @@ pub enum TransformationError {
 
     #[error("Transformation not implemented: {0}")]
     NotImplemented(String),
+
+    #[error("Operation ID error: {0}")]
+    IdError(String),
+
+    #[error("Serialization error during transformation: {0}")]
+    Serialization(String),
 }
 
-/// Transform an operation to a different execution context
-pub fn transform_operation<C: ExecutionContext, D: ExecutionContext>(
-    operation: &Operation<C>,
-) -> std::result::Result<Operation<D>, TransformationError> {
-    let from_env = operation.context.environment();
-    let to_env = D::default_environment();
+// Implement From<SerializationError> for TransformationError
+impl From<SerializationError> for TransformationError {
+    fn from(err: SerializationError) -> Self {
+        TransformationError::Serialization(err.to_string())
+    }
+}
 
-    // Validate the transformation is possible
-    validate_transformation_path(&from_env, &to_env)?;
+/// Transform an operation for a different execution context
+/// This now focuses on generating necessary data/side-effects for the target context
+/// rather than creating a distinct Operation<D> struct.
+pub fn transform_operation_for_context(
+    operation: &Operation, 
+    target_environment: &ExecutionEnvironment
+) -> std::result::Result<(), TransformationError> { // Return Ok or Error, side effects handled internally or via return data (TBD)
+    
+    // Placeholder: Validation and dispatch based on source/target env
+    // let source_environment = determine_source_environment(operation)?; // Need logic to get current env
+    // validate_transformation_path(&source_environment, target_environment)?;
+    // match (source_environment, target_environment) { ... }
 
-    // Create the appropriate target context
-    let target_context = create_target_context::<D>(&operation.context)?;
-
-    // Transform the operation
-    let transformed_operation = match (from_env, to_env) {
-        (ExecutionEnvironment::Abstract, ExecutionEnvironment::Register) => {
-            transform_abstract_to_resource_register(operation, target_context)?
-        },
-        (ExecutionEnvironment::Register, ExecutionEnvironment::OnChain(_)) => {
-            transform_register_to_physical(operation, target_context)?
-        },
-        (ExecutionEnvironment::Abstract, ExecutionEnvironment::ZkVm) => {
-            transform_abstract_to_zk(operation, target_context)?
-        },
-        (ExecutionEnvironment::OnChain(_), ExecutionEnvironment::Abstract) => {
-            transform_physical_to_abstract(operation, target_context)?
-        },
-        _ => {
-            return Err(TransformationError::NotImplemented(
-                format!("Transformation from {:?} to {:?} not implemented", from_env, to_env)
-            ));
-        }
-    };
-
-    Ok(transformed_operation)
+    println!("Placeholder: transform_operation_for_context called for {:?}", target_environment);
+    // TODO: Implement actual transformation logic based on environments
+    Ok(())
 }
 
 /// Validate that a transformation path is valid
@@ -110,101 +127,43 @@ fn validate_transformation_path(
     }
 }
 
-/// Create a target context of the appropriate type
-fn create_target_context<D: ExecutionContext>(
-    source_context: &dyn ExecutionContext,
-) -> std::result::Result<D, TransformationError> {
-    D::from_previous_context(source_context)
-        .map_err(|_| TransformationError::InvalidTransformation {
-            from: format!("{:?}", source_context.environment()),
-            to: format!("{:?}", D::default_environment()),
-        })
+/// Generate data needed for a register operation from a core Operation
+/// Returns RegisterOperation data (e.g., as a struct or HashMap)
+pub fn generate_register_data_from_operation(
+    operation: &Operation,
+) -> std::result::Result<RegisterOperation, TransformationError> { 
+    // Placeholder logic - reconstruct RegisterOperation from core Operation fields
+    create_register_operation_from_core(operation)
 }
 
-/// Transform an abstract operation to a resource register operation
-pub fn transform_abstract_to_resource_register<C: ExecutionContext>(
-    operation: &Operation<C>,
-    target_context: RegisterContext,
-) -> std::result::Result<Operation<RegisterContext>, TransformationError> {
-    // Create a new register operation based on the abstract operation
-    let register_operation = create_register_operation_from_abstract(operation)?;
-    
-    // Create a new operation with the register context
-    Ok(Operation {
-        id: operation.id.clone(),
-        op_type: operation.op_type.clone(),
-        abstract_representation: operation.abstract_representation.clone(),
-        concrete_implementation: Some(register_operation),
-        physical_execution: None,
-        context: target_context,
-        inputs: operation.inputs.clone(),
-        outputs: operation.outputs.clone(),
-        authorization: operation.authorization.clone(),
-        proof: operation.proof.clone(),
-        zk_proof: operation.zk_proof.clone(),
-        conservation: operation.conservation.clone(),
-        metadata: operation.metadata.clone(),
-    })
-}
-
-/// Backward compatibility wrapper for transform_abstract_to_resource_register
-#[deprecated(since = "0.8.0", note = "Use transform_abstract_to_resource_register instead")]
-pub fn transform_abstract_to_register<C: ExecutionContext>(
-    operation: &Operation<C>,
-    target_context: RegisterContext,
-) -> std::result::Result<Operation<RegisterContext>, TransformationError> {
-    transform_abstract_to_resource_register(operation, target_context)
-}
-
-/// Create a register operation from an abstract operation
-fn create_register_operation_from_abstract<C: ExecutionContext>(
-    operation: &Operation<C>,
+/// Helper to create RegisterOperation data from a core Operation
+fn create_register_operation_from_core(
+    operation: &Operation,
 ) -> std::result::Result<RegisterOperation, TransformationError> {
-    // Extract register ID from the first output (if available)
-    let register_id = operation.outputs.first()
-        .map(|output| output.resource_id.clone())
-        .ok_or_else(|| TransformationError::ResourceError(
-            "No output resource specified for register operation".to_string()
-        ))?;
-    
-    // Map the operation type to register operation type
-    let register_op_type = match operation.op_type {
+    let register_id = operation.target.clone();
+    let register_op_type = match operation.operation_type {
         OperationType::Create => RegisterOperationType::Create,
         OperationType::Update => RegisterOperationType::Update,
-        OperationType::Delete => RegisterOperationType::Consume, // Delete maps to consume in unified model
-        OperationType::Transfer => RegisterOperationType::Transfer,
-        OperationType::Merge => RegisterOperationType::Custom("Merge".to_string()),
-        OperationType::Split => RegisterOperationType::Custom("Split".to_string()),
-        OperationType::Deposit => RegisterOperationType::Create, // Deposit is a special case of create
-        OperationType::Withdrawal => RegisterOperationType::Consume, // Withdrawal maps to consume
+        OperationType::Delete => RegisterOperationType::Delete, // Correct mapping
         OperationType::Custom(ref name) => {
-            // Handle special operation names that map directly to register operations
+            // TODO: Define a proper mapping from custom core OperationTypes 
+            //       to RegisterOperationType variants or handle differently.
             match name.as_str() {
-                "Lock" => RegisterOperationType::Lock,
-                "Unlock" => RegisterOperationType::Unlock,
-                "Freeze" => RegisterOperationType::Freeze,
-                "Unfreeze" => RegisterOperationType::Unfreeze,
-                "Archive" => RegisterOperationType::Archive,
-                "Unarchive" => RegisterOperationType::Unarchive,
-                "MarkPending" => RegisterOperationType::MarkPending,
-                _ => RegisterOperationType::Custom(name.clone())
+                "Lock" => RegisterOperationType::Update, // Placeholder: No Lock variant
+                _ => RegisterOperationType::Update, // Placeholder: No general Custom variant
             }
         },
+        // Handle other OperationType variants if necessary, e.g., Read?
+        // If OperationType::Read exists and should map:
+        // OperationType::Read => RegisterOperationType::Read, 
+        _ => return Err(TransformationError::InvalidOperationType(format!("Unhandled core operation type for register fact: {:?}", operation.operation_type)))
     };
-    
-    // Gather operation data from metadata and inputs/outputs
     let mut data = HashMap::new();
+    data.insert("operation_id".to_string(), operation.id()?.to_string());
+    data.insert("operation_type".to_string(), format!("{:?}", operation.operation_type));
+    data.extend(operation.parameters.clone());
+    data.extend(operation.metadata.clone());
     
-    // Add basic operation information
-    data.insert("operation_id".to_string(), operation.id.to_string());
-    data.insert("operation_type".to_string(), format!("{:?}", operation.op_type));
-    
-    // Add metadata from the original operation
-    for (key, value) in &operation.metadata {
-        data.insert(format!("meta_{}", key), value.clone());
-    }
-    
-    // Create the register operation
     Ok(RegisterOperation {
         register_id,
         operation: register_op_type,
@@ -212,138 +171,98 @@ fn create_register_operation_from_abstract<C: ExecutionContext>(
     })
 }
 
-/// Transform a register operation to a physical operation
-fn transform_register_to_physical<C: ExecutionContext>(
-    operation: &Operation<C>,
-    target_context: PhysicalContext,
-) -> std::result::Result<Operation<PhysicalContext>, TransformationError> {
-    // Get the concrete implementation
-    let register_op = operation.concrete_implementation.as_ref()
+/// Generate data needed for a physical operation from a core Operation
+/// Returns PhysicalOperation data (e.g., as a struct or HashMap)
+fn generate_physical_data_from_operation(
+    operation: &Operation, // Core Operation
+    target_context: &PhysicalContext, // Need context info
+) -> std::result::Result<PhysicalOperation, TransformationError> { 
+    let register_id_str = operation.parameters.get("register_id")
         .ok_or(TransformationError::MissingImplementation)?;
+    // Use ResourceId::from_string instead of from_str
+    let register_id = ResourceId::from_string(register_id_str) 
+        .map_err(|e| TransformationError::ResourceError(format!("Invalid register_id parameter: {}", e)))?;
     
-    // Create physical operation for the specified domain
-    let domain_id = target_context.domain_id.clone();
-    
-    let physical_op = PhysicalOperation {
-        domain_id: domain_id.clone(),
-        tx_hash: None, // Will be filled in after execution
-        block_height: None, // Will be filled in after execution
+    // Placeholder: Reconstruct RegisterOperation - needs proper parsing from params
+    // Needs to align with available RegisterOperationType variants
+    let register_op = RegisterOperation {
+         register_id: register_id.clone(),
+         operation: RegisterOperationType::Update, // Placeholder: Use an existing variant like Update
+         data: operation.parameters.clone(), 
+    };
+
+    // Create physical operation data struct
+    Ok(PhysicalOperation {
+        domain_id: target_context.domain_id.clone(),
+        tx_hash: None, 
+        block_height: None,
         data: serde_json::to_vec(&register_op)
             .map_err(|e| TransformationError::ResourceError(e.to_string()))?,
-    };
-    
-    // Create a new operation with the physical context
-    Ok(Operation {
-        id: operation.id.clone(),
-        op_type: operation.op_type.clone(),
-        abstract_representation: operation.abstract_representation.clone(),
-        concrete_implementation: operation.concrete_implementation.clone(),
-        physical_execution: Some(physical_op),
-        context: target_context,
-        inputs: operation.inputs.clone(),
-        outputs: operation.outputs.clone(),
-        authorization: operation.authorization.clone(),
-        proof: operation.proof.clone(),
-        zk_proof: operation.zk_proof.clone(),
-        conservation: operation.conservation.clone(),
-        metadata: operation.metadata.clone(),
     })
 }
 
-/// Transform an abstract operation to a ZK operation
-fn transform_abstract_to_zk<C: ExecutionContext>(
-    operation: &Operation<C>,
-    target_context: ZkContext,
-) -> std::result::Result<Operation<ZkContext>, TransformationError> {
-    // For ZK transformations, we need to ensure there's a proof
-    if target_context.requires_proof() && operation.proof.is_none() {
-        return Err(TransformationError::MissingProof);
+/// Generate data needed for a ZK operation from a core Operation
+/// Returns ZkOperation data (e.g., proof request info or proof CID)
+fn generate_zk_data_from_operation(
+    operation: &Operation, // Core operation
+    target_context: &ZkContext,
+) -> std::result::Result<(), TransformationError> { 
+    // Call requires_proof using explicit trait path
+    if ExecutionContext::proof_required(target_context) { 
+        if operation.metadata.get("proof_cid").is_none() { 
+             return Err(TransformationError::MissingProof);
+        }
     }
-    
-    // Create a new operation with the ZK context
-    Ok(Operation {
-        id: operation.id.clone(),
-        op_type: operation.op_type.clone(),
-        abstract_representation: operation.abstract_representation.clone(),
-        concrete_implementation: operation.concrete_implementation.clone(),
-        physical_execution: operation.physical_execution.clone(),
-        context: target_context,
-        inputs: operation.inputs.clone(),
-        outputs: operation.outputs.clone(),
-        authorization: operation.authorization.clone(),
-        proof: operation.proof.clone(),
-        zk_proof: operation.zk_proof.clone(),
-        conservation: operation.conservation.clone(),
-        metadata: operation.metadata.clone(),
-    })
+    Ok(())
 }
 
-/// Transform a physical operation back to an abstract operation
-fn transform_physical_to_abstract<C: ExecutionContext>(
-    operation: &Operation<C>,
-    target_context: AbstractContext,
-) -> std::result::Result<Operation<AbstractContext>, TransformationError> {
-    // Create a new operation with the abstract context
-    Ok(Operation {
-        id: operation.id.clone(),
-        op_type: operation.op_type.clone(),
-        abstract_representation: operation.abstract_representation.clone(),
-        concrete_implementation: operation.concrete_implementation.clone(),
-        physical_execution: operation.physical_execution.clone(),
-        context: target_context,
-        inputs: operation.inputs.clone(),
-        outputs: operation.outputs.clone(),
-        authorization: operation.authorization.clone(),
-        proof: operation.proof.clone(),
-        zk_proof: operation.zk_proof.clone(),
-        conservation: operation.conservation.clone(),
-        metadata: operation.metadata.clone(),
-    })
+/// Generate abstract representation data from a core Operation
+// This might involve extracting key info from parameters/metadata if transformed previously
+fn generate_abstract_data_from_operation(
+    operation: &Operation,
+    _target_context: &AbstractContext, 
+) -> std::result::Result<(), TransformationError> {
+    // Placeholder: Logic to potentially clean up metadata/parameters from previous transformations.
+    println!("Generating abstract data for operation: {}", operation.id()?); // Added ? to propagate potential ID error
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_patterns::Capability;
+    // use causality_patterns::Capability; // Import might be needed if capability parsing is added
     use crate::effect::EmptyEffect;
+    use std::str::FromStr;
+    // ResourceId is imported correctly now via causality_core::resource
     
     #[test]
-    fn test_transform_abstract_to_resource_register() {
-        // Create an abstract operation
-        let abstract_context = AbstractContext::new(ExecutionPhase::Planning);
-        let effect = Box::new(EmptyEffect::with_name("test_effect"));
+    fn test_generate_register_data() { // Renamed test
+        // Create an abstract context (used separately now)
+        let _abstract_context = AbstractContext::new(ExecutionPhase::Planning);
         
-        // Use ContentId::nil() which doesn't take arguments
-        let content_id = ContentId::nil();
-        
+        // Create a core Operation
+        let identity = IdentityId::new();
+        let target = ResourceId::from_str("test:resource:1").unwrap(); 
+        let effect = Box::new(EmptyEffect::new("test_effect"));
         let operation = Operation::new(
+            identity.clone(),
             OperationType::Create,
-            effect,
-            abstract_context.clone()
-        )
-        .with_output(ResourceRef {
-            resource_id: content_id,
-            domain_id: None,
-            ref_type: ResourceRefType::Output,
-            before_state: None,
-            after_state: Some("created".to_string()),
-        });
+            target.clone(),
+            vec![effect]
+        );
         
-        // Transform to register context
-        let register_context = RegisterContext::new(
+        // Create target register context (passed separately if needed by generation fn)
+        let _register_context = RegisterContext::new(
             ExecutionPhase::Execution,
             "test_namespace"
         );
         
-        let transformed = transform_abstract_to_resource_register(&operation, register_context)
-            .expect("Transformation should succeed");
+        let register_data = generate_register_data_from_operation(&operation)
+            .expect("Generation should succeed");
         
-        // Verify the transformation was successful
-        assert_eq!(transformed.id, operation.id);
-        assert_eq!(transformed.op_type, operation.op_type);
-        assert!(transformed.concrete_implementation.is_some());
-        assert_eq!(transformed.concrete_implementation.unwrap().operation, RegisterOperationType::Create);
-        assert_eq!(transformed.context.phase(), ExecutionPhase::Execution);
-        assert_eq!(transformed.context.environment(), ExecutionEnvironment::Register);
+        // Verify the generated RegisterOperation data
+        assert_eq!(register_data.register_id, operation.target);
+        assert_eq!(register_data.operation, RegisterOperationType::Create);
+        assert!(register_data.data.contains_key("operation_id"));
     }
 } 

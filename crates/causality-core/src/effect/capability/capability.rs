@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fmt::{Debug, Formatter, Result as FmtResult};
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::any::Any;
 use std::collections::HashSet;

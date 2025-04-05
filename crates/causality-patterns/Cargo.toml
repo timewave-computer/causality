@@ -7,18 +7,21 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 # External dependencies
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
 anyhow = { workspace = true }
-tracing = { workspace = true }
-tokio = { workspace = true, features = ["sync"] }
-async-trait = { workspace = true }
+tracing = "0.1"
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+uuid = { workspace = true }
 
 # Internal dependencies
-causality-types = { workspace = true }
-causality-core = { workspace = true }
-causality-domain = { workspace = true }
+causality-types = { path = "../causality-types" }
+causality-core = { path = "../causality-core" }
+causality-domain = { path = "../causality-domain" }
+causality-engine = { path = "../causality-engine" }
+causality-error = { path = "../causality-error" }
 
 # DEPRECATED: Dependencies on legacy crates have been removed
 # All functionality is now available through causality-core

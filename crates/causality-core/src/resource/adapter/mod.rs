@@ -2,8 +2,7 @@
 //!
 //! Provides adapters between resource types and content addressing.
 
-use causality_types::{ContentHash, ContentId};
-use crate::capability::{ContentAddressed, ContentAddressingError, ContentRef};
+use causality_types::ContentId;
 use super::types::ResourceId;
 use crate::utils::content_addressing;
 
@@ -23,7 +22,7 @@ pub fn content_id_to_resource_id(content_id: &ContentId) -> ResourceId {
 
 /// Adapter between capability and resource identifiers
 pub mod id_adapter {
-    use super::*;
+    
     
     /// Convert from capability::ResourceId to resource::types::ResourceId
     pub fn capability_to_resource(id: &crate::capability::ResourceId) -> crate::resource::types::ResourceId {

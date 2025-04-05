@@ -14,17 +14,13 @@
 // pub use file_storage::FileLogStorage;
 
 use std::fmt;
-use std::path::Path;
 use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
-use std::io;
 use std::fmt::Debug;
 use async_trait::async_trait;
 
-use causality_error::{EngineResult, EngineError, CausalityError, Result as CausalityResult};
-use causality_types::{Timestamp, DomainId, TraceId};
+use causality_error::{EngineResult, Result as CausalityResult};
+use causality_types::DomainId;
 use chrono::{DateTime, Utc};
 use crate::log::LogEntry;
 use crate::log::entry::EntryType;

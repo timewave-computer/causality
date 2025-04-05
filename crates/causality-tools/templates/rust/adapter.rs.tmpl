@@ -1,0 +1,33 @@
+// Adapter: {{name}}
+// Version: {{version}}
+// Generated code - do not modify
+
+use anyhow::Result;
+use serde::{Serialize, Deserialize};
+use std::sync::Arc;
+
+{{#each effects}}
+/// {{documentation}}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct {{name}}Effect {
+    {{#each parameters}}
+    /// {{documentation}}
+    pub {{name}}: {{type}},
+    {{/each}}
+}
+
+impl {{name}}Effect {
+    /// Create a new effect
+    pub fn new(
+        {{#each parameters}}
+        {{name}}: {{type}},
+        {{/each}}
+    ) -> Self {
+        Self {
+            {{#each parameters}}
+            {{name}},
+            {{/each}}
+        }
+    }
+}
+{{/each}} 

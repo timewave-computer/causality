@@ -8,22 +8,22 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::fmt;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc, NaiveDateTime};
-use std::ops::Range;
-use std::cmp::{min, max};
 
-use causality_error::{Error, Result};
-use crate::log::{LogEntry, EntryType, LogStorage, EntryData};
+use causality_error::{Error, Result, EngineError, CausalityError};
+use crate::log::storage::LogStorage;
+use crate::log::entry::{LogEntry, EntryType};
+use causality_types::Timestamp;
+use crate::log::types::EntryData;
 
-/// Filter criteria for selecting log entries
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Filter for log visualization
+#[derive(Debug, Clone)]
 pub struct VisualizationFilter {
     /// Start timestamp (inclusive)
-    pub start_time: Option<u64>,
+    pub start_time: Option<Timestamp>,
     /// End timestamp (inclusive)
-    pub end_time: Option<u64>,
+    pub end_time: Option<Timestamp>,
     /// Entry types to include
     pub entry_types: Option<Vec<EntryType>>,
     /// Domains to include
@@ -53,13 +53,13 @@ impl Default for VisualizationFilter {
 impl VisualizationFilter {
     /// Create a new empty filter
     pub fn new() -> Self {
-        Self::default()
+        VisualizationFilter::default()
     }
     
-    /// Set time range
+    /// Set time range filter
     pub fn with_time_range(mut self, start: Option<u64>, end: Option<u64>) -> Self {
-        self.start_time = start;
-        self.end_time = end;
+        self.start_time = start.map(Timestamp);
+        self.end_time = end.map(Timestamp);
         self
     }
     
@@ -95,7 +95,7 @@ impl VisualizationFilter {
     
     /// Check if an entry matches the filter criteria
     pub fn matches(&self, entry: &LogEntry) -> bool {
-        // Check timestamp
+        // Check timestamp range
         if let Some(start) = self.start_time {
             if entry.timestamp < start {
                 return false;
@@ -108,101 +108,77 @@ impl VisualizationFilter {
             }
         }
         
-        // Check entry type
+        // Check entry types
         if let Some(types) = &self.entry_types {
             if !types.contains(&entry.entry_type) {
                 return false;
             }
         }
         
-        // Check domain
+        // Check domains - assuming domain is stored in metadata with key "domain"
         if let Some(domains) = &self.domains {
-            if !domains.contains(&entry.domain) {
+            if let Some(entry_domain) = entry.metadata.get("domain") {
+                if !domains.contains(entry_domain) {
+                    return false;
+                }
+            } else {
+                // If domain filter is provided but entry has no domain, exclude it
                 return false;
             }
         }
         
-        // Check entry ID
+        // Check search text in all textual fields
+        if let Some(search) = &self.search_text {
+            let search_str = search.to_lowercase();
+            
+            // Check entry ID
+            if entry.id.to_lowercase().contains(&search_str) {
+                return true;
+            }
+            
+            // Check metadata values
+            for value in entry.metadata.values() {
+                if value.to_lowercase().contains(&search_str) {
+                    return true;
+                }
+            }
+            
+            // Check data based on type - this would depend on how EntryData is structured
+            let contains_in_data = match &entry.data {
+                EntryData::Fact(fact) => fact.fact_type.to_lowercase().contains(&search_str),
+                EntryData::Effect(effect) => effect.effect_type.to_lowercase().contains(&search_str),
+                EntryData::Event(event) => event.event_name.to_lowercase().contains(&search_str),
+                EntryData::Operation(operation) => operation.operation_type.to_lowercase().contains(&search_str),
+                EntryData::SystemEvent(event) => event.event_type.to_lowercase().contains(&search_str),
+                EntryData::Custom(data) => data.to_string().to_lowercase().contains(&search_str),
+                // Handle other variants as needed
+                _ => false,
+            };
+            
+            if !contains_in_data {
+                return false;
+            }
+        }
+        
+        // Check entry IDs
         if let Some(ids) = &self.entry_ids {
             if !ids.contains(&entry.id) {
                 return false;
             }
         }
         
-        // Check parent ID
+        // Check parent IDs
         if let Some(parent_ids) = &self.parent_ids {
-            match &entry.parent_id {
-                Some(parent_id) => {
-                    if !parent_ids.contains(parent_id) {
-                        return false;
-                    }
-                },
-                None => {
-                    if !parent_ids.is_empty() {
-                        return false;
-                    }
-                }
-            }
-        }
-        
-        // Check search text if specified
-        if let Some(search) = &self.search_text {
-            let search_lower = search.to_lowercase();
-            
-            // Check in domain
-            if entry.domain.to_lowercase().contains(&search_lower) {
-                return true;
-            }
-            
-            // Check in ID
-            if entry.id.to_lowercase().contains(&search_lower) {
-                return true;
-            }
-            
-            // Check in parent ID if present
             if let Some(parent_id) = &entry.parent_id {
-                if parent_id.to_lowercase().contains(&search_lower) {
-                    return true;
+                if !parent_ids.contains(parent_id) {
+                    return false;
                 }
+            } else {
+                // If parent ID filter is provided but entry has no parent ID, exclude it
+                return false;
             }
-            
-            // Check in metadata
-            for (key, value) in &entry.metadata {
-                if key.to_lowercase().contains(&search_lower) || 
-                   value.to_lowercase().contains(&search_lower) {
-                    return true;
-                }
-            }
-            
-            // Check in data - this is approximate since we don't parse the data
-            match &entry.data {
-                // If JSON, convert to string and check
-                EntryData::Json(json) => {
-                    if let Ok(json_str) = serde_json::to_string(json) {
-                        if json_str.to_lowercase().contains(&search_lower) {
-                            return true;
-                        }
-                    }
-                },
-                // If binary, we can't really search effectively
-                EntryData::Binary(_, content_type) => {
-                    if content_type.to_lowercase().contains(&search_lower) {
-                        return true;
-                    }
-                },
-                // If text, we can search directly
-                EntryData::Text(text) => {
-                    if text.to_lowercase().contains(&search_lower) {
-                        return true;
-                    }
-                },
-            }
-            
-            // If we get here and search is enabled, this entry doesn't match
-            return false;
         }
         
-        // If we get here, all specified criteria match
         true
     }
 }
@@ -217,7 +193,7 @@ pub struct CausalityNode {
     /// Domain
     pub domain: String,
     /// Timestamp
-    pub timestamp: u64,
+    pub timestamp: Timestamp,
     /// Human-readable summary
     pub summary: String,
     /// Parent ID if any
@@ -251,33 +227,84 @@ impl CausalityGraph {
         // First pass: create nodes
         for entry in entries {
             let summary = match &entry.data {
-                EntryData::Json(json) => {
-                    format!("{}: {}", entry.entry_type.as_str(), json)
+                EntryData::Fact(fact) => {
+                    format!("Fact: {}", fact.fact_type)
                 },
-                EntryData::Binary(_, content_type) => {
-                    format!("{}: Binary data ({})", entry.entry_type.as_str(), content_type)
+                EntryData::Effect(effect) => {
+                    format!("Effect: {}", effect.effect_type)
                 },
-                EntryData::Text(text) => {
-                    let preview = if text.len() > 50 {
-                        format!("{}...", &text[..47])
+                EntryData::SystemEvent(event) => {
+                    format!("Event: {}", event.event_type)
+                },
+                EntryData::Operation(op) => {
+                    format!("Operation: {}", op.operation_type)
+                },
+                EntryData::Event(event) => {
+                    format!("Event: {}", match event.domains.as_ref() {
+                        Some(domains) if !domains.is_empty() => domains[0].to_string(),
+                        _ => "unknown".to_string()
+                    })
+                },
+                EntryData::Custom(json) => {
+                    format!("Custom: {:?}", json)
+                },
+            };
+            
+            // Get domain from entry data
+            let domain = match &entry.data {
+                EntryData::Fact(fact) => fact.domain_id.to_string(),
+                EntryData::Effect(effect) => {
+                    if let Some(domains) = &effect.domains {
+                        if !domains.is_empty() {
+                            domains[0].to_string()
+                        } else {
+                            "unknown".to_string()
+                        }
                     } else {
-                        text.clone()
-                    };
-                    format!("{}: {}", entry.entry_type.as_str(), preview)
+                        "unknown".to_string()
+                    }
                 },
+                EntryData::Operation(op) => {
+                    if let Some(domains) = &op.domains {
+                        if !domains.is_empty() {
+                            domains[0].to_string()
+                        } else {
+                            "unknown".to_string()
+                        }
+                    } else {
+                        "unknown".to_string()
+                    }
+                },
+                EntryData::Event(event) => {
+                    if let Some(domains) = &event.domains {
+                        if !domains.is_empty() {
+                            domains[0].to_string()
+                        } else {
+                            "unknown".to_string()
+                        }
+                    } else {
+                        "unknown".to_string()
+                    }
+                },
+                EntryData::SystemEvent(_) => "system".to_string(),
+                EntryData::Custom(_) => "custom".to_string(),
             };
             
             let node = CausalityNode {
                 id: entry.id.clone(),
                 entry_type: entry.entry_type.clone(),
-                domain: entry.domain.clone(),
+                domain,
                 timestamp: entry.timestamp,
                 summary,
                 parent_id: entry.parent_id.clone(),
                 children: Vec::new(),
             };
             
-            graph.nodes.insert(entry.id.clone(), node);
+            graph.nodes.insert(node.id.clone(), node);
+            
+            if entry.parent_id.is_none() {
+                graph.roots.push(entry.id.clone());
+            }
         }
         
         // Second pass: build relationships
@@ -286,8 +313,6 @@ impl CausalityGraph {
                 if let Some(parent_node) = graph.nodes.get_mut(parent_id) {
                     parent_node.children.push(entry.id.clone());
                 }
-            } else {
-                graph.roots.push(entry.id.clone());
             }
         }
         
@@ -311,10 +336,10 @@ impl CausalityGraph {
     /// Recursively visualize a node and its children
     fn visualize_node(&self, output: &mut String, node: &CausalityNode, depth: usize) {
         // Format timestamp
-        let dt = NaiveDateTime::from_timestamp_opt((node.timestamp / 1000) as i64, 0)
+        let dt = NaiveDateTime::from_timestamp_opt(node.timestamp.0 as i64 / 1000, 0)
             .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc))
             .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-            .unwrap_or_else(|| format!("Invalid: {}", node.timestamp));
+            .unwrap_or_else(|| format!("Invalid: {}", node.timestamp.0));
         
         // Indentation
         let indent = "  ".repeat(depth);
@@ -326,6 +351,9 @@ impl CausalityGraph {
                 EntryType::Effect => "⚡",
                 EntryType::Fact => "📋",
                 EntryType::Event => "🔔",
+                EntryType::SystemEvent => "🔧",
+                EntryType::Operation => "🔄",
+                EntryType::Custom(_) => "📦",
             },
             dt,
             node.summary,
@@ -358,6 +386,9 @@ impl CausalityGraph {
                 EntryType::Effect => "lightblue",
                 EntryType::Fact => "lightgreen",
                 EntryType::Event => "lightyellow",
+                EntryType::SystemEvent => "lightgray",
+                EntryType::Operation => "lightcoral",
+                EntryType::Custom(_) => "white",
             };
             
             let label = format!("{} ({}): {}", 
@@ -435,7 +466,10 @@ pub enum VisualizationFormat {
     Html,
 }
 
-/// Log visualization service
+/// Result type for visualization operations
+pub type VisualizationResult<T> = std::result::Result<T, Error>;
+
+/// Log visualizer
 pub struct LogVisualizer {
     /// Log storage
     storage: Arc<dyn LogStorage>,
@@ -444,7 +478,7 @@ pub struct LogVisualizer {
 impl LogVisualizer {
     /// Create a new log visualizer
     pub fn new(storage: Arc<dyn LogStorage>) -> Self {
-        LogVisualizer { storage }
+        Self { storage }
     }
     
     /// Get filtered entries
@@ -453,16 +487,10 @@ impl LogVisualizer {
         
         // Get time range from filter or use full range
         let start_pos = 0; // For simplicity, start from beginning
-        let end_pos = match self.storage.get_entry_count() {
-            Ok(count) => count,
-            Err(e) => return Err(Error::Log(e)),
-        };
+        let end_pos = self.storage.get_entry_count().await?;
         
         // Get all entries in range
-        let all_entries = match self.storage.get_entries(start_pos, end_pos).await {
-            Ok(e) => e,
-            Err(e) => return Err(Error::Log(e)),
-        };
+        let all_entries = self.storage.get_entries(start_pos, end_pos).await?;
         
         // Apply filter
         for entry in all_entries {
@@ -492,7 +520,7 @@ impl LogVisualizer {
             VisualizationFormat::Text => Ok(graph.visualize()),
             VisualizationFormat::Json => {
                 serde_json::to_string_pretty(&graph)
-                    .map_err(|e| Error::Internal(format!("JSON serialization error: {}", e)))
+                    .map_err(|e| Box::new(EngineError::LogError(format!("JSON serialization error: {}", e))) as Box<dyn CausalityError>)
             },
             VisualizationFormat::Dot => Ok(graph.to_dot()),
             VisualizationFormat::Html => {
@@ -531,18 +559,21 @@ impl LogVisualizer {
     
     /// Helper for HTML visualization
     fn html_visualize_node(&self, html: &mut String, graph: &CausalityGraph, node: &CausalityNode) {
+        // Format timestamp
+        let dt = NaiveDateTime::from_timestamp_opt(node.timestamp.0 as i64 / 1000, 0)
+            .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc))
+            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+            .unwrap_or_else(|| format!("Invalid: {}", node.timestamp.0));
+        
         // Determine CSS class
         let css_class = match node.entry_type {
             EntryType::Effect => "effect",
             EntryType::Fact => "fact",
             EntryType::Event => "event",
+            EntryType::SystemEvent => "system-event",
+            EntryType::Operation => "operation",
+            EntryType::Custom(_) => "custom",
         };
-        
-        // Format timestamp
-        let dt = NaiveDateTime::from_timestamp_opt((node.timestamp / 1000) as i64, 0)
-            .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc))
-            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-            .unwrap_or_else(|| format!("Invalid: {}", node.timestamp));
         
         // Node representation
         html.push_str(&format!("<div class=\"entry {}\" id=\"{}\">\n", css_class, node.id));
@@ -569,7 +600,7 @@ impl LogVisualizer {
     /// Find causality relationships for a specific entry
     pub async fn find_causality(&self, entry_id: &str) -> Result<CausalityGraph> {
         // Create a filter for this entry and its related entries
-        let mut filter = VisualizationFilter::new();
+        let filter = VisualizationFilter::new();
         
         // First, get this specific entry
         let mut entry_ids = HashSet::new();
@@ -633,6 +664,9 @@ impl EntryType {
             EntryType::Effect => "Effect",
             EntryType::Fact => "Fact",
             EntryType::Event => "Event",
+            EntryType::SystemEvent => "System Event",
+            EntryType::Operation => "Operation",
+            EntryType::Custom(name) => "Custom", // Can't return the string inside name because it's not static
         }
     }
 }

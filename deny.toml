@@ -1,27 +1,54 @@
 [bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow = []
 deny = [
     { name = "uuid", reason = "Use ContentId trait from causality-types crate instead. All stateful objects should be content addressed." },
-    { name = "sha2", reason = "Use cryptographic primitives from causality-crypto crate instead." },
-    { name = "blake3", reason = "Use cryptographic primitives from causality-crypto crate instead." },
-    { name = "poseidon-rs", reason = "Use cryptographic primitives from causality-crypto crate instead." },
-    { name = "hmac", reason = "Use cryptographic primitives from causality-crypto crate instead." },
-    { name = "signature", reason = "Use signature implementations from causality-crypto crate instead." },
-    { name = "ed25519", reason = "Use signature implementations from causality-crypto crate instead." },
-    { name = "serde_cbor", reason = "Use canonical serialization from causality-types crate for deterministic serialization." },
-    { name = "serde_json", reason = "Use canonical serialization from causality-types crate for deterministic serialization." },
-    { name = "rocksdb", reason = "Use storage implementations from causality-storage crate instead." },
-    { name = "redis", reason = "Use storage implementations from causality-storage crate instead." },
-    { name = "chrono", reason = "Use time primitives from causality-core crate for consistent time handling across domains." },
-    { name = "time", reason = "Use time primitives from causality-core crate for consistent time handling across domains." },
-    { name = "tokio-mutex", reason = "Use resource locking from causality-core crate to ensure deterministic concurrency." },
-    { name = "parking_lot", reason = "Use resource locking from causality-core crate to ensure deterministic concurrency." },
-    { name = "merkle_light", reason = "Use SMT implementations from causality-types crate instead." },
-    { name = "sparse-merkle-tree", reason = "Use SMT implementations from causality-types crate instead." },
+]
+
+# Exceptions for specific crates in their canonical locations
+skip = [
+    # Cryptographic primitives in causality-types
+    { name = "sha2", wrappers = ["causality-types"], reason = "ALLOWED ONLY in causality-types as it provides core hash function definitions. For all other crates, use the hash functions exported from causality-types instead." },
+    { name = "blake3", wrappers = ["causality-types"], reason = "ALLOWED ONLY in causality-types as it provides core hash function definitions. For all other crates, use the hash functions exported from causality-types instead." },
+    { name = "signature", wrappers = ["causality-types"], reason = "ALLOWED ONLY in causality-types as it provides core signature trait definitions. For all other crates, use the signature types exported from causality-types instead." },
+    { name = "serde_json", wrappers = ["causality-types"], reason = "ALLOWED ONLY in causality-types for serialization support. For all other crates, use the canonical serialization utilities exported from causality-types." },
+    { name = "merkle_light", wrappers = ["causality-types"], reason = "ALLOWED ONLY in causality-types for Sparse Merkle Tree implementations. For all other crates, use the SMT implementations exported from causality-types." },
+    { name = "sparse-merkle-tree", wrappers = ["causality-types"], reason = "ALLOWED ONLY in causality-types for Sparse Merkle Tree implementations. For all other crates, use the SMT implementations exported from causality-types." },
+    
+    # Cryptographic primitives in causality-crypto
+    { name = "poseidon-rs", wrappers = ["causality-crypto"], reason = "ALLOWED ONLY in causality-crypto as it implements cryptographic primitives. For all other crates, use the implementations exported from causality-crypto." },
+    { name = "hmac", wrappers = ["causality-crypto"], reason = "ALLOWED ONLY in causality-crypto as it implements cryptographic primitives. For all other crates, use the HMAC implementations exported from causality-crypto." },
+    { name = "ed25519", wrappers = ["causality-crypto"], reason = "ALLOWED ONLY in causality-crypto as it implements signature algorithms. For all other crates, use the signature implementations exported from causality-crypto." },
+    
+    # Storage implementations in causality-storage
+    { name = "rocksdb", wrappers = ["causality-storage"], reason = "ALLOWED ONLY in causality-storage as it provides persistence implementations. For all other crates, use the storage interfaces exported from causality-storage." },
+    { name = "redis", wrappers = ["causality-storage"], reason = "ALLOWED ONLY in causality-storage as it provides cache implementations. For all other crates, use the storage interfaces exported from causality-storage." },
+    
+    # Core primitives in causality-core
+    { name = "chrono", wrappers = ["causality-core"], reason = "ALLOWED ONLY in causality-core as it provides time handling primitives. For all other crates, use the time utilities exported from causality-core." },
+    { name = "time", wrappers = ["causality-core"], reason = "ALLOWED ONLY in causality-core as it provides time handling primitives. For all other crates, use the time utilities exported from causality-core." },
+    { name = "tokio-mutex", wrappers = ["causality-core"], reason = "ALLOWED ONLY in causality-core as it provides concurrency primitives. For all other crates, use the concurrency utilities exported from causality-core." },
+    { name = "parking_lot", wrappers = ["causality-core"], reason = "ALLOWED ONLY in causality-core as it provides concurrency primitives. For all other crates, use the concurrency utilities exported from causality-core." },
 ]
 
 [advisories]
 db-path = "~/.cargo/advisory-db"
-vulnerability = "deny"
-unmaintained = "warn"
 yanked = "warn"
-notice = "warn" 
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "CC0-1.0",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+]

@@ -79,6 +79,7 @@ impl ZKProofVerifier for SimpleZKProofVerifier {
 #[derive(Debug)]
 pub struct ZKFactVerifier {
     /// Configuration for the verifier
+    #[allow(dead_code)]
     config: HashMap<String, String>,
 }
 

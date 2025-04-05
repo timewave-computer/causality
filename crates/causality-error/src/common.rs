@@ -1,7 +1,7 @@
 // Common error utilities and helper functions
 // Provides common error handling patterns used across the codebase
 
-use crate::{ErrorCode, ErrorDomain, BoxError};
+use crate::BoxError;
 
 /// Create a "not found" error with the given entity name
 pub fn not_found_error(entity: impl Into<String>) -> BoxError {
@@ -53,12 +53,15 @@ where
     result.map_err(|e| internal_error(e.to_string()))
 }
 
-/// Helper function to check if an error is of a specific code
-pub fn has_error_code(error: &BoxError, code: ErrorCode) -> bool {
-    error.code() == code
-}
+// // Helper function to check if an error is of a specific code
+// pub fn has_error_code(error: &BoxError, code: ErrorCode) -> bool {
+//     error.code() == code
+// }
 
-/// Helper function to check if an error is from a specific domain
-pub fn is_error_from_domain(error: &BoxError, domain: ErrorDomain) -> bool {
-    error.domain() == domain
-} 
+// // Helper function to check if an error is from a specific domain
+// pub fn is_error_from_domain(error: &BoxError, domain: ErrorDomain) -> bool {
+//     error.domain() == domain
+// }
+
+// Removed has_error_code and is_error_from_domain as they are incompatible
+// with the current CausalityError trait (which uses error_code -> &'static str).

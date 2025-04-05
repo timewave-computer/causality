@@ -18,12 +18,11 @@ pub use log::{
     LogEntry, EntryType, EntryData,
     FactId, FactSnapshot, FactDependency, FactDependencyType
 };
-pub use operation::Operation;
 pub use execution::context::ExecutionContext;
 
 // Re-export key types for public API
 pub use invocation::InvocationSystem;
-pub use log::fact::{FactType};
+pub use log::fact_types::{FactType};
 pub use repository::CodeRepository;
 pub use resource::ResourceAllocator;
 
@@ -38,6 +37,9 @@ pub use domain::DomainId;
 
 // Import and re-export TimeMap from causality-core
 pub use causality_core::time::map::TimeMap;
+
+// Error conversion utilities
+pub mod error_conversions;
 
 // Version of the library
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

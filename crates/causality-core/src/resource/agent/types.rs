@@ -3,18 +3,16 @@
 // This file defines the fundamental types used by the agent resource system,
 // following the design outlined in ADR-032.
 
-use crate::resource::{ResourceId, ResourceError, ResourceType};
+use crate::resource::{ResourceId, ResourceError};
 use causality_error::Error as CoreError;
 use crate::resource::operation::Capability;
 use crate::resource::agent::operation::IdentityId;
 use causality_types::ContentId;
-use causality_types::ContentHash;
 use std::fmt;
 use std::str::FromStr;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use std::collections::HashMap;
-use hex;
 
 /// Unique identifier for an agent
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]

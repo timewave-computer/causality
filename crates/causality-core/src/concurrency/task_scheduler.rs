@@ -5,7 +5,6 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use std::result::Result;
@@ -13,7 +12,6 @@ use causality_types::ContentId;
 
 use super::lock::DeterministicMutex;
 use super::task_id::{TaskId, TaskPriority};
-use super::error::TaskSchedulerError;
 
 /// Metrics for the task scheduler.
 #[derive(Debug, Default, Clone)]

@@ -8,30 +8,52 @@
 // - Compression for log segments
 // - Indexing for faster queries
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant};
-use std::vec::Vec;
-use std::thread;
-use chrono::{DateTime, Utc};
+use std::{ 
+    collections::HashMap,
+    fmt::{self, Debug},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, RwLock,
+    },
+    thread,
+    time::{Duration, Instant},
+};
 
-use serde::{Serialize, Deserialize};
-
-use causality_error::{EngineResult, EngineError};
-use crate::log::entry::{LogEntry, EntryType, EntryData};
-use crate::log::storage::LogStorage;
-use crate::log::segment::LogSegment;
-use causality_types::Timestamp;
-
-// Import async_trait for the LogStorage trait
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use futures::executor::block_on;
+use serde::{Serialize, Deserialize};
+use tokio::runtime::Runtime;
+use tokio::time::sleep;
 
-// Import CausalityResult and CausalityError from storage module
-type CausalityResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-type CausalityError = dyn std::error::Error + Send + Sync;
+use causality_error::{EngineError, EngineResult, Result as CausalityResult, CausalityError};
+use causality_types::Timestamp;
+use crate::log::types::{LogEntry, EntryType};
+use crate::log::LogStorage;
+use crate::log::segment::LogSegment;
 
-/// Configuration for batch writes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Configuration for log flushing
+pub struct FlushConfig {
+    /// Maximum number of entries to buffer before writing
+    pub max_entries: usize,
+    /// Maximum time to wait before flushing (in milliseconds)
+    pub flush_interval_ms: u64,
+    /// Whether to flush on every write
+    pub flush_on_write: bool,
+}
+
+impl Default for FlushConfig {
+    fn default() -> Self {
+        FlushConfig {
+            max_entries: 100,
+            flush_interval_ms: 1000,
+            flush_on_write: false,
+        }
+    }
+}
+
+/// Configuration for batch operations
+#[derive(Debug, Clone)]
 pub struct BatchConfig {
     /// Maximum number of entries to buffer before writing
     pub max_batch_size: usize,
@@ -52,6 +74,15 @@ impl Default for BatchConfig {
             compression_level: 6,
         }
     }
+}
+
+/// Configuration for optimized storage
+#[derive(Debug, Clone, Default)]
+pub struct OptimizedStorageConfig {
+    pub batch_config: BatchConfig,
+    // Add other optimization fields here if needed in the future
+    // pub enable_background_flush: bool,
+    // pub flush_interval: Duration,
 }
 
 /// Batch writer for efficiently writing entries to log storage
@@ -80,20 +111,25 @@ impl<S: LogStorage> BatchWriter<S> {
     
     /// Add an entry to the batch
     pub fn add_entry(&self, entry: LogEntry) -> Result<(), EngineError> {
-        let mut buffer = self.buffer.lock().unwrap();
+        let mut buffer = self.buffer.lock().map_err(|e| EngineError::SyncError(e.to_string()))?;
         buffer.push(entry);
         
-        // Check if we should flush due to batch size
-        if buffer.len() >= self.config.max_batch_size {
-            self.flush_internal(&mut buffer)?;
+        let should_flush_size = buffer.len() >= self.config.max_batch_size;
+        drop(buffer);
+
+        if should_flush_size {
+            let mut buffer_lock = self.buffer.lock().map_err(|e| EngineError::SyncError(e.to_string()))?;
+            self.flush_internal(&mut buffer_lock)?;
+            return Ok(());
         }
         
-        // Check if we should flush due to time
-        let mut last_flush = self.last_flush.lock().unwrap();
-        let elapsed = last_flush.elapsed();
-        if elapsed >= Duration::from_millis(self.config.flush_interval_ms) {
-            self.flush_internal(&mut buffer)?;
-            *last_flush = Instant::now();
+        let mut last_flush_lock = self.last_flush.lock().map_err(|e| EngineError::SyncError(e.to_string()))?;
+        if last_flush_lock.elapsed() >= Duration::from_millis(self.config.flush_interval_ms) {
+             let mut buffer_lock = self.buffer.lock().map_err(|e| EngineError::SyncError(e.to_string()))?;
+             if !buffer_lock.is_empty() {
+                 self.flush_internal(&mut buffer_lock)?;
+                 *last_flush_lock = Instant::now();
+             }
         }
         
         Ok(())
@@ -101,10 +137,10 @@ impl<S: LogStorage> BatchWriter<S> {
     
     /// Flush all buffered entries to storage
     pub fn flush(&self) -> Result<(), EngineError> {
-        let mut buffer = self.buffer.lock().unwrap();
+        let mut buffer = self.buffer.lock().map_err(|e| EngineError::SyncError(e.to_string()))?;
         if !buffer.is_empty() {
             self.flush_internal(&mut buffer)?;
-            *self.last_flush.lock().unwrap() = Instant::now();
+            *self.last_flush.lock().map_err(|e| EngineError::SyncError(e.to_string()))? = Instant::now();
         }
         Ok(())
     }
@@ -124,10 +160,8 @@ impl<S: LogStorage> BatchWriter<S> {
             entries
         };
         
-        // Write entries individually instead of as a batch
-        for entry in entries_to_write {
-            self.storage.append(entry)?;
-        }
+        // Use sync append_batch from the trait
+        self.storage.append_batch(entries_to_write).map_err(|e| EngineError::LogError(e.to_string()))?; 
         
         Ok(())
     }
@@ -138,68 +172,124 @@ impl<S: LogStorage> BatchWriter<S> {
         // For this example, we'll just clone the entries (actual compression would be implemented here)
         Ok(entries.to_vec())
     }
-    
-    /// Start a background task that periodically flushes the buffer
-    pub fn start_background_flush(&self) -> Result<BackgroundFlusher<S>, EngineError> {
-        BackgroundFlusher::new(self)
+}
+
+impl<S: LogStorage> std::fmt::Debug for BatchWriter<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BatchWriter")
+            .field("config", &self.config)
+            .field("buffer_size", &self.buffer.lock().map(|b| b.len()).unwrap_or(0))
+            .finish()
     }
 }
 
-/// Background flusher that periodically writes batched entries
-pub struct BackgroundFlusher<S: LogStorage + 'static> {
-    writer: Arc<BatchWriter<S>>,
-    running: Arc<Mutex<bool>>,
+/// Configuration for the background flusher
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackgroundFlusherConfig {
+    /// Interval for flushing
+    pub flush_interval: Duration,
+    /// Whether the flusher is enabled
+    pub enabled: bool,
 }
 
-impl<S: LogStorage + 'static> BackgroundFlusher<S> {
-    /// Create a new background flusher for the given batch writer
-    fn new(writer: &BatchWriter<S>) -> Result<Self, EngineError> {
-        let writer = Arc::new(writer.clone());
-        let running = Arc::new(Mutex::new(true));
-        let flusher = BackgroundFlusher {
-            writer: writer.clone(),
-            running: running.clone(),
-        };
-        
-        // Spawn background thread
-        let flush_interval = writer.config.flush_interval_ms;
-        std::thread::spawn(move || {
-            while *running.lock().unwrap() {
-                std::thread::sleep(Duration::from_millis(flush_interval));
-                if let Err(e) = writer.flush() {
-                    eprintln!("Error flushing batch writer: {}", e);
-                }
-            }
-        });
-        
-        Ok(flusher)
-    }
-    
-    /// Stop the background flusher
-    pub fn stop(&self) -> Result<(), EngineError> {
-        let mut running = self.running.lock().unwrap();
-        *running = false;
-        self.writer.flush()?;
-        Ok(())
-    }
-}
-
-impl<S: LogStorage> Clone for BatchWriter<S> {
-    fn clone(&self) -> Self {
-        BatchWriter {
-            storage: Arc::clone(&self.storage),
-            config: self.config.clone(),
-            buffer: Mutex::new(Vec::with_capacity(self.config.max_batch_size)),
-            last_flush: Mutex::new(Instant::now()),
+impl Default for BackgroundFlusherConfig {
+    fn default() -> Self {
+        Self {
+            flush_interval: Duration::from_secs(5),
+            enabled: true,
         }
     }
 }
 
-impl<S: LogStorage> Drop for BatchWriter<S> {
+/// Background task for periodically flushing log entries
+struct BackgroundFlusher<S: LogStorage + 'static> {
+    /// Shared writer instance
+    writer: Arc<BatchWriter<S>>,
+    /// Configuration for the flusher
+    config: BackgroundFlusherConfig,
+    /// Signal to stop the flusher
+    stop_signal: Arc<AtomicBool>,
+    /// Handle for the background thread
+    handle: Option<thread::JoinHandle<()>>,
+    /// Tokio runtime for async operations
+    runtime: Arc<Runtime>,
+}
+
+impl<S: LogStorage + 'static> Debug for BackgroundFlusher<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BackgroundFlusher")
+            .field("config", &self.config)
+            .field("running", &self.handle.is_some())
+            .finish()
+    }
+}
+
+impl<S: LogStorage + 'static> BackgroundFlusher<S> {
+    /// Create and start a new background flusher
+    fn start(
+        writer: Arc<BatchWriter<S>>,
+        config: BackgroundFlusherConfig,
+        runtime: Arc<Runtime>,
+    ) -> Self {
+        let stop_signal = Arc::new(AtomicBool::new(false));
+        let writer_for_thread = writer.clone();
+        let flusher_config = config.clone();
+        let flusher_stop_signal = stop_signal.clone();
+        let flusher_runtime = runtime.clone();
+
+        let handle = if config.enabled {
+            // Clone the Arc for the final flush outside the async block
+            let final_flush_writer = writer_for_thread.clone(); 
+            Some(thread::spawn(move || {
+                let _guard = flusher_runtime.enter();
+                flusher_runtime.block_on(async move {
+                    loop {
+                        sleep(flusher_config.flush_interval).await;
+                        if flusher_stop_signal.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        if let Err(e) = crate::log::LogStorage::async_flush(&*writer_for_thread.storage).await {
+                             eprintln!("BackgroundFlusher: Error during flush: {}", e);
+                        }
+                    }
+                });
+                // Use the newly cloned Arc here
+                if let Err(e) = futures::executor::block_on(crate::log::LogStorage::async_flush(&*final_flush_writer.storage)) {
+                    eprintln!("BackgroundFlusher: Error during final flush: {}", e);
+                }
+            }))
+        } else {
+            None
+        };
+        Self { writer, config, stop_signal, handle, runtime }
+    }
+
+    /// Stop the background flusher
+    fn stop(mut self) {
+        if let Some(handle) = self.handle.take() {
+            self.stop_signal.store(true, Ordering::Relaxed);
+            if let Err(e) = handle.join() {
+                 eprintln!("BackgroundFlusher: Error joining background thread: {:?}", e);
+            } 
+            if let Err(e) = futures::executor::block_on(crate::log::LogStorage::async_flush(&*self.writer.storage)) {
+                eprintln!("BackgroundFlusher: Error during final flush in stop(): {}", e);
+            }
+        }
+    }
+}
+
+impl<S: LogStorage + 'static> Drop for BackgroundFlusher<S> {
     fn drop(&mut self) {
-        // Try to flush any remaining entries on drop
-        if let Err(e) = self.flush() {
-            eprintln!("Error flushing batch writer on drop: {}", e);
+        if self.handle.is_some() {
+            self.stop_signal.store(true, Ordering::Relaxed);
+            if let Some(handle) = self.handle.take() {
+                 if let Err(e) = handle.join() {
+                      eprintln!("BackgroundFlusher: Error joining background thread on drop: {:?}", e);
+                 }
+                 if let Err(e) = futures::executor::block_on(crate::log::LogStorage::async_flush(&*self.writer.storage)) {
+                     eprintln!("BackgroundFlusher: Error during final flush in drop(): {}", e);
+                 }
+            }
         }
     }
 }
@@ -264,6 +354,7 @@ pub mod compression {
 }
 
 /// Index for fast log entry retrieval based on various criteria
+#[derive(Debug)]
 pub struct LogIndex {
     /// Index entries by hash
     hash_index: Mutex<HashMap<String, usize>>,
@@ -288,23 +379,25 @@ impl LogIndex {
     
     /// Add an entry to the index
     pub fn add_entry(&self, entry: &LogEntry, position: usize) -> Result<(), EngineError> {
-        // Index by hash
-        self.hash_index.lock().unwrap().insert(entry.hash.clone(), position);
+        // Index by entry_hash if available
+        if let Some(hash) = &entry.entry_hash {
+            self.hash_index.lock().unwrap().insert(hash.clone(), position);
+        }
         
         // Index by timestamp
         self.time_index.lock().unwrap()
-            .entry(entry.timestamp)
+            .entry(entry.timestamp.clone())
             .or_insert_with(Vec::new)
             .push(position);
         
-        // Index by type
+        // Index by entry type
         self.type_index.lock().unwrap()
-            .entry(entry.entry_type)
+            .entry(entry.entry_type.clone())
             .or_insert_with(Vec::new)
             .push(position);
         
-        // Index by domain if available
-        if let Some(domain) = entry.domain.as_ref() {
+        // Index by domain if available - look in metadata
+        if let Some(domain) = entry.metadata.get("domain") {
             self.domain_index.lock().unwrap()
                 .entry(domain.clone())
                 .or_insert_with(Vec::new)
@@ -364,11 +457,36 @@ impl LogIndex {
         self.type_index.lock().unwrap().clear();
         self.domain_index.lock().unwrap().clear();
     }
+
+    // Helper methods for adding to indexes
+    fn add_to_hash_index(&self, hash: &str, entry_id: usize) -> Result<(), EngineError> {
+        let mut hash_idx = self.hash_index.lock().map_err(|e| EngineError::LogError(format!("Failed to lock hash index: {}", e)))?;
+        hash_idx.insert(hash.to_string(), entry_id);
+        Ok(())
+    }
+    
+    fn add_to_timestamp_index(&self, timestamp: Timestamp, entry_id: usize) -> Result<(), EngineError> {
+        let mut timestamp_idx = self.time_index.lock().map_err(|e| EngineError::LogError(format!("Failed to lock timestamp index: {}", e)))?;
+        timestamp_idx.entry(timestamp).or_insert_with(Vec::new).push(entry_id);
+        Ok(())
+    }
+    
+    fn add_to_type_index(&self, entry_type: &EntryType, entry_id: usize) -> Result<(), EngineError> {
+        let mut type_idx = self.type_index.lock().map_err(|e| EngineError::LogError(format!("Failed to lock type index: {}", e)))?;
+        type_idx.entry(entry_type.clone()).or_insert_with(Vec::new).push(entry_id);
+        Ok(())
+    }
+    
+    fn add_to_domain_index(&self, domain_id: &str, entry_id: usize) -> Result<(), EngineError> {
+        let mut domain_idx = self.domain_index.lock().map_err(|e| EngineError::LogError(format!("Failed to lock domain index: {}", e)))?;
+        domain_idx.entry(domain_id.to_string()).or_insert_with(Vec::new).push(entry_id);
+        Ok(())
+    }
 }
 
 /// Storage with optimizations for read/write performance
 #[derive(Debug)]
-pub struct OptimizedLogStorage<S: LogStorage> {
+pub struct OptimizedLogStorage<S: LogStorage + Send + Sync + 'static> {
     /// Base storage implementation
     storage: Arc<S>,
     /// Batch writer for efficient writes
@@ -379,248 +497,330 @@ pub struct OptimizedLogStorage<S: LogStorage> {
     _background_flusher: Option<BackgroundFlusher<S>>,
 }
 
-impl<S: LogStorage> OptimizedLogStorage<S> {
+impl<S: LogStorage + Send + Sync + 'static> OptimizedLogStorage<S> {
     /// Create a new optimized log storage with the given base storage
-    pub fn new(storage: S, config: Option<BatchConfig>) -> Result<Self, EngineError> {
-        let storage = Arc::new(storage);
-        let config = config.unwrap_or_default();
-        let batch_writer = BatchWriter::new(Arc::clone(&storage), config);
+    pub async fn new(
+        storage: S,
+        batch_config: BatchConfig,
+        flusher_config: BackgroundFlusherConfig,
+        runtime: Arc<Runtime>,
+    ) -> causality_error::Result<Self> {
+        let storage_arc = Arc::new(storage);
+        let batch_writer = BatchWriter::new(storage_arc.clone(), batch_config);
         let index = LogIndex::new();
+
+        let batch_writer_arc = Arc::new(batch_writer);
+
+        // Start the background flusher
+        let flusher = BackgroundFlusher::start(batch_writer_arc.clone(), flusher_config, runtime);
+
+        // Use try_unwrap carefully
+        let batch_writer_instance = Arc::try_unwrap(batch_writer_arc)
+             .map_err(|_| Box::new(EngineError::SyncError("Failed to unwrap Arc for batch_writer".to_string())) as Box<dyn CausalityError>)?; // Proper error handling
+
+        let optimized_storage = Self {
+            storage: storage_arc.clone(),
+            batch_writer: batch_writer_instance, // Assign unwrapped instance
+            index,
+            _background_flusher: Some(flusher), // Initialize the field
+        };
         
-        // Start background flusher
-        let background_flusher = Some(batch_writer.start_background_flush()?);
-        
-        // Build the initial index by scanning all entries
-        let entries = storage.get_all_entries()?;
+        // Build index (moved from original position)
+        let entries = storage_arc.get_all_entries().await?; // Await the future
         for (i, entry) in entries.iter().enumerate() {
-            index.add_entry(entry, i)?;
+            optimized_storage.index.add_entry(entry, i).map_err(|e| {
+                 Box::new(EngineError::LogError(format!("Error adding entry to index: {}", e))) as Box<dyn CausalityError>
+            })?;
         }
         
-        Ok(OptimizedLogStorage {
-            storage,
-            batch_writer,
-            index,
-            _background_flusher: background_flusher,
-        })
+        Ok(optimized_storage)
     }
     
     /// Get an entry by hash with index acceleration
-    pub fn get_entry_by_hash(&self, hash: &str) -> Result<Option<LogEntry>, EngineError> {
+    pub async fn get_entry_by_hash(&self, hash: &str) -> causality_error::Result<Option<LogEntry>> {
         if let Some(position) = self.index.find_by_hash(hash) {
             // Fast path: entry is in the index
-            let entries = self.storage.get_all_entries()?;
+            let entries = match self.storage.get_all_entries().await {
+                Ok(entries) => entries,
+                Err(e) => return Err(Box::new(EngineError::LogError(format!("Error getting all entries: {}", e)))),
+            };
+            
             if position < entries.len() {
                 return Ok(Some(entries[position].clone()));
             }
         }
         
-        // Fallback to regular storage lookup
-        self.storage.get_entry_by_hash(hash)
+        // Fall back to direct lookup - Await inside the match
+        match self.storage.get_entry_by_hash(hash) {
+            Ok(entry) => Ok(entry),
+            Err(e) => Err(Box::new(EngineError::LogError(format!("Error getting entry by hash: {}", e)))),
+        }
     }
     
-    /// Find entries by type with index acceleration
-    pub fn find_entries_by_type(&self, entry_type: EntryType) -> Result<Vec<LogEntry>, EngineError> {
-        let positions = self.index.find_by_type(entry_type);
-        if !positions.is_empty() {
-            // Fast path: entries are in the index
-            let entries = self.storage.get_all_entries()?;
-            let mut results = Vec::with_capacity(positions.len());
+    /// Find entries by type
+    pub async fn find_entries_by_type(&self, entry_type: EntryType) -> EngineResult<Vec<LogEntry>> {
+        // Check if we have an index first
+        let type_positions = self.index.find_by_type(entry_type.clone());
+        
+        if !type_positions.is_empty() {
+            // We have positions in our index, convert to entries
+            let mut entries = Vec::with_capacity(type_positions.len());
             
-            for pos in positions {
-                if pos < entries.len() {
-                    results.push(entries[pos].clone());
+            // Use a simple synchronous implementation to get all entries
+            let entry_count_result = self.storage.get_entry_count().await; // Added .await
+            let count = match entry_count_result {
+                 Ok(c) => c,
+                 Err(e) => return Err(EngineError::LogError(format!("Failed to get entry count: {}", e))),
+            };
+            let all_entries = match self.storage.read(0, count) {
+                Ok(entries) => entries,
+                Err(e) => return Err(EngineError::LogError(format!("Failed to read entries: {}", e))),
+            };
+            
+            for pos in type_positions {
+                if pos < all_entries.len() {
+                    entries.push(all_entries[pos].clone());
                 }
             }
             
-            return Ok(results);
+            return Ok(entries);
         }
         
-        // Fallback to regular storage lookup
-        self.storage.find_entries_by_type(entry_type)
+        // Fall back to storage lookup using the synchronous method
+        match self.storage.find_entries_by_type(entry_type) {
+            Ok(entries) => Ok(entries),
+            Err(e) => Err(EngineError::LogError(format!("Failed to find entries by type: {}", e))),
+        }
     }
     
-    /// Find entries in a time range with index acceleration
-    pub fn find_entries_in_time_range(&self, start: Timestamp, end: Timestamp) -> Result<Vec<LogEntry>, EngineError> {
-        let positions = self.index.find_in_time_range(start, end);
-        if !positions.is_empty() {
-            // Fast path: entries are in the index
-            let entries = self.storage.get_all_entries()?;
-            let mut results = Vec::with_capacity(positions.len());
+    /// Find entries in time range
+    pub async fn find_entries_in_time_range(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> EngineResult<Vec<LogEntry>> {
+        // Convert DateTime to our timestamp format
+        let start_ts = Timestamp::from_millis(start.timestamp_millis() as u64);
+        let end_ts = Timestamp::from_millis(end.timestamp_millis() as u64);
+        
+        // Check if we have an index first
+        let time_positions = self.index.find_in_time_range(start_ts, end_ts);
+        
+        if !time_positions.is_empty() {
+            // We have positions in our index, convert to entries
+            let mut entries = Vec::with_capacity(time_positions.len());
             
-            for pos in positions {
-                if pos < entries.len() {
-                    results.push(entries[pos].clone());
+            // Use a simple synchronous implementation to get all entries
+            let entry_count_result = self.storage.get_entry_count().await; // Added .await
+            let count = match entry_count_result {
+                 Ok(c) => c,
+                 Err(e) => return Err(EngineError::LogError(format!("Failed to get entry count: {}", e))),
+            };
+            let all_entries = match self.storage.read(0, count) {
+                 Ok(entries) => entries,
+                 Err(e) => return Err(EngineError::LogError(format!("Failed to read entries: {}", e))),
+            };
+            
+            for pos in time_positions {
+                if pos < all_entries.len() {
+                    entries.push(all_entries[pos].clone());
                 }
             }
             
-            return Ok(results);
+            return Ok(entries);
         }
         
-        // Fallback to regular storage lookup
-        self.storage.find_entries_in_time_range(start, end)
+        // Fall back to storage lookup using the synchronous method
+        self.storage.find_entries_in_time_range(start, end).map_err(|e| {
+            EngineError::LogError(format!("Failed to find entries in time range: {}", e))
+        })
+    }
+
+    // Rename this method to async_flush to avoid confusion
+    async fn internal_async_flush(&self) -> CausalityResult<()> {
+        // Get entries to flush
+        let entries_to_flush = {
+            let mut buffer = self.batch_writer.buffer.lock()
+                 .map_err(|_| Box::new(EngineError::SyncError("Mutex poisoned".to_string())) as Box<dyn CausalityError>)?; 
+            if buffer.is_empty() {
+                return Ok(());
+            }
+            let entries = std::mem::take(&mut *buffer);
+            // Update last_flush time using Mutex lock
+            *self.batch_writer.last_flush.lock().map_err(|_| Box::new(EngineError::SyncError("Mutex poisoned".to_string())) as Box<dyn CausalityError>)? = Instant::now(); 
+            entries
+        };
+        
+        if !entries_to_flush.is_empty() {
+             let entries = if self.batch_writer.config.compress_batches {
+                 self.compress_entries(&entries_to_flush).map_err(|e| Box::new(e) as Box<dyn CausalityError>)?
+             } else {
+                 entries_to_flush
+             };
+             crate::log::LogStorage::append_entries_batch(&*self.storage, entries).await?; 
+        }
+        Ok(())
+    }
+
+    /// Compress a set of log entries for storage efficiency
+    pub fn compress_entries(&self, entries: &[LogEntry]) -> EngineResult<Vec<LogEntry>> {
+        // If compression is not enabled in the batch writer, just return the entries
+        if !self.batch_writer.config.compress_batches {
+            return Ok(entries.to_vec());
+        }
+        
+        // Use the compression module to handle the compression
+        let mut compressed_entries = Vec::with_capacity(entries.len());
+        
+        for entry in entries {
+            // Serialize entry to bytes
+            let serialized = serde_json::to_vec(entry)
+                .map_err(|e| EngineError::LogError(format!("Failed to serialize entry: {}", e)))?;
+            
+            // Compress the bytes
+            let level = self.batch_writer.config.compression_level;
+            let compressed_bytes = compression::compress_entry(entry, level)?;
+            
+            // Create a new entry with the compressed data
+            let mut compressed_entry = entry.clone();
+            compressed_entry.metadata.insert("compressed".to_string(), 
+                true.to_string());
+            
+            compressed_entries.push(compressed_entry);
+        }
+        
+        Ok(compressed_entries)
     }
 }
 
 /// Wrapper that implements LogStorage for OptimizedLogStorage
-impl<S: LogStorage + Send + Sync> LogStorage for OptimizedLogStorage<S> {
-    // Implement the async methods
+#[async_trait]
+impl<S: LogStorage + Send + Sync + 'static> LogStorage for OptimizedLogStorage<S> {
     async fn append_entry(&self, entry: LogEntry) -> CausalityResult<()> {
-        // Forward to sync version after ensuring the entry is cloned
-        self.append(entry.clone()).map_err(|e| Box::new(e) as Box<dyn CausalityError>)
+        if self.batch_writer.config.max_batch_size == 0 {
+            return crate::log::LogStorage::append_entry(&*self.storage, entry).await;
+        }
+        let should_flush;
+        {
+            let mut batch = self.batch_writer.buffer.lock()
+                .map_err(|_| Box::new(EngineError::SyncError("Mutex poisoned".to_string())) as Box<dyn CausalityError>)?; 
+            batch.push(entry.clone());
+            should_flush = batch.len() >= self.batch_writer.config.max_batch_size;
+        }
+        if should_flush {
+            self.internal_async_flush().await?;
+        }
+        Ok(())
     }
     
     async fn get_all_entries(&self) -> CausalityResult<Vec<LogEntry>> {
-        // Ensure batch writer is flushed before reading
-        self.batch_writer.flush()?;
-        
-        // Forward to underlying storage
-        self.storage.get_all_entries().await
+        self.internal_async_flush().await?;
+        crate::log::LogStorage::get_all_entries(&*self.storage).await
     }
-    
+
     async fn get_entries(&self, start: usize, end: usize) -> CausalityResult<Vec<LogEntry>> {
-        // Ensure batch writer is flushed before reading
-        self.batch_writer.flush()?;
-        
-        // Forward to underlying storage
-        self.storage.get_entries(start, end).await
+        self.internal_async_flush().await?;
+        crate::log::LogStorage::get_entries(&*self.storage, start, end).await
     }
-    
+
     async fn get_entry_count(&self) -> CausalityResult<usize> {
-        // Ensure batch writer is flushed before counting
-        self.batch_writer.flush()?;
-        
-        // Forward to underlying storage
-        self.storage.get_entry_count().await
+        let batch_len = {
+            let batch = self.batch_writer.buffer.lock()
+                .map_err(|_| Box::new(EngineError::SyncError("Mutex poisoned".to_string())) as Box<dyn CausalityError>)?; 
+            batch.len()
+        };
+        let storage_count = crate::log::LogStorage::get_entry_count(&*self.storage).await?;
+        Ok(storage_count + batch_len)
     }
     
     async fn clear(&self) -> CausalityResult<()> {
-        // Ensure batch writer is flushed
-        self.batch_writer.flush()?;
-        
-        // Clear the index
+        self.internal_async_flush().await?;
+        {
+            let mut buffer = self.batch_writer.buffer.lock()
+                .map_err(|_| Box::new(EngineError::SyncError("Mutex poisoned".to_string())) as Box<dyn CausalityError>)?; 
+            buffer.clear();
+        }
         self.index.clear();
+        crate::log::LogStorage::clear(&*self.storage).await
+    }
+
+    /// Flush any pending operations to the storage (async version)
+    async fn async_flush(&self) -> CausalityResult<()> {
+        // Flush the batch writer's buffer first using the internal method
+        self.internal_async_flush().await?;
         
-        // Forward to underlying storage
-        self.storage.clear().await
+        // Then explicitly call the underlying storage's async_flush
+        crate::log::LogStorage::async_flush(&*self.storage).await
+    }
+
+    fn append(&self, entry: LogEntry) -> CausalityResult<()> {
+        // Add to the batch writer 
+        self.batch_writer.add_entry(entry.clone())
+            .map_err(|e| Box::new(e) as Box<dyn CausalityError>)
     }
     
-    // Implement the sync methods
-    fn append(&self, entry: LogEntry) -> EngineResult<()> {
-        // Add to the batch writer instead of directly to storage
-        self.batch_writer.add_entry(entry.clone())?;
-        
-        // The batch writer handles the actual writing and index updates
-        Ok(())
-    }
-    
-    fn append_batch(&self, entries: Vec<LogEntry>) -> EngineResult<()> {
-        // Add each entry to the batch writer
+    fn append_batch(&self, entries: Vec<LogEntry>) -> CausalityResult<()> {
         for entry in entries {
-            self.append(entry)?;
+            self.batch_writer.add_entry(entry)
+                .map_err(|e| Box::new(e) as Box<dyn CausalityError>)?;
         }
         Ok(())
     }
     
-    fn read(&self, start: usize, count: usize) -> EngineResult<Vec<LogEntry>> {
-        // Ensure batch writer is flushed before reading
-        self.batch_writer.flush()?;
-        
-        // Forward to underlying storage
-        self.storage.read(start, count)
+    fn read(&self, start: usize, count: usize) -> CausalityResult<Vec<LogEntry>> {
+        block_on(<Self as LogStorage>::async_flush(self))?; // Flush before reading
+        self.storage.read(start, count).map_err(|e| e) // Propagate CausalityResult error
     }
     
-    fn read_time_range(&self, start_time: u64, end_time: u64) -> EngineResult<Vec<LogEntry>> {
-        // Ensure batch writer is flushed before reading
-        self.batch_writer.flush()?;
-        
-        // Forward to underlying storage
-        self.storage.read_time_range(start_time, end_time)
+    fn entry_count(&self) -> CausalityResult<usize> {
+         block_on(<Self as LogStorage>::async_flush(self))?; // Flush before reading count
+         self.storage.entry_count().map_err(|e| e) // Propagate CausalityResult error
     }
     
-    fn get_entry_by_id(&self, id: &str) -> EngineResult<Option<LogEntry>> {
-        // Ensure batch writer is flushed before reading
-        self.batch_writer.flush()?;
-        
-        // Forward to underlying storage
-        self.storage.get_entry_by_id(id)
+    fn get_entry_by_hash(&self, hash: &str) -> CausalityResult<Option<LogEntry>> {
+        block_on(<Self as LogStorage>::async_flush(self))?;
+        self.storage.get_entry_by_hash(hash).map_err(|e| e) // Propagate CausalityResult error
     }
     
-    fn get_entries_by_trace(&self, trace_id: &str) -> EngineResult<Vec<LogEntry>> {
-        // Ensure batch writer is flushed before reading
-        self.batch_writer.flush()?;
-        
-        // Forward to underlying storage
-        self.storage.get_entries_by_trace(trace_id)
+    fn get_entries_by_trace(&self, trace_id: &str) -> CausalityResult<Vec<LogEntry>> {
+        block_on(<Self as LogStorage>::async_flush(self))?;
+        self.storage.get_entries_by_trace(trace_id).map_err(|e| e) // Propagate CausalityResult error
     }
     
-    fn get_entry_by_hash(&self, hash: &str) -> EngineResult<Option<LogEntry>> {
-        // Check if in the index first
-        if let Some(position) = self.index.find_by_hash(hash) {
-            // If found in index, try to retrieve from storage
-            let entries = self.storage.read(position, 1)?;
-            if !entries.is_empty() {
-                return Ok(Some(entries[0].clone()));
-            }
-        }
-        
-        // Fall back to storage lookup
-        self.storage.get_entry_by_hash(hash)
+    fn find_entries_by_type(&self, entry_type: EntryType) -> CausalityResult<Vec<LogEntry>> {
+         block_on(<Self as LogStorage>::async_flush(self))?;
+         self.storage.find_entries_by_type(entry_type).map_err(|e| e) // Propagate CausalityResult error
     }
     
-    fn find_entries_by_type(&self, entry_type: EntryType) -> EngineResult<Vec<LogEntry>> {
-        // Try using the index first
-        let positions = self.index.find_by_type(entry_type);
-        if !positions.is_empty() {
-            // Fast path: entries are in the index
-            let mut result = Vec::with_capacity(positions.len());
-            
-            // Read each entry by position
-            for pos in positions {
-                let entries = self.storage.read(pos, 1)?;
-                if !entries.is_empty() {
-                    result.push(entries[0].clone());
-                }
-            }
-            
-            return Ok(result);
-        }
-        
-        // Fall back to storage lookup
-        self.storage.find_entries_by_type(entry_type)
+    fn find_entries_in_time_range(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> CausalityResult<Vec<LogEntry>> {
+         block_on(<Self as LogStorage>::async_flush(self))?;
+         self.storage.find_entries_in_time_range(start, end).map_err(|e| e) // Propagate CausalityResult error
     }
     
-    fn find_entries_in_time_range(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> EngineResult<Vec<LogEntry>> {
-        // Forward to underlying storage - convert DateTime to timestamp properly if needed
-        self.storage.find_entries_in_time_range(start, end)
+    fn rotate(&self) -> CausalityResult<()> {
+        block_on(<Self as LogStorage>::async_flush(self))?;
+        self.storage.rotate().map_err(|e| e) // Propagate CausalityResult error
     }
     
-    fn rotate(&self) -> EngineResult<()> {
-        // Ensure batch writer is flushed
-        self.batch_writer.flush()?;
-        
-        // Forward to underlying storage
-        self.storage.rotate()
+    fn compact(&self) -> CausalityResult<()> {
+        block_on(<Self as LogStorage>::async_flush(self))?;
+        self.storage.compact().map_err(|e| e) // Propagate CausalityResult error
     }
     
-    fn compact(&self) -> EngineResult<()> {
-        // Ensure batch writer is flushed
-        self.batch_writer.flush()?;
-        
-        // Forward to underlying storage
-        self.storage.compact()
+    fn close(&self) -> CausalityResult<()> {
+        block_on(<Self as LogStorage>::async_flush(self))?;
+        self.storage.close().map_err(|e| e) // Propagate CausalityResult error
     }
     
-    fn flush(&self) -> EngineResult<()> {
-        // Forward to batch writer
-        self.batch_writer.flush()
+    fn get_entry_by_id(&self, id: &str) -> CausalityResult<Option<LogEntry>> {
+        block_on(<Self as LogStorage>::async_flush(self))?;
+        self.storage.get_entry_by_id(id).map_err(|e| e) // Propagate CausalityResult error
     }
     
-    fn close(&self) -> EngineResult<()> {
-        // Ensure batch writer is flushed
-        self.batch_writer.flush()?;
-        
-        // Forward to underlying storage
-        self.storage.close()
+    fn find_entries_by_trace_id(&self, trace_id: &causality_types::TraceId) -> CausalityResult<Vec<LogEntry>> {
+        block_on(<Self as LogStorage>::async_flush(self))?;
+        self.storage.find_entries_by_trace_id(trace_id).map_err(|e| e) // Propagate CausalityResult error
+    }
+
+    fn read_time_range(&self, start_time: u64, end_time: u64) -> CausalityResult<Vec<LogEntry>> {
+        block_on(<Self as LogStorage>::async_flush(self))?;
+        self.storage.read_time_range(start_time, end_time).map_err(|e| e) // Propagate CausalityResult error
     }
 }
 
@@ -629,26 +829,21 @@ mod tests {
     use super::*;
     use crate::log::MemoryLogStorage;
     use causality_types::Timestamp;
-    use std::collections::HashMap;
-    
+    use tokio;
+
     // Helper to create a test entry
     fn create_test_entry(entry_type: EntryType, timestamp: Timestamp) -> LogEntry {
         LogEntry {
-            id: format!("id_{}", timestamp),
+            id: format!("test-entry-{}", rand::random::<u32>()),
             timestamp,
             entry_type,
-            data: EntryData::Event(crate::log::entry::EventEntry {
-                severity: crate::log::entry::EventSeverity::Info,
-                event_name: "test_event".to_string(),
-                component: "test_component".to_string(),
-                details: serde_json::Value::Null,
-                resources: Some(Vec::new()),
-                domains: Some(Vec::new()),
-            }),
-            trace_id: Some(format!("trace_{}", timestamp)),
+            data: EntryData::Custom(serde_json::json!({
+                "test": "data"
+            })),
+            trace_id: None,
             parent_id: None,
-            metadata: HashMap::new(),
-            entry_hash: None,
+            metadata: std::collections::HashMap::new(),
+            entry_hash: Some(format!("hash-{}", rand::random::<u32>())),
         }
     }
     
@@ -723,38 +918,42 @@ mod tests {
         Ok(())
     }
     
-    #[test]
-    fn test_optimized_storage() -> Result<(), EngineError> {
+    #[tokio::test]
+    async fn test_optimized_storage() -> Result<(), Box<dyn std::error::Error>> {
         let base_storage = MemoryLogStorage::new();
-        let optimized = OptimizedLogStorage::new(base_storage, None)?;
-        
-        // Add test entries
+        let batch_config = BatchConfig { max_batch_size: 5, ..Default::default() };
+        let flusher_config = BackgroundFlusherConfig { enabled: false, ..Default::default() };
+        let runtime = Arc::new(Runtime::new().unwrap());
+
+        let optimized = OptimizedLogStorage::new(
+            base_storage,
+            batch_config,
+            flusher_config,
+            runtime
+        ).await?;
+
         for i in 0..10 {
             let entry_type = if i % 2 == 0 { EntryType::Fact } else { EntryType::Effect };
-            let entry = create_test_entry(entry_type, Timestamp::from_millis(i));
-            optimized.append_entry(entry)?;
+            let entry = create_test_entry(entry_type, Timestamp::from_millis(i as u64));
+            optimized.append_entry(entry).await?;
         }
-        
-        // Ensure all entries were written
-        assert_eq!(optimized.get_entry_count()?, 10);
-        
-        // Test finding by hash using index
-        let hash = "hash_5".to_string();
-        let entry = optimized.get_entry_by_hash(&hash)?;
+
+        optimized.async_flush().await?;
+        assert_eq!(optimized.get_entry_count().await?, 10);
+
+        let entries_read = optimized.read(5, 1)?;
+        assert_eq!(entries_read.len(), 1);
+        let hash_to_find = entries_read[0].entry_hash.clone().unwrap();
+        let entry = optimized.get_entry_by_hash(&hash_to_find)?;
         assert!(entry.is_some());
         assert_eq!(entry.unwrap().timestamp, Timestamp::from_millis(5));
-        
-        // Test finding by type using index
+
         let facts = optimized.find_entries_by_type(EntryType::Fact)?;
         assert_eq!(facts.len(), 5);
-        
-        // Test finding by time range using index
-        let time_range_entries = optimized.find_entries_in_time_range(
-            Timestamp::from_millis(3),
-            Timestamp::from_millis(7)
-        )?;
-        assert_eq!(time_range_entries.len(), 5);
-        
+
+        let time_range_entries_sync = optimized.read_time_range(3, 7)?;
+        assert_eq!(time_range_entries_sync.len(), 5); 
+
         Ok(())
     }
     
@@ -788,19 +987,67 @@ mod tests {
         
         Ok(())
     }
-    
-    // Fixed implementation for BlockOn trait
-    trait BlockOn<T> {
-        fn block_on(self) -> T;
+}
+
+/// Writer for log entries with performance optimizations
+pub struct LogWriter<S: LogStorage> {
+    /// The storage implementation
+    pub storage: Arc<S>,
+    /// The queue of log entries
+    pub queue: Arc<RwLock<Vec<LogEntry>>>,
+    /// The configuration for flushing
+    pub config: FlushConfig,
+    /// Timestamp of the last flush operation
+    pub last_flush: Arc<RwLock<Instant>>,
+}
+
+impl<S: LogStorage> LogWriter<S> {
+    /// Create a new log writer
+    pub fn new(storage: Arc<S>, config: FlushConfig) -> Self {
+        Self {
+            storage,
+            queue: Arc::new(RwLock::new(Vec::new())),
+            config,
+            last_flush: Arc::new(RwLock::new(Instant::now())),
+        }
     }
     
-    // Implement for EngineResult specifically
-    impl<T> BlockOn<T> for EngineResult<T> {
-        fn block_on(self) -> T {
-            match self {
-                Ok(value) => value,
-                Err(err) => panic!("Error in block_on: {:?}", err),
-            }
+    /// Add a log entry to the queue
+    pub async fn add_entry(&self, entry: LogEntry) -> CausalityResult<()> {
+        let mut queue = self.queue.write().unwrap();
+        queue.push(entry);
+        let should_flush = queue.len() >= self.config.max_entries;
+        drop(queue); 
+        if should_flush { 
+            self.flush_queue().await?; 
         }
+        Ok(())
+    }
+    
+    /// Flush the queue to storage
+    pub async fn flush_queue(&self) -> CausalityResult<()> {
+        let entries = {
+            let mut queue = self.queue.write().unwrap();
+            if queue.is_empty() {
+                return Ok(());
+            }
+            std::mem::take(&mut *queue)
+        };
+        self.storage.append_entries_batch(entries).await?;
+        *self.last_flush.write().unwrap() = Instant::now();
+        Ok(())
+    }
+    
+    /// Flush both the queue and the underlying storage
+    pub async fn async_flush(&self) -> CausalityResult<()> {
+        self.flush_queue().await?;
+        self.storage.async_flush().await?;
+        Ok(())
+    }
+    
+    /// Check if a flush is needed based on time or queue size
+    pub fn needs_flush(&self) -> bool {
+        let queue = self.queue.read().unwrap();
+        !queue.is_empty()
     }
 } 

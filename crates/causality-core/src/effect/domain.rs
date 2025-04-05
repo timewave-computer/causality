@@ -5,8 +5,7 @@
 
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Debug, Display};
-use std::str::FromStr;
+use std::fmt::Debug;
 use std::sync::Arc;
 use async_trait::async_trait;
 use thiserror::Error;
@@ -16,29 +15,23 @@ use serde::{Serialize, Deserialize};
 use super::{
     Effect, EffectContext, EffectError, EffectOutcome, EffectResult, EffectType
 };
+// Import EffectId and EffectTypeId from types module
+use super::types::EffectTypeId;
 use crate::effect::context::Capability;
 use crate::resource::ResourceId;
-// Define these types directly in this module to avoid import error
-pub type EffectId = String;
-pub type EffectTypeId = String;
 
 /// Domain identifier
 pub type DomainId = String;
 
-/// Domain execution boundary
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Execution boundary for domain effects
+#[derive(Debug, Clone)]
 pub enum ExecutionBoundary {
     /// Can execute in any domain
     Any,
-    
-    /// Can only execute in the specified domain
-    Domain,
-    
-    /// Can execute across domain boundaries
-    CrossDomain,
-    
-    /// Can only execute at a specific boundary
-    Boundary,
+    /// Can only execute in a specific domain
+    Domain(String),
+    /// Can execute across domains
+    CrossDomain(String),
 }
 
 /// Domain effect errors
@@ -61,6 +54,9 @@ pub enum DomainEffectError {
     
     #[error("Domain boundary error: {0}")]
     BoundaryError(String),
+    
+    #[error("Invalid handler combination: {0}")]
+    InvalidHandlerCombination(String),
 }
 
 /// Domain effect result
@@ -119,39 +115,25 @@ impl DomainEffectOutcome {
         }
     }
     
-    /// Convert to a regular EffectOutcome
+    /// Convert a domain effect outcome to a regular effect outcome
     pub fn to_effect_outcome(&self) -> EffectOutcome {
         let mut data = HashMap::new();
         if let Some(ref result_data) = self.data {
             data = result_data.clone();
         }
         
-        // Add domain_id to the data
-        data.insert("domain_id".to_string(), self.domain_id.clone());
-        
-        // Add effect_id to the data
-        data.insert("effect_id".to_string(), self.effect_id.clone());
-        
-        let mut outcome = match self.status {
+        match self.status {
             EffectOutcomeStatus::Success => EffectOutcome::success(data),
             EffectOutcomeStatus::Failure => {
-                let mut outcome = EffectOutcome::success(data);
-                outcome.status = super::outcome::EffectStatus::Failure;
-                if let Some(ref error) = self.error {
-                    outcome.error_message = Some(error.clone());
-                } else {
-                    outcome.error_message = Some("Unknown domain effect error".to_string());
-                }
-                outcome
+                let error = self.error.clone().unwrap_or_else(|| "Unknown domain effect error".to_string());
+                EffectOutcome::failure(error)
             },
             EffectOutcomeStatus::Pending => {
                 let mut outcome = EffectOutcome::success(data);
                 outcome.status = super::outcome::EffectStatus::Pending;
                 outcome
             }
-        };
-        
-        outcome
+        }
     }
     
     /// Check if the outcome was successful
@@ -242,12 +224,11 @@ pub trait DomainParameterValidator: Send + Sync + Debug {
     }
 }
 
-/// Trait for domain-specific effects
-#[async_trait]
-pub trait DomainEffect: Effect + Debug + Send + Sync {
-    /// Get the domain ID this effect operates on
+/// A trait for domain-specific effects
+pub trait DomainEffect: Effect {
+    /// Get the ID of the domain this effect belongs to.
     fn domain_id(&self) -> &DomainId;
-    
+
     /// Get the execution boundary for this effect
     fn execution_boundary(&self) -> ExecutionBoundary {
         ExecutionBoundary::Any
@@ -257,58 +238,135 @@ pub trait DomainEffect: Effect + Debug + Send + Sync {
     fn can_execute_in(&self, domain_id: &DomainId) -> bool {
         self.domain_id() == domain_id
     }
-    
-    /// Validate the domain parameters for this effect
-    fn validate_parameters(&self) -> EffectResult<EffectOutcome>;
+
+    /// Validate this effect
+    fn validate(&self) -> Result<(), String>;
     
     /// Get domain-specific parameters for this effect
     fn domain_parameters(&self) -> HashMap<String, String>;
-    
-    /// Adapt the effect context for the target domain
-    fn adapt_context(&self, context: &dyn EffectContext) -> EffectResult<EffectOutcome>;
-    
-    /// Handle this effect within the specified domain using the adapted context
-    async fn handle_in_domain(
-        &self,
-        context: &dyn EffectContext,
-        handler: &dyn DomainEffectHandler,
-    ) -> EffectResult<EffectOutcome>;
+
+    /// Adapt this effect's context for the domain
+    fn adapt_context(&self, context: &dyn EffectContext) -> Result<(), String>;
 }
 
-/// Trait for domain effects that support downcasting
-pub trait DowncastDomainEffect: DomainEffect {
-    /// Helper method to downcast to a specific domain effect type
-    fn downcast_domain_ref<T: Any>(&self) -> Option<&T> {
-        self.as_any().downcast_ref::<T>()
+/// A trait for handling domain effects
+#[async_trait::async_trait]
+pub trait DomainEffectHandling: DomainEffect {
+    /// Handle this effect in the specified domain
+    async fn handle_in_domain<H: DomainEffectHandler + Send + Sync>(
+        self: &Self,
+        context: &dyn EffectContext,
+        handler: &H,
+    ) -> Result<DomainEffectOutcome, DomainEffectError> {
+        // Instead of trying to cast self to a trait object, explicitly pass the required
+        // domain effect information to the handler
+        let effect_type = self.effect_type();
+        let domain_id = self.domain_id();
+        let parameters = self.domain_parameters();
+        
+        // Call a custom method on the handler that takes the individual components
+        // instead of a trait object
+        handler.handle_domain_effect_with_data(
+            effect_type, 
+            domain_id, 
+            &parameters, 
+            context
+        ).await
     }
 }
 
 // Blanket implementation for all types that implement DomainEffect
-impl<T: DomainEffect> DowncastDomainEffect for T {}
+#[async_trait::async_trait]
+impl<T: DomainEffect + Send + Sync> DomainEffectHandling for T {}
 
-/// Trait for cross-domain effects
-#[async_trait]
+/// A trait for cross-domain effects
 pub trait CrossDomainEffect: DomainEffect {
-    /// Get the source domain ID
+    /// Get the source domain ID for this effect
     fn source_domain_id(&self) -> &DomainId;
     
-    /// Get the target domain ID
+    /// Get the target domain ID for this effect
     fn target_domain_id(&self) -> &DomainId;
     
+    /// Adapt context for the source domain
+    fn adapt_source_context(&self, context: &dyn EffectContext) -> Result<Box<dyn EffectContext>, String>;
+    
+    /// Adapt context for the target domain
+    fn adapt_target_context(&self, context: &dyn EffectContext) -> Result<Box<dyn EffectContext>, String>;
+    
+    /// View this effect as a source domain effect
+    fn as_source_domain_effect(&self) -> &dyn DomainEffect where Self: Sized {
+        self
+    }
+    
+    /// View this effect as a target domain effect
+    fn as_target_domain_effect(&self) -> &dyn DomainEffect where Self: Sized {
+        self
+    }
+    
     /// Validate cross-domain parameters
-    fn validate_cross_domain(&self) -> EffectResult<EffectOutcome>;
+    fn validate_cross_domain(&self) -> Result<(), String>;
     
-    /// Adapt the effect for the target domain
-    fn adapt_for_target(&self) -> EffectResult<DomainEffectOutcome>;
+    /// Create a basic domain effect for the source domain
+    fn to_source_domain_effect(&self) -> BasicDomainEffect {
+        let parameters = self.domain_parameters();
+        BasicDomainEffect::new(
+            self.effect_type(),
+            self.source_domain_id().clone(),
+        ).with_parameters(parameters)
+    }
     
-    /// Handle this effect across domains
+    /// Create a basic domain effect for the target domain
+    fn to_target_domain_effect(&self) -> BasicDomainEffect {
+        let parameters = self.domain_parameters();
+        BasicDomainEffect::new(
+            self.effect_type(),
+            self.target_domain_id().clone(),
+        ).with_parameters(parameters)
+    }
+}
+
+/// Async handler for cross-domain effects
+#[async_trait::async_trait]
+pub trait CrossDomainEffectHandling: CrossDomainEffect {
+    /// Handle an effect across domains
     async fn handle_across_domains(
         &self,
         source_context: &dyn EffectContext,
         target_context: &dyn EffectContext,
-        source_handler: &dyn DomainEffectHandler,
+        source_handler: &dyn DomainEffectHandler, 
         target_handler: &dyn DomainEffectHandler,
     ) -> EffectResult<EffectOutcome>;
+}
+
+/// Default implementation of CrossDomainEffectHandling
+#[async_trait::async_trait]
+impl<T: CrossDomainEffect + Send + Sync> CrossDomainEffectHandling for T {
+    async fn handle_across_domains(
+        &self,
+        source_context: &dyn EffectContext,
+        target_context: &dyn EffectContext,
+        source_handler: &dyn DomainEffectHandler, 
+        target_handler: &dyn DomainEffectHandler,
+    ) -> EffectResult<EffectOutcome> {
+        // Handle in the respective domains using the new helper methods
+        let source_effect = self.to_source_domain_effect();
+        let target_effect = self.to_target_domain_effect();
+        
+        let domain_outcome = source_handler.handle_domain_effect(
+            &source_effect,
+            source_context,
+        ).await
+        .map_err(EffectError::from)?;
+        
+        let _ = target_handler.handle_domain_effect(
+            &target_effect,
+            target_context,
+        ).await
+        .map_err(EffectError::from)?;
+        
+        // Convert to a regular effect outcome
+        Ok(domain_outcome.to_effect_outcome())
+    }
 }
 
 /// Domain capability mapping
@@ -435,15 +493,15 @@ pub enum CrossDomainSupport {
     Full,
 }
 
-/// Domain effect handler
-#[async_trait]
+/// Domain effect handler trait
+#[async_trait::async_trait]
 pub trait DomainEffectHandler: Send + Sync + Debug {
-    /// Get the domain ID this handler operates on
-    fn domain_id(&self) -> &DomainId;
+    /// Get the domain ID for this handler
+    fn domain_id(&self) -> &str;
     
-    /// Check if this handler can handle the given domain effect
+    /// Check if this handler can handle the given effect
     fn can_handle(&self, effect: &dyn DomainEffect) -> bool {
-        effect.can_execute_in(self.domain_id())
+        effect.domain_id() == self.domain_id()
     }
     
     /// Handle a domain effect
@@ -451,235 +509,191 @@ pub trait DomainEffectHandler: Send + Sync + Debug {
         &self,
         effect: &dyn DomainEffect,
         context: &dyn EffectContext,
-    ) -> EffectResult<EffectOutcome>;
+    ) -> Result<DomainEffectOutcome, DomainEffectError>;
     
-    /// Get the domain context adapter for this handler
-    fn context_adapter(&self) -> Option<&DomainContextAdapter> {
-        None
-    }
-    
-    /// Check if this handler supports cross-domain effects
-    fn cross_domain_support(&self) -> Option<CrossDomainSupport> {
-        None
+    /// Handle a domain effect using explicit data instead of a trait object
+    /// This is used by the DomainEffectHandling trait to avoid Self size issues
+    async fn handle_domain_effect_with_data(
+        &self,
+        effect_type: EffectType,
+        domain_id: &str,
+        parameters: &HashMap<String, String>,
+        context: &dyn EffectContext,
+    ) -> Result<DomainEffectOutcome, DomainEffectError> {
+        // Create a BasicDomainEffect to wrap the data
+        let basic_effect = BasicDomainEffect::new(
+            effect_type,
+            domain_id.to_string(),
+        ).with_parameters(parameters.clone());
+        
+        // Use the regular handler method
+        self.handle_domain_effect(&basic_effect, context).await
     }
 }
 
-/// Cross-domain effect handler
-#[async_trait]
-pub trait CrossDomainEffectHandler: DomainEffectHandler {
-    /// Get the domains this handler can bridge between
-    fn supported_domains(&self) -> Vec<(DomainId, DomainId)>;
-    
-    /// Check if this handler can handle cross-domain effects between the given domains
-    fn can_handle_cross_domain(
-        &self,
-        source_domain: &DomainId,
-        target_domain: &DomainId,
-    ) -> bool {
-        self.supported_domains().iter().any(|(src, tgt)| {
-            src == source_domain && tgt == target_domain
-        })
-    }
-    
-    /// Handle a cross-domain effect
-    async fn handle_cross_domain_effect(
-        &self,
-        effect: &dyn CrossDomainEffect,
-        source_context: &dyn EffectContext,
-        target_context: &dyn EffectContext,
-    ) -> EffectResult<EffectOutcome>;
-    
-    /// Get the capability mapping for the specified domains
-    fn capability_mapping(
-        &self,
-        source_domain: &DomainId,
-        target_domain: &DomainId,
-    ) -> Option<&DomainCapabilityMapping>;
-}
-
-/// Domain effect registry
+/// Enum to hold either a regular or cross-domain handler
 #[derive(Debug, Clone)]
-pub struct DomainEffectRegistry {
-    /// Handlers by domain ID
-    handlers: HashMap<DomainId, Vec<Arc<dyn DomainEffectHandler>>>,
+pub enum HandlerVariant {
+    /// Regular domain handler
+    Domain(Arc<dyn DomainEffectHandler>),
+}
+
+impl HandlerVariant {
+    /// Get the handler's domain ID
+    pub fn domain_id(&self) -> &str {
+        match self {
+            HandlerVariant::Domain(handler) => handler.domain_id(),
+        }
+    }
     
-    /// Cross-domain handlers
-    cross_domain_handlers: Vec<Arc<dyn CrossDomainEffectHandler>>,
+    /// Check if this handler can handle the given effect type
+    pub fn can_handle(&self, effect: &dyn DomainEffect) -> bool {
+        match self {
+            HandlerVariant::Domain(handler) => handler.can_handle(effect),
+        }
+    }
+}
+
+/// Registry for domain effects and handlers
+#[derive(Debug, Default)]
+pub struct DomainEffectRegistry {
+    /// Domain-specific handlers organized by domain ID
+    handlers: HashMap<String, Vec<HandlerVariant>>,
+}
+
+impl Clone for DomainEffectRegistry {
+    fn clone(&self) -> Self {
+        Self {
+            handlers: self.handlers.clone()
+        }
+    }
 }
 
 impl DomainEffectRegistry {
-    /// Create a new domain effect registry
+    /// Create a new registry for domain effects
     pub fn new() -> Self {
         Self {
             handlers: HashMap::new(),
-            cross_domain_handlers: Vec::new(),
         }
     }
     
-    /// Register a domain effect handler
+    /// Register a handler for a specific domain
     pub fn register_handler(&mut self, handler: Arc<dyn DomainEffectHandler>) {
-        let domain_id = handler.domain_id().clone();
-        self.handlers.entry(domain_id)
+        let domain_id = handler.domain_id().to_string();
+        self.handlers
+            .entry(domain_id)
             .or_insert_with(Vec::new)
-            .push(handler);
+            .push(HandlerVariant::Domain(handler));
     }
     
-    /// Register a cross-domain effect handler
-    pub fn register_cross_domain_handler(&mut self, handler: Arc<dyn CrossDomainEffectHandler>) {
-        // Register as a cross-domain handler first
-        self.cross_domain_handlers.push(handler.clone());
-        
-        // Now create a wrapper that delegates to the cross-domain handler
-        // This avoids the need for trait casting
-        let domain_id = handler.domain_id().clone();
-        let cross_domain_handler = handler;
-        
-        // Create a wrapper DomainEffectHandler that delegates to the cross-domain handler
-        // This avoids the need for a trait upcast
-        struct CrossDomainWrapper {
-            inner: Arc<dyn CrossDomainEffectHandler>,
-        }
-        
-        impl Debug for CrossDomainWrapper {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.debug_struct("CrossDomainWrapper")
-                    .field("inner", &"CrossDomainEffectHandler")
-                    .finish()
-            }
-        }
-        
-        #[async_trait]
-        impl DomainEffectHandler for CrossDomainWrapper {
-            fn domain_id(&self) -> &DomainId {
-                self.inner.domain_id()
-            }
-            
-            fn can_handle(&self, effect: &dyn DomainEffect) -> bool {
-                self.inner.can_handle(effect)
-            }
-            
-            async fn handle_domain_effect(
-                &self,
-                effect: &dyn DomainEffect,
-                context: &dyn EffectContext,
-            ) -> EffectResult<EffectOutcome> {
-                self.inner.handle_domain_effect(effect, context).await
-            }
-            
-            fn context_adapter(&self) -> Option<&DomainContextAdapter> {
-                self.inner.context_adapter()
-            }
-            
-            fn cross_domain_support(&self) -> Option<CrossDomainSupport> {
-                self.inner.cross_domain_support()
-            }
-        }
-        
-        let wrapper = CrossDomainWrapper { inner: cross_domain_handler };
-        self.handlers.entry(domain_id)
-            .or_insert_with(Vec::new)
-            .push(Arc::new(wrapper));
-    }
-    
-    /// Get handlers for the given domain
-    pub fn get_handlers(&self, domain_id: &DomainId) -> Vec<Arc<dyn DomainEffectHandler>> {
-        self.handlers.get(domain_id)
-            .map(|h| h.clone())
+    /// Get all handlers for a specific domain
+    pub fn get_handlers(&self, domain_id: &str) -> Vec<HandlerVariant> {
+        self.handlers
+            .get(domain_id)
+            .cloned()
             .unwrap_or_default()
     }
     
-    /// Check if a handler exists for the given domain and effect type
-    pub fn has_handler_for_type(&self, domain_id: &DomainId, _effect_type_id: &EffectTypeId) -> bool {
+    /// Get a handler for a specific domain and effect
+    pub fn get_handler_for_effect(&self, effect: &dyn DomainEffect) -> Option<HandlerVariant> {
+        let domain_id = effect.domain_id().to_string();
+        if let Some(handlers) = self.handlers.get(&domain_id) {
+            for handler_variant in handlers {
+                match handler_variant {
+                    HandlerVariant::Domain(handler) => {
+                        if handler.can_handle(effect) {
+                            return Some(HandlerVariant::Domain(handler.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Get a handler for a specific domain
+    pub fn get_handler_for_domain(&self, domain_id: &str) -> Option<HandlerVariant> {
         if let Some(handlers) = self.handlers.get(domain_id) {
-            for _handler in handlers {
-                // For a proper implementation we would need to check if the handler can handle this type
-                // For now, just return true if there is any handler for this domain
-                return true;
+            if !handlers.is_empty() {
+                return Some(handlers[0].clone());
             }
         }
-        false
-    }
-    
-    /// Get a handler for the given domain effect
-    pub fn get_handler_for_effect(&self, effect: &dyn DomainEffect) -> Option<Arc<dyn DomainEffectHandler>> {
-        let domain_id = effect.domain_id();
-        let handlers = self.get_handlers(domain_id);
-        
-        for handler in handlers {
-            if handler.can_handle(effect) {
-                return Some(handler);
-            }
-        }
-        
         None
     }
     
-    /// Get a cross-domain handler for the given domains
-    pub fn get_cross_domain_handler(
-        &self,
-        _source_domain: &DomainId,
-        target_domain: &DomainId,
-    ) -> Option<Arc<dyn CrossDomainEffectHandler>> {
-        let _default_ctx = SimpleEffectContext::new(crate::effect::types::EffectId::from(target_domain.to_string()));
-        
-        for handler in &self.cross_domain_handlers {
-            if handler.domain_id() == "*" && matches!(handler.cross_domain_support(), Some(CrossDomainSupport::Full)) {
-                return Some(handler.clone());
+    /// Execute a domain effect (now async)
+    pub async fn execute_effect( // Add async keyword
+        &self, 
+        effect: &dyn DomainEffect, 
+        context: &dyn EffectContext
+    ) -> EffectResult<EffectOutcome> {
+        // Find an appropriate handler for this effect
+        let handler_variant = self.get_handler_for_effect(effect)
+            .ok_or_else(|| {
+                EffectError::HandlerNotFound(format!(
+                    "No handler found for effect with domain ID: {}",
+                    effect.domain_id()
+                ))
+            })?;
+
+        // Execute the effect using the handler
+        let domain_outcome = match handler_variant {
+            HandlerVariant::Domain(handler) => {
+                handler.handle_domain_effect(effect, context).await.map_err(EffectError::from)?
             }
-        }
-        
-        None
-    }
-    
-    /// Execute a domain effect
-    pub fn execute_effect(&self, effect: &dyn DomainEffect, _context: &dyn EffectContext) 
-        -> EffectResult<EffectOutcome> {
-        // Find a handler for this effect
-        let _handler = self.get_handler_for_effect(effect)
-            .ok_or_else(|| EffectError::ExecutionError(format!(
-                "No handler found for domain effect {}",
-                effect.description()
-            )))?;
-            
-        // For now, just return a simple success outcome
-        // In a real implementation, this would delegate to handle_domain_effect
-        let data = HashMap::new();
-        Ok(EffectOutcome::success(data))
+        };
+
+        // Convert the domain outcome to a generic effect outcome
+        Ok(domain_outcome.to_effect_outcome())
     }
     
     /// Execute a cross-domain effect
-    pub async fn execute_cross_domain_effect(
+    pub async fn execute_cross_domain_effect<T: CrossDomainEffect + Send + Sync>(
         &self,
-        effect: &dyn CrossDomainEffect,
-        context: &dyn EffectContext,
+        effect: &T,
+        context: &dyn EffectContext
     ) -> EffectResult<EffectOutcome> {
-        // Find a cross-domain handler
-        let source_domain = effect.source_domain_id();
-        let target_domain = effect.target_domain_id();
-        
-        let handler = self.get_cross_domain_handler(source_domain, target_domain)
-            .ok_or_else(|| EffectError::ExecutionError(
-                format!("No cross-domain handler found for {} -> {}", source_domain, target_domain)
+        // Get handlers for both domains
+        let source_handler = self.get_handler_for_domain(&effect.source_domain_id())
+            .ok_or_else(|| EffectError::InvalidOperation(
+                format!("No handler registered for source domain {}", effect.source_domain_id())
             ))?;
-        
-        // Validate the cross-domain effect
-        effect.validate_cross_domain()?;
-        
-        // Create appropriate contexts for source and target domains
-        let mut source_ctx = SimpleEffectContext::new(crate::effect::types::EffectId::from(source_domain.to_string()))
-            .with_metadata("domain_id", source_domain);
             
-        let mut target_ctx = SimpleEffectContext::new(crate::effect::types::EffectId::from(target_domain.to_string()))
-            .with_metadata("domain_id", target_domain);
+        let target_handler = self.get_handler_for_domain(&effect.target_domain_id())
+            .ok_or_else(|| EffectError::InvalidOperation(
+                format!("No handler registered for target domain {}", effect.target_domain_id())
+            ))?;
+            
+        // Extract the handler from the variants - since we only have Domain variant now
+        let HandlerVariant::Domain(source_h) = source_handler;
+        let HandlerVariant::Domain(target_h) = target_handler;
         
-        // Execute the cross-domain effect
-        let result = handler.handle_cross_domain_effect(
-            effect,
-            &source_ctx,
-            &target_ctx
-        ).await?;
+        // Adapt the context for each domain
+        let source_ctx = effect.adapt_source_context(context)
+            .map_err(|e| EffectError::ExecutionError(format!("Failed to adapt source context: {}", e)))?;
+            
+        let target_ctx = effect.adapt_target_context(context)
+            .map_err(|e| EffectError::ExecutionError(format!("Failed to adapt target context: {}", e)))?;
         
-        Ok(result)
+        // Use the CrossDomainEffectHandling trait to handle the effect
+        effect.handle_across_domains(
+            source_ctx.as_ref(),
+            target_ctx.as_ref(),
+            source_h.as_ref(),
+            target_h.as_ref(),
+        ).await
+    }
+
+    /// Check if a handler exists for a specific type in a domain
+    pub fn has_handler_for_type(&self, domain_id: &str, effect_type_id: &EffectTypeId) -> bool {
+        // Check if we have any handlers for this domain
+        if let Some(handlers) = self.handlers.get(domain_id) {
+            // For now, we're not checking specific effect types since domain
+            // handlers handle all effects for their domain
+            !handlers.is_empty()
+        } else {
+            false
+        }
     }
 }
 
@@ -759,7 +773,7 @@ impl Effect for BasicDomainEffect {
 
 #[async_trait]
 impl DomainEffect for BasicDomainEffect {
-    /// Get the domain ID this effect operates on
+    /// Get the ID of the domain this effect belongs to.
     fn domain_id(&self) -> &DomainId {
         &self.domain_id
     }
@@ -769,30 +783,21 @@ impl DomainEffect for BasicDomainEffect {
         self.boundary.clone()
     }
     
-    /// Get domain-specific parameters for this effect
+    /// Validate parameters for this effect
+    fn validate(&self) -> Result<(), String> {
+        // Basic parameter validation that always succeeds
+        Ok(())
+    }
+    
+    /// Get domain-specific parameters
     fn domain_parameters(&self) -> HashMap<String, String> {
         self.parameters.clone()
     }
     
-    /// Validate parameters for this effect
-    fn validate_parameters(&self) -> EffectResult<EffectOutcome> {
-        // Basic parameter validation that always succeeds
-        Ok(EffectOutcome::success(HashMap::new()))
-    }
-    
     /// Adapt the context for the domain
-    fn adapt_context(&self, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
+    fn adapt_context(&self, _context: &dyn EffectContext) -> Result<(), String> {
         // Return the context as is, wrapped in a success outcome
-        Ok(EffectOutcome::success_with_data(context.metadata().clone()))
-    }
-    
-    /// Handle this effect within the specified domain using the adapted context
-    async fn handle_in_domain(
-        &self,
-        context: &dyn EffectContext,
-        handler: &dyn DomainEffectHandler,
-    ) -> EffectResult<EffectOutcome> {
-        handler.handle_domain_effect(self, context).await
+        Ok(())
     }
 }
 
@@ -845,6 +850,7 @@ impl BasicCrossDomainEffect {
     }
 }
 
+// Add impl Effect for BasicCrossDomainEffect
 #[async_trait]
 impl Effect for BasicCrossDomainEffect {
     fn effect_type(&self) -> EffectType {
@@ -857,8 +863,11 @@ impl Effect for BasicCrossDomainEffect {
     }
     
     async fn execute(&self, _context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        // Cross-domain effects need special handling
-        Ok(EffectOutcome::success(HashMap::new()))
+        // Cross-domain effects should be handled by handle_across_domains,
+        // not directly executed via the base Effect trait.
+        Err(EffectError::ExecutionError(
+            "CrossDomainEffect cannot be executed directly, use handle_across_domains".to_string()
+        ))
     }
     
     fn as_any(&self) -> &dyn Any {
@@ -868,114 +877,59 @@ impl Effect for BasicCrossDomainEffect {
 
 #[async_trait]
 impl DomainEffect for BasicCrossDomainEffect {
-    /// Get the domain ID this effect operates on
     fn domain_id(&self) -> &DomainId {
         &self.source_domain_id
     }
     
-    /// Get the execution boundary for this effect
     fn execution_boundary(&self) -> ExecutionBoundary {
-        ExecutionBoundary::CrossDomain
+        ExecutionBoundary::CrossDomain(self.target_domain_id.clone())
     }
     
-    /// Get domain-specific parameters for this effect
     fn domain_parameters(&self) -> HashMap<String, String> {
-        let mut params = self.parameters.clone();
-        params.insert("source_domain".to_string(), self.source_domain_id.to_string());
-        params.insert("target_domain".to_string(), self.target_domain_id.to_string());
+        let mut params = HashMap::new();
+        params.insert("source_domain".to_string(), self.source_domain_id.clone());
+        params.insert("target_domain".to_string(), self.target_domain_id.clone());
         params
     }
     
-    /// Validate parameters for this effect
-    fn validate_parameters(&self) -> EffectResult<EffectOutcome> {
-        // Validate parameters for cross-domain effect
-        Ok(EffectOutcome::success(HashMap::new()))
+    fn validate(&self) -> Result<(), String> {
+        Ok(())
     }
     
-    /// Adapt the context for the domain
-    fn adapt_context(&self, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        // Return the context with source domain info
-        Ok(EffectOutcome::success_with_data(context.metadata().clone()))
-    }
-    
-    /// Handle this effect within the specified domain using the adapted context
-    async fn handle_in_domain(
-        &self,
-        context: &dyn EffectContext,
-        handler: &dyn DomainEffectHandler,
-    ) -> EffectResult<EffectOutcome> {
-        // For cross-domain effects, we should use the cross-domain handler if available
-        // Instead of trying to downcast, check if handler implements a specific method
-        if let Some(_cross_domain_method) = handler.cross_domain_support() {
-            // If cross-domain is supported, use that path
-            // Create an adapted context
-            let _result = self.adapt_context(context)?;
-            
-            // Handle in the cross-domain context
-            handler.handle_domain_effect(self, context).await
-        } else {
-            // If we don't have cross-domain support, return an error
-            Err(EffectError::ExecutionError(
-                "Cannot handle cross-domain effect with a regular domain handler".to_string()
-            ))
-        }
+    fn adapt_context(&self, _context: &dyn EffectContext) -> Result<(), String> {
+        Ok(())
     }
 }
 
 #[async_trait]
 impl CrossDomainEffect for BasicCrossDomainEffect {
-    /// Get the source domain ID
     fn source_domain_id(&self) -> &DomainId {
         &self.source_domain_id
     }
     
-    /// Get the target domain ID
     fn target_domain_id(&self) -> &DomainId {
         &self.target_domain_id
     }
     
-    /// Validate cross-domain parameters
-    fn validate_cross_domain(&self) -> EffectResult<EffectOutcome> {
-        // Basic validation that always succeeds for now
-        Ok(EffectOutcome::success(HashMap::new()))
+    fn adapt_source_context(&self, context: &dyn EffectContext) -> Result<Box<dyn EffectContext>, String> {
+        Ok(context.clone_context())
     }
     
-    /// Adapt the effect for the target domain
-    fn adapt_for_target(&self) -> EffectResult<DomainEffectOutcome> {
-        // Basic adaptation logic
-        let data = HashMap::new();
-        Ok(DomainEffectOutcome::success(
-            self.target_domain_id.clone(),
-            "adapted".to_string(),
-            Some(data)
-        ))
+    fn adapt_target_context(&self, context: &dyn EffectContext) -> Result<Box<dyn EffectContext>, String> {
+        Ok(context.clone_context())
     }
     
-    /// Handle this effect across domains
-    async fn handle_across_domains(
-        &self,
-        source_context: &dyn EffectContext,
-        target_context: &dyn EffectContext,
-        source_handler: &dyn DomainEffectHandler,
-        target_handler: &dyn DomainEffectHandler,
-    ) -> EffectResult<EffectOutcome> {
-        // Handle in source domain first
-        let source_outcome = source_handler.handle_domain_effect(self, source_context).await?;
-        
-        // If the source handler succeeded, adapt the effect for the target domain
-        if source_outcome.status == crate::effect::outcome::EffectStatus::Success {
-            // Create a new effect for the target domain
-            let target_effect = BasicDomainEffect::new(
-                self.effect_type(),
-                self.target_domain_id.clone()
-            );
-            
-            // Handle in target domain
-            target_handler.handle_domain_effect(&target_effect, target_context).await
-        } else {
-            // Return the source outcome if it failed
-            Ok(source_outcome)
+    fn validate_cross_domain(&self) -> Result<(), String> {
+        if self.source_domain_id.is_empty() {
+            return Err("Source domain ID cannot be empty".to_string());
         }
+        if self.target_domain_id.is_empty() {
+            return Err("Target domain ID cannot be empty".to_string());
+        }
+        if self.source_domain_id == self.target_domain_id {
+            return Err("Source and target domain IDs must be different".to_string());
+        }
+        Ok(())
     }
 }
 
@@ -1335,5 +1289,20 @@ impl EffectContext for SimpleEffectContext {
     
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+// Add conversion from DomainEffectError to EffectError
+impl From<DomainEffectError> for EffectError {
+    fn from(err: DomainEffectError) -> Self {
+        match err {
+            DomainEffectError::DomainNotFound(msg) => EffectError::NotFound(msg),
+            DomainEffectError::OperationError(msg) => EffectError::ExecutionError(msg),
+            DomainEffectError::ValidationError(msg) => EffectError::ValidationError(msg),
+            DomainEffectError::ParameterError(msg) => EffectError::InvalidParameter(msg),
+            DomainEffectError::CrossDomainError(msg) => EffectError::ExecutionError(format!("Cross-domain error: {}", msg)),
+            DomainEffectError::BoundaryError(msg) => EffectError::ExecutionError(format!("Boundary error: {}", msg)),
+            DomainEffectError::InvalidHandlerCombination(msg) => EffectError::ExecutionError(msg),
+        }
     }
 } 

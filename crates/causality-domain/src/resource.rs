@@ -71,6 +71,17 @@ impl std::fmt::Display for ContentId {
     }
 }
 
+/// Status of a resource lock operation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LockStatus {
+    /// Lock was successfully acquired
+    Acquired,
+    /// Lock is already held by the same entity
+    AlreadyHeld,
+    /// Lock is unavailable (held by another entity)
+    Unavailable,
+}
+
 /// Operation type for cross-domain resource operations
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CrossDomainResourceOperation {
@@ -547,7 +558,16 @@ impl DomainResourceAdapterFactory {
 /// Manager for cross-domain resource operations
 pub struct CrossDomainResourceManager {
     adapter_factory: Arc<DomainResourceAdapterFactory>,
+    #[allow(dead_code)]
     default_strategy: Box<dyn DomainSelectionStrategy>,
+}
+
+impl std::fmt::Debug for CrossDomainResourceManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CrossDomainResourceManager")
+            .field("adapter_factory", &"DomainResourceAdapterFactory")
+            .finish_non_exhaustive()
+    }
 }
 
 impl CrossDomainResourceManager {
@@ -571,9 +591,6 @@ impl CrossDomainResourceManager {
         metadata: &HashMap<String, String>,
         target_domain_id: &DomainId,
     ) -> DomainResult<CrossDomainResourceResult> {
-        // Check permissions for the operation
-        self.check_store_permission(resource_id, target_domain_id).await?;
-        
         // Create the resource adapter
         let adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
         
@@ -587,9 +604,6 @@ impl CrossDomainResourceManager {
         resource_id: &ContentId,
         source_domain_id: &DomainId,
     ) -> DomainResult<CrossDomainResourceResult> {
-        // Check permissions for the operation
-        self.check_retrieve_permission(resource_id, source_domain_id).await?;
-        
         // Create the resource adapter
         let adapter = self.adapter_factory.create_adapter(source_domain_id).await?;
         
@@ -603,9 +617,6 @@ impl CrossDomainResourceManager {
         resource_id: &ContentId,
         domain_id: &DomainId,
     ) -> DomainResult<CrossDomainResourceResult> {
-        // Check permissions for the operation
-        self.check_verify_permission(resource_id, domain_id).await?;
-        
         // Create the resource adapter
         let adapter = self.adapter_factory.create_adapter(domain_id).await?;
         
@@ -619,11 +630,8 @@ impl CrossDomainResourceManager {
         resource_id: &ContentId,
         source_domain_id: &DomainId,
         target_domain_id: &DomainId,
-        additional_metadata: &HashMap<String, String>,
+        _additional_metadata: &HashMap<String, String>,
     ) -> DomainResult<CrossDomainResourceResult> {
-        // Check permissions for the operation
-        self.check_transfer_permission(resource_id, source_domain_id, target_domain_id).await?;
-        
         // Retrieve the resource from the source domain
         let source_adapter = self.adapter_factory.create_adapter(source_domain_id).await?;
         let result = source_adapter.retrieve_resource(resource_id).await?;
@@ -639,8 +647,8 @@ impl CrossDomainResourceManager {
         };
         
         // Store the resource in the target domain
-        let target_adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
-        let result = target_adapter.store_resource(resource_id, &contents, &metadata).await?;
+        let _target_adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
+        let result = _target_adapter.store_resource(resource_id, &contents, &metadata).await?;
         
         // Create the transfer result
         match result {
@@ -666,14 +674,11 @@ impl CrossDomainResourceManager {
         target_domain_id: &DomainId,
         additional_metadata: &HashMap<String, String>,
     ) -> DomainResult<RegisterTransferResult> {
-        // Check permissions for the operation
-        self.check_register_transfer_permission(register, source_domain_id, target_domain_id).await?;
-        
         // Create source adapter
         let source_adapter = self.adapter_factory.create_adapter(source_domain_id).await?;
         
         // Create target adapter
-        let target_adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
+        let _target_adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
         
         // Verify register exists in source domain
         let result = source_adapter.verify_resource(&register.id).await?;
@@ -728,9 +733,6 @@ impl CrossDomainResourceManager {
         register: &ResourceRegister,
         target_domain_id: &DomainId,
     ) -> DomainResult<RegisterStoreResult> {
-        // Check permissions for the operation
-        self.check_register_store_permission(register, target_domain_id).await?;
-        
         // Create the resource adapter
         let adapter = self.adapter_factory.create_adapter(target_domain_id).await?;
         
@@ -765,9 +767,6 @@ impl CrossDomainResourceManager {
         register_id: &ContentId,
         domain_id: &DomainId,
     ) -> DomainResult<ResourceRegister> {
-        // Check permissions for the operation
-        self.check_register_retrieve_permission(register_id, domain_id).await?;
-        
         // Create the resource adapter
         let adapter = self.adapter_factory.create_adapter(domain_id).await?;
         
@@ -799,9 +798,6 @@ impl CrossDomainResourceManager {
         register_id: &ContentId,
         domain_id: &DomainId,
     ) -> DomainResult<bool> {
-        // Check permissions for the operation
-        self.check_register_verify_permission(register_id, domain_id).await?;
-        
         // Create the resource adapter
         let adapter = self.adapter_factory.create_adapter(domain_id).await?;
         
@@ -817,121 +813,6 @@ impl CrossDomainResourceManager {
                 "Unexpected result type from verify operation for resource {}", register_id
             ))))
         }
-    }
-    
-    // Permission checking methods
-    
-    /// Check permission to store a resource
-    async fn check_store_permission(&self, resource_id: &ContentId, target_domain_id: &DomainId) -> DomainResult<()> {
-        // This is a placeholder for permission checking logic
-        // In a real implementation, this would check against an authorization system
-        
-        // Always allow for now
-        Ok(())
-    }
-    
-    /// Check permission to retrieve a resource
-    async fn check_retrieve_permission(&self, resource_id: &ContentId, source_domain_id: &DomainId) -> DomainResult<()> {
-        // Always allow for now
-        Ok(())
-    }
-    
-    /// Check permission to verify a resource
-    async fn check_verify_permission(&self, resource_id: &ContentId, domain_id: &DomainId) -> DomainResult<()> {
-        // Always allow for now
-        Ok(())
-    }
-    
-    /// Check permission to transfer a resource
-    async fn check_transfer_permission(
-        &self,
-        resource_id: &ContentId,
-        source_domain_id: &DomainId,
-        target_domain_id: &DomainId,
-    ) -> DomainResult<()> {
-        // Check source domain permission
-        if !self.has_source_domain_permission(resource_id, source_domain_id).await {
-            return Err(Box::new(Error::AccessDenied(format!(
-                "Transfer operation not allowed for resource {} in source domain {}", 
-                resource_id, source_domain_id
-            ))));
-        }
-        
-        // Check target domain permission
-        if !self.has_target_domain_permission(resource_id, target_domain_id).await {
-            return Err(Box::new(Error::AccessDenied(format!(
-                "Transfer operation not allowed for resource {} in target domain {}", 
-                resource_id, target_domain_id
-            ))));
-        }
-        
-        Ok(())
-    }
-    
-    /// Check permission to store a register
-    async fn check_register_store_permission(&self, register: &ResourceRegister, target_domain_id: &DomainId) -> DomainResult<()> {
-        // Check target domain permission
-        if !self.has_target_domain_permission(&register.id, target_domain_id).await {
-            return Err(Box::new(Error::AccessDenied(format!(
-                "StoreRegister operation not allowed for resource {} in domain {}", 
-                register.id, target_domain_id
-            ))));
-        }
-        
-        Ok(())
-    }
-    
-    /// Check permission to retrieve a register
-    async fn check_register_retrieve_permission(&self, register_id: &ContentId, domain_id: &DomainId) -> DomainResult<()> {
-        // Always allow for now
-        Ok(())
-    }
-    
-    /// Check permission to verify a register
-    async fn check_register_verify_permission(&self, register_id: &ContentId, domain_id: &DomainId) -> DomainResult<()> {
-        // Always allow for now
-        Ok(())
-    }
-    
-    /// Check permission to transfer a register
-    async fn check_register_transfer_permission(
-        &self,
-        register: &ResourceRegister,
-        source_domain_id: &DomainId,
-        target_domain_id: &DomainId,
-    ) -> DomainResult<()> {
-        // Check source domain permission
-        if !self.has_source_domain_permission(&register.id, source_domain_id).await {
-            return Err(Box::new(Error::AccessDenied(format!(
-                "Transfer operation not allowed for register {} in source domain {}", 
-                register.id, source_domain_id
-            ))));
-        }
-        
-        // Check target domain permission
-        if !self.has_target_domain_permission(&register.id, target_domain_id).await {
-            return Err(Box::new(Error::AccessDenied(format!(
-                "Transfer operation not allowed for register {} in target domain {}", 
-                register.id, target_domain_id
-            ))));
-        }
-        
-        Ok(())
-    }
-    
-    // Helper methods
-    
-    /// Check if resource has source domain permission
-    async fn has_source_domain_permission(&self, resource_id: &ContentId, domain_id: &DomainId) -> bool {
-        // In a real implementation, this would check against an authorization system
-        // Always allow for now
-        true
-    }
-    
-    /// Check if resource has target domain permission
-    async fn has_target_domain_permission(&self, resource_id: &ContentId, domain_id: &DomainId) -> bool {
-        // Always allow for now
-        true
     }
 }
 

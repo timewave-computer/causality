@@ -10,28 +10,24 @@ use std::time::SystemTime;
 use std::any::Any;
 
 use async_trait::async_trait;
-use thiserror::Error;
-use chrono::{DateTime, Utc, TimeZone};
-use serde::{Serialize, Deserialize};
 
 use crate::effect::{
     Effect, DomainEffect, EffectContext, EffectError, EffectOutcome, 
-    EffectResult, HandlerResult, EffectHandler,
-    domain::DomainEffectHandler, EffectExecutor, EffectRegistrar, EffectType
+    EffectResult,
+    domain::{DomainEffectHandler, DomainEffectOutcome, DomainId, DomainEffectError},
+    EffectExecutor, EffectRegistrar, EffectType,
 };
 
 use crate::time::{
     TimeProvider, ClockTime, TimeMap,
-    effect::TimeEffectHandler as TimeEffectTrait,
-    effect::BasicTimeEffectHandler,
+    effect::{TimeEffectType, TimeEffect},
+    effect_handler::TimeEffectTrait,
     effect::AttestationSource as EffectAttestationSource,
     effect::TimeAttestation
 };
 
-use crate::time::types::DomainId;
-
 use causality_types::time_snapshot::{
-    TimeEffect, AttestationSource as TimeSnapshotAttestationSource
+    AttestationSource as TimeSnapshotAttestationSource
 };
 
 use super::types::DomainAttestationSource;
@@ -73,7 +69,7 @@ pub struct DomainTimeAttestation {
     pub metadata: HashMap<String, String>,
 }
 
-// Create a concrete implementation of BasicTimeEffectHandler
+// Create a concrete implementation of TimeEffectHandler
 #[derive(Debug)]
 pub struct BasicTimeEffectHandlerImpl {
     pub domain_id: DomainId,
@@ -102,16 +98,16 @@ impl BasicTimeEffectHandlerImpl {
             TimeSnapshotAttestationSource::User => EffectAttestationSource::UserProvided,
             TimeSnapshotAttestationSource::Custom(s) => EffectAttestationSource::Custom(s.clone()),
             TimeSnapshotAttestationSource::SystemClock => EffectAttestationSource::SystemClock,
-            TimeSnapshotAttestationSource::Blockchain { chain_id, block_number } => {
+            TimeSnapshotAttestationSource::Blockchain { chain_id, block_number: _ } => {
                 EffectAttestationSource::Custom(format!("blockchain:{}", chain_id))
             },
-            TimeSnapshotAttestationSource::Operator { operator_id, signature } => {
+            TimeSnapshotAttestationSource::Operator { operator_id, signature: _ } => {
                 EffectAttestationSource::Custom(format!("operator:{}", operator_id))
             },
-            TimeSnapshotAttestationSource::Committee { committee_id, signatures } => {
+            TimeSnapshotAttestationSource::Committee { committee_id, signatures: _ } => {
                 EffectAttestationSource::Custom(format!("committee:{}", committee_id))
             },
-            TimeSnapshotAttestationSource::Oracle { oracle_id, data } => {
+            TimeSnapshotAttestationSource::Oracle { oracle_id, data: _ } => {
                 EffectAttestationSource::Custom(format!("oracle:{}", oracle_id))
             },
         }
@@ -163,42 +159,132 @@ impl BasicTimeEffectHandlerImpl {
         
         time_attestation
     }
+    
+    /// Handle advancing causal time
+    async fn handle_advance_causal_time(
+        &self,
+        effect: &AdvanceCausalTimeEffect,
+        context: &dyn EffectContext,
+    ) -> Result<DomainEffectOutcome, DomainEffectError> {
+        // Get the time effect handler
+        match &self.time_effect_handler {
+            Some(handler) => {
+                // Extract relevant data from the effect
+                let result = handler.handle_advance_causal_time(
+                    &effect.domain_id,
+                    effect.logical_clock.unwrap_or(0),
+                    effect.vector_clock_updates.clone(),
+                    Vec::new(), // Typically we'd extract dependencies here
+                ).await.map_err(|e| 
+                    DomainEffectError::OperationError(format!("Failed to advance causal time: {}", e))
+                )?;
+
+                // Create outcome from the result
+                Ok(DomainEffectOutcome::success(
+                    effect.domain_id.clone(),
+                    "advance_causal_time".to_string(),
+                    Some(result),
+                ))
+            }
+            None => Err(DomainEffectError::OperationError("No time effect handler available".to_string()))
+        }
+    }
+
+    /// Handle setting clock time
+    async fn handle_set_clock_time(
+        &self,
+        effect: &SetClockTimeEffect,
+        _context: &dyn EffectContext,
+    ) -> Result<DomainEffectOutcome, DomainEffectError> {
+        // Get the time effect handler
+        match &self.time_effect_handler {
+            Some(handler) => {
+                // Convert timestamp to DateTime
+                let timestamp = effect.timestamp;
+                let datetime = chrono::DateTime::from_timestamp(timestamp as i64, 0)
+                    .ok_or_else(|| DomainEffectError::OperationError(
+                        format!("Invalid timestamp: {}", timestamp)
+                    ))?;
+
+                // Convert AttestationSource to the correct type
+                let source = Self::convert_from_snapshot_to_effect_source(&effect.source);
+
+                // Set the clock time
+                let result = handler.handle_set_clock_time(
+                    &self.domain_id,
+                    datetime,
+                    source,
+                ).await.map_err(|e| 
+                    DomainEffectError::OperationError(format!("Failed to set clock time: {}", e))
+                )?;
+
+                // Create outcome from the result
+                Ok(DomainEffectOutcome::success(
+                    self.domain_id.clone(),
+                    "set_clock_time".to_string(),
+                    Some(result),
+                ))
+            }
+            None => Err(DomainEffectError::OperationError("No time effect handler available".to_string()))
+        }
+    }
+
+    /// Handle registering time attestation
+    async fn handle_register_attestation(
+        &self,
+        effect: &RegisterAttestationEffect,
+        _context: &dyn EffectContext,
+    ) -> Result<DomainEffectOutcome, DomainEffectError> {
+        // Get the time effect handler
+        match &self.time_effect_handler {
+            Some(handler) => {
+                // Register the attestation
+                let attestation = Self::convert_attestation(&effect.attestation);
+                
+                let result = handler.handle_register_attestation(
+                    &self.domain_id,
+                    attestation,
+                ).await.map_err(|e| 
+                    DomainEffectError::OperationError(format!("Failed to register attestation: {}", e))
+                )?;
+
+                // Create outcome from the result
+                Ok(DomainEffectOutcome::success(
+                    self.domain_id.clone(),
+                    "register_attestation".to_string(),
+                    Some(result),
+                ))
+            },
+            None => Err(DomainEffectError::OperationError("No time effect handler available".to_string()))
+        }
+    }
 }
 
 #[async_trait]
 impl DomainEffectHandler for BasicTimeEffectHandlerImpl {
-    fn domain_id(&self) -> &DomainId {
-        &self.domain_id
+    fn domain_id(&self) -> &str {
+        self.domain_id.as_str()
     }
 
-    async fn handle_domain_effect(&self, effect: &dyn DomainEffect, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        // Try to find a concrete implementation
-        let concrete_time_effect: Option<&TimeEffectImpl> = effect.as_any().downcast_ref::<TimeEffectImpl>();
-        
-        if let Some(time_effect) = concrete_time_effect {
-            // Extract the time effect variant and handle it
-            match &time_effect.variant {
-                TimeEffectVariant::AdvanceCausalTime(_) => {
-                    self.handle_advance_causal_time(effect, context).await
-                },
-                TimeEffectVariant::SetClockTime(_) => {
-                    self.handle_set_clock_time(effect, context).await
-                },
-                TimeEffectVariant::RegisterAttestation(_) => {
-                    self.handle_register_attestation(effect, context).await
-                },
-                _ => {
-                    let error_message = "Unsupported time effect type".to_string();
-                    let mut data = HashMap::new();
-                    data.insert("error".to_string(), error_message.clone());
-                    Err(EffectError::ExecutionError(error_message))
-                }
+    async fn handle_domain_effect(
+        &self,
+        effect: &dyn DomainEffect,
+        context: &dyn EffectContext,
+    ) -> Result<DomainEffectOutcome, DomainEffectError> {
+        let time_effect = match effect.as_any().downcast_ref::<TimeEffectImpl>() {
+            Some(e) => e,
+            None => {
+                return Err(DomainEffectError::OperationError(
+                    format!("Unsupported effect type: {}", effect.effect_type().to_string())
+                ));
             }
-        } else {
-            let error_message = "Not a time effect".to_string();
-            let mut data = HashMap::new();
-            data.insert("error".to_string(), error_message.clone());
-            Err(EffectError::ExecutionError(error_message))
+        };
+
+        match &time_effect.variant {
+            TimeEffectVariant::AdvanceCausalTime(e) => self.handle_advance_causal_time(e, context).await,
+            TimeEffectVariant::SetClockTime(e) => self.handle_set_clock_time(e, context).await,
+            TimeEffectVariant::RegisterAttestation(e) => self.handle_register_attestation(e, context).await,
+            TimeEffectVariant::Other(s) => Err(DomainEffectError::OperationError(format!("Unsupported time effect: {}", s))),
         }
     }
 }
@@ -206,102 +292,6 @@ impl DomainEffectHandler for BasicTimeEffectHandlerImpl {
 // Define a domain-specific time effect trait
 pub trait TimeEffectDomain: DomainEffect {
     fn get_variant(&self) -> &TimeEffectVariant;
-}
-
-impl BasicTimeEffectHandlerImpl {
-    async fn handle_advance_causal_time(
-        &self, 
-        effect: &dyn DomainEffect, 
-        context: &dyn EffectContext
-    ) -> HandlerResult<EffectOutcome> {
-        let time_effect = effect.as_any().downcast_ref::<TimeEffectImpl>();
-        
-        if let Some(time_effect) = time_effect {
-            match &time_effect.variant {
-                TimeEffectVariant::AdvanceCausalTime(advance) => {
-                    match &self.time_effect_handler {
-                        Some(handler) => {
-                            handler.handle_advance_causal_time(
-                                &advance.domain_id,
-                                advance.logical_clock.unwrap_or(0),
-                                advance.vector_clock_updates.clone(),
-                                vec![], // No dependencies for now
-                            ).await.map(|data| EffectOutcome::success(HashMap::new()).with_data_map(data))
-                            .map_err(|e| EffectError::ExecutionError(e.to_string()))
-                        },
-                        None => Err(EffectError::ExecutionError("No time effect handler available".to_string()))
-                    }
-                },
-                _ => Err(EffectError::ExecutionError("Expected AdvanceCausalTime effect".to_string()))
-            }
-        } else {
-            Err(EffectError::ExecutionError("Not a time effect".to_string()))
-        }
-    }
-
-    async fn handle_set_clock_time(
-        &self, 
-        effect: &dyn DomainEffect, 
-        context: &dyn EffectContext
-    ) -> HandlerResult<EffectOutcome> {
-        let time_effect = effect.as_any().downcast_ref::<TimeEffectImpl>();
-        
-        if let Some(time_effect) = time_effect {
-            match &time_effect.variant {
-                TimeEffectVariant::SetClockTime(set_clock) => {
-                    match &self.time_effect_handler {
-                        Some(handler) => {
-                            let source = Self::convert_from_snapshot_to_effect_source(&set_clock.source);
-                            // Convert timestamp to DateTime<Utc>
-                            let datetime = Utc.timestamp_opt(set_clock.timestamp as i64, 0)
-                                .single()
-                                .ok_or_else(|| EffectError::ExecutionError("Invalid timestamp".to_string()))?;
-                                
-                            handler.handle_set_clock_time(
-                                &self.domain_id,
-                                datetime,
-                                source
-                            ).await.map(|data| EffectOutcome::success(HashMap::new()).with_data_map(data))
-                            .map_err(|e| EffectError::ExecutionError(e.to_string()))
-                        },
-                        None => Err(EffectError::ExecutionError("No time effect handler available".to_string()))
-                    }
-                },
-                _ => Err(EffectError::ExecutionError("Expected SetClockTime effect".to_string()))
-            }
-        } else {
-            Err(EffectError::ExecutionError("Not a time effect".to_string()))
-        }
-    }
-
-    async fn handle_register_attestation(
-        &self, 
-        effect: &dyn DomainEffect, 
-        context: &dyn EffectContext
-    ) -> HandlerResult<EffectOutcome> {
-        let time_effect = effect.as_any().downcast_ref::<TimeEffectImpl>();
-        
-        if let Some(time_effect) = time_effect {
-            match &time_effect.variant {
-                TimeEffectVariant::RegisterAttestation(register_attestation) => {
-                    match &self.time_effect_handler {
-                        Some(handler) => {
-                            let attestation = Self::convert_attestation(&register_attestation.attestation);
-                            handler.handle_register_attestation(
-                                &self.domain_id,
-                                attestation
-                            ).await.map(|data| EffectOutcome::success(HashMap::new()).with_data_map(data))
-                            .map_err(|e| EffectError::ExecutionError(e.to_string()))
-                        },
-                        None => Err(EffectError::ExecutionError("No time effect handler available".to_string()))
-                    }
-                },
-                _ => Err(EffectError::ExecutionError("Expected RegisterAttestation effect".to_string()))
-            }
-        } else {
-            Err(EffectError::ExecutionError("Not a time effect".to_string()))
-        }
-    }
 }
 
 /// Adapter that connects the domain effect-based time system with the provider-based system
@@ -378,6 +368,21 @@ impl TimeEffectImpl {
     }
 }
 
+impl TimeEffect for TimeEffectImpl {
+    fn get_time_effect_type(&self) -> TimeEffectType {
+        match self.variant {
+            TimeEffectVariant::AdvanceCausalTime(_) => TimeEffectType::AdvanceCausalTime,
+            TimeEffectVariant::SetClockTime(_) => TimeEffectType::SetClockTime,
+            TimeEffectVariant::RegisterAttestation(_) => TimeEffectType::RegisterAttestation,
+            TimeEffectVariant::Other(_) => TimeEffectType::Custom("other".to_string()),
+        }
+    }
+    
+    fn get_domain_id(&self) -> &String {
+        &self.domain_id_str
+    }
+}
+
 #[async_trait]
 impl Effect for TimeEffectImpl {
     fn effect_type(&self) -> EffectType {
@@ -392,11 +397,11 @@ impl Effect for TimeEffectImpl {
     fn description(&self) -> String {
         format!("Time effect: {:?}", self.effect_type())
     }
-
+    
     async fn execute(&self, _context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
         Ok(EffectOutcome::success(HashMap::new()))
     }
-
+    
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -408,8 +413,12 @@ impl DomainEffect for TimeEffectImpl {
         &self.domain_id_str
     }
     
-    fn validate_parameters(&self) -> EffectResult<EffectOutcome> {
-        Ok(EffectOutcome::success(HashMap::new()))
+    fn validate(&self) -> Result<(), String> {
+        // Basic validation - in real implementation, add more checks
+        if self.domain_id_str.is_empty() {
+            return Err("Domain ID cannot be empty".to_string());
+        }
+        Ok(())
     }
     
     fn domain_parameters(&self) -> HashMap<String, String> {
@@ -439,16 +448,9 @@ impl DomainEffect for TimeEffectImpl {
         params
     }
     
-    fn adapt_context(&self, _context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        Ok(EffectOutcome::success(HashMap::new()))
-    }
-    
-    async fn handle_in_domain(
-        &self,
-        context: &dyn EffectContext,
-        handler: &dyn DomainEffectHandler,
-    ) -> EffectResult<EffectOutcome> {
-        handler.handle_domain_effect(self, context).await
+    fn adapt_context(&self, _context: &dyn EffectContext) -> Result<(), String> {
+        // Simple adaptation for now
+        Ok(())
     }
 }
 

@@ -6,7 +6,6 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::Arc;
 use std::time::SystemTime;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -17,17 +16,11 @@ use thiserror::Error;
 
 use crate::effect::{
     Effect, EffectContext, EffectError, EffectOutcome, EffectResult, EffectType,
-    outcome::EffectOutcomeBuilder,
-    types::{EffectId, EffectTypeId, ExecutionBoundary},
+    types::{EffectId, EffectTypeId},
     handler::{EffectHandler, HandlerResult},
     DowncastEffect
 };
-use crate::resource::types::ResourceId;
-use super::{ClockTime, Timer, TimeObserver};
-use super::map::TimeMap;
-use super::types::DomainPosition;
-use super::timestamp::Timestamp;
-use crate::id_utils::FactId;
+use super::{ClockTime, Timer};
 // We may not need PublicKey yet, so we'll comment it out for now
 // use crate::verification::PublicKey;
 

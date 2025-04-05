@@ -13,14 +13,12 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::sync::{Arc, Mutex, RwLock};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use causality_types::{ContentHash, ContentId};
+use causality_types::ContentHash;
 use blake3;
 
-use crate::serialization::Serializer;
 
 pub use examples::{basic_capability_example, content_addressed_example, capability_delegation_example, complex_resource_example};
 

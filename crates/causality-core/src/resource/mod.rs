@@ -1,16 +1,17 @@
-use causality_types::ContentHash;
 // Resource management system
 //
 // This module provides the core resource management system,
 // including resource interfaces and SMT integration.
 
-pub mod adapter;pub mod agent;
+pub mod adapter;
+pub mod agent;
 pub mod protocol;
 pub mod storage;
 // pub mod validation; // Temporarily disabled until we fix the compatibility issues
 pub mod query;
 pub mod interface;
 pub mod types;
+pub mod operation;
 
 #[cfg(test)]
 pub mod tests;
@@ -25,19 +26,31 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 // Use proper imports
-use causality_types::{ContentId, ContentAddressed};
+use causality_types::ContentId;
 
 pub use interface::*;
 pub use types::*;
 pub use types::ResourceId;  // Explicit re-export to fix shadowing
 // pub use validation::*; // Temporarily disabled until we fix the compatibility issues
 pub use storage::*;
-pub use agent::*;
-pub use query::*;
+// pub use agent::*;
+// pub use query::*;
+
+// Re-export key types
+// pub use manager::ResourceManager;
+// pub use state::ResourceState;
+// pub use types::*;
+
+// Specific imports (might shadow glob exports if not careful)
+// Remove this specific import to avoid shadowing the glob export from types::*
+// use crate::resource_types::{ResourceTypeId};
+// use crate::capabilities::CapabilityRegistry;
+// use crate::error::ResourceError;
+// use crate::identity::IdentityService;
+// use crate::lifecycle::LifecycleManager;
 
 // Re-export specific types from resource_types
 // Use direct imports here instead of re-exporting
-use crate::resource_types::{ResourceTypeId};
 // Import ResourceType directly from our own module
 pub use crate::resource::types::ResourceType;
 // Explicitly re-export ResourceState
@@ -281,4 +294,7 @@ impl Resource for Box<dyn Resource> {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
-} 
+}
+
+// Re-export key types
+pub use crate::effect::resource::ResourceOperation; 
