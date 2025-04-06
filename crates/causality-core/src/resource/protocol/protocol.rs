@@ -5,16 +5,21 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
 use causality_types::ContentId;
 use causality_types::domain::DomainId;
-use crate::capability::resource::Capability;
+use crate::capability::resource::{Capability, CapabilityGrants, ResourceCapability, ResourceCapabilityType};
 use crate::effect::EffectContext;
 use crate::resource::types::{ResourceTypeId, ResourceTypeRegistry, ResourceTypeRegistryError};
 use crate::resource::Resource;
+use crate::id_utils::content_id_to_str;
+// Remove the unused import
+// use crate::id_utils::content_id_to_str;
+// Fix the identity import
+type IdentityId = String; // Temporary placeholder for missing IdentityId type
 
 /// Unique identifier for a cross-domain resource reference
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -364,7 +369,7 @@ pub trait CrossDomainResourceProtocol: Send + Sync + Debug {
     async fn get_transfer_status(
         &self,
         transfer_id: &str,
-        context: &dyn EffectContext,
+        _context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<TransferStatus>;
     
     /// Synchronize a resource reference with its source
@@ -651,7 +656,7 @@ impl CrossDomainResourceProtocol for BasicCrossDomainResourceProtocol {
     async fn get_transfer_status(
         &self,
         transfer_id: &str,
-        context: &dyn EffectContext,
+        _context: &dyn EffectContext,
     ) -> CrossDomainProtocolResult<TransferStatus> {
         // Get the transfer operation
         let operation = self.get_transfer(transfer_id)
@@ -730,7 +735,7 @@ impl Clone for ProtocolAuthorization {
 
 // Helper function to create a dummy capability for clone implementation
 fn create_dummy_capability() -> Capability<Box<dyn Resource>> {
-    let resource_id = ContentId::from_bytes_unwrap(&[0, 0, 0, 0]);
+    let _resource_id = ContentId::from_bytes_unwrap(&[0, 0, 0, 0]);
     let cap = crate::capability::resource::ResourceCapability::new(
         crate::capability::resource::ResourceCapabilityType::Read,
         crate::capability::resource::CapabilityGrants::read_only(),
@@ -746,6 +751,8 @@ mod tests {
     use causality_types::ContentId;
     use crate::resource::types::{InMemoryResourceTypeRegistry, ResourceSchema, ResourceTypeDefinition};
     use std::collections::HashMap;
+    // Import the content_id_to_str function for the tests
+    use crate::id_utils::content_id_to_str;
     // Use async_trait for the test
     use async_trait::async_trait;
     use crate::effect::context::{BasicEffectContext, EffectContextBuilder};
@@ -776,7 +783,7 @@ mod tests {
         
         fn with_resource(self, resource_id: &CrossDomainResourceId, data: Vec<u8>) -> Self {
             if let Ok(mut resources) = self.resources.write() {
-                resources.insert(resource_id.content_id.to_string(), data);
+                resources.insert(content_id_to_str(&resource_id.content_id), data);
             }
             self
         }
@@ -800,7 +807,7 @@ mod tests {
             _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<()> {
             if let Ok(mut resources) = self.resources.write() {
-                resources.insert(resource_id.content_id.to_string(), data.to_vec());
+                resources.insert(content_id_to_str(&resource_id.content_id), data.to_vec());
                 Ok(())
             } else {
                 Err(CrossDomainProtocolError::InternalError("Failed to acquire write lock".to_string()))
@@ -812,7 +819,7 @@ mod tests {
             resource_id: &CrossDomainResourceId,
             _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<Vec<u8>> {
-            self.resources.read().unwrap().get(&resource_id.content_id.to_string())
+            self.resources.read().unwrap().get(&content_id_to_str(&resource_id.content_id))
                 .cloned()
                 .ok_or_else(|| CrossDomainProtocolError::ResourceNotFound(
                     format!("Resource {} not found in domain {}", resource_id.content_id, self.domain_id)
@@ -824,7 +831,7 @@ mod tests {
             resource_id: &CrossDomainResourceId,
             _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<bool> {
-            Ok(self.resources.read().unwrap().contains_key(&resource_id.content_id.to_string()))
+            Ok(self.resources.read().unwrap().contains_key(&content_id_to_str(&resource_id.content_id)))
         }
         
         async fn verify_resource(
@@ -832,7 +839,7 @@ mod tests {
             resource_id: &CrossDomainResourceId,
             _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<VerificationResult> {
-            if self.resources.read().unwrap().contains_key(&resource_id.content_id.to_string()) {
+            if self.resources.read().unwrap().contains_key(&content_id_to_str(&resource_id.content_id)) {
                 Ok(VerificationResult::Valid)
             } else {
                 Ok(VerificationResult::Invalid("Resource not found".to_string()))
@@ -846,7 +853,7 @@ mod tests {
         ) -> CrossDomainProtocolResult<()> {
             // In a real implementation, this would lock or remove the resource
             // For testing, just ensure the resource exists
-            if !self.resources.read().unwrap().contains_key(&operation.resource_id.content_id.to_string()) {
+            if !self.resources.read().unwrap().contains_key(&content_id_to_str(&operation.resource_id.content_id)) {
                 return Err(CrossDomainProtocolError::ResourceNotFound(
                     format!("Resource {} not found in domain {}", 
                         operation.resource_id.content_id, 
@@ -864,9 +871,9 @@ mod tests {
         ) -> CrossDomainProtocolResult<()> {
             if let Ok(mut resources) = self.resources.write() {
                 if let Some(data) = &operation.resource_data {
-                    resources.insert(operation.resource_id.content_id.to_string(), data.clone());
+                    resources.insert(content_id_to_str(&operation.resource_id.content_id), data.clone());
                 } else {
-                    resources.insert(operation.resource_id.content_id.to_string(), vec![]);
+                    resources.insert(content_id_to_str(&operation.resource_id.content_id), vec![]);
                 }
                 Ok(())
             } else {
@@ -881,7 +888,7 @@ mod tests {
             _context: &dyn EffectContext,
         ) -> CrossDomainProtocolResult<()> {
             if let Ok(mut resources) = self.resources.write() {
-                resources.insert(reference.id.content_id.to_string(), data.to_vec());
+                resources.insert(content_id_to_str(&reference.id.content_id), data.to_vec());
                 Ok(())
             } else {
                 Err(CrossDomainProtocolError::InternalError("Failed to acquire write lock".to_string()))

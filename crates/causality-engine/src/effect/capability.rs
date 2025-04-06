@@ -62,8 +62,8 @@ pub enum EffectCapabilityType {
 pub struct EffectCapabilityRegistry {}
 
 impl EffectCapabilityRegistry {
-    pub fn has_required_capabilities(&self, identity: &IdentityId, effect_type: &str) -> Result<bool, EffectCapabilityError> {
-        // Simplified implementation
+    pub fn has_required_capabilities(&self, _identity: &IdentityId, _effect_type: &str) -> Result<bool, EffectCapabilityError> {
+        // For testing, just return true
         Ok(true)
     }
 }

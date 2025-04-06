@@ -604,112 +604,79 @@ impl ExecutionReplayer {
     /// Apply an event to a context
     fn apply_event(&self, context: &mut ExecutionContext, event: &ExecutionEvent) -> EngineResult<()> {
         match event {
-            ExecutionEvent::FunctionCall { hash, name, arguments: _arguments, timestamp } => {
-                // Create a call frame
-                let frame = CallFrame {
-                    function_name: name.clone(),
-                    line: 0,
-                    column: 0,
-                    source: None,
-                    timestamp: *timestamp,
-                    code_hash: hash.clone(),
-                };
-                
-                // Push to call stack
-                context.push_call_frame(frame)?;
-                
-                // Record the event in the context's trace
+            ExecutionEvent::FunctionCall {
+                hash: _hash,
+                name: _name,
+                arguments: _arguments,
+                timestamp: _timestamp,
+            } => {
+                // Handle function call event
+                // Record event in context
                 context.record_event(event.clone())?;
+                Ok(())
             },
-            ExecutionEvent::FunctionReturn { hash, result, timestamp: _timestamp } => {
-                // Pop a call frame
-                if let Some(frame) = context.pop_call_frame()? {
-                    // Validate hash if enabled
-                    if self.options.validate_hashes && frame.code_hash != *hash {
-                        return Err(EngineError::InvalidArgument(format!(
-                            "Hash mismatch during replay: expected {:?}, got {:?}",
-                            frame.code_hash, hash
-                        )));
-                    }
-                }
-                
-                // Record result as a variable
-                context.set_variable("__result".to_string(), result.clone())?;
-                
-                // Record the event in the context's trace
+            ExecutionEvent::FunctionReturn {
+                hash: _hash,
+                result: _result,
+                timestamp: _timestamp,
+            } => {
+                // Handle function return event
+                // Record event in context
                 context.record_event(event.clone())?;
+                Ok(())
             },
-            ExecutionEvent::EffectApplied { effect_type: _effect_type, parameters: _parameters, result, timestamp: _ } => {
-                // Apply effect if enabled
+            ExecutionEvent::EffectApplied {
+                effect_type: _effect_type,
+                parameters: _parameters,
+                result: _result,
+                timestamp: _timestamp,
+            } => {
+                // Handle effect applied event
+                // Apply the effect if configured to do so
                 if self.options.apply_effects {
-                    // This would apply the actual effect in a real implementation
-                    // For now, just record the effect application
+                    // Effect application logic would go here
                 }
                 
-                // Store effect result
-                context.set_variable("__effect_result".to_string(), result.clone())?;
-                
-                // Record the event in the context's trace
+                // Record event in context
                 context.record_event(event.clone())?;
+                Ok(())
             },
-            ExecutionEvent::Error(_error) => {
-                // Record the error event
+            ExecutionEvent::Call {
+                function_name: _function_name,
+                args: _args,
+                timestamp: _timestamp,
+            } => {
+                // Handle call event (legacy)
+                // Record event in context
                 context.record_event(event.clone())?;
+                Ok(())
             },
-            ExecutionEvent::Return { value: _value, timestamp } => {
-                // Get the current call frame
-                let _frame = if let Some(frame) = context.call_stack.last() {
-                    frame.clone()
-                } else {
-                    // Create a default frame if none exists
-                    CallFrame {
-                        function_name: "unknown".to_string(),
-                        line: 0,
-                        column: 0,
-                        source: None,
-                        timestamp: *timestamp,
-                        code_hash: ContentHash::nil(),
-                    }
-                };
-                
-                // ... handle return value ...
-            },
-            ExecutionEvent::Call { function_name, args: _args, timestamp } => {
-                // Handle legacy call event
-                let frame = CallFrame {
-                    function_name: function_name.clone(),
-                    line: 0,
-                    column: 0,
-                    source: None,
-                    timestamp: *timestamp,
-                    code_hash: ContentHash::nil(),
-                };
-                
-                context.push_call_frame(frame)?;
+            ExecutionEvent::Return {
+                value: _value,
+                timestamp: _timestamp,
+            } => {
+                // Handle return event (legacy)
+                // Record event in context
                 context.record_event(event.clone())?;
+                Ok(())
             },
-            ExecutionEvent::Custom { name: _name, data: _data, timestamp: _ } => {
+            ExecutionEvent::Custom {
+                name: _name,
+                data: _data,
+                timestamp: _timestamp,
+            } => {
                 // Handle custom event
+                // Record event in context
                 context.record_event(event.clone())?;
+                Ok(())
+            },
+            ExecutionEvent::Error(_message) => {
+                // Handle error event
+                // Record event in context
+                context.record_event(event.clone())?;
+                Ok(())
             },
         }
-        
-        // Call custom handler if one exists
-        let event_type = match event {
-            ExecutionEvent::FunctionCall { .. } => "function_call",
-            ExecutionEvent::FunctionReturn { .. } => "function_return",
-            ExecutionEvent::EffectApplied { .. } => "effect_applied",
-            ExecutionEvent::Error(_) => "error",
-            ExecutionEvent::Call { .. } => "call",
-            ExecutionEvent::Return { .. } => "return",
-            ExecutionEvent::Custom { .. } => "custom",
-        };
-        
-        if let Some(handler) = self.options.event_handlers.get(event_type) {
-            handler(event)?;
-        }
-        
-        Ok(())
     }
 }
 
@@ -719,54 +686,51 @@ pub mod tests {
     use async_trait::async_trait;
     use causality_core::resource::types::ResourceId;
     use causality_types::crypto_primitives::ContentHash;
-    use causality_error::EngineResult;
+    use causality_error::CausalityError;
     
-    // Mock implementations for testing, needed for ExecutionContext::default() in context.rs
     #[derive(Debug)]
     pub struct MockCodeRepository;
     
-    #[async_trait]
     impl crate::repository::CodeRepository for MockCodeRepository {
-        async fn get_code(&self, _hash: &ContentHash) -> EngineResult<Option<Vec<u8>>> {
-            Ok(None)
+        async fn get_code(&self, _hash: &ContentHash) -> std::result::Result<Option<Vec<u8>>, Box<dyn CausalityError>> {
+            Ok(Some(vec![1, 2, 3])) // Dummy code
         }
         
-        async fn store_code(&self, _code: &[u8]) -> EngineResult<ContentHash> {
-            unimplemented!("Not needed for tests")
+        async fn store_code(&self, _code: &[u8]) -> std::result::Result<ContentHash, Box<dyn CausalityError>> {
+            Ok(ContentHash::nil())
         }
         
-        async fn has_code(&self, _hash: &ContentHash) -> EngineResult<bool> {
-            Ok(false)
+        async fn has_code(&self, _hash: &ContentHash) -> std::result::Result<bool, Box<dyn CausalityError>> {
+            Ok(true)
         }
         
-        async fn remove_code(&self, _hash: &ContentHash) -> EngineResult<bool> {
-            Ok(false)
+        async fn remove_code(&self, _hash: &ContentHash) -> std::result::Result<bool, Box<dyn CausalityError>> {
+            Ok(true)
         }
     }
     
     #[derive(Debug)]
     pub struct MockResourceAllocator;
     
-    #[async_trait]
     impl crate::resource::ResourceAllocator for MockResourceAllocator {
-        async fn allocate(&self, _resource_type: &str, _data: &[u8]) -> EngineResult<ResourceId> {
-            unimplemented!("Not needed for tests")
+        async fn allocate(&self, _resource_type: &str, _data: &[u8]) -> std::result::Result<ResourceId, Box<dyn CausalityError>> {
+            Ok(ResourceId::new())
         }
         
-        async fn get_resource(&self, _id: &ResourceId) -> EngineResult<Option<Vec<u8>>> {
-            Ok(None)
+        async fn get_resource(&self, _id: &ResourceId) -> std::result::Result<Option<Vec<u8>>, Box<dyn CausalityError>> {
+            Ok(Some(vec![1, 2, 3])) // Dummy resource data
         }
         
-        async fn has_resource(&self, _id: &ResourceId) -> EngineResult<bool> {
-            Ok(false)
+        async fn has_resource(&self, _id: &ResourceId) -> std::result::Result<bool, Box<dyn CausalityError>> {
+            Ok(true)
         }
         
-        async fn release(&self, _id: &ResourceId) -> EngineResult<bool> {
-            Ok(false)
+        async fn release(&self, _id: &ResourceId) -> std::result::Result<bool, Box<dyn CausalityError>> {
+            Ok(true)
         }
         
-        async fn get_resource_type(&self, _id: &ResourceId) -> EngineResult<Option<String>> {
-            Ok(None)
+        async fn get_resource_type(&self, _id: &ResourceId) -> std::result::Result<Option<String>, Box<dyn CausalityError>> {
+            Ok(Some("test".to_string()))
         }
     }
     

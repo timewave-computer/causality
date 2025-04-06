@@ -1,0 +1,17 @@
+[workspace.dependencies]
+# Common dependencies
+anyhow = "1.0.75"
+async-trait = "0.1.74"
+axum = "0.6.20"
+borsh = { version = "0.10.3", features = ["derive"] }
+crossbeam-channel = "0.5.8"
+chrono = { version = "0.4.31", features = ["serde"] }
+hex = "0.4.3"
+parking_lot = "0.12.1"
+rand = "0.8.5"
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.108"
+thiserror = "1.0.49"
+tokio = { version = "1.33.0", features = ["full"] }
+tracing = "0.1.40" 

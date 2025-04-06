@@ -5,11 +5,31 @@ use anyhow::Result;
 use std::sync::Arc;
 use crate::scenario::AgentConfig; // Correct path
 // Use ResourceId from causality-core as agents are resources.
-use causality_core::resource::ResourceId;
+use causality_core::resource::types::ResourceId;
 use causality_types::crypto_primitives::ContentHash; // Needed for potential hash creation
+use std::str::FromStr;
+use crate::observer::ObserverRegistry;
+use crate::replay::LogStorage;
 
 /// Unique identifier for an agent in the simulation.
 pub type AgentId = ResourceId;
+
+/// Helper functions for working with AgentId in the simulation system
+pub mod agent_id {
+    use super::*;
+    
+    /// Create an AgentId from a string identifier
+    /// This hashes the string to create a content-addressed ID
+    pub fn from_string(id: impl AsRef<str>) -> AgentId {
+        // Use ResourceId::from_str which hashes the string if it's not a valid hex
+        ResourceId::from_str(id.as_ref()).unwrap_or_else(|_| {
+            // If parsing fails, create a hash from the string bytes
+            let bytes = id.as_ref().as_bytes().to_vec();
+            let hash = ContentHash::new("blake3", bytes);
+            ResourceId::new(hash)
+        })
+    }
+}
 
 /// Configuration passed to an agent when it's started by a runner.
 #[derive(Debug, Clone)]
@@ -18,8 +38,9 @@ pub struct SimulationAgentConfig {
     pub scenario_id: String, // ID of the scenario run
     pub agent_config: AgentConfig,
     // Information provided by the runner
-    // e.g., communication endpoints, shared state handles
-    // TODO: Define specific fields needed by agents (e.g., message queues, peer info)
+    pub observer_registry: Arc<ObserverRegistry>,
+    pub log_storage: Arc<LogStorage>,
+    pub run_id: String,
 }
 
 /// Standard interface for all agents participating in a simulation.

@@ -2,6 +2,7 @@
 // Allows selective retrieval of log entries based on various criteria
 
 use std::collections::HashSet;
+use std::str::FromStr;
 use causality_types::{ContentId, DomainId, Timestamp, TraceId};
 use crate::log::types::{LogEntry, EntryType, EntryData};
 
@@ -80,37 +81,60 @@ impl LogFilter {
             }
         }
         
-        // Check resource ID if available
-        if let Some(resource_ids) = &self.resource_ids {
-            let has_resource = match &entry.data {
-                EntryData::Fact(fact) => fact.resources.as_ref().map(|resources| 
-                    resources.iter().any(|id| resource_ids.contains(id))).unwrap_or(false),
-                EntryData::Effect(effect) => effect.resources.as_ref().map(|resources| 
-                    resources.iter().any(|id| resource_ids.contains(id))).unwrap_or(false),
-                EntryData::Operation(op) => op.resources.as_ref().map(|resources| 
-                    resources.iter().any(|id| resource_ids.contains(id))).unwrap_or(false),
-                _ => false,
-            };
-            
-            if !has_resource {
-                return false;
+        // Check Resource Filters (using resource_ids)
+        let include_resource = match &self.resource_ids {
+            None => true, // No filter set, include entry
+            Some(filter_ids) => { // Filter set, check if entry resources intersect
+                match &entry.data {
+                    EntryData::Fact(fact) => fact.resources.iter().any(|r| filter_ids.contains(r)),
+                    EntryData::Effect(effect) => effect.resources.iter().any(|r| filter_ids.contains(r)),
+                    EntryData::Operation(op) => op.resources.iter().any(|r| filter_ids.contains(r)),
+                    EntryData::Event(event) => {
+                        // Check Option<Vec<ContentId>>
+                        event.resources.as_ref().map_or(false, |resources| {
+                            resources.iter().any(|r| filter_ids.contains(r))
+                        })
+                    },
+                    EntryData::ResourceAccess(ra) => {
+                        // Check if the single resource_id is in the filter set
+                        match ContentId::from_str(&ra.resource_id) {
+                            Ok(cid) => filter_ids.contains(&cid),
+                            Err(_) => false
+                        }
+                    },
+                    EntryData::SystemEvent(_) => false, // No resources match filter
+                    EntryData::Custom(..) => false, // No resources match filter
+                }
             }
+        };
+
+        if !include_resource {
+            return false;
         }
         
-        // Check domain ID if available
-        if let Some(domain_ids) = &self.domain_ids {
-            let has_domain = match &entry.data {
-                EntryData::Fact(fact) => domain_ids.contains(&fact.domain_id),
-                EntryData::Effect(effect) => effect.domains.as_ref().map(|domains| 
-                    domains.iter().any(|id| domain_ids.contains(id))).unwrap_or(false),
-                EntryData::Operation(op) => op.domains.as_ref().map(|domains| 
-                    domains.iter().any(|id| domain_ids.contains(id))).unwrap_or(false),
-                _ => false,
-            };
-            
-            if !has_domain {
-                return false;
+        // Check Domain Filters (using domain_ids)
+        let include_domain = match &self.domain_ids {
+            None => true, // No filter set, include entry
+            Some(filter_ids) => { // Filter set, check if entry domains intersect
+                match &entry.data {
+                    EntryData::Fact(fact) => filter_ids.contains(&fact.domain), // Check single domain
+                    EntryData::Effect(effect) => effect.domains.iter().any(|d| filter_ids.contains(d)),
+                    EntryData::Operation(op) => op.domains.iter().any(|d| filter_ids.contains(d)),
+                    EntryData::Event(event) => {
+                        // Check Option<Vec<DomainId>>
+                        event.domains.as_ref().map_or(false, |domains| {
+                            domains.iter().any(|d| filter_ids.contains(d))
+                        })
+                    },
+                    EntryData::ResourceAccess(_) => false, // No domains match filter
+                    EntryData::SystemEvent(_) => false, // No domains match filter
+                    EntryData::Custom(..) => false, // No domains match filter
+                }
             }
+        };
+
+        if !include_domain {
+            return false;
         }
         
         // Check trace ID

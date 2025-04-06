@@ -8,8 +8,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-// async_trait import was unused, removing it.
-// use async_trait::async_trait; 
+use anyhow; // Add anyhow import
 
 use causality_error::{EngineResult as Result, EngineError as Error};
 use causality_core::effect::{Effect, EffectOutcome};
@@ -18,13 +17,13 @@ use causality_types::DomainId;
 
 // Import only necessary types from super
 use super::{
-    execution::{AbstractExecutor, RegisterExecutor, ZkExecutor, execute_operation, OperationResult}, // Use non-generic OperationResult
+    execution::{AbstractExecutor, RegisterExecutor, ZkExecutor, execute_operation, OperationResult}, // Remove VerificationResultExt
     // transformation::transform_operation, // Remove unused import
+    verification::{VerificationResult, VerificationService},
     zk::OperationProofGenerator,
-    verification::VerificationService
 };
 // Import core operation types
-use causality_core::resource::{Operation as CoreOperation, OperationType as CoreOperationType, ResourceId}; // Add ResourceId import
+use causality_core::resource::{Operation as CoreOperation, OperationType as CoreOperationType, ResourceId}; 
 use causality_core::resource::agent::operation::IdentityId;
 
 // Define local traits for this module
@@ -52,8 +51,8 @@ struct InterpreterAdapter {
 
 #[async_trait::async_trait] // Re-add async_trait here
 impl crate::operation::execution::Interpreter for InterpreterAdapter {
-    async fn execute_effect(&self, effect: &dyn Effect) -> Result<EffectOutcome> {
-        self.inner.execute_effect(effect).await
+    async fn execute_effect(&self, effect: &dyn Effect) -> std::result::Result<EffectOutcome, anyhow::Error> {
+        self.inner.execute_effect(effect).await.map_err(|e| anyhow::anyhow!("{}", e))
     }
 }
 
@@ -64,32 +63,32 @@ struct ResourceRegisterAdapter {
 
 #[async_trait::async_trait] // Re-add async_trait here
 impl crate::operation::execution::ResourceRegisterTrait for ResourceRegisterAdapter {
-    async fn create_register(&self, register_id: &str, data: &HashMap<String, String>) -> Result<()> {
-        self.inner.create_register(register_id, data).await
+    async fn create_register(&self, register_id: &str, data: &HashMap<String, String>) -> std::result::Result<(), anyhow::Error> {
+        self.inner.create_register(register_id, data).await.map_err(|e| anyhow::anyhow!("{}", e))
     }
     
-    async fn update_register(&self, register_id: &str, data: &HashMap<String, String>) -> Result<()> {
-        self.inner.update_register(register_id, data).await
+    async fn update_register(&self, register_id: &str, data: &HashMap<String, String>) -> std::result::Result<(), anyhow::Error> {
+        self.inner.update_register(register_id, data).await.map_err(|e| anyhow::anyhow!("{}", e))
     }
     
-    async fn transfer_register(&self, register_id: &str, new_owner: &str) -> Result<()> {
-        self.inner.transfer_register(register_id, new_owner).await
+    async fn transfer_register(&self, register_id: &str, new_owner: &str) -> std::result::Result<(), anyhow::Error> {
+        self.inner.transfer_register(register_id, new_owner).await.map_err(|e| anyhow::anyhow!("{}", e))
     }
     
-    async fn lock_register(&self, register_id: &str) -> Result<()> {
-        self.inner.lock_register(register_id).await
+    async fn lock_register(&self, register_id: &str) -> std::result::Result<(), anyhow::Error> {
+        self.inner.lock_register(register_id).await.map_err(|e| anyhow::anyhow!("{}", e))
     }
     
-    async fn unlock_register(&self, register_id: &str) -> Result<()> {
-        self.inner.unlock_register(register_id).await
+    async fn unlock_register(&self, register_id: &str) -> std::result::Result<(), anyhow::Error> {
+        self.inner.unlock_register(register_id).await.map_err(|e| anyhow::anyhow!("{}", e))
     }
     
-    async fn freeze_register(&self, register_id: &str) -> Result<()> {
-        self.inner.freeze_register(register_id).await
+    async fn freeze_register(&self, register_id: &str) -> std::result::Result<(), anyhow::Error> {
+        self.inner.freeze_register(register_id).await.map_err(|e| anyhow::anyhow!("{}", e))
     }
     
-    async fn archive_register(&self, register_id: &str) -> Result<()> {
-        self.inner.archive_register(register_id).await
+    async fn archive_register(&self, register_id: &str) -> std::result::Result<(), anyhow::Error> {
+        self.inner.archive_register(register_id).await.map_err(|e| anyhow::anyhow!("{}", e))
     }
 }
 
@@ -102,8 +101,8 @@ pub struct OperationManager {
     
     // Executors for different contexts
     abstract_executor: Arc<AbstractExecutor>,
-    register_executor: Arc<RegisterExecutor>,
-    zk_executor: Option<Arc<ZkExecutor>>,
+    register_executor: Arc<RegisterExecutor<VerificationResult>>,
+    zk_executor: Option<Arc<ZkExecutor<VerificationResult>>>,
 }
 
 impl OperationManager {
@@ -125,7 +124,6 @@ impl OperationManager {
         // Create executors
         let abstract_executor = Arc::new(AbstractExecutor::new(
             interpreter_adapter,
-            // verification_service.clone(), // Remove second argument
         ));
         
         let register_executor = Arc::new(RegisterExecutor::new(

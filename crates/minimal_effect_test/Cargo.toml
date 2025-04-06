@@ -1,9 +1,0 @@
-[package]
-name = "minimal_effect_test"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-causality-core = { path = "../causality-core" }
-tokio = { version = "1", features = ["full"] }
-async-trait = "0.1" 

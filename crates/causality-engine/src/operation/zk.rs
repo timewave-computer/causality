@@ -293,7 +293,7 @@ impl OperationProofGenerator {
 /// Select an appropriate ZK circuit for an operation
 pub trait CircuitSelector: Debug + Send + Sync {
     /// Select a circuit by operation type
-    fn select_circuit_by_type(&self, op_type: &OperationType) -> Option<Arc<dyn Circuit>>;
+    fn select_circuit_by_type(&self, _op_type: &OperationType) -> Option<Arc<dyn Circuit>>;
     
     /// Get all available circuits
     fn get_all_circuits(&self) -> Vec<Arc<dyn Circuit>>;
@@ -326,7 +326,7 @@ impl DefaultCircuitSelector {
 }
 
 impl CircuitSelector for DefaultCircuitSelector {
-    fn select_circuit_by_type(&self, op_type: &OperationType) -> Option<Arc<dyn Circuit>> {
+    fn select_circuit_by_type(&self, _op_type: &OperationType) -> Option<Arc<dyn Circuit>> {
         // For now, just return our default circuit
         self.circuits.get("default").cloned()
     }
@@ -414,6 +414,12 @@ mod tests {
     use causality_core::resource::{ResourceRef, ResourceRefType};
     use super::{Circuit, ProofRequest, ProofSystem};
     use async_trait::async_trait;
+    use crate::operation::AbstractContext;
+    use crate::operation::ExecutionPhase;
+    use crate::effect::capability::IdentityId;
+    use causality_core::resource::ResourceId;
+    use causality_core::resource::Operation;
+    use causality_core::resource::OperationType;
     
     #[tokio::test]
     async fn test_proof_generation() {

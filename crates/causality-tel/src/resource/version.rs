@@ -29,7 +29,7 @@ use crate::tel::{
 
 /// Version identifier for a resource
 #[derive(Debug, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
-pub struct VersionId(pub Uuid);
+pub struct VersionId(pub ContentId);
 
 impl VersionId {
     /// Create a new version ID
@@ -47,27 +47,18 @@ impl VersionId {
         let hash = hasher.hash(version_data.as_bytes());
         let content_id = ContentId::from(hash);
         
-        // Create version ID from the content_id
-        Self::from_content_id(&content_id)
+        Self(content_id)
     }
     
     /// Create from a ContentId
     pub fn from_content_id(content_id: &ContentId) -> Self {
-        // Create a UUID from the first 16 bytes of the content hash
-        let hash_bytes = content_id.hash().as_bytes();
-        let mut uuid_bytes = [0u8; 16];
-        
-        // Copy the first 16 bytes (or fewer if hash is shorter)
-        let copy_len = std::cmp::min(hash_bytes.len(), 16);
-        uuid_bytes[..copy_len].copy_from_slice(&hash_bytes[..copy_len]);
-        
-        Self(Uuid::from_bytes(uuid_bytes))
+        Self(content_id.clone())
     }
     
     /// Convert from a string
     pub fn from_str(s: &str) -> TelResult<Self> {
-        match Uuid::parse_str(s) {
-            Ok(uuid) => Ok(Self(uuid)),
+        match ContentId::from_str(s) {
+            Ok(content_id) => Ok(Self(content_id)),
             Err(_) => Err(TelError::InvalidId(format!("Invalid version ID: {}", s)))
         }
     }
@@ -75,28 +66,19 @@ impl VersionId {
 
 impl ContentAddressed for VersionId {
     fn content_hash(&self) -> HashOutput {
-        let hasher = HashFactory::default().create_hasher().unwrap();
-        let bytes = self.0.as_bytes();
-        hasher.hash(bytes)
+        self.0.hash()
     }
     
     fn verify(&self) -> bool {
-        true
+        self.0.verify()
     }
     
     fn to_bytes(&self) -> Vec<u8> {
-        self.0.as_bytes().to_vec()
+        self.0.to_bytes()
     }
     
     fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
-        if bytes.len() < 16 {
-            return Err(HashError::InvalidLength);
-        }
-        
-        let mut uuid_bytes = [0u8; 16];
-        uuid_bytes.copy_from_slice(&bytes[..16]);
-        
-        Ok(Self(Uuid::from_bytes(uuid_bytes)))
+        ContentId::from_bytes(bytes).map(Self)
     }
 }
 
@@ -144,7 +126,7 @@ pub struct ResourceChange {
     pub change_type: ChangeType,
     
     /// Operation that caused this change
-    pub operation_id: Option<Uuid>,
+    pub operation_id: Option<ContentId>,
     
     /// Previous contents (if contents were changed)
     pub previous_contents: Option<RegisterContents>,
@@ -167,7 +149,7 @@ impl ResourceChange {
     pub fn new(
         register_id: ContentId,
         change_type: ChangeType,
-        operation_id: Option<Uuid>,
+        operation_id: Option<ContentId>,
         previous_contents: Option<RegisterContents>,
         new_contents: Option<RegisterContents>,
         initiator: Address,
@@ -312,11 +294,11 @@ impl VersionManager {
         Self::new(VersioningConfig::default())
     }
     
-    /// Track a resource creation
+    /// Track creation of a resource version
     pub fn track_creation(
         &self,
         register: &Register,
-        operation_id: Option<Uuid>,
+        operation_id: Option<ContentId>,
         initiator: Address,
     ) -> TelResult<VersionId> {
         if !self.config.enabled {
@@ -339,13 +321,13 @@ impl VersionManager {
         Ok(version_id)
     }
     
-    /// Track a content update
+    /// Track update to a resource
     pub fn track_update(
         &self,
         register_id: &RegisterId,
         previous_contents: &RegisterContents,
         new_contents: &RegisterContents,
-        operation_id: Option<Uuid>,
+        operation_id: Option<ContentId>,
         initiator: Address,
     ) -> TelResult<VersionId> {
         if !self.config.enabled {
@@ -370,13 +352,13 @@ impl VersionManager {
         Ok(version_id)
     }
     
-    /// Track an ownership change
+    /// Track ownership change
     pub fn track_ownership_change(
         &self,
         register_id: &RegisterId,
         previous_owner: &Address,
         new_owner: &Address,
-        operation_id: Option<Uuid>,
+        operation_id: Option<ContentId>,
         initiator: Address,
     ) -> TelResult<VersionId> {
         if !self.config.enabled {
@@ -401,11 +383,11 @@ impl VersionManager {
         Ok(version_id)
     }
     
-    /// Track a state change
+    /// Track state change
     pub fn track_state_change(
         &self,
         register_id: &RegisterId,
-        operation_id: Option<Uuid>,
+        operation_id: Option<ContentId>,
         initiator: Address,
     ) -> TelResult<VersionId> {
         if !self.config.enabled {
@@ -430,11 +412,11 @@ impl VersionManager {
         Ok(version_id)
     }
     
-    /// Track marking a resource for deletion
+    /// Track deletion mark
     pub fn track_deletion_mark(
         &self,
         register_id: &RegisterId,
-        operation_id: Option<Uuid>,
+        operation_id: Option<ContentId>,
         initiator: Address,
     ) -> TelResult<VersionId> {
         if !self.config.enabled {
@@ -858,7 +840,7 @@ impl VersionManager {
         
         // Optional fields
         if version.operation_id.is_some() {
-            size += std::mem::size_of::<Uuid>();
+            size += std::mem::size_of::<ContentId>();
         }
         
         if version.parent_version.is_some() {

@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
@@ -21,7 +21,7 @@ use causality_engine::log::event_entry::EventSeverity;
 use causality_types::{DomainId, Timestamp};
 use causality_error::Error as LogError;
 use causality_error::CausalityError;
-use uuid::Uuid;
+use rand::RngCore; // Import RngCore for random bytes
 
 /// Result type for integration operations
 pub type Result<T> = std::result::Result<T, Error>;
@@ -53,6 +53,12 @@ pub enum Error {
 impl From<Box<dyn CausalityError>> for Error {
     fn from(err: Box<dyn CausalityError>) -> Self {
         Error::Storage(format!("Storage error: {}", err))
+    }
+}
+
+impl From<causality_types::ContentAddressingError> for Error {
+    fn from(err: causality_types::ContentAddressingError) -> Self {
+        Error::Storage(format!("Content addressing error: {}", err))
     }
 }
 
@@ -132,30 +138,41 @@ impl<S: StateHandler> ProgramIntegration<S> {
     
     /// Log an effect produced by the program
     pub async fn log_effect(&self, effect_type: &str, data: serde_json::Value) -> Result<LogEntry> {
+        // Temporary ID generation using timestamp + nonce (replace Uuid)
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
+        let nonce = rand::thread_rng().next_u64();
+        let entry_id = format!("eff_{}_{}", timestamp, nonce);
+        
         // Create parameters map
         let mut parameters = HashMap::new();
-        parameters.insert("data".to_string(), data);
+        parameters.insert("data".to_string(), causality_engine::log::types::BorshJsonValue(data));
         
         // Create EffectEntry with the needed fields
         let effect_entry = EffectEntry {
-            effect_type: effect_type.to_string(),
-            resources: Some(vec![]),
-            domains: Some(vec![DomainId::new(&self.config.domain)]),
+            effect_type: causality_engine::log::types::SerializableEffectType(effect_type.to_string()),
+            resources: Vec::new(),
+            domains: vec![DomainId::new(&self.config.domain)],
             code_hash: None,
-            parameters: serde_json::Value::Object(serde_json::Map::from_iter(parameters.into_iter().map(|(k, v)| (k, v)))),
+            parameters,
             result: None,
             success: true,
             error: None,
+            domain_id: DomainId::new(&self.config.domain),
+            effect_id: effect_type.to_string(),
+            status: "success".to_string(),
         };
         
         // Create EntryData as a tuple variant
         let entry_data = EntryData::Effect(effect_entry);
         
-        // Generate a unique ID for the entry
-        let entry_id = format!("eff_{}", Uuid::new_v4());
-        
         // Create the log entry with the new signature
-        let entry = LogEntry::new(entry_id, EntryType::Effect, entry_data);
+        let entry = LogEntry::new(
+            EntryType::Effect,
+            entry_data,
+            None, // trace_id
+            None, // parent_id
+            HashMap::new(), // metadata
+        )?;
         
         // Store a copy for return
         let return_entry = entry.clone();
@@ -166,11 +183,11 @@ impl<S: StateHandler> ProgramIntegration<S> {
                 Error::State("Failed to acquire lock on state handler".to_string())
             })?;
             
-            state_handler.handle_effect(&entry)?;
+            state_handler.handle_effect(&return_entry)?;
         }
         
         // Log the entry
-        self.storage.append_entry(entry.clone()).await?;
+        self.storage.append_entry(return_entry.clone()).await?;
         
         // Update position
         {
@@ -191,27 +208,36 @@ impl<S: StateHandler> ProgramIntegration<S> {
     
     /// Log a fact observed by the program
     pub async fn log_fact(&self, domain: &str, fact_type: &str, data: serde_json::Value) -> Result<LogEntry> {
+        // Temporary ID generation using timestamp + nonce (replace Uuid)
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
+        let nonce = rand::thread_rng().next_u64();
+        let entry_id = format!("fact_{}_{}", timestamp, nonce);
+        
         // Create FactEntry with the needed fields
         let fact_entry = FactEntry {
-            fact_id: format!("fact_{}", Uuid::new_v4()),
+            domain: DomainId::new(domain),
+            block_height: 0,
+            block_hash: None,
+            observed_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64,
             fact_type: fact_type.to_string(),
+            resources: Vec::new(),
+            data: causality_engine::log::types::BorshJsonValue(data),
+            verified: false,
             domain_id: DomainId::new(domain),
-            height: 0,
-            hash: "".to_string(),
-            timestamp: Timestamp::now(),
-            resources: Some(vec![]),
-            domains: Some(vec![]),
-            data,
+            fact_id: entry_id.clone(),
         };
         
         // Create EntryData as a tuple variant
         let entry_data = EntryData::Fact(fact_entry);
         
-        // Generate a unique ID for the entry
-        let entry_id = format!("fact_{}", Uuid::new_v4());
-        
         // Create the log entry with the new signature
-        let entry = LogEntry::new(entry_id, EntryType::Fact, entry_data);
+        let entry = LogEntry::new(
+            EntryType::Fact,
+            entry_data,
+            None, // trace_id
+            None, // parent_id
+            HashMap::new(), // metadata
+        )?;
         
         // Store a copy for return
         let return_entry = entry.clone();
@@ -222,11 +248,11 @@ impl<S: StateHandler> ProgramIntegration<S> {
                 Error::State("Failed to acquire lock on state handler".to_string())
             })?;
             
-            state_handler.handle_fact(&entry)?;
+            state_handler.handle_fact(&return_entry)?;
         }
         
         // Log the entry
-        self.storage.append_entry(entry.clone()).await?;
+        self.storage.append_entry(return_entry.clone()).await?;
         
         // Update position
         {
@@ -242,24 +268,32 @@ impl<S: StateHandler> ProgramIntegration<S> {
     
     /// Log an event emitted by the program
     pub async fn log_event(&self, event_type: &str, data: serde_json::Value) -> Result<LogEntry> {
-        // Create EventEntry with the needed fields
+        // Temporary ID generation using timestamp + nonce (replace Uuid)
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
+        let nonce = rand::thread_rng().next_u64();
+        let entry_id = format!("evt_{}_{}", timestamp, nonce);
+        
+        // Create event entry
         let event_entry = EventEntry::new(
             event_type.to_string(),
             EventSeverity::Info,
-            "application".to_string(),
-            data,
-            None, // resources
-            Some(vec![DomainId::new(&self.config.domain)])
+            "system".to_string(),
+            causality_engine::log::types::BorshJsonValue(data),
+            None,
+            Some(vec![DomainId::new(&self.config.domain)]),
         );
         
         // Create EntryData as a tuple variant
         let entry_data = EntryData::Event(event_entry);
         
-        // Generate a unique ID for the entry
-        let entry_id = format!("evt_{}", Uuid::new_v4());
-        
         // Create the log entry with the new signature
-        let entry = LogEntry::new(entry_id, EntryType::Event, entry_data);
+        let entry = LogEntry::new(
+            EntryType::Event,
+            entry_data,
+            None, // trace_id
+            None, // parent_id
+            HashMap::new(), // metadata
+        )?;
         
         // Store a copy for return
         let return_entry = entry.clone();
@@ -270,11 +304,11 @@ impl<S: StateHandler> ProgramIntegration<S> {
                 Error::State("Failed to acquire lock on state handler".to_string())
             })?;
             
-            state_handler.handle_event(&entry)?;
+            state_handler.handle_event(&return_entry)?;
         }
         
         // Log the entry
-        self.storage.append_entry(entry.clone()).await?;
+        self.storage.append_entry(return_entry.clone()).await?;
         
         // Update position
         {
@@ -317,11 +351,13 @@ impl<S: StateHandler> ProgramIntegration<S> {
         let entries = self.storage.get_entries(start_position, end_pos - start_position).await?;
         
         // Process each entry
-        for entry in entries {
-            // Verify integrity if configured
-            if self.config.verify_integrity && entry.entry_hash.is_some() {
-                // In this implementation we assume entries are valid
-                // In a real implementation, you would check the hash
+        for i in 0..entries.len() {
+            // Process the entry
+            let entry = entries[i].clone();
+            
+            // Verify entry integrity if configured
+            if self.config.verify_integrity {
+                self.verify_entry_integrity(&entry)?;
             }
             
             // Process by entry type
@@ -341,13 +377,17 @@ impl<S: StateHandler> ProgramIntegration<S> {
                     state_handler.handle_effect(&entry)?;
                 },
                 EntryData::Event(event) => {
-                    // Check if this is a checkpoint entry
-                    if entry.metadata.get("checkpoint").map_or(false, |v| v == "true") {
+                    if event.event_name == "state" {
                         let mut state_handler = self.state_handler.lock().map_err(|_| {
                             Error::State("Failed to acquire lock on state handler".to_string())
                         })?;
                         
-                        state_handler.set_state(event.details.clone())?;
+                        // Extract and convert BorshJsonValue to serde_json::Value for set_state
+                        let json_value = match &event.details {
+                            causality_engine::log::types::BorshJsonValue(val) => val.clone(),
+                        };
+                        
+                        state_handler.set_state(json_value)?;
                     } else {
                         let mut state_handler = self.state_handler.lock().map_err(|_| {
                             Error::State("Failed to acquire lock on state handler".to_string())
@@ -374,7 +414,7 @@ impl<S: StateHandler> ProgramIntegration<S> {
         Ok(())
     }
     
-    /// Create a checkpoint of the current program state
+    /// Create a checkpoint with the current state
     pub async fn create_checkpoint(&self) -> Result<()> {
         // Get the current state
         let state = {
@@ -385,30 +425,41 @@ impl<S: StateHandler> ProgramIntegration<S> {
             state_handler.get_state()?
         };
         
-        // Create EventEntry with the needed fields
+        // Get the current position
+        let position = self.get_current_position()?;
+        
+        // Temporary ID generation
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
+        let nonce = rand::thread_rng().next_u64();
+        let entry_id = format!("chk_{}_{}", timestamp, nonce);
+        
+        // Create event entry
         let event_entry = EventEntry::new(
             "checkpoint".to_string(),
             EventSeverity::Info,
-            "application".to_string(),
-            state,
-            None, // resources
-            Some(vec![DomainId::new(&self.config.domain)])
+            "system".to_string(),
+            causality_engine::log::types::BorshJsonValue(state),
+            None,
+            Some(vec![DomainId::new(&self.config.domain)]),
         );
         
-        // Create EntryData as a tuple variant
+        // Create EntryData
         let entry_data = EntryData::Event(event_entry);
         
-        // Generate a unique ID for the entry
-        let entry_id = format!("chk_{}", Uuid::new_v4());
+        // Create the log entry
+        let mut entry = LogEntry::new(
+            EntryType::Event,
+            entry_data,
+            None, // trace_id
+            None, // parent_id
+            HashMap::new(), // metadata
+        )?;
         
-        // Create checkpoint entry
-        let mut entry = LogEntry::new(entry_id, EntryType::Event, entry_data);
-        
-        // Add checkpoint metadata
+        // Add metadata
         entry.metadata.insert("checkpoint".to_string(), "true".to_string());
         entry.metadata.insert("position".to_string(), self.get_current_position()?.to_string());
         
-        // Add the checkpoint entry
+        // Log the entry
         self.storage.append_entry(entry).await?;
         
         // Update last checkpoint position
@@ -417,61 +468,70 @@ impl<S: StateHandler> ProgramIntegration<S> {
                 Error::State("Failed to acquire lock on last checkpoint".to_string())
             })?;
             
-            *last_checkpoint = self.get_current_position()?;
+            *last_checkpoint = position;
         }
         
         Ok(())
     }
     
-    /// Restore from the latest checkpoint
+    /// Find the last checkpoint and restore program state from it
     pub async fn restore_from_checkpoint(&self) -> Result<usize> {
+        // Get the entry count
+        let entry_count = self.storage.entry_count()?;
+        
+        // Read all entries (would be more efficient to have a reverse iteration)
+        let entries = self.storage.read(0, entry_count)?;
+        
         // Find the latest checkpoint
-        let entries = self.storage.get_entries(0, self.storage.get_entry_count().await?).await?;
-        
-        let mut checkpoint_position = 0;
         let mut checkpoint_entry = None;
+        let mut checkpoint_position = 0;
         
-        for (i, entry) in entries.iter().enumerate().rev() {
-            if let Some(is_checkpoint) = entry.metadata.get("checkpoint") {
-                if is_checkpoint == "true" {
-                    if let EntryData::Event(event) = &entry.data {
-                        checkpoint_position = i;
-                        checkpoint_entry = Some((entry, event.details.clone()));
-                        break;
-                    }
+        for entry in entries.iter().rev() {
+            if entry.entry_type == EntryType::Event {
+                if let Some(true) = entry.metadata.get("checkpoint").map(|v| v == "true") {
+                    checkpoint_entry = Some(entry.clone());
+                    checkpoint_position = entry.metadata.get("position")
+                        .and_then(|p| p.parse::<usize>().ok())
+                        .unwrap_or(0);
+                    break;
                 }
             }
         }
         
-        if let Some((_entry, state)) = checkpoint_entry {
-            // Reset state handler with checkpoint data
-            {
+        // If we found a checkpoint, restore from it
+        if let Some(entry) = checkpoint_entry {
+            if let EntryData::Event(event_data) = &entry.data {
                 let mut state_handler = self.state_handler.lock().map_err(|_| {
                     Error::State("Failed to acquire lock on state handler".to_string())
                 })?;
                 
-                state_handler.set_state(state)?;
-            }
-            
-            // Update position
-            {
-                let mut position = self.current_position.lock().map_err(|_| {
-                    Error::State("Failed to acquire lock on current position".to_string())
-                })?;
+                // Convert BorshJsonValue to serde_json::Value for set_state
+                let json_value = match &event_data.details {
+                    causality_engine::log::types::BorshJsonValue(val) => val.clone(),
+                };
                 
-                *position = checkpoint_position;
-            }
-            
-            // Update last checkpoint
-            {
-                let mut last_checkpoint = self.last_checkpoint.lock().map_err(|_| {
-                    Error::State("Failed to acquire lock on last checkpoint".to_string())
-                })?;
+                state_handler.set_state(json_value)?;
                 
-                *last_checkpoint = checkpoint_position;
+                // Update position
+                {
+                    let mut position = self.current_position.lock().map_err(|_| {
+                        Error::State("Failed to acquire lock on current position".to_string())
+                    })?;
+                    
+                    *position = checkpoint_position;
+                }
+                
+                // Update last checkpoint
+                {
+                    let mut last_checkpoint = self.last_checkpoint.lock().map_err(|_| {
+                        Error::State("Failed to acquire lock on last checkpoint".to_string())
+                    })?;
+                    
+                    *last_checkpoint = checkpoint_position;
+                }
+                
+                return Ok(checkpoint_position);
             }
-            
-            return Ok(checkpoint_position);
         }
         
         Err(Error::Replay("No checkpoint found".to_string()))
@@ -507,6 +567,18 @@ impl<S: StateHandler> ProgramIntegration<S> {
         })?;
         
         state_handler.get_state()
+    }
+
+    /// Verify the integrity of a log entry (if supported by the entry)
+    fn verify_entry_integrity(&self, entry: &LogEntry) -> Result<bool> {
+        // Skip verification if disabled
+        if !self.config.verify_integrity {
+            return Ok(true);
+        }
+        
+        // No direct integrity checking yet, as ID is now based on content hash
+        // Future versions would recalculate the hash and compare
+        Ok(true)
     }
 }
 
@@ -569,23 +641,79 @@ impl JsonStateHandler {
     
     /// Apply an effect to the state
     fn apply_effect(&mut self, effect_type: &str, data: &serde_json::Value) -> Result<()> {
+        // Check if we have a handler for this effect type
         if let Some(handler) = self.effect_handlers.get(effect_type) {
-            handler(&mut self.state, data)
+            // Use the registered handler
+            handler(&mut self.state, data)?;
+            Ok(())
         } else {
-            // Default behavior: merge data into state
-            if let serde_json::Value::Object(state_obj) = &mut self.state {
-                if let serde_json::Value::Object(data_obj) = data {
-                    for (key, value) in data_obj {
-                        state_obj.insert(key.clone(), value.clone());
+            // Default handling based on effect type
+            match effect_type {
+                // Transfer effect moves value from one account to another
+                "transfer" => {
+                    if let Some(from) = data.get("from").and_then(|v| v.as_str()) {
+                        if let Some(to) = data.get("to").and_then(|v| v.as_str()) {
+                            if let Some(amount) = data.get("amount").and_then(|v| v.as_u64()) {
+                                // Update from account
+                                if let Some(accounts) = self.state.get_mut("accounts") {
+                                    if let Some(account) = accounts.get_mut(from) {
+                                        if let Some(balance) = account.get_mut("balance") {
+                                            if let Some(current) = balance.as_u64() {
+                                                if current >= amount {
+                                                    *balance = serde_json::json!(current - amount);
+                                                    
+                                                    // Update to account
+                                                    if let Some(to_account) = accounts.get_mut(to) {
+                                                        if let Some(to_balance) = to_account.get_mut("balance") {
+                                                            if let Some(to_current) = to_balance.as_u64() {
+                                                                *to_balance = serde_json::json!(to_current + amount);
+                                                                return Ok(());
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
-                    Ok(())
-                } else {
-                    // Not an object, store under effect type key
-                    state_obj.insert(effect_type.to_string(), data.clone());
+                    Err(Error::State(format!("Failed to apply transfer effect: {:?}", data)))
+                },
+                // Update effect sets a value
+                "update" => {
+                    if let Some(path) = data.get("path").and_then(|v| v.as_str()) {
+                        if let Some(value) = data.get("value") {
+                            self.set_value_at_path(path, value.clone())?;
+                            return Ok(());
+                        }
+                    }
+                    Err(Error::State(format!("Failed to apply update effect: {:?}", data)))
+                },
+                // Default case for unknown effects
+                _ => {
+                    // Just record the effect in the effects history
+                    if let Some(history) = self.state.get_mut("effects") {
+                        if let Some(effects_array) = history.as_array_mut() {
+                            let effect_record = serde_json::json!({
+                                "type": effect_type,
+                                "data": data,
+                                "timestamp": chrono::Utc::now().to_rfc3339()
+                            });
+                            effects_array.push(effect_record);
+                            return Ok(());
+                        }
+                    }
+                    // If no history array, create one
+                    let effects = vec![serde_json::json!({
+                        "type": effect_type,
+                        "data": data,
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    })];
+                    self.state["effects"] = serde_json::json!(effects);
                     Ok(())
                 }
-            } else {
-                Err(Error::State("State is not an object".to_string()))
             }
         }
     }
@@ -653,35 +781,83 @@ impl JsonStateHandler {
             }
         }
     }
+
+    /// Set a value at a specific path in the state
+    fn set_value_at_path(&mut self, path: &str, value: serde_json::Value) -> Result<()> {
+        let parts: Vec<&str> = path.split('.').collect();
+        let mut current = &mut self.state;
+        
+        for (i, part) in parts.iter().enumerate() {
+            if i == parts.len() - 1 {
+                // Last part, set the value
+                if let serde_json::Value::Object(obj) = current {
+                    obj.insert(part.to_string(), value);
+                    return Ok(());
+                } else {
+                    return Err(Error::State(format!("Cannot set value at path {}: parent is not an object", path)));
+                }
+            } else {
+                // Navigate to the next part
+                if let serde_json::Value::Object(obj) = current {
+                    if !obj.contains_key(*part) {
+                        obj.insert(part.to_string(), serde_json::json!({}));
+                    }
+                    
+                    current = obj.get_mut(*part).unwrap();
+                } else {
+                    return Err(Error::State(format!("Cannot navigate path {}: part {} is not an object", path, part)));
+                }
+            }
+        }
+        
+        Ok(())
+    }
 }
 
 impl StateHandler for JsonStateHandler {
     fn handle_effect(&mut self, effect: &LogEntry) -> Result<()> {
         if let EntryData::Effect(effect_data) = &effect.data {
-            let effect_type = effect_data.effect_type.to_string();
+            // Extract the data parameter from the effect
             let params = match effect_data.parameters.get("data") {
-                Some(data) => data.clone(),
+                Some(data) => {
+                    if let causality_engine::log::types::BorshJsonValue(value) = data {
+                        value.clone()
+                    } else {
+                        serde_json::Value::Null
+                    }
+                },
                 None => serde_json::Value::Null,
             };
-            self.apply_effect(&effect_type, &params)
+            
+            self.apply_effect(&effect_data.effect_type, &params)
         } else {
-            Ok(())
+            Err(Error::InvalidOperation("Not an effect entry".to_string()))
         }
     }
     
     fn handle_fact(&mut self, fact: &LogEntry) -> Result<()> {
         if let EntryData::Fact(fact_data) = &fact.data {
-            self.apply_fact(&fact_data.fact_type, &fact_data.data)
+            // Extract the data from BorshJsonValue
+            let json_value = match &fact_data.data {
+                causality_engine::log::types::BorshJsonValue(val) => val.clone(),
+            };
+            
+            self.apply_fact(&fact_data.fact_type, &json_value)
         } else {
-            Ok(())
+            Err(Error::InvalidOperation("Not a fact entry".to_string()))
         }
     }
     
     fn handle_event(&mut self, event: &LogEntry) -> Result<()> {
         if let EntryData::Event(event_data) = &event.data {
-            self.apply_event(&event_data.event_name, &event_data.details)
+            // Extract the details from BorshJsonValue
+            let json_value = match &event_data.details {
+                causality_engine::log::types::BorshJsonValue(val) => val.clone(),
+            };
+            
+            self.apply_event(&event_data.event_name, &json_value)
         } else {
-            Ok(())
+            Err(Error::InvalidOperation("Not an event entry".to_string()))
         }
     }
     

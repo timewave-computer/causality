@@ -34,6 +34,7 @@ use causality_core::resource::types::ResourceId;
 
 // Re-import the SerializableEffectType from the replay module
 use crate::execution::replay::SerializableEffectType;
+use causality_types::content_addressing::content_id_from_bytes;
 
 /// A unique identifier for an execution context
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -57,7 +58,7 @@ impl ContentAddressed for ContextIdContent {
         let hash_factory = causality_crypto::hash::HashFactory::default();
         // Use default content hasher instead of explicitly referencing the private HashAlgorithm
         let hasher = hash_factory.default_content_hasher().unwrap();
-        let data = self.try_to_vec().unwrap();
+        let data = borsh::to_vec(&self).map_err(|e| causality_types::HashError::SerializationError(e.to_string()))?;
         Ok(hasher.hash(&data))
     }
     
@@ -67,13 +68,19 @@ impl ContentAddressed for ContextIdContent {
     }
     
     fn to_bytes(&self) -> std::result::Result<Vec<u8>, causality_types::HashError> {
-        self.try_to_vec()
+        borsh::to_vec(&self)
             .map_err(|e| causality_types::HashError::SerializationError(e.to_string()))
     }
     
     fn from_bytes(bytes: &[u8]) -> std::result::Result<ContextIdContent, causality_types::HashError> {
         BorshDeserialize::try_from_slice(bytes)
             .map_err(|e| causality_types::HashError::SerializationError(e.to_string()))
+    }
+
+    // Moved content_id method here and fixed signature/errors
+    fn content_id(&self) -> std::result::Result<ContentId, causality_types::HashError> {
+        let data = borsh::to_vec(&self).map_err(|e| causality_types::HashError::SerializationError(e.to_string()))?;
+        Ok(content_id_from_bytes(&data))
     }
 }
 
@@ -638,26 +645,31 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use async_trait::async_trait;
-    
+    use causality_error::{CausalityError, EngineError}; // Import EngineError as well
+    use causality_types::Result as CausalityTypesResult; // Use alias to avoid conflict
+    use causality_types::crypto_primitives::ContentHash; // Added missing import
+    use causality_core::resource::types::ResourceId; // Added missing import
+
     // Mock implementation for testing
     #[derive(Debug)]
     pub struct MockCodeRepository;
     
     #[async_trait]
     impl crate::repository::CodeRepository for MockCodeRepository {
-        async fn get_code(&self, _hash: &ContentHash) -> causality_error::EngineResult<Option<Vec<u8>>> {
+        async fn get_code(&self, _hash: &ContentHash) -> CausalityTypesResult<Option<Vec<u8>>, Box<dyn CausalityError>> {
             Ok(None)
         }
         
-        async fn store_code(&self, _code: &[u8]) -> causality_error::EngineResult<ContentHash> {
-            unimplemented!("Not needed for test")
+        async fn store_code(&self, _code: &[u8]) -> CausalityTypesResult<ContentHash, Box<dyn CausalityError>> {
+            // Return a boxed EngineError
+            Err(Box::new(EngineError::execution_failed("Mock store_code unimplemented")))
         }
         
-        async fn has_code(&self, _hash: &ContentHash) -> causality_error::EngineResult<bool> {
+        async fn has_code(&self, _hash: &ContentHash) -> CausalityTypesResult<bool, Box<dyn CausalityError>> {
             Ok(false)
         }
         
-        async fn remove_code(&self, _hash: &ContentHash) -> causality_error::EngineResult<bool> {
+        async fn remove_code(&self, _hash: &ContentHash) -> CausalityTypesResult<bool, Box<dyn CausalityError>> {
             Ok(false)
         }
     }
@@ -667,23 +679,24 @@ mod tests {
     
     #[async_trait]
     impl crate::resource::ResourceAllocator for MockResourceAllocator {
-        async fn allocate(&self, _resource_type: &str, _data: &[u8]) -> causality_error::EngineResult<ResourceId> {
-            unimplemented!("Not needed for test")
+        async fn allocate(&self, _resource_type: &str, _data: &[u8]) -> CausalityTypesResult<ResourceId, Box<dyn CausalityError>> {
+             // Return a boxed EngineError
+             Err(Box::new(EngineError::execution_failed("Mock allocate unimplemented")))
         }
         
-        async fn get_resource(&self, _id: &ResourceId) -> causality_error::EngineResult<Option<Vec<u8>>> {
+        async fn get_resource(&self, _id: &ResourceId) -> CausalityTypesResult<Option<Vec<u8>>, Box<dyn CausalityError>> {
             Ok(None)
         }
         
-        async fn has_resource(&self, _id: &ResourceId) -> causality_error::EngineResult<bool> {
+        async fn has_resource(&self, _id: &ResourceId) -> CausalityTypesResult<bool, Box<dyn CausalityError>> {
             Ok(false)
         }
         
-        async fn release(&self, _id: &ResourceId) -> causality_error::EngineResult<bool> {
+        async fn release(&self, _id: &ResourceId) -> CausalityTypesResult<bool, Box<dyn CausalityError>> {
             Ok(false)
         }
         
-        async fn get_resource_type(&self, _id: &ResourceId) -> causality_error::EngineResult<Option<String>> {
+        async fn get_resource_type(&self, _id: &ResourceId) -> CausalityTypesResult<Option<String>, Box<dyn CausalityError>> {
             Ok(None)
         }
     }

@@ -11,12 +11,16 @@ use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 
 use causality_types::DomainId;
+use causality_error::EngineError;
 
 // Import context-related items directly from context module
 use super::context::{
     ExecutionContext, ExecutionEnvironment,
     AbstractContext, PhysicalContext, ZkContext
 };
+
+// Import ResourceRegisterTrait
+use crate::operation::api::ResourceRegisterTrait;
 
 // Import items from causality_core
 use causality_core::{
@@ -91,7 +95,7 @@ impl From<SerializationError> for TransformationError {
 /// This now focuses on generating necessary data/side-effects for the target context
 /// rather than creating a distinct Operation<D> struct.
 pub fn transform_operation_for_context(
-    operation: &Operation, 
+    _operation: &Operation, 
     target_environment: &ExecutionEnvironment
 ) -> std::result::Result<(), TransformationError> { // Return Ok or Error, side effects handled internally or via return data (TBD)
     
@@ -227,12 +231,46 @@ fn generate_abstract_data_from_operation(
     Ok(())
 }
 
+/// Define TransformedOutput type for the transformation results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransformedOutput {
+    pub id: String,
+    pub data: HashMap<String, String>,
+}
+
+// Define RegisterData type for operation outputs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterData {
+    pub register_id: ResourceId,
+    pub data: HashMap<String, String>,
+}
+
+/// Generate the output transformation for a given operation
+/// This transforms the output from the operation
+fn generate_output_transformation(
+    _resources: &dyn ResourceRegisterTrait,
+    _operation: &Operation, 
+    output: &RegisterData,
+) -> Result<TransformedOutput, EngineError> {
+    // For now, simply construct a TransformedOutput instance with minimal data
+    let mut output_data = output.data.clone();
+    output_data.insert("transformed".to_string(), "true".to_string());
+    
+    Ok(TransformedOutput {
+        id: output.register_id.to_string(),
+        data: output_data,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     // use causality_patterns::Capability; // Import might be needed if capability parsing is added
     use crate::effect::EmptyEffect;
     use std::str::FromStr;
+    use crate::operation::AbstractContext;
+    use crate::operation::ExecutionPhase;
+    use crate::effect::capability::IdentityId;
     // ResourceId is imported correctly now via causality_core::resource
     
     #[test]

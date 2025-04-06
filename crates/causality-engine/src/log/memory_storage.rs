@@ -1,281 +1,280 @@
 // In-memory log storage implementation
 //
-// This module provides an in-memory implementation of the LogStorage trait
-// for testing and development.
+// This module provides an in-memory storage implementation for the log system.
 
-use std::sync::RwLock;
+use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use std::fmt::Debug;
 
-use causality_error::{EngineError, CausalityError};
 use async_trait::async_trait;
+use anyhow::Result;
+use causality_types::{DomainId, Timestamp};
 
-use crate::log::LogStorage;
-use crate::log::types::LogEntry;
-use crate::log::EntryType;
+use crate::log::{LogStorage, Log, LogEntry, EntryType, EntryData};
+use causality_error::{EngineError, CausalityError};
 
-/// In-memory implementation of the LogStorage trait
+/// In-memory storage for log entries
+#[derive(Debug)]
 pub struct MemoryLogStorage {
-    /// The entries stored in memory
-    entries: RwLock<Vec<LogEntry>>,
-    /// Index of entries by ID
-    entry_index: RwLock<HashMap<String, usize>>,
+    entries: Mutex<Vec<LogEntry>>,
 }
 
 impl MemoryLogStorage {
-    /// Create a new memory log storage
+    /// Create a new empty memory log storage
     pub fn new() -> Self {
-        MemoryLogStorage {
-            entries: RwLock::new(Vec::new()),
-            entry_index: RwLock::new(HashMap::new()),
+        Self {
+            entries: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl LogStorage for MemoryLogStorage {
+    fn entry_count(&self) -> causality_error::Result<usize> {
+        match self.entries.lock() {
+            Ok(entries) => Ok(entries.len()),
+            Err(_) => Err(Box::new(EngineError::SyncError("Failed to lock entries".into()))),
         }
     }
     
-    /// Find an entry by ID
-    pub fn find_by_id(&self, id: &str) -> causality_error::Result<Option<LogEntry>> {
-        let index = self.entry_index.read().map_err(|e| {
-            Box::new(EngineError::LogError(format!("Failed to acquire read lock on entry_index: {}", e))) as Box<dyn CausalityError>
-        })?;
-        
-        Ok(index.get(id).and_then(|idx| {
-            let entries = self.entries.read().ok()?;
-            entries.get(*idx).cloned()
-        }))
+    fn read(&self, offset: usize, limit: usize) -> causality_error::Result<Vec<LogEntry>> {
+        match self.entries.lock() {
+            Ok(entries) => {
+                let start = std::cmp::min(offset, entries.len());
+                let end = std::cmp::min(offset + limit, entries.len());
+                Ok(entries[start..end].to_vec())
+            },
+            Err(_) => Err(Box::new(EngineError::SyncError("Failed to lock entries".into()))),
+        }
+    }
+    
+    fn append(&self, entry: LogEntry) -> causality_error::Result<()> {
+        match self.entries.lock() {
+            Ok(mut entries) => {
+        entries.push(entry);
+        Ok(())
+            },
+            Err(_) => Err(Box::new(EngineError::SyncError("Failed to lock entries".into()))),
+        }
+    }
+
+    // Implement the get_entry_by_id method required by the trait
+    fn get_entry_by_id(&self, id: &str) -> causality_error::Result<Option<LogEntry>> {
+        match self.entries.lock() {
+            Ok(entries) => {
+                let found = entries.iter()
+                    .find(|e| e.id == id)
+                    .cloned();
+                Ok(found)
+            },
+            Err(_) => Err(Box::new(EngineError::SyncError("Failed to lock entries".into()))),
+        }
+    }
+
+    // Implement the get_entries_by_trace method required by the trait
+    fn get_entries_by_trace(&self, trace_id: &str) -> causality_error::Result<Vec<LogEntry>> {
+        match self.entries.lock() {
+            Ok(entries) => {
+                let filtered = entries.iter()
+                    .filter(|e| e.trace_id.as_ref().map_or(false, |t| t.as_str() == trace_id))
+                    .cloned()
+                    .collect();
+                Ok(filtered)
+            },
+            Err(_) => Err(Box::new(EngineError::SyncError("Failed to lock entries".into()))),
+        }
     }
 }
 
 #[async_trait]
-impl LogStorage for MemoryLogStorage {
-    fn entry_count(&self) -> causality_error::Result<usize> {
-        let entries = self.entries.read().map_err(|e| {
-            Box::new(EngineError::LogError(format!("Failed to acquire read lock on entries: {}", e))) as Box<dyn CausalityError>
-        })?;
-        
-        Ok(entries.len())
+impl Log for MemoryLogStorage {
+    async fn add_entry(&self, entry: LogEntry) -> Result<()> {
+        // Use the LogStorage append method
+        LogStorage::append(self, entry).map_err(|e| anyhow::anyhow!("{:?}", e))
     }
     
-    fn read(&self, offset: usize, limit: usize) -> causality_error::Result<Vec<LogEntry>> {
-        let entries = self.entries.read().map_err(|e| {
-            Box::new(EngineError::LogError(format!("Failed to acquire read lock on entries: {}", e))) as Box<dyn CausalityError>
-        })?;
-        
-        let end = (offset + limit).min(entries.len());
-        
-        Ok(entries[offset..end].to_vec())
-    }
-    
-    fn append(&self, entry: LogEntry) -> causality_error::Result<()> {
-        let mut entries = self.entries.write().map_err(|e| {
-            Box::new(EngineError::LogError(format!("Failed to acquire write lock on entries: {}", e))) as Box<dyn CausalityError>
-        })?;
-        
-        let mut index = self.entry_index.write().map_err(|e| {
-            Box::new(EngineError::LogError(format!("Failed to acquire write lock on entry_index: {}", e))) as Box<dyn CausalityError>
-        })?;
-        
-        // Store the entry index
-        let idx = entries.len();
-        index.insert(entry.id.clone(), idx);
-        
-        // Append the entry
-        entries.push(entry);
-        
-        Ok(())
-    }
-    
-    // Implement the required methods from the LogStorage trait
-    fn append_batch(&self, entries: Vec<LogEntry>) -> causality_error::Result<()> {
-        for entry in entries {
-            // Handle errors manually instead of using ?
-            match self.append(entry) {
-                Ok(_) => {},
-                Err(e) => return Err(e)
-            }
+    async fn query_entries(&self, domain: &DomainId, entry_type: EntryType, since: Option<u64>) -> Result<Vec<LogEntry>> {
+        match self.entries.lock() {
+            Ok(entries) => {
+                let filtered = entries.iter()
+                    .filter(|e| {
+                        // Match entry type
+                        if e.entry_type != entry_type {
+                            return false;
+                        }
+                        
+                        // Match domain
+                        let domain_matches = match &e.data {
+                            EntryData::Fact(fact) => &fact.domain == domain,
+                            EntryData::Effect(effect) => effect.domains.contains(domain),
+                            // Handle other entry types as needed
+                            _ => false,
+                        };
+                        
+                        // Match timestamp if provided
+                        let time_matches = match since {
+                            Some(ts) => e.timestamp.to_millis() >= ts,
+                            None => true,
+                        };
+                        
+                        domain_matches && time_matches
+                    })
+                    .cloned()
+                    .collect();
+                
+                Ok(filtered)
+            },
+            Err(_) => Err(anyhow::anyhow!("Failed to lock entries")),
         }
-        Ok(())
     }
     
-    fn read_time_range(&self, start_time: u64, end_time: u64) -> causality_error::Result<Vec<LogEntry>> {
-        // Manual error handling
-        let entry_count = match self.entry_count() {
-            Ok(count) => count,
-            Err(e) => return Err(e)
+    async fn get_entry_by_id(&self, id: &str) -> Result<Option<LogEntry>> {
+        // Use the LogStorage get_entry_by_id method
+        LogStorage::get_entry_by_id(self, id).map_err(|e| anyhow::anyhow!("{:?}", e))
+    }
+    
+    async fn get_entries_by_trace(&self, trace_id: &str) -> Result<Vec<LogEntry>> {
+        // Use the LogStorage get_entries_by_trace method
+        LogStorage::get_entries_by_trace(self, trace_id).map_err(|e| anyhow::anyhow!("{:?}", e))
+    }
+    
+    async fn get_entries_in_time_range(&self, start_time: u64, end_time: u64) -> Result<Vec<LogEntry>> {
+        match self.entries.lock() {
+            Ok(entries) => {
+                let filtered = entries.iter()
+                    .filter(|e| {
+                        let ts = e.timestamp.to_millis();
+                        ts >= start_time && ts <= end_time
+                    })
+                    .cloned()
+                    .collect();
+                
+                Ok(filtered)
+            },
+            Err(_) => Err(anyhow::anyhow!("Failed to lock entries")),
+        }
+    }
+    
+    async fn get_all_entries(&self) -> Result<Vec<LogEntry>> {
+        match self.entries.lock() {
+            Ok(entries) => {
+                Ok(entries.clone())
+            },
+            Err(_) => Err(anyhow::anyhow!("Failed to lock entries")),
+        }
+    }
+    
+    async fn get_entry_count(&self) -> Result<usize> {
+        match self.entries.lock() {
+            Ok(entries) => {
+                Ok(entries.len())
+            },
+            Err(_) => Err(anyhow::anyhow!("Failed to lock entries")),
+        }
+    }
+    
+    async fn clear(&self) -> Result<()> {
+        match self.entries.lock() {
+            Ok(mut entries) => {
+                entries.clear();
+                Ok(())
+            },
+            Err(_) => Err(anyhow::anyhow!("Failed to lock entries")),
+        }
+    }
+}
+
+impl Default for MemoryLogStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::log::types::{BorshJsonValue, FactEntry};
+    use std::collections::HashMap;
+    
+    fn create_test_entry(id: &str) -> LogEntry {
+        let fact_entry = FactEntry {
+            domain: DomainId::from_str("test_domain").unwrap(),
+            block_height: 0,
+            block_hash: None,
+            observed_at: 123456789,
+            fact_type: "test_fact".to_string(),
+            resources: Vec::new(),
+            data: BorshJsonValue(serde_json::Value::Null),
+            verified: false,
+            domain_id: DomainId::from_str("test_domain").unwrap(),
+            fact_id: "test_fact".to_string(),
         };
         
-        let entries = match self.read(0, entry_count) {
-            Ok(entries) => entries,
-            Err(e) => return Err(e)
-        };
+        LogEntry {
+            id: id.to_string(),
+            timestamp: (123456789u64).into(),
+            entry_type: EntryType::Fact,
+            data: EntryData::Fact(fact_entry),
+            trace_id: None,
+            parent_id: None,
+            metadata: HashMap::new(),
+        }
+    }
+    
+    #[test]
+    fn test_memory_storage() {
+        // Create storage
+        let storage = MemoryLogStorage::new();
         
-        Ok(entries.into_iter()
-            .filter(|e| {
-                let ts = e.timestamp.as_millis();
-                ts >= start_time && ts <= end_time
-            })
-            .collect())
-    }
-    
-    // Additional async methods
-    async fn get_entry_count(&self) -> causality_error::Result<usize> {
-        self.entry_count()
-    }
-    
-    async fn get_all_entries(&self) -> causality_error::Result<Vec<LogEntry>> {
-        // Manual error handling
-        let entry_count = match self.entry_count() {
-            Ok(count) => count,
-            Err(e) => return Err(e)
-        };
+        // Append entries
+        let entry1 = create_test_entry("entry1");
+        let entry2 = create_test_entry("entry2");
+        storage.append(entry1.clone()).unwrap();
+        storage.append(entry2.clone()).unwrap();
         
-        self.read(0, entry_count)
-    }
-    
-    async fn get_entries(&self, start: usize, end: usize) -> causality_error::Result<Vec<LogEntry>> {
-        self.read(start, end - start)
-    }
-    
-    async fn append_entry(&self, entry: LogEntry) -> causality_error::Result<()> {
-        self.append(entry)
-    }
-    
-    async fn append_entries_batch(&self, entries: Vec<LogEntry>) -> causality_error::Result<()> {
-        self.append_batch(entries)
-    }
-    
-    fn find_entries_by_type(&self, entry_type: EntryType) -> causality_error::Result<Vec<LogEntry>> {
-        // Manual error handling
-        let entry_count = match self.entry_count() {
-            Ok(count) => count,
-            Err(e) => return Err(e)
-        };
+        // Test count
+        assert_eq!(storage.entry_count().unwrap(), 2);
         
-        let entries = match self.read(0, entry_count) {
-            Ok(entries) => entries,
-            Err(e) => return Err(e)
-        };
+        // Test read
+        let entries = storage.read(0, 10).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].id, "entry1");
+        assert_eq!(entries[1].id, "entry2");
         
-        Ok(entries.into_iter()
-            .filter(|e| e.entry_type == entry_type)
-            .collect())
+        // Test read with offset and limit
+        let entries = storage.read(1, 1).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, "entry2");
     }
     
-    async fn find_entries_by_type_async(&self, entry_type: EntryType) -> causality_error::Result<Vec<LogEntry>> {
-        self.find_entries_by_type(entry_type)
-    }
-    
-    fn find_entries_in_time_range(&self, start: chrono::DateTime<chrono::Utc>, end: chrono::DateTime<chrono::Utc>) -> causality_error::Result<Vec<LogEntry>> {
-        // Manual error handling
-        let entry_count = match self.entry_count() {
-            Ok(count) => count,
-            Err(e) => return Err(e)
-        };
+    #[tokio::test]
+    async fn test_log_interface() {
+        let log = MemoryLogStorage::new();
         
-        let entries = match self.read(0, entry_count) {
-            Ok(entries) => entries,
-            Err(e) => return Err(e)
-        };
+        // Add entries
+        let entry1 = create_test_entry("entry1");
+        let entry2 = create_test_entry("entry2");
+        Log::add_entry(&log, entry1.clone()).await.unwrap();
+        Log::add_entry(&log, entry2.clone()).await.unwrap();
         
-        Ok(entries.into_iter()
-            .filter(|e| {
-                let ts = crate::log::time_utils::timestamp_to_datetime(e.timestamp.clone());
-                ts >= start && ts <= end
-            })
-            .collect())
-    }
-    
-    async fn find_entries_in_time_range_async(&self, start: chrono::DateTime<chrono::Utc>, end: chrono::DateTime<chrono::Utc>) -> causality_error::Result<Vec<LogEntry>> {
-        self.find_entries_in_time_range(start, end)
-    }
-    
-    async fn async_flush(&self) -> causality_error::Result<()> {
-        // No-op for memory storage
-        Ok(())
-    }
-    
-    async fn clear(&self) -> causality_error::Result<()> {
-        let mut entries = self.entries.write().map_err(|e| {
-            Box::new(EngineError::LogError(format!("Failed to acquire write lock on entries: {}", e))) as Box<dyn CausalityError>
-        })?;
+        // Test count
+        assert_eq!(Log::get_entry_count(&log).await.unwrap(), 2);
         
-        let mut index = self.entry_index.write().map_err(|e| {
-            Box::new(EngineError::LogError(format!("Failed to acquire write lock on entry_index: {}", e))) as Box<dyn CausalityError>
-        })?;
+        // Test get all
+        let entries = Log::get_all_entries(&log).await.unwrap();
+        assert_eq!(entries.len(), 2);
         
-        entries.clear();
-        index.clear();
+        // Test get by ID
+        let found = Log::get_entry_by_id(&log, "entry1").await.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "entry1");
         
-        Ok(())
-    }
-    
-    fn close(&self) -> causality_error::Result<()> {
-        // No special closing needed for in-memory
-        Ok(())
-    }
-    
-    fn find_entries_by_trace_id(&self, trace_id: &causality_types::TraceId) -> causality_error::Result<Vec<LogEntry>> {
-        // Manual error handling
-        let entry_count = match self.entry_count() {
-            Ok(count) => count,
-            Err(e) => return Err(e)
-        };
+        // Test query
+        let domain = DomainId::from_str("test_domain").unwrap();
+        let queried = Log::query_entries(&log, &domain, EntryType::Fact, None).await.unwrap();
+        assert_eq!(queried.len(), 2);
         
-        let entries = match self.read(0, entry_count) {
-            Ok(entries) => entries,
-            Err(e) => return Err(e)
-        };
-        
-        Ok(entries.into_iter()
-            .filter(|e| {
-                e.trace_id.as_ref().map_or(false, |t| t == trace_id)
-            })
-            .collect())
-    }
-    
-    fn get_entries_by_trace(&self, trace_id: &str) -> causality_error::Result<Vec<LogEntry>> {
-        // Manual error handling
-        let entry_count = match self.entry_count() {
-            Ok(count) => count,
-            Err(e) => return Err(e)
-        };
-        
-        let entries = match self.read(0, entry_count) {
-            Ok(entries) => entries,
-            Err(e) => return Err(e)
-        };
-        
-        Ok(entries.into_iter()
-            .filter(|e| {
-                e.trace_id.as_ref().map_or(false, |t| t.as_str() == trace_id)
-            })
-            .collect())
-    }
-    
-    fn get_entry_by_id(&self, id: &str) -> causality_error::Result<Option<LogEntry>> {
-        self.find_by_id(id)
-    }
-    
-    fn get_entry_by_hash(&self, hash: &str) -> causality_error::Result<Option<LogEntry>> {
-        // Manual error handling
-        let entry_count = match self.entry_count() {
-            Ok(count) => count,
-            Err(e) => return Err(e)
-        };
-        
-        let entries = match self.read(0, entry_count) {
-            Ok(entries) => entries,
-            Err(e) => return Err(e)
-        };
-        
-        Ok(entries.into_iter()
-            .find(|entry| entry.entry_hash.as_ref().map_or(false, |h| h == hash)))
-    }
-    
-    fn rotate(&self) -> causality_error::Result<()> {
-        // No-op for memory storage
-        Ok(())
-    }
-    
-    fn compact(&self) -> causality_error::Result<()> {
-        // No-op for memory storage
-        Ok(())
+        // Test clear
+        Log::clear(&log).await.unwrap();
+        assert_eq!(Log::get_entry_count(&log).await.unwrap(), 0);
     }
 } 

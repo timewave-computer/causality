@@ -1,0 +1,12 @@
+# Basic scenario configuration
+name = "basic_test_scenario"
+description = "A simple test scenario with two agents"
+
+# Define some agents
+[[agents]]
+id = "agent1"
+actor_type = "test_agent"
+
+[[agents]]
+id = "agent2"
+actor_type = "test_agent" 

@@ -193,7 +193,7 @@ impl TimeProvider for SimulationTimeProvider {
     
     async fn sleep(&self, duration: TimeDelta) -> Result<()> {
         // Scale the sleep duration by the time scale
-        let scaled_duration = TimeDelta::from_nanos(
+        let _scaled_duration = TimeDelta::from_nanos(
             ((duration.as_nanos() as f64) / self.time_scale) as i64
         );
         

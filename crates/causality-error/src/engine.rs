@@ -21,6 +21,7 @@ pub mod codes {
     pub const SEGMENT_ERROR: ErrorCode = ErrorCode(5009);
     pub const SYNC_ERROR: ErrorCode = ErrorCode(5010);
     pub const CAPABILITY_ERROR: ErrorCode = ErrorCode(5011);
+    pub const CALLBACK_ERROR: ErrorCode = ErrorCode(5012);
 }
 
 /// Engine-specific error types
@@ -78,6 +79,10 @@ pub enum EngineError {
     #[error("Capability error: {0}")]
     CapabilityError(String),
 
+    /// Callback error
+    #[error("Callback error: {0}")]
+    CallbackError(String),
+
     /// Serialization failed
     #[error("Serialization failed: {0}")]
     SerializationFailed(String),
@@ -124,6 +129,7 @@ impl CausalityError for EngineError {
             EngineError::SegmentError(_) => "ENGINE_SEGMENT_ERROR",
             EngineError::SyncError(_) => "ENGINE_SYNC_ERROR",
             EngineError::CapabilityError(_) => "ENGINE_CAPABILITY_ERROR",
+            EngineError::CallbackError(_) => "ENGINE_CALLBACK_ERROR",
             EngineError::SerializationFailed(_) => "ENGINE_SERIALIZATION_FAILED",
             EngineError::DeserializationFailed(_) => "ENGINE_DESERIALIZATION_FAILED",
             EngineError::IoError(_) => "ENGINE_IO_ERROR",
@@ -176,5 +182,10 @@ impl EngineError {
     /// Create a new execution failed error
     pub fn execution_failed(message: impl Into<String>) -> Self {
         EngineError::ExecutionFailed(message.into())
+    }
+    
+    /// Create a new callback error
+    pub fn callback_error(message: impl Into<String>) -> Self {
+        EngineError::CallbackError(message.into())
     }
 } 

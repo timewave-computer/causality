@@ -7,11 +7,13 @@
 
 use std::fmt;
 use serde::{Serialize, Deserialize};
-
+use serde_json::Value;
+use borsh::{BorshSerialize, BorshDeserialize, io::Read, io::Write as BorshWrite};
 use causality_types::{ContentId, DomainId};
+use crate::log::types::BorshJsonValue; // Import BorshJsonValue
 
 /// The severity level of an event
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub enum EventSeverity {
     /// Debug-level event (lowest importance)
     Debug,
@@ -38,7 +40,7 @@ impl fmt::Display for EventSeverity {
 }
 
 /// An entry representing a system event
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EventEntry {
     /// The event name
     pub event_name: String,
@@ -47,11 +49,46 @@ pub struct EventEntry {
     /// The component that generated this event
     pub component: String,
     /// The event details
-    pub details: serde_json::Value,
+    pub details: BorshJsonValue,
     /// Related resources, if any
     pub resources: Option<Vec<ContentId>>,
     /// Related domains, if any
     pub domains: Option<Vec<DomainId>>,
+}
+
+// Manual BorshSerialize implementation for EventEntry
+impl BorshSerialize for EventEntry {
+    fn serialize<W: BorshWrite>(&self, writer: &mut W) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.event_name, writer)?;
+        BorshSerialize::serialize(&self.severity, writer)?;
+        BorshSerialize::serialize(&self.component, writer)?;
+        // Manually serialize the skipped field
+        BorshSerialize::serialize(&self.details, writer)?;
+        BorshSerialize::serialize(&self.resources, writer)?;
+        BorshSerialize::serialize(&self.domains, writer)?;
+        Ok(())
+    }
+}
+
+// Manual BorshDeserialize implementation for EventEntry
+impl BorshDeserialize for EventEntry {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        let event_name = BorshDeserialize::deserialize_reader(reader)?;
+        let severity = BorshDeserialize::deserialize_reader(reader)?;
+        let component = BorshDeserialize::deserialize_reader(reader)?;
+        // Manually deserialize the skipped field
+        let details = BorshDeserialize::deserialize_reader(reader)?;
+        let resources = BorshDeserialize::deserialize_reader(reader)?;
+        let domains = BorshDeserialize::deserialize_reader(reader)?;
+        Ok(Self {
+            event_name,
+            severity,
+            component,
+            details,
+            resources,
+            domains,
+        })
+    }
 }
 
 impl EventEntry {
@@ -60,7 +97,7 @@ impl EventEntry {
         event_name: String,
         severity: EventSeverity,
         component: String,
-        details: serde_json::Value,
+        details: BorshJsonValue,
         resources: Option<Vec<ContentId>>,
         domains: Option<Vec<DomainId>>,
     ) -> Self {
@@ -90,7 +127,7 @@ impl EventEntry {
     }
     
     /// Get the event details
-    pub fn details(&self) -> &serde_json::Value {
+    pub fn details(&self) -> &BorshJsonValue {
         &self.details
     }
     
@@ -108,7 +145,7 @@ impl EventEntry {
     pub fn debug(
         component: impl Into<String>,
         event_name: impl Into<String>,
-        details: serde_json::Value,
+        details: BorshJsonValue,
     ) -> Self {
         Self::new(
             event_name.into(),
@@ -124,7 +161,7 @@ impl EventEntry {
     pub fn info(
         component: impl Into<String>,
         event_name: impl Into<String>,
-        details: serde_json::Value,
+        details: BorshJsonValue,
     ) -> Self {
         Self::new(
             event_name.into(),
@@ -140,7 +177,7 @@ impl EventEntry {
     pub fn warning(
         component: impl Into<String>,
         event_name: impl Into<String>,
-        details: serde_json::Value,
+        details: BorshJsonValue,
     ) -> Self {
         Self::new(
             event_name.into(),
@@ -156,7 +193,7 @@ impl EventEntry {
     pub fn error(
         component: impl Into<String>,
         event_name: impl Into<String>,
-        details: serde_json::Value,
+        details: BorshJsonValue,
     ) -> Self {
         Self::new(
             event_name.into(),
@@ -172,7 +209,7 @@ impl EventEntry {
     pub fn critical(
         component: impl Into<String>,
         event_name: impl Into<String>,
-        details: serde_json::Value,
+        details: BorshJsonValue,
     ) -> Self {
         Self::new(
             event_name.into(),
@@ -206,7 +243,7 @@ mod tests {
     fn test_event_entry_creation() {
         let event_name = "test_event".to_string();
         let component = "test".to_string();
-        let details = serde_json::json!({"message": "test message"});
+        let details = BorshJsonValue(serde_json::json!({"message": "test message"}));
         let resources = Some(vec![ContentId::new("resource-id-1")]);  // Use string ID
         let domains = Some(vec![DomainId::new("domain-id-1")]);  // Use string ID
         
@@ -222,38 +259,36 @@ mod tests {
         assert_eq!(entry.event_name, event_name);
         assert_eq!(entry.severity, EventSeverity::Info);
         assert_eq!(entry.component, component);
-        assert_eq!(entry.details, details);
+        assert_eq!(entry.details.0, details.0);
         assert_eq!(entry.resources, resources);
         assert_eq!(entry.domains, domains);
         
-        // Test getters
         assert_eq!(entry.event_name(), event_name);
         assert_eq!(entry.severity(), &EventSeverity::Info);
         assert_eq!(entry.component(), component);
-        assert_eq!(entry.details(), &details);
+        assert_eq!(entry.details().0, details.0);
         
-        // Test convenience methods
-        let debug = EventEntry::debug("test", "debug_event", serde_json::json!({}))
+        let debug = EventEntry::debug("test", "debug_event", BorshJsonValue(serde_json::json!({})))
             .with_resources(vec![ContentId::new("resource-id-1")]);  // Use string ID
         assert_eq!(debug.severity, EventSeverity::Debug);
         assert_eq!(debug.component, "test");
         assert_eq!(debug.event_name, "debug_event");
         assert_eq!(debug.resources.unwrap()[0], ContentId::new("resource-id-1"));  // Use string ID
         
-        let info = EventEntry::info("test", "info_event", serde_json::json!({}))
+        let info = EventEntry::info("test", "info_event", BorshJsonValue(serde_json::json!({})))
             .with_domains(vec![DomainId::new("domain-id-1")]);  // Use string ID
         assert_eq!(info.severity, EventSeverity::Info);
         assert_eq!(info.component, "test");
         assert_eq!(info.event_name, "info_event");
         assert_eq!(info.domains.unwrap()[0], DomainId::new("domain-id-1"));  // Use string ID
         
-        let warning = EventEntry::warning("test", "warning_event", serde_json::json!({}));
+        let warning = EventEntry::warning("test", "warning_event", BorshJsonValue(serde_json::json!({})));
         assert_eq!(warning.severity, EventSeverity::Warning);
         
-        let error = EventEntry::error("test", "error_event", serde_json::json!({}));
+        let error = EventEntry::error("test", "error_event", BorshJsonValue(serde_json::json!({})));
         assert_eq!(error.severity, EventSeverity::Error);
         
-        let critical = EventEntry::critical("test", "critical_event", serde_json::json!({}));
+        let critical = EventEntry::critical("test", "critical_event", BorshJsonValue(serde_json::json!({})));
         assert_eq!(critical.severity, EventSeverity::Critical);
     }
 } 

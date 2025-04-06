@@ -179,11 +179,11 @@ impl EffectRegistrar for BasicEffectRegistry {
 
 impl EffectExecutor for BasicEffectRegistry {
     /// Execute an effect
-    fn execute_effect(&self, effect: &dyn Effect, context: &dyn EffectContext) 
+    fn execute_effect(&self, effect: &dyn Effect, _context: &dyn EffectContext) 
         -> EffectResult<EffectOutcome> {
         // Check if we have a handler for this effect type
         let effect_type_id = get_effect_type_id(effect);
-        let handler = self.get_handler(&effect_type_id).ok_or_else(|| {
+        let _handler = self.get_handler(&effect_type_id).ok_or_else(|| {
             EffectError::NotFound(format!("No handler found for effect type: {}", effect_type_id))
         })?;
         

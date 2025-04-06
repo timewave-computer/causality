@@ -671,7 +671,7 @@ impl ResourceManager for SimpleResourceManager {
         Ok(())
     }
     
-    async fn resource_exists(&self, resource_type: &str, resource_id: &str) -> bool {
+    async fn resource_exists(&self, _resource_type: &str, resource_id: &str) -> bool {
         if let Ok(resources) = self.resources.read() {
             resources.contains_key(resource_id)
         } else {
@@ -683,7 +683,7 @@ impl ResourceManager for SimpleResourceManager {
         &self,
         resource_type: &str,
         resource_id: &str,
-        data: HashMap<String, String>,
+        _data: HashMap<String, String>,
     ) -> ResourceResult<()> {
         let mut resources = match self.resources.write() {
             Ok(guard) => guard,
@@ -713,7 +713,7 @@ impl ResourceManager for SimpleResourceManager {
     
     async fn get_resource(
         &self,
-        resource_type: &str,
+        _resource_type: &str,
         resource_id: &str,
     ) -> ResourceResult<Box<dyn Resource>> {
         let resources = match self.resources.read() {
@@ -741,7 +741,7 @@ impl ResourceManager for SimpleResourceManager {
     
     async fn update_resource(
         &self,
-        resource_type: &str,
+        _resource_type: &str,
         resource_id: &str,
         data: HashMap<String, String>,
     ) -> ResourceResult<()> {
@@ -770,7 +770,7 @@ impl ResourceManager for SimpleResourceManager {
     
     async fn delete_resource(
         &self,
-        resource_type: &str,
+        _resource_type: &str,
         resource_id: &str,
     ) -> ResourceResult<()> {
         let mut resources = match self.resources.write() {
@@ -793,10 +793,10 @@ impl ResourceManager for SimpleResourceManager {
     
     async fn execute_operation(
         &self,
-        resource_type: &str,
+        _resource_type: &str,
         resource_id: &str,
-        operation: &str,
-        params: HashMap<String, String>,
+        _operation: &str,
+        _params: HashMap<String, String>,
     ) -> ResourceResult<HashMap<String, String>> {
         let mut resources = match self.resources.write() {
             Ok(guard) => guard,

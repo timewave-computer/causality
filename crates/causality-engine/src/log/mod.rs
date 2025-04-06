@@ -4,6 +4,9 @@
 // effects, and events in the system.
 
 use async_trait::async_trait;
+use std::fmt::Debug;
+use anyhow::Result;
+use causality_types::{DomainId, Timestamp};
 
 // Core modules
 pub mod types;
@@ -19,7 +22,7 @@ pub use memory_storage::MemoryLogStorage;
 
 /// Trait for log storage
 #[async_trait]
-pub trait LogStorage: Send + Sync {
+pub trait LogStorage: Send + Sync + Debug {
     /// Get the number of entries in the storage (synchronous version)
     fn entry_count(&self) -> causality_error::Result<usize>;
     
@@ -66,13 +69,6 @@ pub trait LogStorage: Send + Sync {
             .find(|e| e.id == id))
     }
 
-    /// Get an entry by hash (synchronous version)
-    fn get_entry_by_hash(&self, hash: &str) -> causality_error::Result<Option<LogEntry>> {
-        let entries = self.read(0, self.entry_count()?)?;
-        Ok(entries.into_iter()
-            .find(|e| e.entry_hash.as_ref().map_or(false, |h| h == hash)))
-    }
-
     /// Get entries by trace ID (synchronous version)
     fn get_entries_by_trace(&self, trace_id: &str) -> causality_error::Result<Vec<LogEntry>> {
         let entries = self.read(0, self.entry_count()?)?;
@@ -86,17 +82,6 @@ pub trait LogStorage: Send + Sync {
         let entries = self.read(0, self.entry_count()?)?;
         Ok(entries.into_iter()
             .filter(|e| e.entry_type == entry_type)
-            .collect())
-    }
-
-    /// Find entries in time range (synchronous version)
-    fn find_entries_in_time_range(&self, start: chrono::DateTime<chrono::Utc>, end: chrono::DateTime<chrono::Utc>) -> causality_error::Result<Vec<LogEntry>> {
-        let entries = self.read(0, self.entry_count()?)?;
-        Ok(entries.into_iter()
-            .filter(|e| {
-                let ts = crate::log::time_utils::timestamp_to_datetime(e.timestamp.clone());
-                ts >= start && ts <= end
-            })
             .collect())
     }
 
@@ -156,12 +141,6 @@ pub trait LogStorage: Send + Sync {
         self.find_entries_by_type(entry_type)
     }
 
-    /// Find entries in time range (async version)
-    async fn find_entries_in_time_range_async(&self, start: chrono::DateTime<chrono::Utc>, end: chrono::DateTime<chrono::Utc>) -> causality_error::Result<Vec<LogEntry>> {
-        // Default implementation falls back to synchronous version
-        self.find_entries_in_time_range(start, end)
-    }
-
     /// Flush any pending operations to the storage (async version)
     async fn async_flush(&self) -> causality_error::Result<()> {
         // Default implementation - no-op, just return success
@@ -173,6 +152,34 @@ pub trait LogStorage: Send + Sync {
         // Default implementation - no-op
         Ok(())
     }
+}
+
+/// Async Log interface for the engine
+#[async_trait]
+pub trait Log: Send + Sync + Debug {
+    /// Add a log entry
+    async fn add_entry(&self, entry: LogEntry) -> Result<()>;
+    
+    /// Query entries by domain and type, starting from a timestamp
+    async fn query_entries(&self, domain: &DomainId, entry_type: EntryType, since: Option<u64>) -> Result<Vec<LogEntry>>;
+    
+    /// Get a specific entry by ID
+    async fn get_entry_by_id(&self, id: &str) -> Result<Option<LogEntry>>;
+    
+    /// Get entries by trace ID
+    async fn get_entries_by_trace(&self, trace_id: &str) -> Result<Vec<LogEntry>>;
+    
+    /// Get entries in a time range
+    async fn get_entries_in_time_range(&self, start_time: u64, end_time: u64) -> Result<Vec<LogEntry>>;
+    
+    /// Get all entries
+    async fn get_all_entries(&self) -> Result<Vec<LogEntry>>;
+    
+    /// Get the number of entries
+    async fn get_entry_count(&self) -> Result<usize>;
+    
+    /// Clear all entries
+    async fn clear(&self) -> Result<()>;
 }
 
 // Legacy modules - these may be deprecated in future versions

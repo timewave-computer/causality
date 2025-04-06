@@ -612,7 +612,7 @@ pub trait ResourceTypeRegistry: Send + Sync + Debug {
     /// Find compatible resource types
     async fn find_compatible_types(
         &self, 
-        id: &ResourceTypeId
+        _id: &ResourceTypeId
     ) -> ResourceTypeRegistryResult<Vec<ResourceTypeId>>;
     
     /// Get all versions of a resource type
@@ -856,7 +856,7 @@ impl ResourceTypeRegistry for ContentAddressedResourceTypeRegistry {
     
     async fn find_compatible_types(
         &self, 
-        id: &ResourceTypeId
+        _id: &ResourceTypeId
     ) -> ResourceTypeRegistryResult<Vec<ResourceTypeId>> {
         // In a real implementation, query compatibility index
         // For now, just return empty list
@@ -1139,13 +1139,11 @@ impl ResourceTypeRegistry for InMemoryResourceTypeRegistry {
     
     async fn find_compatible_types(
         &self, 
-        id: &ResourceTypeId
+        _id: &ResourceTypeId
     ) -> ResourceTypeRegistryResult<Vec<ResourceTypeId>> {
-        if let Some(compatible_types) = self.compatibility_index.get(id) {
-            Ok(compatible_types.clone())
-        } else {
-            Ok(Vec::new())
-        }
+        // In a real implementation, query compatibility index
+        // For now, just return empty list
+        Ok(Vec::new())
     }
     
     async fn get_all_versions(

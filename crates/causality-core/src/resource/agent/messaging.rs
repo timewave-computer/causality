@@ -22,6 +22,7 @@ use futures::stream::{StreamExt};
 use rand::Rng;
 use causality_types::ContentHash;
 use crate::serialization::Serializable;
+use crate::id_utils::content_id_to_str;
 
 /// Message hash for calculating content hashes
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -162,15 +163,15 @@ impl MessageId {
         generate_message_id()
     }
     
-    /// Get string representation of the message ID
+    /// Get the string representation of this message ID
     pub fn as_string(&self) -> String {
-        self.0.to_string()
+        content_id_to_str(&self.0)
     }
 }
 
 impl fmt::Display for MessageId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", content_id_to_str(&self.0))
     }
 }
 

@@ -12,6 +12,9 @@ pub mod effect;
 pub mod resource;
 pub mod domain;
 pub mod repository;
+pub mod config;
+pub mod storage;
+pub mod engine;
 
 // Re-exports
 pub use log::{
@@ -34,6 +37,11 @@ pub use causality_types::{ContentId, TraceId, Timestamp};
 
 // Re-export domain types
 pub use domain::DomainId;
+
+// Re-export engine and config
+pub use engine::Engine;
+pub use config::EngineConfig;
+pub use storage::memory::InMemoryStorage;
 
 // Import and re-export TimeMap from causality-core
 pub use causality_core::time::map::TimeMap;

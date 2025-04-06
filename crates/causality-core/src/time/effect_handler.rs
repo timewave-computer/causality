@@ -592,7 +592,7 @@ impl<E: TimeEffect + Send + Sync + Debug + 'static> EffectHandler for TimeEffect
         vec![EffectTypeId::new(&self.effect_type.effect_type().to_string())]
     }
     
-    async fn handle(&self, effect: &dyn Effect, context: &dyn EffectContext) -> HandlerResult<EffectOutcome> {
+    async fn handle(&self, effect: &dyn Effect, _context: &dyn EffectContext) -> HandlerResult<EffectOutcome> {
         if let Some(causal_effect) = effect.downcast_ref::<CausalTimeEffect>() {
             match self.handle_causal_update(
                 causal_effect.domain_id.clone(),

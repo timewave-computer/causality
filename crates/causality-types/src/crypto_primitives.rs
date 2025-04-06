@@ -172,7 +172,7 @@ impl ContentId {
     }
     
     /// Convert to string representation
-    pub fn to_string(&self) -> String {
+    pub fn as_string(&self) -> String {
         format!("cid:{}", self.0.to_hex_string())
     }
     
@@ -232,7 +232,7 @@ impl ContentId {
 
 impl fmt::Display for ContentId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self.as_string())
     }
 }
 
@@ -358,7 +358,7 @@ impl ContentHash {
     }
     
     /// Convert to string representation
-    pub fn to_string(&self) -> String {
+    pub fn as_string(&self) -> String {
         format!("{}:{}", self.algorithm.to_lowercase(), self.to_hex())
     }
     
@@ -378,7 +378,7 @@ impl ContentHash {
 
 impl fmt::Display for ContentHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self.as_string())
     }
 }
 

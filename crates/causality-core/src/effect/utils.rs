@@ -66,8 +66,8 @@ impl EffectHandler for MockEffectHandler {
 
 /// Register resource handlers with a default effect registry
 pub fn register_resource_handlers(
-    registry: &mut BasicEffectRegistry,
-    resource_manager: Arc<dyn ResourceManager>
+    _registry: &mut BasicEffectRegistry,
+    _resource_manager: Arc<dyn ResourceManager>
 ) {
     // Placeholder for the commented out register_resource_handler function
 }

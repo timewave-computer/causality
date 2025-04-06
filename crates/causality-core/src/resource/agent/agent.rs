@@ -369,7 +369,7 @@ impl Agent for AgentImpl {
             .collect()
     }
     
-    fn get_relationship(&self, target_id: &ResourceId) -> Option<&AgentRelationship> {
+    fn get_relationship(&self, _target_id: &ResourceId) -> Option<&AgentRelationship> {
         None
     }
     
@@ -528,7 +528,7 @@ mod tests {
             .unwrap();
         
         // Add a capability
-        let capability = Capability::new("test", "read", None);
+        let capability = Capability::new("test".to_string(), vec!["read".to_string()], None, None);
         agent.add_capability(capability.clone()).await.unwrap();
         
         // Check if the agent has the capability
