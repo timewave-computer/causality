@@ -98,7 +98,7 @@ impl FactEffectTracker {
             },
             EntryType::Effect => {
                 // Register the effect and its fact dependencies
-                if let EntryData::Effect(effect) = &entry.data {
+                if let EntryData::Effect(_effect) = &entry.data {
                     // Find dependencies in effect metadata or attached fact snapshots
                     let dependencies = match self.extract_dependencies(entry) {
                         Ok(deps) => deps,
@@ -229,24 +229,15 @@ impl FactEffectTracker {
                 Box::new(EngineError::SyncError(format!("Failed to acquire write lock on trace_relations: {}", e))) as Box<dyn CausalityError>
             )?;
             
-            // Extract resources and domains
-            let resources = effect.resources.clone().unwrap_or_default()
-                .into_iter()
-                .collect::<HashSet<_>>();
-                
-            let domains = effect.domains.clone().unwrap_or_default()
-                .into_iter()
-                .collect::<HashSet<_>>();
-            
-            // Create relations for each dependency
+            // Create relations for each dependency first
             for dep in dependencies {
                 let relation = FactEffectRelation {
                     fact_id: dep.fact_id.clone(),
                     effect_id: entry.id.clone(),
                     effect_timestamp: entry.timestamp,
                     dependency_type: dep.dependency_type.clone(),
-                    resources: resources.clone(),
-                    domains: domains.clone(),
+                    resources: HashSet::new(), // Will be populated
+                    domains: HashSet::new(), // Will be populated
                     trace_id: entry.trace_id.clone(),
                 };
                 
@@ -254,7 +245,7 @@ impl FactEffectTracker {
                 relations.insert((dep.fact_id.clone(), entry.id.clone()), relation);
                 
                 // Update resource relations
-                for resource in &resources {
+                for resource in &effect.resources {
                     resource_rels
                         .entry(resource.clone())
                         .or_insert_with(HashSet::new)
@@ -262,20 +253,46 @@ impl FactEffectTracker {
                 }
                 
                 // Update domain relations
-                for domain in &domains {
+                for domain in &effect.domains {
                     domain_rels
                         .entry(domain.clone())
                         .or_insert_with(HashSet::new)
                         .insert((dep.fact_id.clone(), entry.id.clone()));
                 }
                 
-                // Update trace relations
+                // Update trace relations (if applicable)
                 if let Some(trace_id) = &entry.trace_id {
                     trace_rels
                         .entry(trace_id.clone())
                         .or_insert_with(HashSet::new)
                         .insert((dep.fact_id.clone(), entry.id.clone()));
                 }
+            }
+            
+            // Handle case where there are dependencies but no resources OR domains match
+            if effect.resources.is_empty() && effect.domains.is_empty() {
+                 for dep in dependencies {
+                     let key = (dep.fact_id.clone(), entry.id.clone());
+                     if !relations.contains_key(&key) {
+                         let relation = FactEffectRelation {
+                            fact_id: dep.fact_id.clone(),
+                            effect_id: entry.id.clone(),
+                            effect_timestamp: entry.timestamp,
+                            dependency_type: dep.dependency_type.clone(),
+                            resources: HashSet::new(), 
+                            domains: HashSet::new(),
+                            trace_id: entry.trace_id.clone(),
+                        };
+                        relations.insert(key.clone(), relation);
+                        // Update trace relations if needed
+                        if let Some(trace_id) = &entry.trace_id {
+                            trace_rels
+                                .entry(trace_id.clone())
+                                .or_insert_with(HashSet::new)
+                                .insert(key.clone());
+                        }
+                     }
+                 }
             }
         }
         
@@ -476,37 +493,38 @@ impl FactEffectTracker {
 mod tests {
     use super::*;
     // Update imports to use crate-level modules
-    use crate::log::types::{FactEntry, EffectEntry};
+    use crate::log::types::{FactEntry, EffectEntry, BorshJsonValue, SerializableEffectType};
     use crate::log::memory_storage::MemoryLogStorage;
-    use std::sync::Arc;
+    use std::str::FromStr;
+    use serde_json::json;
     
-    fn create_fact_entry(id: &str, fact_id: &str, domain_id: DomainId) -> LogEntry {
-        LogEntry {
-            id: id.to_string(),
-            timestamp: Timestamp::now(),
-            entry_type: EntryType::Fact,
-            data: EntryData::Fact(FactEntry {
-                fact_id: fact_id.to_string(),
-                fact_type: "test".to_string(),
-                domain_id: domain_id.clone(),
-                height: 10,
-                hash: "hash123".to_string(),
-                timestamp: Timestamp::now(),
-                resources: Some(vec![ContentId::new("resource1")]),
-                domains: Some(vec![domain_id.clone()]),
-                data: serde_json::json!({}),
-            }),
-            trace_id: None,
-            parent_id: None,
-            metadata: HashMap::new(),
-            entry_hash: None,
-        }
+    fn create_fact_entry(id: &str, fact_type: &str, domain_id: DomainId, resources: Vec<ContentId>) -> LogEntry {
+        let fact_entry = FactEntry::new(
+            domain_id.clone(),
+            10, // block_height
+            Some("hash123".to_string()), // block_hash
+            Timestamp::now().timestamp(), // observed_at
+            fact_type.to_string(), // fact_type
+            resources, // resources
+            BorshJsonValue(json!({})), // data
+            false, // verified
+        );
+
+        // Use LogEntry::new which calculates the ID
+        LogEntry::new(
+            EntryType::Fact,
+            EntryData::Fact(fact_entry),
+            None, // trace_id
+            None, // parent_id
+            HashMap::new(), // metadata
+        ).unwrap() // Assuming tests don't need error handling for ID creation
     }
     
     fn create_effect_entry(
-        id: &str,
-        resource_id: &str,
-        domain_id: DomainId,
+        id: &str, // Note: This id is now ignored as LogEntry::new calculates it
+        effect_type_str: &str,
+        resource_ids: Vec<ContentId>,
+        domain_ids: Vec<DomainId>,
         fact_dependencies: Vec<FactDependency>
     ) -> LogEntry {
         let mut metadata = HashMap::new();
@@ -518,25 +536,25 @@ mod tests {
             );
         }
         
-        LogEntry {
-            id: id.to_string(),
-            timestamp: Timestamp::now(),
-            entry_type: EntryType::Effect,
-            data: EntryData::Effect(EffectEntry {
-                effect_type: "test".to_string(),
-                resources: Some(vec![ContentId::new(resource_id)]),
-                domains: Some(vec![domain_id.clone()]),
-                code_hash: None,
-                parameters: serde_json::json!({}),
-                result: None,
-                success: true,
-                error: None,
-            }),
-            trace_id: Some(TraceId::from_str("trace1")),
-            parent_id: None,
-            metadata,
-            entry_hash: None,
-        }
+        let effect_entry = EffectEntry::new(
+            SerializableEffectType(effect_type_str.to_string()),
+            resource_ids,
+            domain_ids,
+            None, // code_hash
+            HashMap::new(), // parameters
+            None, // result
+            true, // success
+            None, // error
+        );
+
+        // Use LogEntry::new which calculates the ID
+        LogEntry::new(
+            EntryType::Effect,
+            EntryData::Effect(effect_entry),
+            Some(TraceId::from_str("trace1").unwrap()), // trace_id - use unwrap in test
+            None, // parent_id
+            metadata, // metadata
+        ).unwrap() // Assuming tests don't need error handling for ID creation
     }
     
     #[test]
@@ -545,7 +563,7 @@ mod tests {
         
         // Create a fact
         let domain_id = DomainId::new("1");
-        let fact_entry = create_fact_entry("entry1", "fact1", domain_id.clone());
+        let fact_entry = create_fact_entry("ignored_id_fact", "fact1", domain_id.clone(), vec![ContentId::from_str("resource1").unwrap()]);
         let fact_id = FactId("fact1".to_string());
         
         // Track the fact
@@ -561,9 +579,10 @@ mod tests {
         ];
         
         let effect_entry = create_effect_entry(
-            "effect1",
-            "resource1",
-            domain_id.clone(),
+            "ignored_id_effect", // ID is calculated by LogEntry::new
+            "test_effect",
+            vec![ContentId::from_str("resource1").unwrap()],
+            vec![domain_id.clone()],
             dependencies,
         );
         
@@ -572,24 +591,26 @@ mod tests {
         
         // Verify relationships
         let dependent_effects = tracker.get_dependent_effects(&fact_id)?;
-        assert!(dependent_effects.contains("effect1"));
+        assert!(dependent_effects.contains(&effect_entry.id)); // Use calculated effect ID
         
-        let effect_dependencies = tracker.get_effect_dependencies("effect1")?;
+        let effect_dependencies = tracker.get_effect_dependencies(&effect_entry.id)?;
         assert!(effect_dependencies.contains(&fact_id));
         
         // Check resource relations
-        let resource_relations = tracker.get_resource_relations(&ContentId::new("resource1"))?;
+        let resource_relations = tracker.get_resource_relations(&ContentId::from_str("resource1").unwrap())?;
         assert_eq!(resource_relations.len(), 1);
         assert_eq!(resource_relations[0].fact_id, fact_id);
-        assert_eq!(resource_relations[0].effect_id, "effect1");
+        assert_eq!(resource_relations[0].effect_id, effect_entry.id); // Use calculated effect ID
         
         // Check domain relations
         let domain_relations = tracker.get_domain_relations(&domain_id)?;
         assert_eq!(domain_relations.len(), 1);
         
         // Check trace relations
-        let trace_relations = tracker.get_trace_relations(&TraceId::from_str("trace1"))?;
+        let trace_id = TraceId::from_str("trace1").unwrap(); // Create trace_id for lookup
+        let trace_relations = tracker.get_trace_relations(&trace_id)?;
         assert_eq!(trace_relations.len(), 1);
+        assert_eq!(trace_relations[0].effect_id, effect_entry.id);
         
         Ok(())
     }
@@ -601,7 +622,7 @@ mod tests {
         
         // Create a fact
         let domain_id = DomainId::new("1");
-        let fact_entry = create_fact_entry("entry1", "fact1", domain_id.clone());
+        let fact_entry = create_fact_entry("ignored_id_fact", "fact1", domain_id.clone(), vec![ContentId::from_str("resource1").unwrap()]);
         let fact_id = FactId("fact1".to_string());
         
         // Add fact to storage
@@ -617,23 +638,24 @@ mod tests {
         ];
         
         let effect_entry = create_effect_entry(
-            "effect1",
-            "resource1",
-            domain_id.clone(),
+            "ignored_id_effect", // ID is calculated by LogEntry::new
+            "test_effect",
+            vec![ContentId::from_str("resource1").unwrap()],
+            vec![domain_id.clone()],
             dependencies,
         );
         
         // Add effect to storage
-        storage.append(effect_entry)?;
+        storage.append(effect_entry.clone())?; // Clone effect_entry here
         
         // Build tracker from storage
         let tracker = FactEffectTracker::build_from_storage(&storage)?;
         
         // Verify relationships were loaded
         let dependent_effects = tracker.get_dependent_effects(&fact_id)?;
-        assert!(dependent_effects.contains("effect1"));
+        assert!(dependent_effects.contains(&effect_entry.id)); // Use calculated effect ID
         
-        let effect_dependencies = tracker.get_effect_dependencies("effect1")?;
+        let effect_dependencies = tracker.get_effect_dependencies(&effect_entry.id)?;
         assert!(effect_dependencies.contains(&fact_id));
         
         Ok(())
@@ -647,8 +669,8 @@ mod tests {
         let domain1 = DomainId::new("1");
         let domain2 = DomainId::new("2");
         
-        let fact1 = create_fact_entry("entry1", "fact1", domain1.clone());
-        let fact2 = create_fact_entry("entry2", "fact2", domain2.clone());
+        let fact1 = create_fact_entry("ignored_id_fact1", "fact1", domain1.clone(), vec![ContentId::from_str("resource1").unwrap()]);
+        let fact2 = create_fact_entry("ignored_id_fact2", "fact2", domain2.clone(), vec![ContentId::from_str("resource2").unwrap()]);
         
         // Track the facts
         tracker.track_entry(&fact1)?;
@@ -672,16 +694,18 @@ mod tests {
         ];
         
         let effect1 = create_effect_entry(
-            "effect1",
-            "resource1",
-            domain1.clone(),
+            "ignored_id_effect1",
+            "test_effect1",
+            vec![ContentId::from_str("resource1").unwrap()],
+            vec![domain1.clone()],
             dependencies1,
         );
         
         let effect2 = create_effect_entry(
-            "effect2",
-            "resource2",
-            domain2.clone(),
+            "ignored_id_effect2",
+            "test_effect2",
+            vec![ContentId::from_str("resource2").unwrap()],
+            vec![domain2.clone()],
             dependencies2,
         );
         
@@ -691,7 +715,7 @@ mod tests {
         
         // Create a snapshot for resource1 and domain1
         let snapshot = tracker.create_snapshot(
-            &[ContentId::new("resource1")],
+            &[ContentId::from_str("resource1").unwrap()],
             &[domain1.clone()],
             "test_observer",
         )?;
@@ -703,7 +727,7 @@ mod tests {
         
         // Create a snapshot for both resources and domains
         let snapshot2 = tracker.create_snapshot(
-            &[ContentId::new("resource1"), ContentId::new("resource2")],
+            &[ContentId::from_str("resource1").unwrap(), ContentId::from_str("resource2").unwrap()],
             &[domain1.clone(), domain2.clone()],
             "test_observer",
         )?;

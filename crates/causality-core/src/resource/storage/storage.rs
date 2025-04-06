@@ -799,7 +799,7 @@ impl Default for ResourceStorageConfig {
 /// Create a resource storage implementation based on configuration
 pub fn create_resource_storage(
     storage: Arc<dyn ContentAddressedStorage>,
-    config: ResourceStorageConfig,
+    _config: ResourceStorageConfig,
 ) -> ResourceStorageEnum {
     // For now, just create the basic implementation
     // In the future, this could be extended to create different types

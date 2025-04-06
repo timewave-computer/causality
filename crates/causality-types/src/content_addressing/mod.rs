@@ -3,6 +3,7 @@
 // This module provides utilities for content addressing, hashing, and canonical serialization.
 
 use crate::crypto_primitives::{HashError, HashOutput, HashAlgorithm, ContentId};
+use borsh;
 
 // Export storage module
 pub mod storage;
@@ -99,6 +100,8 @@ pub mod canonical {
     use serde::{Serialize, Deserialize};
     use serde_json::{Value, Map};
     use thiserror::Error;
+    use borsh::{BorshSerialize, BorshDeserialize};
+    use std::io;
     
     /// Error type for canonical serialization operations
     #[derive(Debug, Error)]
@@ -133,9 +136,9 @@ pub mod canonical {
     }
     
     /// Convert an object to canonical binary format (borsh by default)
-    pub fn to_canonical_binary<T: borsh::BorshSerialize>(value: &T) -> Result<Vec<u8>, CanonicalSerializationError> {
-        value.try_to_vec()
-            .map_err(|e| CanonicalSerializationError::BinaryError(e.to_string()))
+    pub fn to_canonical_binary<T: BorshSerialize>(value: &T) -> Result<Vec<u8>, CanonicalSerializationError> {
+        borsh::to_vec(value)
+            .map_err(|e: io::Error| CanonicalSerializationError::BinaryError(e.to_string()))
     }
     
     /// Deserialize from canonical JSON format
@@ -148,9 +151,9 @@ pub mod canonical {
     }
     
     /// Deserialize from canonical binary format
-    pub fn from_canonical_binary<T: borsh::BorshDeserialize>(bytes: &[u8]) -> Result<T, CanonicalSerializationError> {
-        T::try_from_slice(bytes)
-            .map_err(|e| CanonicalSerializationError::BinaryError(e.to_string()))
+    pub fn from_canonical_binary<T: BorshDeserialize>(bytes: &[u8]) -> Result<T, CanonicalSerializationError> {
+        borsh::BorshDeserialize::try_from_slice(bytes)
+            .map_err(|e: io::Error| CanonicalSerializationError::BinaryError(e.to_string()))
     }
     
     /// Normalize a JSON value (sort maps, etc.)

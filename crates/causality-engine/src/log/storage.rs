@@ -112,57 +112,99 @@ impl Default for StorageConfig {
 /// Interface for log storage implementations
 #[async_trait]
 pub trait LogStorage: Send + Sync + Debug {
-    /// Append an entry to the log
-    async fn append_entry(&self, entry: LogEntry) -> CausalityResult<()>;
-    
-    /// Get all entries in the log
-    async fn get_all_entries(&self) -> CausalityResult<Vec<LogEntry>>;
-    
-    /// Get entries in a specific range
-    async fn get_entries(&self, start: usize, end: usize) -> CausalityResult<Vec<LogEntry>>;
-    
     /// Get the total number of entries in the log
-    async fn get_entry_count(&self) -> CausalityResult<usize>;
-    
-    /// Clear all entries from the log
-    async fn clear(&self) -> CausalityResult<()>;
-    
-    /// Append a new entry to the log
-    fn append(&self, entry: LogEntry) -> EngineResult<()>;
-    
-    /// Append multiple entries to the log
-    fn append_batch(&self, entries: Vec<LogEntry>) -> EngineResult<()>;
+    fn entry_count(&self) -> CausalityResult<usize>;
     
     /// Read entries from the log
-    fn read(&self, start: usize, count: usize) -> EngineResult<Vec<LogEntry>>;
+    fn read(&self, offset: usize, limit: usize) -> CausalityResult<Vec<LogEntry>>;
     
-    /// Read entries within a time range
-    fn read_time_range(&self, start_time: u64, end_time: u64) -> EngineResult<Vec<LogEntry>>;
+    /// Append a new entry to the log
+    fn append(&self, entry: LogEntry) -> CausalityResult<()>;
     
     /// Get an entry by ID
-    fn get_entry_by_id(&self, id: &str) -> EngineResult<Option<LogEntry>>;
+    fn get_entry_by_id(&self, id: &str) -> CausalityResult<Option<LogEntry>>;
     
     /// Get entries by trace ID
-    fn get_entries_by_trace(&self, trace_id: &str) -> EngineResult<Vec<LogEntry>>;
-    
-    /// Get an entry by hash
-    fn get_entry_by_hash(&self, hash: &str) -> EngineResult<Option<LogEntry>>;
-    
+    fn get_entries_by_trace(&self, trace_id: &str) -> CausalityResult<Vec<LogEntry>>;
+
     /// Find entries by type
-    fn find_entries_by_type(&self, entry_type: EntryType) -> EngineResult<Vec<LogEntry>>;
+    fn find_entries_by_type(&self, entry_type: EntryType) -> CausalityResult<Vec<LogEntry>> {
+        let all_entries = self.read(0, self.entry_count()?)?;
+        Ok(all_entries.into_iter()
+            .filter(|entry| entry.entry_type == entry_type)
+            .collect())
+    }
     
-    /// Find entries within a time range
-    fn find_entries_in_time_range(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> EngineResult<Vec<LogEntry>>;
+    /// Read entries within a time range
+    fn read_time_range(&self, start_time: u64, end_time: u64) -> CausalityResult<Vec<LogEntry>> {
+        let all_entries = self.read(0, self.entry_count()?)?;
+        Ok(all_entries.into_iter()
+            .filter(|entry| {
+                let ts = entry.timestamp.to_millis();
+                ts >= start_time && ts <= end_time
+            })
+            .collect())
+    }
+    
+    /// Append multiple entries to the log
+    fn append_batch(&self, entries: Vec<LogEntry>) -> CausalityResult<()> {
+        for entry in entries {
+            self.append(entry)?;
+        }
+        Ok(())
+    }
     
     /// Rotate the log
-    fn rotate(&self) -> EngineResult<()>;
+    fn rotate(&self) -> CausalityResult<()> {
+        Ok(()) // Default no-op implementation
+    }
     
     /// Compact the log
-    fn compact(&self) -> EngineResult<()>;
+    fn compact(&self) -> CausalityResult<()> {
+        Ok(()) // Default no-op implementation
+    }
     
     /// Flush any pending writes
-    fn flush(&self) -> EngineResult<()>;
+    fn flush(&self) -> CausalityResult<()> {
+        Ok(()) // Default no-op implementation
+    }
     
     /// Close the storage
-    fn close(&self) -> EngineResult<()>;
+    fn close(&self) -> CausalityResult<()> {
+        Ok(()) // Default no-op implementation
+    }
+    
+    // Async methods
+    
+    /// Asynchronously flush any pending writes
+    async fn async_flush(&self) -> CausalityResult<()> {
+        Ok(self.flush()?)
+    }
+    
+    /// Append an entry to the log asynchronously
+    async fn append_entry(&self, entry: LogEntry) -> CausalityResult<()> {
+        Ok(self.append(entry)?)
+    }
+    
+    /// Get all entries in the log asynchronously
+    async fn get_all_entries(&self) -> CausalityResult<Vec<LogEntry>> {
+        Ok(self.read(0, self.entry_count()?)?)
+    }
+    
+    /// Get entries in a specific range asynchronously
+    async fn get_entries(&self, start: usize, end: usize) -> CausalityResult<Vec<LogEntry>> {
+        let limit = if end > start { end - start } else { 0 };
+        Ok(self.read(start, limit)?)
+    }
+    
+    /// Get the total number of entries in the log asynchronously
+    async fn get_entry_count(&self) -> CausalityResult<usize> {
+        Ok(self.entry_count()?)
+    }
+    
+    /// Clear all entries from the log asynchronously
+    async fn clear(&self) -> CausalityResult<()> {
+        // Default implementation - can be overridden by implementations
+        Ok(())
+    }
 } 

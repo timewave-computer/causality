@@ -7,12 +7,17 @@ use causality_types::crypto_primitives::ContentId;
 use blake3;
 use crate::serialization::Serializable;
 
+/// Helper function to convert ContentId to String to avoid trait ambiguity
+pub fn content_id_to_str(content_id: &ContentId) -> String {
+    format!("{}", content_id) // Uses Display impl directly
+}
+
 /// Generate a content-addressed ID string
 pub fn generate_content_id() -> String {
     // Generate random bytes and create ContentId
     let random_bytes = rand::random::<[u8; 16]>();
     let content_id = ContentId::from_bytes(&random_bytes);
-    content_id.to_string()
+    content_id_to_str(&content_id)
 }
 
 /// Generate a random hex string of specified length
@@ -61,8 +66,8 @@ impl FactId {
     }
     
     /// Convert to string representation
-    pub fn to_string(&self) -> String {
-        format!("{}:{}", self.content_id, self.domain)
+    pub fn as_string(&self) -> String {
+        format!("{}:{}", content_id_to_str(&self.content_id), self.domain)
     }
     
     /// Create from string representation
@@ -84,7 +89,7 @@ impl FactId {
     /// Create a composite hash for this fact ID
     pub fn composite_hash(&self) -> String {
         // Combine content ID and domain for composite hash
-        let combined = format!("{}:{}", self.content_id, self.domain).into_bytes();
+        let combined = format!("{}:{}", content_id_to_str(&self.content_id), self.domain).into_bytes();
         let hash = blake3::hash(&combined);
         hex::encode(hash.as_bytes())
     }
@@ -101,7 +106,7 @@ impl FactId {
 
 impl fmt::Display for FactId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.content_id, self.domain)
+        write!(f, "{}", self.as_string())
     }
 }
 
@@ -125,7 +130,7 @@ pub fn generate_decision_id() -> String {
     // Create a ContentId with decision prefix
     let seed = format!("decision_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
     let content_id = ContentId::from_bytes(seed.as_bytes());
-    format!("decision_{}", content_id)
+    format!("decision_{}", content_id_to_str(&content_id))
 }
 
 /// Generate a unique ID for system operations
@@ -133,7 +138,7 @@ pub fn generate_system_operation_id() -> String {
     // Create a ContentId with system operation prefix
     let seed = format!("sys_op_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
     let content_id = ContentId::from_bytes(seed.as_bytes());
-    format!("sys_op_{}", content_id)
+    format!("sys_op_{}", content_id_to_str(&content_id))
 }
 
 /// Generate a unique ID for maintenance windows
@@ -141,7 +146,7 @@ pub fn generate_maintenance_window_id() -> String {
     // Create a ContentId with maintenance prefix
     let seed = format!("maint_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
     let content_id = ContentId::from_bytes(seed.as_bytes());
-    format!("maint_{}", content_id)
+    format!("maint_{}", content_id_to_str(&content_id))
 }
 
 /// Generate a unique ID for transfers
@@ -149,19 +154,19 @@ pub fn generate_transfer_id() -> String {
     // Create a ContentId with transfer prefix
     let seed = format!("transfer_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
     let content_id = ContentId::from_bytes(seed.as_bytes());
-    format!("transfer_{}", content_id)
+    format!("transfer_{}", content_id_to_str(&content_id))
 }
 
 /// Convert from causality_types::crypto_primitives::ContentId to causality_types::ContentId
 pub fn convert_to_types_content_id(content_id: &ContentId) -> causality_types::ContentId {
     // Convert the crypto_primitives ContentId to standard ContentId
-    let hash_hex = content_id.to_string();
+    let hash_hex = content_id_to_str(content_id);
     causality_types::ContentId::new(hash_hex)
 }
 
 /// Convert from causality_types::ContentId to causality_types::crypto_primitives::ContentId
 pub fn convert_from_types_content_id(content_id: &causality_types::ContentId) -> ContentId {
     // Get the hex value from ContentId
-    let content_hex = content_id.to_string();
+    let content_hex = content_id.as_string();
     ContentId::new(content_hex)
 }

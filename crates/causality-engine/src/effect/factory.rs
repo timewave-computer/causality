@@ -23,7 +23,7 @@ pub fn create_transfer_effect(
 pub fn create_deposit_effect(
     resource_id: String,
     owner: String,
-    initial_state: String,
+    _initial_state: String,
 ) -> Result<Box<dyn Effect>> {
     // Using empty effect until we implement proper deposit
     Ok(Box::new(EmptyEffect::new(&format!("deposit_effect:{}:{}", resource_id, owner))))
@@ -63,7 +63,7 @@ impl Effect for EmptyEffect {
         format!("Empty effect: {}", self.name)
     }
     
-    async fn execute(&self, context: &dyn causality_core::effect::EffectContext) -> EffectResult<EffectOutcome> {
+    async fn execute(&self, _context: &dyn causality_core::effect::EffectContext) -> EffectResult<EffectOutcome> {
         // Simplified implementation for now - create a workflow from state
         Ok(EffectOutcome::success(HashMap::new()))
     }

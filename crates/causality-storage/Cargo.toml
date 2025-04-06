@@ -17,6 +17,7 @@ serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+borsh = { workspace = true }
 
 # Internal dependencies
 causality-types = { workspace = true }

@@ -409,7 +409,7 @@ impl QueryEngine for BasicQueryEngine {
                     .resource_type_counts
                     .iter()
                     .filter(|(t, _)| *t == resource_type)
-                    .flat_map(|(_, count)| {
+                    .flat_map(|(_, _count)| {
                         // TODO: Get actual resource IDs for the type
                         Vec::new()
                     })

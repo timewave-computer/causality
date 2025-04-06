@@ -341,7 +341,7 @@ impl Obligation {
         match &self.obligation_type {
             ObligationType::UseWithinTime(_) => true,
             ObligationType::ReportUsage {  .. } => true,
-            ObligationType::RevokeAt(time) => true,
+            ObligationType::RevokeAt(_time) => true,
             ObligationType::PayForUsage {  .. } => true,
             ObligationType::Custom { parameters, .. } => parameters.contains_key("deadline"),
             _ => false,

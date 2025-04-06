@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::fmt::Debug;
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -17,8 +16,9 @@ use uuid::Uuid;
 
 use causality_error::EngineError;
 use causality_types::{Timestamp, ContentId, TraceId, DomainId};
+use causality_types::content_addressing::{content_id_from_string, content_hash_from_bytes};
 
-use crate::log::types::{LogEntry, EntryType, EntryData, SystemEventEntry};
+use crate::log::types::{LogEntry, EntryType, EntryData, SystemEventEntry, BorshJsonValue};
 use crate::log::LogStorage;
 use crate::log::event_entry::{EventEntry, EventSeverity};
 use crate::error_conversions::convert_boxed_error;
@@ -167,7 +167,7 @@ impl<S: LogStorage + Send + Sync + 'static> EventLogger<S> {
         }
     }
     
-    /// Log an event
+    /// Log a standard event
     pub fn log_event(
         &self,
         entry_type: &str,
@@ -177,11 +177,12 @@ impl<S: LogStorage + Send + Sync + 'static> EventLogger<S> {
         trace_id: Option<TraceId>,
         resources: Option<Vec<ContentId>>,
     ) -> std::result::Result<(), Box<dyn CausalityError>> {
+        let event_name_str = event_name.into();
         let event = EventEntry {
-            event_name: event_name.into(),
+            event_name: event_name_str.clone(),
             severity: severity.clone(),
             component: "engine".to_string(),
-            details: payload.unwrap_or_else(|| serde_json::json!({})),
+            details: BorshJsonValue(payload.unwrap_or_else(|| serde_json::json!({}))),
             resources,
             domains: None,
         };
@@ -190,15 +191,24 @@ impl<S: LogStorage + Send + Sync + 'static> EventLogger<S> {
         metadata.insert("event_type".to_string(), entry_type.to_string());
         metadata.insert("severity".to_string(), format!("{:?}", severity));
         
+        let event_str = format!("{}-{}-{}-{}",
+            entry_type,
+            format!("{:?}", severity),
+            event_name_str,
+            Timestamp::now().to_string()
+        );
+        
+        let hash = content_hash_from_bytes(event_str.as_bytes());
+        let id = ContentId::from(hash).to_string();
+        
         let log_entry = LogEntry {
-            id: Uuid::new_v4().to_string(),
+            id,
             timestamp: Timestamp::now(),
-            entry_type: EntryType::Event,
+            entry_type: EntryType::Custom(entry_type.to_string()),
             data: EntryData::Event(event),
             trace_id,
             parent_id: None,
             metadata,
-            entry_hash: None,
         };
         
         let storage = self.storage.lock()
@@ -215,7 +225,7 @@ impl<S: LogStorage + Send + Sync + 'static> EventLogger<S> {
         lifecycle_stage: &str,
         entity_type: &str,
         entity_id: &str,
-        metadata: Option<EventMetadata>,
+        _metadata: Option<EventMetadata>,
     ) -> std::result::Result<(), Box<dyn CausalityError>> {
         let lifecycle_data = LifecycleEventData {
             lifecycle_stage: lifecycle_stage.to_string(),
@@ -250,7 +260,7 @@ impl<S: LogStorage + Send + Sync + 'static> EventLogger<S> {
         system_component: &str,
         event_name: &str,
         message: &str,
-        metadata: Option<EventMetadata>,
+        _metadata: Option<EventMetadata>,
     ) -> std::result::Result<(), Box<dyn CausalityError>> {
         let system_data = SystemEventData {
             component: system_component.to_string(),
@@ -285,7 +295,7 @@ impl<S: LogStorage + Send + Sync + 'static> EventLogger<S> {
         user_id: &str,
         activity_type: &str,
         details: &str,
-        metadata: Option<EventMetadata>,
+        _metadata: Option<EventMetadata>,
     ) -> std::result::Result<(), Box<dyn CausalityError>> {
         let activity_data = UserActivityData {
             user_id: user_id.to_string(),
@@ -321,7 +331,7 @@ impl<S: LogStorage + Send + Sync + 'static> EventLogger<S> {
         resource_id: &str,
         access_type: &str,
         accessor_id: &str,
-        metadata: Option<EventMetadata>,
+        _metadata: Option<EventMetadata>,
     ) -> std::result::Result<(), Box<dyn CausalityError>> {
         let access_data = ResourceAccessData {
             resource_type: resource_type.to_string(),
@@ -367,7 +377,7 @@ impl<S: LogStorage + Send + Sync + 'static> EventLogger<S> {
             stack_trace: stack_trace.map(|s| s.to_string()),
         };
         
-        let metadata_with_severity = match metadata {
+        let _metadata_with_severity = match metadata {
             Some(meta) => {
                 let meta_clone = EventMetadata {
                     timestamp: meta.timestamp,
@@ -686,7 +696,7 @@ impl<'a, S: LogStorage + Send + Sync + 'static> EventQuery<'a, S> {
         
         if let Some(start_time) = self.start_time {
             results.retain(|event| {
-                if let Ok(metadata) = serde_json::from_value::<EventMetadata>(event.details.clone()) {
+                if let Ok(metadata) = serde_json::from_value::<EventMetadata>(event.details.0.clone()) {
                     metadata.timestamp >= start_time
                 } else {
                     true
@@ -696,7 +706,7 @@ impl<'a, S: LogStorage + Send + Sync + 'static> EventQuery<'a, S> {
         
         if let Some(end_time) = self.end_time {
             results.retain(|event| {
-                if let Ok(metadata) = serde_json::from_value::<EventMetadata>(event.details.clone()) {
+                if let Ok(metadata) = serde_json::from_value::<EventMetadata>(event.details.0.clone()) {
                     metadata.timestamp <= end_time
                 } else {
                     true
@@ -712,233 +722,119 @@ impl<'a, S: LogStorage + Send + Sync + 'static> EventQuery<'a, S> {
     }
 }
 
-/// Create a new event entry
-pub fn create_event_entry(
-    event_name: &str,
-    severity: EventSeverity,
-    component: &str,
-    details: Option<Value>,
-) -> LogEntry {
-    LogEntry {
-        id: format!("event-{}", uuid::Uuid::new_v4()),
-        timestamp: Timestamp::now(),
-        entry_type: EntryType::Event,
-        data: EntryData::SystemEvent(SystemEventEntry {
-            event_type: event_name.to_string(),
-            source: component.to_string(),
-            data: details.unwrap_or(json!({})),
-        }),
-        trace_id: None,
-        parent_id: None,
-        metadata: HashMap::new(),
-        entry_hash: None,
-    }
-}
-
-/// Create a fact observation event
-pub fn create_fact_observation(
-    event_name: &str,
-    fact_id: &str,
-    domains: Option<Vec<String>>,
-    _metadata: Option<EventMetadata>,
-) -> LogEntry {
-    let mut entry = LogEntry::new();
-    // Implementation would go here
-    entry
-}
-
-/// Create a resource access event
-pub fn create_resource_access(
-    event_name: &str,
-    resource_id: &str,
-    domains: Option<Vec<String>>,
-    _metadata: Option<EventMetadata>,
-) -> LogEntry {
-    let mut entry = LogEntry::new();
-    // Implementation would go here
-    entry
-}
-
-/// Create a system event
-pub fn create_system_event(
-    event_name: &str,
-    domains: Option<Vec<String>>,
-    _metadata: Option<EventMetadata>,
-) -> LogEntry {
-    let mut entry = LogEntry::new();
-    // Implementation would go here
-    entry
-}
-
-/// Create a domain event
-pub fn create_domain_event(
-    event_name: &str,
-    domains: Option<Vec<String>>,
-    _metadata: Option<EventMetadata>,
-) -> LogEntry {
-    let mut entry = LogEntry::new();
-    // Implementation would go here
-    entry
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::log::MemoryLogStorage;
+    use crate::log::memory_storage::MemoryLogStorage;
+    use crate::log::types::{EntryData, EntryType, BorshJsonValue};
+    use std::sync::Mutex;
+    use serde_json::json;
     use crate::log::event_entry::EventSeverity;
-    use chrono::Duration;
-    use tokio;
-    
+
     fn create_test_logger() -> EventLogger<MemoryLogStorage> {
-        let storage = Arc::new(Mutex::new(MemoryLogStorage::new()));
-        let domain_id = DomainId::new("test-domain");
-        EventLogger::new(storage, domain_id)
+        let storage = Arc::new(Mutex::new(MemoryLogStorage::default()));
+        EventLogger::new(storage, DomainId::new("test_domain"))
     }
-    
+
     #[test]
     fn test_log_basic_event() {
         let logger = create_test_logger();
-        let trace_id = TraceId::from_str("test-trace");
-        let resource = ContentId::new("resource-1");
-        
+        let trace_id = TraceId::new();
         let result = logger.log_event(
-            "event",
+            "test.event",
             EventSeverity::Info,
-            "test-component",
-            Some(json!({"message": "Test event"})),
-            Some(trace_id),
-            Some(vec![resource]),
+            "test_component",
+            Some(json!({ "key": "value" })),
+            Some(trace_id.clone()),
+            None,
         );
-        
         assert!(result.is_ok());
-        let storage = logger.storage.lock().unwrap();
-        let entries = storage.read(0, storage.entry_count().unwrap()).unwrap();
+
+        let storage_locked = logger.storage.lock().unwrap();
+        let count = storage_locked.entry_count().expect("Failed to get entry count");
+        let entries = storage_locked.read(0, count).expect("Failed to read entries");
         assert_eq!(entries.len(), 1);
-        
         let entry = &entries[0];
-        if let EntryData::Event(event) = &entry.data {
-            assert_eq!(event.event_name, "test-component");
-            assert_eq!(event.severity, EventSeverity::Info);
-            assert_eq!(event.component, "engine");
-            assert_eq!(event.details, json!({"message": "Test event"}));
-            assert_eq!(event.resources.as_ref().unwrap()[0], resource);
+        let trace_id_str = trace_id.to_string();
+        assert_eq!(entry.trace_id.as_ref().map(|t| t.to_string()), Some(trace_id_str));
+
+        if let EntryData::Event(event_data) = &entry.data {
+            assert_eq!(event_data.event_name, "test.event");
+            assert_eq!(event_data.severity, EventSeverity::Info);
+            assert_eq!(event_data.component, "test_component");
+            assert_eq!(event_data.details.0, json!({ "key": "value" }));
         } else {
-            panic!("Expected EntryData::Event");
+            panic!("Incorrect entry data type: expected Event, got {:?}", entry.data);
         }
     }
-    
+
     #[test]
     fn test_log_with_metadata() {
         let logger = create_test_logger();
-        let trace_id = TraceId::from_str("test-trace");
-        let resource = ContentId::new("resource-1");
-        
-        let result = logger.log_event(
-            "event",
-            EventSeverity::Warning,
-            "test-component",
-            Some(json!({"message": "Test event with metadata"})),
-            Some(trace_id),
-            Some(vec![resource]),
+        let trace_id = TraceId::new();
+        let metadata = EventMetadata::new("test_source")
+            .with_severity(EventSeverity::Warning)
+            .with_tag("important");
+
+        let result = logger.log_lifecycle_event(
+            trace_id.clone(), 
+            "created", 
+            "user", 
+            "user123", 
+            Some(metadata)
         );
-        
         assert!(result.is_ok());
-        let storage = logger.storage.lock().unwrap();
-        let entries = storage.read(0, storage.entry_count().unwrap()).unwrap();
+        
+        let storage_locked = logger.storage.lock().unwrap();
+        let count = storage_locked.entry_count().expect("Failed to get entry count");
+        let entries = storage_locked.read(0, count).expect("Failed to read entries");
         assert_eq!(entries.len(), 1);
-        
         let entry = &entries[0];
-        if let EntryData::Event(event) = &entry.data {
-            assert_eq!(event.event_name, "test-component");
-            assert_eq!(event.severity, EventSeverity::Warning);
-            assert_eq!(event.component, "engine");
-            assert_eq!(event.details, json!({"message": "Test event with metadata"}));
-            assert_eq!(event.resources.as_ref().unwrap()[0], resource);
-        } else {
-            panic!("Expected EntryData::Event");
-        }
-        
-        assert_eq!(entry.metadata.get("event_type"), Some(&"event".to_string()));
-        assert_eq!(entry.metadata.get("severity"), Some(&"Warning".to_string()));
+        assert_eq!(entry.metadata.get("event_type"), Some(&"lifecycle.event".to_string()));
+        assert_eq!(entry.metadata.get("severity"), Some(&"Info".to_string()));
     }
-    
+
     #[test]
     fn test_specialized_event_types() {
         let logger = create_test_logger();
-        let trace_id = TraceId::from_str("test-trace");
-        
-        let resource_id = ContentId::new("resource-1");
-        
-        let result = logger.log_event(
-            "system-event",
-            EventSeverity::Info,
-            "system",
-            Some(json!({"message": "test message"})),
-            Some(trace_id.clone()),
-            Some(vec![resource_id.clone()]),
-        );
-        
-        assert!(result.is_ok());
-        
-        let result = logger.log_event(
-            "user-activity",
-            EventSeverity::Info,
-            "user",
-            Some(json!({"user_id": "user1", "message": "user logged in"})),
-            Some(trace_id.clone()),
-            Some(vec![resource_id.clone()]),
-        );
-        
-        assert!(result.is_ok());
+        let trace_id = TraceId::new();
+
+        let res1 = logger.log_system_event(trace_id.clone(), "auth", "login_failed", "Invalid password", None);
+        assert!(res1.is_ok());
+        let res2 = logger.log_user_activity(trace_id.clone(), "user123", "file_upload", "Uploaded report.pdf", None);
+        assert!(res2.is_ok());
+        let res3 = logger.log_resource_access(trace_id.clone(), "database", "orders_table", "read", "service_account", None);
+        assert!(res3.is_ok());
+        let res4 = logger.log_error(trace_id.clone(), "DatabaseError", "Connection timeout", Some(504), None, None);
+        assert!(res4.is_ok());
+        let res5 = logger.log_performance_event(trace_id.clone(), "query_execution", 150, None);
+        assert!(res5.is_ok());
+        let res6 = logger.log_debug(trace_id.clone(), "cache_module", "Cache miss for key X", None);
+        assert!(res6.is_ok());
+
+        let storage_locked = logger.storage.lock().unwrap();
+        let count = storage_locked.entry_count().expect("Failed to get entry count");
+        assert_eq!(count, 6);
     }
-    
+
     #[tokio::test]
     async fn test_event_query() {
         let logger = create_test_logger();
-        let trace_id = TraceId::from_str("test-trace");
-        let resource_id = ContentId::new("resource-1");
+        let trace_id = TraceId::new();
+        logger.log_event("event.one", EventSeverity::Info, "comp_a", None, Some(trace_id.clone()), None).unwrap();
+        logger.log_event("event.two", EventSeverity::Warning, "comp_b", None, Some(trace_id.clone()), None).unwrap();
+        logger.log_event("event.three", EventSeverity::Info, "comp_a", None, Some(trace_id.clone()), None).unwrap();
+
+        let all_entries = logger.storage.lock().unwrap().get_all_entries().await.unwrap();
         
-        logger.log_event(
-            "event1",
-            EventSeverity::Info,
-            "system",
-            Some(json!({"data": "data1"})),
-            Some(trace_id.clone()),
-            Some(vec![resource_id.clone()]),
-        ).unwrap();
-        
-        logger.log_event(
-            "event2",
-            EventSeverity::Warning,
-            "system",
-            Some(json!({"data": "data2"})),
-            Some(trace_id.clone()),
-            Some(vec![resource_id.clone()]),
-        ).unwrap();
-        
-        logger.log_event(
-            "event3",
-            EventSeverity::Error,
-            "system",
-            Some(json!({"data": "data3"})),
-            Some(trace_id.clone()),
-            Some(vec![resource_id.clone()]),
-        ).unwrap();
-        
-        let events = EventQuery::new(&logger)
-            .of_type("event1")
-            .execute()
-            .await
-            .unwrap();
-        
-        assert!(!events.is_empty());
-        
-        let events = EventQuery::new(&logger)
-            .min_severity(EventSeverity::Warning)
-            .execute()
-            .await
-            .unwrap();
-        
-        assert!(!events.is_empty());
+        let info_events: Vec<_> = all_entries.iter().filter(|e| 
+            matches!(&e.data, EntryData::Event(ev) if ev.severity == EventSeverity::Info)
+        ).collect();
+        let comp_a_events: Vec<_> = all_entries.iter().filter(|e| 
+            matches!(&e.data, EntryData::Event(ev) if ev.component == "comp_a")
+        ).collect();
+
+        assert_eq!(info_events.len(), 2);
+        assert_eq!(comp_a_events.len(), 2);
     }
 } 

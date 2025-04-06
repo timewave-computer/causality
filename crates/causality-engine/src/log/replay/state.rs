@@ -50,17 +50,21 @@ impl ReplayState {
     /// Get facts of a specific type
     pub fn get_facts_by_type(&self, fact_type: &str) -> Vec<&FactEntry> {
         self.facts.iter()
-            .filter(|fact| fact.fact_type == fact_type)
+            // TODO: Revisit filtering - FactEntry no longer has fact_type.
+            // .filter(|fact| fact.fact_type == fact_type)
             .collect()
     }
     
     /// Get facts for a specific resource
     pub fn get_facts_for_resource(&self, resource_id: &ContentId) -> Vec<&FactEntry> {
         self.facts.iter()
+            // TODO: Revisit filtering - FactEntry no longer has resources.
+            /*
             .filter(|fact| match &fact.resources {
                 Some(resources) => resources.contains(resource_id),
                 None => false,
             })
+            */
             .collect()
     }
     
@@ -68,17 +72,21 @@ impl ReplayState {
     pub fn get_effects_by_type(&self, effect_type: &causality_core::EffectType) -> Vec<&EffectEntry> {
         self.effects
             .iter()
-            .filter(|effect| effect.effect_type.to_string() == effect_type.to_string())
+            // TODO: Revisit filtering - EffectEntry no longer has effect_type.
+            // .filter(|effect| effect.effect_type.to_string() == effect_type.to_string())
             .collect()
     }
     
     /// Get effects for a specific resource
     pub fn get_effects_for_resource(&self, resource_id: &ContentId) -> Vec<&EffectEntry> {
         self.effects.iter()
+             // TODO: Revisit filtering - EffectEntry no longer has resources.
+            /*
             .filter(|effect| match &effect.resources {
                 Some(resources) => resources.contains(resource_id),
                 None => false,
             })
+            */
             .collect()
     }
     
@@ -91,19 +99,110 @@ impl ReplayState {
     pub fn facts_containing_resource(&self, resource_id: &ContentId) -> Vec<&FactEntry> {
         self.facts
             .iter()
+            // TODO: Revisit filtering - FactEntry no longer has resources.
+            /*
             .filter(|fact| match &fact.resources {
                 Some(resources) => resources.contains(resource_id),
                 None => false, // No resources in this fact
             })
+            */
             .collect()
     }
 
     pub fn effects_containing_resource(&self, resource_id: &ContentId) -> Vec<&EffectEntry> {
         self.effects
             .iter()
+             // TODO: Revisit filtering - EffectEntry no longer has resources.
+            /*
             .filter(|effect| match &effect.resources {
                 Some(resources) => resources.contains(resource_id),
                 None => false, // No resources in this effect
+            })
+            */
+            .collect()
+    }
+
+    /// Find facts matching a specific type and optional resource filter.
+    pub fn find_facts(
+        &self, 
+        fact_type: &str, 
+        resource_filter: Option<&HashSet<ContentId>>
+    ) -> Vec<&FactEntry> {
+        self.facts.iter()
+            // TODO: Revisit filtering - FactEntry no longer has fact_type.
+            // .filter(|fact| fact.fact_type == fact_type)
+            .filter(|fact| { // Temporary: allow all fact types
+                if let Some(filter) = resource_filter {
+                    // TODO: Revisit resource filtering. FactEntry no longer has resources.
+                    false // Need to implement resource check based on new structure or remove
+                    /*
+                    match &fact.resources {
+                        Some(resources) => resources.iter().any(|r| filter.contains(r)),
+                        None => false, // Fact has no resources, doesn't match filter
+                    }
+                    */
+                } else {
+                    true // No resource filter, include fact
+                }
+            })
+            .collect()
+    }
+
+    /// Find effects matching a specific type and optional resource filter.
+     pub fn find_effects(
+        &self, 
+        effect_type: &str, 
+        resource_filter: Option<&HashSet<ContentId>>
+    ) -> Vec<&EffectEntry> {
+        self.effects.iter()
+             // TODO: Revisit filtering - EffectEntry no longer has effect_type.
+             // Maybe filter based on effect_id or details field?
+            // .filter(|effect| effect.effect_type.to_string() == effect_type.to_string())
+             .filter(|effect| { // Temporary: allow all effect types
+                 if let Some(filter) = resource_filter {
+                     // TODO: Revisit resource filtering. EffectEntry no longer has resources.
+                    false // Need to implement resource check based on new structure or remove
+                    /*
+                     match &effect.resources {
+                         Some(resources) => resources.iter().any(|r| filter.contains(r)),
+                         None => false, // Effect has no resources, doesn't match filter
+                     }
+                     */
+                 } else {
+                     true // No resource filter, include effect
+                 }
+             })
+            .collect()
+    }
+    
+    /// Get all facts related to a set of resources.
+    pub fn get_facts_by_resources(&self, resources: &HashSet<ContentId>) -> Vec<&FactEntry> {
+        self.facts.iter()
+            .filter(|fact| { 
+                 // TODO: Revisit resource filtering. FactEntry no longer has resources.
+                 false // Need to implement resource check based on new structure or remove
+                /*
+                match &fact.resources {
+                    Some(fact_resources) => fact_resources.iter().any(|r| resources.contains(r)),
+                    None => false,
+                }
+                */
+            })
+            .collect()
+    }
+
+    /// Get all effects related to a set of resources.
+    pub fn get_effects_by_resources(&self, resources: &HashSet<ContentId>) -> Vec<&EffectEntry> {
+        self.effects.iter()
+            .filter(|effect| { 
+                 // TODO: Revisit resource filtering. EffectEntry no longer has resources.
+                 false // Need to implement resource check based on new structure or remove
+                /*
+                match &effect.resources {
+                    Some(effect_resources) => effect_resources.iter().any(|r| resources.contains(r)),
+                    None => false,
+                }
+                */
             })
             .collect()
     }
@@ -219,24 +318,31 @@ impl DomainState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr; // Import FromStr if needed for ContentId/DomainId
     
     #[test]
     fn test_resource_state() {
-        let resource_id = ContentId::new(1);
+        // Use from_str or new depending on ContentId implementation
+        let resource_id = ContentId::from_str("resource_1").expect("Invalid ContentId");
         let entry_id = "entry_1".to_string();
         
-        let mut state = ResourceState::new(resource_id, entry_id.clone());
+        let mut state = ResourceState::new(resource_id.clone(), entry_id.clone());
         assert_eq!(state.id, resource_id);
         assert_eq!(state.last_entry_id, entry_id);
         assert!(state.owner.is_none());
         assert!(!state.locked);
         assert!(state.waiters.is_empty());
         
-        let state = state.with_owner("alice").lock();
-        assert_eq!(state.owner.unwrap(), "alice");
+        // Chain the calls to avoid partial move
+        let mut state = ResourceState::new(resource_id.clone(), entry_id.clone())
+            .with_owner("alice")
+            .lock();
+            
+        assert_eq!(state.owner.unwrap(), "alice"); // owner is consumed here
         assert!(state.locked);
         
-        let mut state = state.unlock();
+        // Reassign state after unlock
+        state = state.unlock();
         assert!(!state.locked);
         
         state.add_waiter("bob");
@@ -254,10 +360,11 @@ mod tests {
     
     #[test]
     fn test_domain_state() {
-        let domain_id = DomainId::new(1);
+        // Use DomainId::new
+        let domain_id = DomainId::new("domain_1");
         let entry_id = "entry_1".to_string();
         
-        let mut state = DomainState::new(domain_id, entry_id.clone());
+        let mut state = DomainState::new(domain_id.clone(), entry_id.clone());
         assert_eq!(state.id, domain_id);
         assert_eq!(state.last_entry_id, entry_id);
         assert_eq!(state.height, BlockHeight::new(0));

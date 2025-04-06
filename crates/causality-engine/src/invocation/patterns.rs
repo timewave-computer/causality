@@ -479,8 +479,8 @@ impl InvocationPatternTrait for StreamingInvocation {
     
     async fn execute(
         &self,
-        registry: &EffectRegistry,
-        propagator: &ContextPropagator,
+        _registry: &EffectRegistry,
+        _propagator: &ContextPropagator,
     ) -> Result<HandlerOutput> {
         // Simplified execution that returns an empty result
         // This is a temporary workaround until the streaming functionality is fixed

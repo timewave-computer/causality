@@ -10,37 +10,94 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use async_trait::async_trait;
 use tracing::{debug, warn};
-
-use causality_error::{EngineResult as Result, EngineError as Error};
+use anyhow::{anyhow, Result};
+use thiserror::Error;
+use causality_error::{Error, EngineError};
 use causality_core::effect::Effect;
 use causality_core::effect::outcome::{EffectOutcome, EffectStatus, ResultData};
 use causality_core::effect::types::EffectId;
 // Import the specific, generic Operation type from core
 use causality_core::resource::agent::operation::Operation as CoreOperation;
 use causality_core::resource::OperationType as CoreOperationType;
-// Import local types using crate::operation path, and RegisterOperationType from log::fact_types
+use causality_core::resource::agent::operation::{
+    IdentityId, OperationState, EffectInfo, effects_to_info
+};
+// Import types for CoreOperation
+use causality_core::resource::ResourceId;
+use causality_types::ContentId;
+// Import local types using crate::operation path
 use crate::operation::{ 
     ExecutionContext, ExecutionEnvironment, 
     AbstractContext, RegisterContext, ZkContext, // Keep local RegisterOperation struct (might be unused now?)
 };
-use crate::operation::verification::{VerificationService, VerificationContext, VerificationOptions};
+use crate::effect::factory::EmptyEffect;
+
+/// Verification service trait for operation verification
+#[async_trait]
+pub trait VerificationService: Send + Sync {
+    /// The result type for verification
+    type VerificationResult: VerificationResultExt;
+    
+    /// Verify an operation in the given context with the given options
+    async fn verify(&self, context: VerificationContext, options: VerificationOptions) -> std::result::Result<Self::VerificationResult, EngineError>;
+}
+
+/// Context for verification operations
+#[derive(Debug)]
+pub struct VerificationContext {
+    // Fields as needed for verification
+    pub operation_id: String,
+    pub operation_type: String,
+}
+
+impl VerificationContext {
+    /// Create a new verification context
+    pub fn new() -> Self {
+        Self {
+            operation_id: String::new(),
+            operation_type: String::new(),
+        }
+    }
+    
+    /// Set the operation type
+    pub fn with_operation_type(mut self, operation_type: String) -> Self {
+        self.operation_type = operation_type;
+        self
+    }
+}
+
+/// Options for verification
+#[derive(Debug)]
+pub struct VerificationOptions {
+    // Fields as needed for verification options
+    pub strict_mode: bool,
+}
+
+impl VerificationOptions {
+    /// Create default verification options
+    pub fn default() -> Self {
+        Self {
+            strict_mode: false,
+        }
+    }
+}
 
 // Define Interpreter trait since it doesn't exist yet
 #[async_trait]
 pub trait Interpreter: Send + Sync {
-    async fn execute_effect(&self, effect: &dyn Effect) -> Result<EffectOutcome>;
+    async fn execute_effect(&self, effect: &dyn Effect) -> std::result::Result<EffectOutcome, anyhow::Error>;
 }
 
 // FIXME: Placeholder for ResourceRegisterTrait that's missing
 #[async_trait]
 pub trait ResourceRegisterTrait: Send + Sync {
-    async fn create_register(&self, register_id: &str, data: &HashMap<String, String>) -> Result<()>;
-    async fn update_register(&self, register_id: &str, data: &HashMap<String, String>) -> Result<()>;
-    async fn transfer_register(&self, register_id: &str, new_owner: &str) -> Result<()>;
-    async fn lock_register(&self, register_id: &str) -> Result<()>;
-    async fn unlock_register(&self, register_id: &str) -> Result<()>;
-    async fn freeze_register(&self, register_id: &str) -> Result<()>;
-    async fn archive_register(&self, register_id: &str) -> Result<()>;
+    async fn create_register(&self, register_id: &str, data: &HashMap<String, String>) -> std::result::Result<(), anyhow::Error>;
+    async fn update_register(&self, register_id: &str, data: &HashMap<String, String>) -> std::result::Result<(), anyhow::Error>;
+    async fn transfer_register(&self, register_id: &str, new_owner: &str) -> std::result::Result<(), anyhow::Error>;
+    async fn lock_register(&self, register_id: &str) -> std::result::Result<(), anyhow::Error>;
+    async fn unlock_register(&self, register_id: &str) -> std::result::Result<(), anyhow::Error>;
+    async fn freeze_register(&self, register_id: &str) -> std::result::Result<(), anyhow::Error>;
+    async fn archive_register(&self, register_id: &str) -> std::result::Result<(), anyhow::Error>;
 }
 
 // use super::transformation::transform_operation; // Comment out if transform_operation relies on removed types
@@ -77,18 +134,18 @@ pub enum ExecutionError {
 }
 
 // Implement From trait to convert ExecutionError to EngineError
-impl From<ExecutionError> for Error {
+impl From<ExecutionError> for EngineError {
     fn from(error: ExecutionError) -> Self {
         match error {
-            ExecutionError::InvalidContext(ctx) => Error::ValidationError(format!("Invalid execution context: {:?}", ctx)),
-            ExecutionError::MissingImplementation => Error::ValidationError("Missing concrete implementation".to_string()),
-            ExecutionError::MissingProof => Error::ValidationError("Missing required proof".to_string()),
-            ExecutionError::VerificationFailed(msg) => Error::ValidationError(format!("Verification failed: {}", msg)),
-            ExecutionError::EffectExecutionFailed(msg) => Error::ExecutionTimeout(format!("Effect execution failed: {}", msg)),
-            ExecutionError::RegisterOperationFailed(msg) => Error::StorageError(format!("Register operation failed: {}", msg)),
-            ExecutionError::PhysicalOperationFailed(msg) => Error::ExecutionFailed(format!("Physical operation failed: {}", msg)),
-            ExecutionError::TransformationError(msg) => Error::ValidationError(format!("Transformation error: {}", msg)),
-            ExecutionError::InternalError(msg) => Error::InternalError(format!("Internal error: {}", msg)),
+            ExecutionError::InvalidContext(ctx) => EngineError::ValidationError(format!("Invalid execution context: {:?}", ctx)),
+            ExecutionError::MissingImplementation => EngineError::ValidationError("Missing concrete implementation".to_string()),
+            ExecutionError::MissingProof => EngineError::ValidationError("Missing required proof".to_string()),
+            ExecutionError::VerificationFailed(msg) => EngineError::ValidationError(format!("Verification failed: {}", msg)),
+            ExecutionError::EffectExecutionFailed(msg) => EngineError::ExecutionTimeout(format!("Effect execution failed: {}", msg)),
+            ExecutionError::RegisterOperationFailed(msg) => EngineError::StorageError(format!("Register operation failed: {}", msg)),
+            ExecutionError::PhysicalOperationFailed(msg) => EngineError::ExecutionFailed(format!("Physical operation failed: {}", msg)),
+            ExecutionError::TransformationError(msg) => EngineError::ValidationError(format!("Transformation error: {}", msg)),
+            ExecutionError::InternalError(msg) => EngineError::InternalError(format!("Internal error: {}", msg)),
         }
     }
 }
@@ -110,6 +167,29 @@ pub struct OperationResult {
     
     /// Additional result data
     pub result_data: HashMap<String, String>,
+}
+
+/// Mock verification result used for testing
+#[derive(Debug)]
+pub struct MockVerificationResult { 
+    pub valid: bool 
+}
+
+/// Extension trait for verification result
+pub trait VerificationResultExt {
+    fn is_valid(&self) -> bool;
+    fn reasons(&self) -> Vec<String>;
+}
+
+// Implementation for MockVerificationResult for tests
+impl VerificationResultExt for MockVerificationResult {
+    fn is_valid(&self) -> bool {
+        self.valid
+    }
+    
+    fn reasons(&self) -> Vec<String> {
+        if self.valid { vec![] } else { vec!["Mock failure".to_string()] }
+    }
 }
 
 /// Trait for executing operations (accepts CoreOperation, identifies context via type param C)
@@ -168,7 +248,7 @@ impl OperationExecutor<AbstractContext> for AbstractExecutor { // Specify Abstra
         // Example: Execute the first effect found
         let effect_outcome = if let Some(first_effect_info) = operation.effects.first() {
             // Use crate's EmptyEffect from factory instead
-            let placeholder_effect = crate::effect::factory::EmptyEffect::new(&first_effect_info.effect_type);
+            let placeholder_effect = EmptyEffect::new(&first_effect_info.effect_type);
             self.interpreter.execute_effect(&placeholder_effect)
                 .await
                 .map_err(|e| ExecutionError::EffectExecutionFailed(e.to_string()))?
@@ -201,16 +281,16 @@ impl OperationExecutor<AbstractContext> for AbstractExecutor { // Specify Abstra
 }
 
 /// Executor for register operations
-pub struct RegisterExecutor {
+pub struct RegisterExecutor<V: VerificationResultExt> {
     resource_register: Arc<dyn ResourceRegisterTrait>,
-    verification_service: Arc<VerificationService>,
+    verification_service: Arc<dyn VerificationService<VerificationResult = V>>,
 }
 
-impl RegisterExecutor {
+impl<V: VerificationResultExt> RegisterExecutor<V> {
     /// Create a new register executor
     pub fn new(
         resource_register: Arc<dyn ResourceRegisterTrait>,
-        verification_service: Arc<VerificationService>
+        verification_service: Arc<dyn VerificationService<VerificationResult = V>>
     ) -> Self {
         Self {
             resource_register,
@@ -219,7 +299,7 @@ impl RegisterExecutor {
     }
     
     /// Execute abstract effect if available within the CoreOperation
-    async fn execute_abstract_effect(&self, _effects: &[causality_core::resource::agent::operation::EffectInfo]) -> Result<EffectOutcome> {
+    async fn execute_abstract_effect(&self, _effects: &[EffectInfo]) -> Result<EffectOutcome> {
         // Placeholder: In reality, this might involve interpreting the EffectInfo 
         // or finding an associated Effect trait object.
         Ok(EffectOutcome {
@@ -236,7 +316,7 @@ impl RegisterExecutor {
 }
 
 #[async_trait]
-impl OperationExecutor<RegisterContext> for RegisterExecutor { // Specify RegisterContext here
+impl<V: VerificationResultExt + Send + Sync + 'static> OperationExecutor<RegisterContext> for RegisterExecutor<V> {
     // Takes CoreOperation as input
     async fn execute(&self, operation: &CoreOperation) -> std::result::Result<OperationResult, ExecutionError> {
         // For register operations, we need to verify the operation first
@@ -252,6 +332,7 @@ impl OperationExecutor<RegisterContext> for RegisterExecutor { // Specify Regist
             .await
             .map_err(|e| ExecutionError::VerificationFailed(e.to_string()))?;
         
+        // Use the VerificationResultExt trait methods directly
         if !verification_result.is_valid() {
             return Err(ExecutionError::VerificationFailed(
                 format!("Operation verification failed: {:?}", verification_result.reasons())
@@ -351,13 +432,13 @@ impl OperationExecutor<RegisterContext> for RegisterExecutor { // Specify Regist
 }
 
 /// Executor for ZK operations
-pub struct ZkExecutor {
-    verification_service: Arc<VerificationService>,
+pub struct ZkExecutor<V: VerificationResultExt> {
+    verification_service: Arc<dyn VerificationService<VerificationResult = V>>,
 }
 
-impl ZkExecutor {
+impl<V: VerificationResultExt> ZkExecutor<V> {
     /// Create a new ZK executor
-    pub fn new(verification_service: Arc<VerificationService>) -> Self {
+    pub fn new(verification_service: Arc<dyn VerificationService<VerificationResult = V>>) -> Self {
         Self {
             verification_service,
         }
@@ -365,7 +446,7 @@ impl ZkExecutor {
 }
 
 #[async_trait]
-impl OperationExecutor<ZkContext> for ZkExecutor { // Specify ZkContext here
+impl<V: VerificationResultExt + Send + Sync + 'static> OperationExecutor<ZkContext> for ZkExecutor<V> {
     // Takes CoreOperation as input
     async fn execute(&self, operation: &CoreOperation) -> std::result::Result<OperationResult, ExecutionError> {
         // For ZK operations, we need to generate or verify a proof
@@ -420,6 +501,20 @@ impl OperationExecutor<ZkContext> for ZkExecutor { // Specify ZkContext here
     }
 }
 
+/// Helper function to check if verification result is valid
+fn verification_result_is_valid<T>(result: &T) -> bool {
+    // Since we can't directly use VerificationResultExt trait, we'll use this function
+    // In a real implementation, this might type check dynamically or use a more generic approach
+    true // Default to assuming valid for now
+}
+
+/// Helper function to get verification result reasons
+fn verification_result_reasons<T>(_result: &T) -> Vec<String> {
+    // Since we can't directly use VerificationResultExt trait, we'll use this function
+    // In a real implementation, this might type check dynamically or use a more generic approach
+    vec![] // Default to no reasons for now
+}
+
 /// Execute an operation with the given executor (accepts CoreOperation)
 pub async fn execute_operation<C: ExecutionContext>(
     operation: &CoreOperation,
@@ -450,21 +545,39 @@ async fn record_operation_execution(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_core::resource::{ResourceId}; 
-    use causality_core::resource::agent::operation::{ 
-        IdentityId, OperationState, effects_to_info, 
-        EffectInfo, CoreMockEffect // Use the imported alias 
-    };
-    use causality_error::EngineError;
-    use std::sync::Mutex;
-    use std::collections::HashMap;
 
-    // Mocks for dependencies (Interpreter, VerificationService)
+    // Mock VerificationService implementation for testing
+    #[derive(Debug)]
+    struct MockVerificationServiceImpl {}
+
+    #[derive(Debug)]
+    struct MockVerificationResult { valid: bool }
+
+    impl VerificationResultExt for MockVerificationResult {
+        fn is_valid(&self) -> bool {
+            self.valid
+        }
+        
+        fn reasons(&self) -> Vec<String> {
+            if self.valid { vec![] } else { vec!["Mock failure".to_string()] }
+        }
+    }
+
+    #[async_trait]
+    impl VerificationService for MockVerificationServiceImpl {
+        type VerificationResult = MockVerificationResult; // Associate the result type
+        // Use concrete types for VerificationContext/Options if they are structs
+        async fn verify(&self, _context: VerificationContext, _options: VerificationOptions) -> std::result::Result<Self::VerificationResult, EngineError> {
+            Ok(MockVerificationResult { valid: true })
+        }
+    }
+
+    // Mocks for dependencies (Interpreter)
     struct MockInterpreter {}
 
     #[async_trait]
     impl Interpreter for MockInterpreter {
-        async fn execute_effect(&self, effect: &dyn Effect) -> Result<EffectOutcome, EngineError> {
+        async fn execute_effect(&self, effect: &dyn Effect) -> std::result::Result<EffectOutcome, anyhow::Error> {
             Ok(EffectOutcome {
                 effect_id: Some(effect.id().clone()), // Use Some for Option<EffectId>
                 status: EffectStatus::Success,
@@ -479,30 +592,6 @@ mod tests {
         }
     }
 
-    // Mock VerificationService using the actual trait
-    struct MockVerificationServiceImpl {}
-
-    #[derive(Debug)]
-    struct MockVerificationResult { valid: bool }
-
-    #[async_trait]
-    impl VerificationService for MockVerificationServiceImpl {
-        type VerificationResult = MockVerificationResult; // Associate the result type
-        // Use concrete types for VerificationContext/Options if they are structs
-        async fn verify(&self, _context: VerificationContext, _options: VerificationOptions) -> Result<Self::VerificationResult, EngineError> {
-            Ok(MockVerificationResult { valid: true })
-        }
-    }
-
-    impl MockVerificationResult {
-        pub fn is_valid(&self) -> bool {
-            self.valid
-        }
-        pub fn reasons(&self) -> Vec<String> {
-            if self.valid { vec![] } else { vec!["Mock failure".to_string()] }
-        }
-    }
-
     // Test AbstractExecutor
     #[tokio::test]
     async fn test_abstract_executor() {
@@ -510,8 +599,8 @@ mod tests {
         // let verification_service = Arc::new(MockVerificationServiceImpl {}); // Verification service removed from AbstractExecutor::new
         let executor = AbstractExecutor::new(interpreter);
 
-        // Use the aliased CoreMockEffect
-        let test_effect = Box::new(CoreMockEffect::new("test_effect")) as Box<dyn Effect>; 
+        // Use EmptyEffect since CoreMockEffect isn't directly accessible
+        let test_effect = Box::new(EmptyEffect::new("test_effect")) as Box<dyn Effect>; 
         
         let operation = CoreOperation {
             identity: IdentityId::new("test-identity"),
@@ -536,5 +625,88 @@ mod tests {
         assert_eq!(outcome.status, EffectStatus::Success);
     }
 
-    // Add tests for other executors once they are uncommented and fixed
+    // Add tests for RegisterExecutor
+    #[tokio::test]
+    async fn test_register_executor() {
+        // This is just a basic test structure - the actual implementation would be more complex
+        struct MockResourceRegister {}
+
+        #[async_trait]
+        impl ResourceRegisterTrait for MockResourceRegister {
+            async fn create_register(&self, _register_id: &str, _data: &HashMap<String, String>) -> std::result::Result<(), anyhow::Error> {
+                Ok(())
+            }
+            async fn update_register(&self, _register_id: &str, _data: &HashMap<String, String>) -> std::result::Result<(), anyhow::Error> {
+                Ok(())
+            }
+            async fn transfer_register(&self, _register_id: &str, _new_owner: &str) -> std::result::Result<(), anyhow::Error> {
+                Ok(())
+            }
+            async fn lock_register(&self, _register_id: &str) -> std::result::Result<(), anyhow::Error> {
+                Ok(())
+            }
+            async fn unlock_register(&self, _register_id: &str) -> std::result::Result<(), anyhow::Error> {
+                Ok(())
+            }
+            async fn freeze_register(&self, _register_id: &str) -> std::result::Result<(), anyhow::Error> {
+                Ok(())
+            }
+            async fn archive_register(&self, _register_id: &str) -> std::result::Result<(), anyhow::Error> {
+                Ok(())
+            }
+        }
+
+        let resource_register = Arc::new(MockResourceRegister {});
+        let verification_service = Arc::new(MockVerificationServiceImpl {});
+        let executor = RegisterExecutor::<MockVerificationResult>::new(resource_register, verification_service);
+
+        // Create a simple operation
+        let operation = CoreOperation {
+            identity: IdentityId::new("test-identity"),
+            operation_type: CoreOperationType::Create,
+            target: ResourceId::from_legacy_content_id(&ContentId::new("test-register")),
+            effects: Vec::new(),
+            state: OperationState::Pending,
+            previous_operations: Vec::new(),
+            parameters: HashMap::new(),
+            metadata: HashMap::new(),
+            capability: None,
+        };
+
+        // Execute the operation
+        let result = executor.execute(&operation).await;
+        
+        // Verify the result
+        assert!(result.is_ok(), "Register execution failed: {:?}", result.err());
+        let op_result = result.unwrap();
+        assert!(op_result.success);
+    }
+
+    // Add test for ZkExecutor
+    #[tokio::test]
+    async fn test_zk_executor() {
+        let verification_service = Arc::new(MockVerificationServiceImpl {});
+        let executor = ZkExecutor::<MockVerificationResult>::new(verification_service);
+
+        // Create a simple operation
+        let operation = CoreOperation {
+            identity: IdentityId::new("test-identity"),
+            operation_type: CoreOperationType::Custom("ZkProof".to_string()),
+            target: ResourceId::from_legacy_content_id(&ContentId::new("test-proof-target")),
+            effects: Vec::new(),
+            state: OperationState::Pending,
+            previous_operations: Vec::new(),
+            parameters: HashMap::new(),
+            metadata: HashMap::new(),
+            capability: None,
+        };
+
+        // Execute the operation
+        let result = executor.execute(&operation).await;
+        
+        // Verify the result
+        assert!(result.is_ok(), "ZK execution failed: {:?}", result.err());
+        let op_result = result.unwrap();
+        assert!(op_result.success);
+    }
 } 

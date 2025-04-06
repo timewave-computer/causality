@@ -1,0 +1,19 @@
+# Basic scenario for in-memory simulation testing
+
+name = "basic-in-memory-test"
+description = "A simple scenario with one user and one committee agent."
+simulation-mode = "in-memory"
+
+[simulation_settings]
+runner_type = "in_memory"
+duration_seconds = 10
+
+[[agents]]
+id = "user-1"
+type = "mock_user"
+count = 1
+
+[[agents]]
+id = "committee-1"
+type = "mock_committee"
+count = 1 

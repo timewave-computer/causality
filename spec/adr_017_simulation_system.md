@@ -1,5 +1,7 @@
 # ADR-017: Simulation System and Unified Actor Control Plane
 
+**Note (2024-04-05):** This ADR uses the term "Actor". The system architecture has since evolved (see [spec.md](mdc:spec/spec.md) Section 6 and ADR-032) to use the term "Agent", representing simulation participants as specialized resource types. While the concepts in this ADR remain relevant, implementations should use the "Agent" terminology and resource-based model.
+
 ## Status
 
 Accepted, not yet implemented

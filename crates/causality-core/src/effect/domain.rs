@@ -685,7 +685,7 @@ impl DomainEffectRegistry {
     }
 
     /// Check if a handler exists for a specific type in a domain
-    pub fn has_handler_for_type(&self, domain_id: &str, effect_type_id: &EffectTypeId) -> bool {
+    pub fn has_handler_for_type(&self, domain_id: &str, _effect_type_id: &EffectTypeId) -> bool {
         // Check if we have any handlers for this domain
         if let Some(handlers) = self.handlers.get(domain_id) {
             // For now, we're not checking specific effect types since domain
@@ -761,7 +761,7 @@ impl Effect for BasicDomainEffect {
         format!("{:?} effect in domain {}", self.type_id, self.domain_id)
     }
     
-    async fn execute(&self, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
+    async fn execute(&self, _context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
         // Use success() method to construct a successful outcome with empty data HashMap
         Ok(EffectOutcome::success(HashMap::new()))
     }

@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -17,7 +17,7 @@ use serde::{Serialize, Deserialize};
 
 use causality_core::ContentHash;
 use causality_error::EngineError as Error;
-use crate::execution::{ContextId, ExecutionEvent};
+use crate::execution::context::{ContextId, ExecutionEvent, Value};
 
 /// Metadata for an execution trace
 #[derive(Debug, Clone, Serialize, Deserialize)]

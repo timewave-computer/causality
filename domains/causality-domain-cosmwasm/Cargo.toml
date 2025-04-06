@@ -15,11 +15,10 @@ tracing = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 
-# Note: Internal dependencies are intentionally commented out
-# until the core crates are stabilized
-# causality-types = { workspace = true }
-# causality-core = { workspace = true }
-# causality-domain = { workspace = true }
+# Internal dependencies - now uncommented
+causality-types = { workspace = true }
+causality-core = { workspace = true }
+causality-domain = { workspace = true }
 
 # DEPRECATED: Dependencies on legacy crates have been removed
 # All functionality is now available through causality-core

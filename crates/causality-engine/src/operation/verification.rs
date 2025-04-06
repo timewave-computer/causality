@@ -3,97 +3,11 @@
 
 use std::collections::HashMap;
 use causality_error::EngineResult as Result;
+use causality_error::EngineError;
+use async_trait::async_trait;
 
-/// Context for verification operations
-#[derive(Debug, Clone)]
-pub struct VerificationContext {
-    pub operation_id: String,
-    pub resource_ids: Vec<String>,
-    pub metadata: HashMap<String, String>,
-    pub operation_type: Option<String>,
-    pub proof: Option<UnifiedProof>,
-}
-
-impl VerificationContext {
-    /// Create a new verification context
-    pub fn new() -> Self {
-        Self {
-            operation_id: String::new(),
-            resource_ids: Vec::new(),
-            metadata: HashMap::new(),
-            operation_type: None,
-            proof: None,
-        }
-    }
-
-    /// Set the operation ID
-    pub fn with_operation_id(mut self, operation_id: String) -> Self {
-        self.operation_id = operation_id;
-        self
-    }
-    
-    /// Set the operation type
-    pub fn with_operation_type(mut self, operation_type: String) -> Self {
-        self.operation_type = Some(operation_type);
-        self
-    }
-    
-    /// Set the resources
-    pub fn with_resources(mut self, resource_ids: Vec<String>) -> Self {
-        self.resource_ids = resource_ids;
-        self
-    }
-    
-    /// Set the proof
-    pub fn with_proof(mut self, proof: UnifiedProof) -> Self {
-        self.proof = Some(proof);
-        self
-    }
-}
-
-impl Default for VerificationContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Options for verification
-#[derive(Debug, Clone)]
-pub struct VerificationOptions {
-    pub strict: bool,
-    pub timeout_ms: u64,
-    pub required_verifications: Vec<String>,
-}
-
-impl Default for VerificationOptions {
-    fn default() -> Self {
-        Self {
-            strict: false,
-            timeout_ms: 5000, // 5 seconds default timeout
-            required_verifications: Vec::new(),
-        }
-    }
-}
-
-impl VerificationOptions {
-    /// Set strict verification mode
-    pub fn with_strict_verification(mut self, strict: bool) -> Self {
-        self.strict = strict;
-        self
-    }
-    
-    /// Set timeout in milliseconds
-    pub fn with_timeout(mut self, timeout_ms: u64) -> Self {
-        self.timeout_ms = timeout_ms;
-        self
-    }
-    
-    /// Add a required verification
-    pub fn with_required_verification(mut self, verification: String) -> Self {
-        self.required_verifications.push(verification);
-        self
-    }
-}
+// Re-export the types from execution to avoid conflicts
+pub use crate::operation::execution::{VerificationContext, VerificationOptions};
 
 /// A unified proof representation
 #[derive(Debug, Clone)]
@@ -116,6 +30,21 @@ impl UnifiedProof {
 #[derive(Debug, Clone)]
 pub struct VerificationService {}
 
+// Add the trait implementation for VerificationService 
+#[async_trait]
+impl crate::operation::execution::VerificationService for VerificationService {
+    type VerificationResult = VerificationResult;
+    
+    async fn verify(
+        &self,
+        context: VerificationContext,
+        options: VerificationOptions
+    ) -> std::result::Result<Self::VerificationResult, EngineError> {
+        // Reuse the existing implementation
+        self.verify(context, options).await
+    }
+}
+
 impl VerificationService {
     /// Create a new verification service
     pub fn new() -> Self {
@@ -127,7 +56,7 @@ impl VerificationService {
         &self,
         _context: VerificationContext,
         _options: VerificationOptions
-    ) -> Result<VerificationResult> {
+    ) -> std::result::Result<VerificationResult, EngineError> {
         // Placeholder implementation
         Ok(VerificationResult {
             valid: true,

@@ -12,11 +12,14 @@ use serde::{Serialize, Deserialize};
 use std::fmt::Debug;
 use chrono::Utc;
 use rand;
-
-use causality_error::{EngineError, EngineResult};
-use causality_types::{TraceId, ContentId, ContentAddressed};
+use std::time::{Duration, Instant};
 use causality_types::crypto_primitives::{HashOutput, HashAlgorithm};
+use causality_types::crypto_primitives::ContentAddressed;
 use causality_core::time::TimeMap;
+use super::context::InvocationState;
+use causality_error::{EngineResult, CausalityError};
+use causality_types::{TraceId, ContentId};
+use causality_error::EngineError;
 use super::InvocationContext;
 
 /// Invocation context data for ID generation
@@ -220,11 +223,11 @@ impl ContextPropagator {
         let parent_guard = parent_ctx.read().map_err(|_| 
             EngineError::SyncError("Failed to acquire read lock on parent context".to_string()))?;
         
-        let trace_id = parent_guard.trace_id().cloned();
+        let _trace_id = parent_guard.trace_id().cloned();
             
         let invocation_data = InvocationData {
             timestamp: Utc::now().timestamp(),
-            trace_id: trace_id.as_ref().map(|t| t.as_str().to_string()).unwrap_or_default(),
+            trace_id: _trace_id.as_ref().map(|t| t.as_str().to_string()).unwrap_or_default(),
             parent_id: Some(parent_id.to_string()),
             nonce: rand::random::<[u8; 8]>(),
         };
@@ -259,7 +262,7 @@ impl ContextPropagator {
         let parent_guard = parent_ctx.read().map_err(|_| 
             EngineError::SyncError("Failed to acquire read lock on parent context".to_string()))?;
         
-        let trace_id = parent_guard.trace_id().cloned();
+        let _trace_id = parent_guard.trace_id().cloned();
         let child_context = parent_guard.create_child(child_id);
         
         {

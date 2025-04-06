@@ -252,8 +252,8 @@ impl LogSegmentManager {
             // Flush the old segment
             active_lock.flush().map_err(convert_boxed_error)?;
             
-            // Update the index with the old segment info
-            let old_info = active_lock.info().clone();
+            // Activate a new segment
+            let _old_info = active_lock.info().clone();
             
             // Extract the segment before updating
             let old_segment = std::mem::replace(&mut *active_lock, new_segment);
@@ -599,7 +599,8 @@ impl LogSegmentManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_engine::{EntryType, EntryData, EventEntry, EventSeverity};
+    use crate::log::types::{EntryType, EntryData};
+    use crate::log::{EventEntry, EventSeverity};
     use std::collections::HashMap;
     use tempfile::tempdir;
     

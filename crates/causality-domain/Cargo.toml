@@ -26,6 +26,7 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 chrono = { workspace = true }
 anyhow = { workspace = true }
+borsh = { workspace = true }
 
 # Internal dependencies
 causality-types = { path = "../causality-types" }

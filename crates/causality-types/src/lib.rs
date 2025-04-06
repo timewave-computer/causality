@@ -10,7 +10,7 @@ use std::hash::Hash;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
-use borsh;
+use borsh::{self, BorshSerialize, BorshDeserialize};
 use rand;
 use chrono::{DateTime, TimeZone, Utc};
 
@@ -107,7 +107,7 @@ pub mod trace {
     use super::*;
     
     /// Trace identifier for tracing related operations
-    #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
     pub struct TraceId(pub String);
     
     /// Content for a trace ID
@@ -208,7 +208,7 @@ pub mod domain {
     use super::*;
     
     /// Domain identifier
-    #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
     pub struct DomainId(pub String);
     
     impl DomainId {
@@ -390,7 +390,7 @@ pub mod timestamp {
     use super::*;
     
     /// Timestamp type (in seconds since UNIX epoch)
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
     pub struct Timestamp(pub u64);
     
     impl Timestamp {
@@ -411,6 +411,11 @@ pub mod timestamp {
         }
 
         pub fn as_i64(&self) -> i64 {
+            self.0 as i64
+        }
+
+        /// Return the timestamp value in seconds (same as value())
+        pub fn timestamp(&self) -> i64 {
             self.0 as i64
         }
         
@@ -685,6 +690,21 @@ pub enum Visibility {
     
     /// Visible to specific entities
     Restricted(Vec<String>),
+}
+
+// --- Simulation Log Entry --- //
+
+/// Represents a single entry in the unified simulation log.
+// TODO (Task 4.1): Refine this struct with final fields and ensure content-addressing.
+#[derive(Debug, Clone, Serialize, Deserialize)] // Add Borsh later if needed
+pub struct SimulationLogEntry {
+    pub sequence_id: u64, // Simple sequence for now, might become Lamport or Vector clock
+    pub scenario_id: String, // ID of the scenario run
+    pub agent_id: String, // ID of the agent generating the log
+    pub timestamp: Timestamp,
+    pub event_type: String, // e.g., "EFFECT", "FACT_OBSERVED", "AGENT_START", "ERROR"
+    pub data: serde_json::Value, // Flexible data payload (EffectOutcome, Fact, etc.)
+    pub content_hash: Option<ContentHash>, // For content-addressable logging
 }
 
 #[cfg(test)]

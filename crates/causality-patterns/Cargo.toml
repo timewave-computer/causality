@@ -5,23 +5,28 @@ edition = "2021"
 description = "Causality - Common patterns and abstractions"
 license = "MIT OR Apache-2.0"
 
+
 [dependencies]
 # External dependencies
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = "0.1"
 tokio = { version = "1", features = ["full"] }
-async-trait = "0.1"
-uuid = { workspace = true }
+async-trait = { workspace = true }
+borsh = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
 
 # Internal dependencies
-causality-types = { path = "../causality-types" }
-causality-core = { path = "../causality-core" }
+causality-types = { path = "../causality-types", version = "0.1.0" }
+causality-core = { path = "../causality-core", version = "0.1.0" }
 causality-domain = { path = "../causality-domain" }
 causality-engine = { path = "../causality-engine" }
 causality-error = { path = "../causality-error" }
+causality-crypto = { workspace = true }
 
 # DEPRECATED: Dependencies on legacy crates have been removed
 # All functionality is now available through causality-core

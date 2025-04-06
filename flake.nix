@@ -12,9 +12,12 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # Add inputs for the agent flakes (needed if we reference their outputs, though crate2nix might handle it)
+    # agent-user-flake = { url = "git+file://./crates/agent-user?"; flake = true; };
+    # agent-committee-flake = { url = "git+file://./crates/agent-committee?"; flake = true; };
   };
 
-  outputs = { self, nixpkgs, flake-utils, crate2nix, rust-overlay }:
+  outputs = { self, nixpkgs, flake-utils, crate2nix, rust-overlay, /* agent-user-flake, agent-committee-flake */ }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
@@ -85,54 +88,56 @@
         # Create the crate2nix package
         crate2nixPackage = importedCargoNix {
           inherit pkgs;
-          rootFeatures = ["minimal-build"];
+          # Adjust features if needed to ensure binaries are built
+          # Maybe define specific binary crates if rootFeatures isn't enough?
+          # For now, assume default build includes binaries from workspace members.
+          # rootFeatures = ["minimal-build"]; 
           defaultCrateOverrides = pkgs.defaultCrateOverrides // {
-            # Add custom crate overrides if needed
             openssl-sys = attrs: {
               buildInputs = (attrs.buildInputs or []) ++ [ pkgs.openssl ];
               nativeBuildInputs = (attrs.nativeBuildInputs or []) ++ [ pkgs.pkg-config ];
               inherit (commonEnv) MACOSX_DEPLOYMENT_TARGET;
             };
-            # Add a fix for proc-macro-crate
             proc-macro-crate = attrs: {
               patches = [
                 ./nix/patches/proc-macro-crate.patch
               ];
               inherit (commonEnv) MACOSX_DEPLOYMENT_TARGET;
             };
-            # Ensure all crates have the correct MACOSX_DEPLOYMENT_TARGET
             ".*" = attrs: {
               inherit (commonEnv) MACOSX_DEPLOYMENT_TARGET;
             };
           };
         };
 
-        # Standard Rust build as fallback
-        causalityStdPkg = pkgs.rustPlatform.buildRustPackage ({
-          pname = "causality";
-          version = "0.1.0";
-          src = ./.;
-          cargoLock = {
-            lockFile = ./Cargo.lock;
-          };
-          buildInputs = commonInputs;
-          nativeBuildInputs = [ pkgs.pkg-config ];
-          cargoBuildFlags = ["--no-default-features" "--features" "minimal-build"];
-        } // commonEnv);
+        # Define helper to get binary package from crate2nix result
+        getBinPkg = name: crate2nixPackage.workspaceMembers."${name}".build;
 
       in rec {
         # Default package (crate2nix build)
         packages = {
-          causality = crate2nixPackage.rootCrate.build;
-          causality-std = causalityStdPkg;
-          default = packages.causality;
-          # Add the environment script as a package
+          causality-controller = getBinPkg "causality-controller";
+          agent-user = getBinPkg "agent-user";
+          agent-committee = getBinPkg "agent-committee";
           env-script = nixEnvScript;
+          # Keep default pointing to controller for now, or remove if confusing
+          default = packages.causality-controller; 
         };
 
         # Apps for different build tasks 
         apps = {
-          # Generate the Cargo.nix file
+          controller = {
+            type = "app";
+            program = "${packages.causality-controller}/bin/causality-controller";
+          };
+          agent-user = {
+            type = "app";
+            program = "${packages.agent-user}/bin/agent-user";
+          };
+          agent-committee = {
+            type = "app";
+            program = "${packages.agent-committee}/bin/agent-committee";
+          };
           generate-cargo-nix = {
             type = "app";
             program = toString (pkgs.writeShellScript "generate-cargo-nix" ''
@@ -142,7 +147,6 @@
               echo "Cargo.nix generated successfully"
             '');
           };
-          # Standard build
           build = {
             type = "app";
             program = toString (pkgs.writeShellScript "build-causality" ''
@@ -152,8 +156,8 @@
               echo "Build completed successfully"
             '');
           };
-          default = apps.generate-cargo-nix;
-          # Add an app to enter the environment
+          # Set the default app to the controller
+          default = apps.controller; 
           env = {
             type = "app";
             program = "${nixEnvScript}/bin/causality-env";
@@ -168,6 +172,10 @@
             pkgs.cargo-audit
             pkgs.cargo-edit
             nixEnvScript  # Include our environment script
+            # Add built agent binaries to the dev shell path?
+            packages.causality-controller
+            packages.agent-user
+            packages.agent-committee
           ];
           
           # Explicitly set environment variables
@@ -179,11 +187,15 @@
             echo ""
             echo "Build commands:"
             echo "- nix run .#generate-cargo-nix  # Generate Cargo.nix file"
-            echo "- nix build                     # Build with crate2nix (default)"
-            echo "- nix build .#causality-std     # Build with standard Rust"
-            echo "- nix run .#build               # Build with cargo"
+            echo "- nix build .#controller         # Build controller (default)"
+            echo "- nix build .#agent-user         # Build user agent"
+            echo "- nix build .#agent-committee    # Build committee agent"
             echo ""
-            echo "Run everything in the Nix environment with:"
+            echo "Run commands:"
+            echo "- nix run .#controller -- --help  # Run controller app"
+            echo "- nix run .#agent-user -- --help   # Run user agent app"
+            echo ""
+            echo "Run other commands in the Nix environment with:"
             echo "- ./result/bin/causality-env cargo build   # Run cargo in Nix env"
             echo "- ./result/bin/causality-env               # Enter Nix shell"
           '';

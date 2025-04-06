@@ -7,6 +7,7 @@ mod context;
 mod execution;
 mod transformation;
 mod verification;
+mod verification_ext;
 mod zk;
 mod types;
 
@@ -24,5 +25,6 @@ pub use execution::{AbstractExecutor, RegisterExecutor, ZkExecutor};
 pub use context::*;
 pub use transformation::*;
 pub use verification::*;
+pub use verification_ext::*;
 pub use zk::*;
 pub use types::*; 
