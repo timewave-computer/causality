@@ -1,0 +1,40 @@
+//! Simulation framework for Causality with both standalone and engine-integrated modes
+//!
+//! This crate supports two operation modes through feature flags:
+//!
+//! 1. "standalone" (default): Provides a simplified mock implementation
+//!    that can run independently without the full engine.
+//!
+//! 2. "engine": Integrates with the `causality-engine` crate to provide
+//!    a more realistic simulation environment.
+//!
+//! # Known issues with the engine integration:
+//! 
+//! - Field name mismatches between simulation and engine APIs
+//! - Structure differences in log entries
+//! - Missing required fields in engine implementation
+//!
+//! See the README.md for more details.
+
+#![deny(unsafe_code)]
+
+/// The scenario module for defining simulation scenarios
+pub mod scenario;
+
+/// The agent module for defining simulation agents
+pub mod agent;
+
+/// The runner module for executing simulations
+pub mod runner;
+
+/// The controller module for managing simulation execution
+pub mod controller;
+
+/// The log module for interacting with the causality log system
+pub mod log;
+
+// Re-export the public API
+pub use scenario::{Scenario, AgentConfig};
+pub use agent::{SimulatedAgent, AgentId, SimulationAgentConfig};
+pub use runner::{SimulationRunner, RunnerType, RunnerFactory};
+pub use controller::SimulationController;

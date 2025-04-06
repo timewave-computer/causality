@@ -1,0 +1,41 @@
+# Purpose: Defines the dependencies and metadata for the causality-simulation crate.
+
+[package]
+name = "causality-simulation"
+version = "0.1.0"
+edition = "2021"
+description = "Simulation framework for Causality actors and scenarios"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# External dependencies
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
+blake3 = { workspace = true }
+chrono = { workspace = true }
+sha2 = "0.10.6"
+clap = { version = "4.3", features = ["derive", "env"] }
+ctrlc = "3.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1.4", features = ["v4", "serde"] }
+
+# Internal dependencies
+causality-types = { workspace = true }
+causality-error = { workspace = true }
+causality-core = { workspace = true }
+causality-engine = { workspace = true, optional = true }
+
+[features]
+default = ["standalone"]
+standalone = []
+engine = ["dep:causality-engine"]
+
+[dev-dependencies]
+tempfile = "3.5.0"
