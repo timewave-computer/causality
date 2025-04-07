@@ -1,0 +1,40 @@
+# Fact propagation test scenario
+
+name = "fact-propagation-test"
+description = "A scenario with multiple domains for testing fact propagation."
+simulation-mode = "in-memory"
+
+[simulation_settings]
+runner_type = "in_memory"
+duration_seconds = 10
+
+# Required agent configuration
+[[agents]]
+id = "test_agent_1"
+type = "mock_user"
+domain = "DomainA"
+count = 1
+
+[[agents]]
+id = "test_agent_2"
+type = "mock_user"
+domain = "DomainB"
+count = 1
+
+[[domains]]
+id = "DomainA"
+type = "mock"
+
+[[domains]]
+id = "DomainB"
+type = "mock"
+
+[[observers]]
+id = "observer_a"
+type = "memory"
+domain = "DomainA"
+
+[[observers]]
+id = "observer_b"
+type = "memory"
+domain = "DomainB" 

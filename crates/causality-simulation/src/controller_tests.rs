@@ -154,7 +154,7 @@ mod tests {
     }
 
     /// Create adapter for testing
-    fn create_mock_async_adapter(mock_storage: MockLogStorage) -> Arc<AsyncLogStorageAdapter> {
+    fn create_mock_async_adapter(_mock_storage: MockLogStorage) -> Arc<AsyncLogStorageAdapter> {
         create_test_log_storage()
     }
     

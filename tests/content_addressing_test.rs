@@ -1,13 +1,12 @@
 use causality::log::entry::{EntryType, EventSeverity, LogEntry};
-use causality::types::{DomainId, ResourceId};
-use uuid::Uuid;
+use causality::types::{DomainId, ResourceId, ContentId};
 
 /// Tests for content addressing implementation in LogEntry
 #[test]
 fn test_log_entry_hash_generation() {
     // Create resource and domain IDs for testing
-    let resource_id = ResourceId::new(Uuid::new_v4().to_string());
-    let domain_id = DomainId::new(Uuid::new_v4().to_string());
+    let resource_id = ResourceId::new(ContentId::generate().to_string());
+    let domain_id = DomainId::new(ContentId::generate().to_string());
 
     // Create a log entry
     let mut entry = LogEntry::new_event(
@@ -46,8 +45,8 @@ fn test_log_entry_hash_generation() {
 #[test]
 fn test_entry_factory_methods() {
     // Create resource and domain IDs for testing
-    let resource_id = ResourceId::new(Uuid::new_v4().to_string());
-    let domain_id = DomainId::new(Uuid::new_v4().to_string());
+    let resource_id = ResourceId::new(ContentId::generate().to_string());
+    let domain_id = DomainId::new(ContentId::generate().to_string());
 
     // Test event entry creation
     let event_entry = LogEntry::new_event(

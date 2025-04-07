@@ -84,7 +84,7 @@ impl ContextPropagator {
     /// Create a new context with the given trace ID
     pub fn create_context(&self, trace_id: Option<TraceId>, parent_id: Option<String>, time_map: TimeMap) -> Result<InvocationContext> {
         // Generate a unique ID for the context
-        let id = format!("ctx:{}", uuid::Uuid::new_v4());
+        let id = format!("ctx:{}", ContentId::generate());
         
         // Create a new invocation context
         let context = InvocationContext::new(id, trace_id, parent_id, time_map);

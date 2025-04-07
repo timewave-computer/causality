@@ -11,7 +11,7 @@ use serde::{Serialize, Deserialize};
 use causality_error::{EngineError, EngineResult};
 // Replace the import that's causing problems
 // use causality_core::effect::runtime::EffectRuntime;
-use causality_types::ContentId as ContentHash;
+use causality_types::{ContentId, ContentId as ContentHash};
 
 // Define a serializable wrapper around EffectType
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -68,7 +68,7 @@ pub enum ExecutionEvent {
     /// Function call event
     FunctionCall {
         /// Function hash
-        hash: ContentHash,
+        hash: ContentId,
         /// Function name
         name: String,
         /// Arguments
@@ -79,7 +79,7 @@ pub enum ExecutionEvent {
     /// Function return event
     FunctionReturn {
         /// Function hash
-        hash: ContentHash,
+        hash: ContentId,
         /// Return value
         result: Value,
         /// Timestamp
@@ -148,7 +148,7 @@ pub struct ContextId(String);
 
 impl ContextId {
     pub fn new() -> Self {
-        ContextId(uuid::Uuid::new_v4().to_string())
+        ContextId(ContentId::new(format!("ctx-{}", chrono::Utc::now().timestamp_millis())).to_string())
     }
 }
 
@@ -216,7 +216,7 @@ pub struct CallFrame {
     /// Timestamp when the frame was created
     pub timestamp: u64,
     /// Code hash for the function
-    pub code_hash: ContentHash,
+    pub code_hash: ContentId,
 }
 
 impl CallFrame {
@@ -233,7 +233,7 @@ impl CallFrame {
             column,
             source,
             timestamp,
-            code_hash: ContentHash::nil(),
+            code_hash: ContentId::nil(),
         }
     }
 }
@@ -588,7 +588,7 @@ impl ExecutionReplayer {
     /// Find the next occurrence of a function call
     pub fn find_next_function_call(
         &self,
-        code_hash: &ContentHash,
+        code_hash: &ContentId,
     ) -> Option<ReplayPosition> {
         for i in self.position.event_index()..self.trace.events.len() {
             if let ExecutionEvent::FunctionCall { hash, .. } = &self.trace.events[i] {

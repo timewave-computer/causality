@@ -7,7 +7,7 @@ mod tests {
     use causality::error::Result;
     use causality::factory::EffectFactory;
     use causality::riscv::{RiscVGenerator, RiscVProgram};
-    use causality::types::{Account, Amount, Balance, ResourceId, Timestamp};
+    use causality::types::{Account, Amount, Balance, ResourceId, Timestamp, ContentId};
     use causality::vm::{
         generate_proof, verify, verify_proof, MemoryAccess, Prover, ProverBackend, ProverConfig,
         PublicInputs, Verifier, VmState, Witness, WitnessGenerator,
@@ -99,8 +99,7 @@ mod tests {
         let proof = generate_proof(&witness, ProverBackend::Groth16)?;
 
         // Create public inputs with resource states
-        use uuid::Uuid;
-        let resource_id = ResourceId(Uuid::new_v4());
+        let resource_id = ResourceId(ContentId::generate());
         let resource_state = 42; // Some state value
 
         let inputs = PublicInputs::new().with_resource_state(resource_id, resource_state);

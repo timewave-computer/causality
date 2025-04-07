@@ -70,6 +70,7 @@ mod tests {
             async fn get_scenario_status(&self, scenario_name: &str) -> Result<ScenarioStatus>;
             async fn get_invariant_violations(&self, scenario_name: &str) -> Result<Vec<String>>;
             async fn inject_fact(&self, scenario_name: &str, fact_data: Value) -> Result<()>;
+            async fn inject_fact_entry(&self, scenario_name: &str, entry: LogEntry) -> Result<()>;
             async fn query_agent_state(&self, scenario_name: &str, agent_id: &AgentId, query: &str) -> Result<Value>;
             async fn pause_scenario(&self, scenario_name: &str) -> Result<()>;
             async fn resume_scenario(&self, scenario_name: &str) -> Result<()>;

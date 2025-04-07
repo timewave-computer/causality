@@ -36,6 +36,9 @@ pub mod log;
 /// The observer module for subscribing to simulation events
 pub mod observer;
 
+/// The observe module for additional observer extensions
+pub mod observe;
+
 /// The replay module for replay capabilities
 pub mod replay;
 
