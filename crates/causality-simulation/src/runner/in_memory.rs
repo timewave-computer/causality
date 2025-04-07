@@ -11,6 +11,8 @@ use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 use std::fmt; // Import fmt for Debug impl
 use anyhow::{Result, anyhow}; // Note explicit import of anyhow macro
+use chrono::Utc;
+use tokio::sync::Mutex as AsyncMutex;
 
 use crate::agent::{AgentId, SimulatedAgent, SimulationAgentConfig};
 use crate::runner::{SimulationRunner, RunnerState};
@@ -23,6 +25,8 @@ use crate::observer::{Observer, ObserverRegistry};
 use crate::replay::LogStorage;
 use causality_core::effect::outcome::{EffectStatus, ResultData};
 use causality_core::effect::EffectResult;
+use causality_types::ContentId;
+use causality_types::content_addressing::content_hash_from_bytes;
 
 // When we have engine integration, import the relevant types
 #[cfg(feature = "engine")]
@@ -34,11 +38,12 @@ use causality_core::resource::agent::{
 };
 
 // --- Helper to create ResourceId from string ID (copied from mocks.rs) ---
+/// Create a resource ID from a string
 fn create_resource_id(id_str: &str) -> ResourceId {
-    let hash_bytes = blake3::hash(id_str.as_bytes());
+    let hash_output = causality_types::content_addressing::content_hash_from_bytes(id_str.as_bytes());
     let content_hash = ContentHash::new(
         &HashAlgorithm::Blake3.to_string(),
-        hash_bytes.as_bytes().to_vec()
+        hash_output.as_bytes().to_vec()
     );
     ResourceId::with_name(content_hash, id_str.to_string())
 }
@@ -273,27 +278,41 @@ impl Effect for InMemoryAgentEffect {
 
 /// Mock effect for testing
 #[derive(Debug, Clone)]
-pub struct MockEffect {}
+pub struct MockEffect {
+    id: String,
+    name: String,
+    metadata: HashMap<String, String>,
+}
 
 impl MockEffect {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(id: String, name: &str, metadata: HashMap<String, String>) -> Self {
+        Self {
+            id,
+            name: name.to_string(),
+            metadata,
+        }
     }
 }
 
 #[async_trait]
 impl Effect for MockEffect {
     fn effect_type(&self) -> EffectType {
-        EffectType::Custom("mock".to_string())
+        EffectType::Custom(self.name.clone())
     }
     
     fn description(&self) -> String {
-        "Mock effect for testing".to_string()
+        format!("Mock effect {} for testing", self.name)
     }
     
     async fn execute(&self, _context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
         let mut data = HashMap::new();
         data.insert("status".to_string(), "success".to_string());
+        data.insert("id".to_string(), self.id.clone());
+        
+        // Add any metadata to the outcome
+        for (key, value) in &self.metadata {
+            data.insert(key.clone(), value.clone());
+        }
         
         Ok(EffectOutcome::success(data))
     }
@@ -365,7 +384,11 @@ pub struct DefaultEffectFactory;
 impl EffectFactory for DefaultEffectFactory {
     fn create_effect(&self, config: &crate::scenario::AgentConfig) -> Result<Arc<dyn Effect>> {
         // For testing, create a simple mock effect
-        Ok(Arc::new(MockEffect::new()))
+        Ok(Arc::new(MockEffect::new(
+            config.id.clone(),
+            &config.actor_type,
+            HashMap::new()
+        )))
     }
 }
 
@@ -638,6 +661,36 @@ impl SimulationRunner for InMemoryRunner {
             Err(_) => RunnerState::Error("Failed to access runner state".to_string()),
         }
     }
+}
+
+// Function to create an effect ID using content_hash_from_bytes
+fn create_effect_id(agent_id: &str, effect_name: &str) -> String {
+    let id_str = format!("agent-{}-effect-{}", agent_id, effect_name);
+    let hash = content_hash_from_bytes(id_str.as_bytes());
+    let content_id = ContentId::from(hash);
+    content_id.to_string()
+}
+
+// Replace the blake3 usage in the effect implementation
+pub fn create_test_effect(agent_id: &str, effect_name: &str) -> Result<Arc<dyn Effect>> {
+    let id_str = format!("agent-{}-effect-{}", agent_id, effect_name);
+    let hash = content_hash_from_bytes(id_str.as_bytes());
+    let content_id = ContentId::from(hash);
+    
+    // Add required metadata
+    let mut metadata = HashMap::new();
+    metadata.insert("algorithm".to_string(), HashAlgorithm::Blake3.to_string());
+    metadata.insert("agent_id".to_string(), agent_id.to_string());
+    metadata.insert("effect_name".to_string(), effect_name.to_string());
+    
+    // Create a basic effect implementation
+    let effect = Arc::new(MockEffect::new(
+        content_id.to_string(),
+        effect_name,
+        metadata
+    ));
+    
+    Ok(effect)
 }
 
 // End of file

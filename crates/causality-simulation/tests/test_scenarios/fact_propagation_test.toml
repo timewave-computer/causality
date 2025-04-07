@@ -1,0 +1,19 @@
+# Test scenario for fact propagation
+name = "fact-propagation-test"
+description = "A simple test scenario for fact propagation"
+simulation-mode = "local-process"
+
+# Define the agents for the scenario
+[[agents]]
+id = "test-agent-1"
+type = "TestAgent"
+domain = "test_domain"
+
+[[agents]]
+id = "test-agent-2"
+type = "TestAgent"
+domain = "test_domain"
+
+# Define invariants
+[invariants]
+no_negative_balances = true 

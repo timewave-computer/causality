@@ -413,7 +413,7 @@ mod tests {
         });
         
         // Create a log entry with negative balance
-        let mut metadata = HashMap::new();
+        let metadata = HashMap::new();
         let payload = serde_json::json!({
             "balances": {
                 "USD": -50

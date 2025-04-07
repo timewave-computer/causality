@@ -36,6 +36,9 @@ pub trait SimulationController {
     /// Inject a fact into a running simulation
     async fn inject_fact(&self, scenario_name: &str, fact_data: Value) -> Result<()>;
     
+    /// Inject a fact using a pre-constructed LogEntry with hash
+    async fn inject_fact_entry(&self, scenario_name: &str, entry: LogEntry) -> Result<()>;
+    
     /// Query the state of an agent in a running simulation
     async fn query_agent_state(&self, scenario_name: &str, agent_id: &AgentId, query: &str) -> Result<Value>;
     
@@ -127,7 +130,8 @@ impl BasicSimulationController {
         metadata.insert("scenario_name".to_string(), scenario_name.to_string());
         metadata.insert("type".to_string(), "fact_injection".to_string());
         
-        let entry = LogEntry::new(
+        // Use new_with_hash instead of new to ensure hash is correctly computed
+        let entry = LogEntry::new_with_hash(
             crate::replay::LogEntryType::FactObservation,
             None,  // No specific agent
             None,  // No specific domain
@@ -181,7 +185,7 @@ impl BasicSimulationController {
         metadata.insert("scenario_name".to_string(), scenario_name.to_string());
         metadata.insert("type".to_string(), "agent_query".to_string());
         
-        let entry = LogEntry::new(
+        let entry = LogEntry::new_with_hash(
             crate::replay::LogEntryType::AgentState,
             Some(agent_id.clone()),
             None,  // No specific domain
@@ -353,6 +357,30 @@ impl SimulationController for BasicSimulationController {
         
         // Process the fact injection
         self.process_fact_injection(scenario_name, fact_data).await
+    }
+    
+    /// Inject a fact using a pre-constructed LogEntry with hash
+    async fn inject_fact_entry(&self, scenario_name: &str, entry: LogEntry) -> Result<()> {
+        // Check if the scenario is running
+        let scenarios = self.running_scenarios.lock().await;
+        if !scenarios.contains_key(scenario_name) {
+            return Err(anyhow!("Scenario {} is not running", scenario_name));
+        }
+        
+        // Check if the scenario is paused
+        let scenario_state = scenarios.get(scenario_name).unwrap();
+        if scenario_state.status == ScenarioStatus::Paused {
+            return Err(anyhow!("Scenario {} is paused, cannot inject facts while paused", scenario_name));
+        }
+        
+        // Store the log entry directly
+        self.log_storage.store_entry(&entry).await?;
+        
+        // Notify observers about the fact injection
+        self.observer_registry.notify_log_entry(entry.clone());
+        
+        info!(scenario_name = %scenario_name, "Fact injected into simulation");
+        Ok(())
     }
     
     /// Query the state of an agent in a running simulation

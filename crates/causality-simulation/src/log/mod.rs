@@ -7,10 +7,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use anyhow::Result;
 use chrono;
-use uuid::Uuid;
 
 use causality_core::resource::types::ResourceId;
 use causality_core::effect::Effect;
+use causality_types::ContentId;
 
 use crate::scenario::Scenario;
 
@@ -50,7 +50,7 @@ impl LogEvent {
     /// Create a new log event
     pub fn new(event_type: LogEventType, scenario_name: &str, message: &str) -> Self {
         Self {
-            id: Uuid::new_v4().to_string(),
+            id: ContentId::new(format!("event-{}", chrono::Utc::now().timestamp_nanos())).to_string(),
             event_type,
             timestamp: chrono::Utc::now(),
             scenario_name: scenario_name.to_string(),

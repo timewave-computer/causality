@@ -1,0 +1,32 @@
+# Test scenario for capability-based security and authorization
+name = "capability-security-test"
+description = "Test scenario for validating capability-based security model and authorization"
+simulation-mode = "local-process"
+
+# Define the agents for the scenario
+[[agents]]
+id = "admin-agent"
+type = "TestAgent"
+domain = "SecurityDomain"
+capabilities = ["admin", "read", "write", "delegate"]
+
+[[agents]]
+id = "user-agent"
+type = "TestAgent"
+domain = "SecurityDomain"
+capabilities = ["read"]
+
+[[agents]]
+id = "guest-agent"
+type = "TestAgent"
+domain = "SecurityDomain"
+capabilities = []
+
+# Define resources
+[resources]
+protected_resource = { owner = "admin-agent", required_capabilities = ["read", "write"] }
+public_resource = { owner = "user-agent", required_capabilities = ["read"] }
+
+# Define invariants
+[invariants]
+capability_checks = true 

@@ -15,7 +15,6 @@ pub mod engine_adapter {
     use chrono::Utc;
     use std::sync::Mutex;
     use async_trait::async_trait;
-    use uuid::Uuid;
 
     /// Converts a domain from the simulation model to a domain_id for the engine
     pub fn convert_domain_to_domain_id(domain: &DomainId) -> DomainId {
@@ -153,7 +152,7 @@ pub mod engine_adapter {
 
     /// Converts a log event from the simulation model to the engine log entry
     pub fn convert_simulation_log_event_to_engine(event: &crate::log::LogEvent) -> Result<causality_engine::log::types::LogEntry, anyhow::Error> {
-        let trace_id = event.trace_id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
+        let trace_id = event.trace_id.clone().unwrap_or_else(|| ContentId::generate().to_string());
         let trace_id_parsed = TraceId::from_str(&trace_id)
             .map_err(|_| anyhow::anyhow!("Invalid trace ID format"))?;
         

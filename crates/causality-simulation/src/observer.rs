@@ -11,6 +11,7 @@ use rand;
 use crate::replay::{LogEntry, LogEntryType};
 use crate::agent::agent_id;
 use causality_core::resource::ResourceId;
+use causality_types::ContentId;
 
 /// Filter to select specific log entries
 #[derive(Debug, Clone, Default)]
@@ -593,7 +594,7 @@ mod tests {
         
         // Create a basic entry directly with the specified entry_type instead of using helpers
         LogEntry {
-            id: format!("test-id-{}", uuid::Uuid::new_v4()),
+            id: format!("test-id-{}", ContentId::generate()),
             timestamp: chrono::Utc::now(),
             entry_type,
             agent_id,
@@ -720,7 +721,7 @@ mod tests {
     
     #[test]
     fn test_channel_observer() {
-        let (mut observer, mut receiver) = ChannelObserver::new();
+        let (observer, mut receiver) = ChannelObserver::new();
         
         // Create test entries using only valid LogEntryType variants
         let entry1 = create_test_entry(

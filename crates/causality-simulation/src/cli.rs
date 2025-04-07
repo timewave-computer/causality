@@ -260,7 +260,7 @@ async fn run_scenario(controller: &BasicSimulationController, args: RunArgs) -> 
     let shutdown_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let shutdown_signal_clone = shutdown_signal.clone();
     let scenario_name_clone = scenario_name.clone();
-    let controller_clone = controller.clone();
+    let controller_clone = controller;
     
     ctrlc::set_handler(move || {
         shutdown_signal_clone.store(true, std::sync::atomic::Ordering::SeqCst);

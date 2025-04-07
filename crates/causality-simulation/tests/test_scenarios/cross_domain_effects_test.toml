@@ -1,0 +1,29 @@
+# Test scenario for cross-domain effects propagation
+name = "cross-domain-effects-test"
+description = "Test scenario for validating cross-domain effects propagation"
+simulation-mode = "local-process"
+
+# Define the agents for the scenario - one for each domain
+[[agents]]
+id = "domain-a-agent"
+type = "TestAgent"
+domain = "DomainA"
+
+[[agents]]
+id = "domain-b-agent"
+type = "TestAgent"
+domain = "DomainB"
+
+[[agents]]
+id = "domain-c-agent"
+type = "TestAgent"
+domain = "DomainC"
+
+# Define initial resources
+[resources]
+token_resource = { domain = "DomainA", type = "Token", initial_balance = 1000 }
+
+# Define invariants
+[invariants]
+no_negative_balances = true
+cross_domain_integrity = true 

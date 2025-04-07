@@ -561,7 +561,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "blake3",
  "causality-core",
  "causality-engine",
  "causality-error",
@@ -575,14 +574,12 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "sha2",
  "tempfile",
  "thiserror",
  "tokio",
  "toml",
  "tracing",
  "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]

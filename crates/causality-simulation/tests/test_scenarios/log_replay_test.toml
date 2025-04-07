@@ -1,0 +1,19 @@
+# Test scenario for log replay and state reconstruction
+name = "log-replay-test"
+description = "Test scenario for validating log replay and state reconstruction"
+simulation-mode = "local-process"
+
+# Define the agents for the scenario
+[[agents]]
+id = "domain-a-agent"
+type = "TestAgent"
+domain = "DomainA"
+
+[[agents]]
+id = "domain-b-agent"
+type = "TestAgent"
+domain = "DomainB"
+
+# Define invariants
+[invariants]
+log_integrity = true
