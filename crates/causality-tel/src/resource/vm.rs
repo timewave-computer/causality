@@ -82,10 +82,10 @@ impl ContentAddressed for VmRegId {
             return Err(HashError::InvalidLength);
         }
         
-        let mut uuid_bytes = [0u8; 16];
-        uuid_bytes.copy_from_slice(&bytes[..16]);
+        // Create ContentId directly from bytes
+        let content_id = ContentId::from_bytes(bytes)?;
         
-        Ok(Self(ContentId::from(uuid_bytes)))
+        Ok(Self(content_id))
     }
 }
 

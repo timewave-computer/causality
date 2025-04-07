@@ -86,7 +86,6 @@ causality-error = { path = "crates/causality-error" }
 causality-storage = { path = "crates/causality-storage" }
 causality-tel = { path = "crates/causality-tel" }
 causality-types = { path = "crates/causality-types" }
-uuid = { version = "1.6", features = ["v4", "serde"] }
 
 # This section is used by cargo-workspaces
 [workspace.package]

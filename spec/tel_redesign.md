@@ -35,13 +35,13 @@ let token_data = {
 }
 
 -- Reference is the hash of the content
-let token_id = content_id(token_data)  -- Returns Hash<TokenData>
+let token_id = content_id(token_data)  -- Returns ContentId<TokenData>
 
 -- Content-addressed operations
 perform transfer {
-  from: sender_id,  -- Hash<Account>
-  to: receiver_id,  -- Hash<Account>
-  token: token_id,  -- Hash<TokenData>
+  from: sender_id,  -- ContentId<Account>
+  to: receiver_id,  -- ContentId<Account>
+  token: token_id,  -- ContentId<TokenData>
   amount: amount
 }
 ```
@@ -60,7 +60,7 @@ State transitions produce new content-addressed states:
 
 ```tel
 -- State transitions generate new content-addressed states
-effect transition : State -> <state, logging> Hash<State>
+effect transition : State -> <state, logging> ContentId<State>
 
 handler content_addressed_state initial_state_hash
   var current_state_hash = initial_state_hash
@@ -107,10 +107,10 @@ TEL is built on a unified foundation where all language features are expressed t
 program TokenSwap
   -- Declare input parameters with types
   input
-    sender : Hash<Account>
-    token_a : Hash<Token>
+    sender : ContentId<Account>
+    token_a : ContentId<Token>
     amount_a : Amount
-    token_b : Hash<Token>
+    token_b : ContentId<Token>
     min_amount_b : Amount
     deadline : Timestamp
 
@@ -180,7 +180,7 @@ Effects operate on content-addressed data:
 
 ```tel
 -- Define a content-addressed effect operation
-effect transfer : TransferParams -> <transfer, failure> Hash<TransferResult>
+effect transfer : TransferParams -> <transfer, failure> ContentId<TransferResult>
 
 -- Define an effect handler
 handler transfer_handler
@@ -226,7 +226,7 @@ state
   final Failed reason:String
 
 -- State transition effect returns content hash of new state
-effect transition : State -> <state, logging> Hash<State>
+effect transition : State -> <state, logging> ContentId<State>
 
 -- State machine handler
 handler state_machine_handler initial_state
@@ -272,10 +272,10 @@ Content addressing enables built-in verification:
 
 ```tel
 -- Verify data matches its hash
-effect verify : (Hash<T>, T) -> <verification> Boolean
+effect verify : (ContentId<T>, T) -> <verification> Boolean
 
 -- Generate merkle proofs for data
-effect generate_proof : Hash<T> -> <merkle> MerkleProof<T>
+effect generate_proof : ContentId<T> -> <merkle> MerkleProof<T>
 
 -- Verify a merkle proof
 effect verify_proof : MerkleProof<T> -> <verification> Boolean
@@ -296,10 +296,10 @@ Temporal effects work with content-addressed states:
 
 ```tel
 -- Schedule an effect based on content-addressed trigger
-effect at : Timestamp -> (() -> <e> Hash<Result>) -> <scheduler, e> Hash<Task>
+effect at : Timestamp -> (() -> <e> ContentId<Result>) -> <scheduler, e> ContentId<Task>
 
 -- Schedule based on state transition
-effect after_state : Hash<State> -> (() -> <e> Hash<Result>) -> <scheduler, e> Hash<Task>
+effect after_state : ContentId<State> -> (() -> <e> ContentId<Result>) -> <scheduler, e> ContentId<Task>
 
 -- Schedule a content-addressed task
 task_hash <- perform at tomorrow_midnight do
@@ -320,7 +320,7 @@ Content addressing enables explicit causal relationships:
 
 ```tel
 -- Define a causal relationship between content-addressed entities
-effect link : LinkSpec -> <causality> Hash<Link>
+effect link : LinkSpec -> <causality> ContentId<Link>
 
 -- Create a causal dependency
 link_hash <- perform link {
@@ -346,8 +346,8 @@ program LimitOrderBook
   -- Order placement flow
   flow place_order = do
     input
-      trader : Hash<Account>
-      market : Hash<Market>
+      trader : ContentId<Account>
+      market : ContentId<Market>
       side : Side
       amount : Amount
       price : Price
@@ -398,8 +398,8 @@ program LimitOrderBook
 program VerifiableAuction
   flow initialize = do
     input
-      seller : Hash<Account>
-      item : Hash<Item>
+      seller : ContentId<Account>
+      item : ContentId<Item>
       reserve_price : Amount
       duration : Duration
       
