@@ -405,6 +405,7 @@ impl Drop for WaitFuture {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::error::WaitQueueError;
     
     #[test]
     fn test_wait_queue_basic() -> Result<(), WaitQueueError> {
@@ -497,17 +498,29 @@ mod tests {
                 // In a real scenario, you'd implement proper waker logic
                 unsafe {
                     let ptr = Box::into_raw(Box::new(self));
+                    
+                    // Define static helper functions for the vtable
+                    unsafe fn clone_raw(ptr: *const ()) -> RawWaker {
+                        let ptr = ptr as *const MockWaker;
+                        RawWaker::new(ptr as *const (), &RawWakerVTable::new(clone_raw, wake_raw, wake_by_ref_raw, drop_raw))
+                    }
+                    
+                    unsafe fn wake_raw(ptr: *const ()) {
+                        let waker = Box::from_raw(ptr as *mut MockWaker);
+                        waker.woken.store(true, Ordering::SeqCst);
+                    }
+                    
+                    unsafe fn wake_by_ref_raw(_ptr: *const ()) {
+                        // Not implemented for this test
+                    }
+                    
+                    unsafe fn drop_raw(ptr: *const ()) {
+                        drop(Box::from_raw(ptr as *mut MockWaker));
+                    }
+                    
                     Waker::from_raw(RawWaker::new(
                         ptr as *const (),
-                        &RawWakerVTable::new(
-                            |_| RawWaker::new(ptr as *const (), &RawWakerVTable::new(|_| panic!(), |_| {}, |_| {}, |_| {})),
-                            |p| {
-                                let waker = Box::from_raw(p as *mut MockWaker);
-                                waker.woken.store(true, Ordering::SeqCst);
-                            },
-                            |_| {},
-                            |p| drop(Box::from_raw(p as *mut MockWaker)),
-                        ),
+                        &RawWakerVTable::new(clone_raw, wake_raw, wake_by_ref_raw, drop_raw),
                     ))
                 }
             }

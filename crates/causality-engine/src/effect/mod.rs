@@ -10,6 +10,7 @@ pub mod executor;
 pub mod content_addressable_executor;
 pub mod resource;
 pub mod factory;
+pub mod tel;
 
 /// Re-export all public items from submodules
 pub use runtime::{
@@ -298,6 +299,12 @@ impl EffectOutcome {
         }
     }
 }
+
+// Re-export from submodules
+pub use tel::TelEffectExecutor;
+pub use tel::TelEffectAdapter;
+pub use tel::{create_effect_adapter, adapter_to_core_effect, register_tel_adapter_factory};
+pub use tel::{TegExecutor, TegExecutionResult};
 
 #[cfg(test)]
 mod tests {

@@ -12,12 +12,18 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # TEL extension subflake
+    tel-extension = {
+      url = "path:./nix/tel-syntax-extension";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
     # Add inputs for the agent flakes (needed if we reference their outputs, though crate2nix might handle it)
     # agent-user-flake = { url = "git+file://./crates/agent-user?"; flake = true; };
     # agent-committee-flake = { url = "git+file://./crates/agent-committee?"; flake = true; };
   };
 
-  outputs = { self, nixpkgs, flake-utils, crate2nix, rust-overlay, /* agent-user-flake, agent-committee-flake */ }:
+  outputs = { self, nixpkgs, flake-utils, crate2nix, rust-overlay, tel-extension, /* agent-user-flake, agent-committee-flake */ }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
@@ -116,12 +122,25 @@
       in rec {
         # Default package (crate2nix build)
         packages = {
-          causality-controller = getBinPkg "causality-controller";
-          agent-user = getBinPkg "agent-user";
-          agent-committee = getBinPkg "agent-committee";
+          causality-controller = 
+            if builtins.hasAttr "causality-controller" crate2nixPackage.workspaceMembers
+            then getBinPkg "causality-controller"
+            else pkgs.hello; # Fallback to a placeholder
+
+          agent-user = 
+            if builtins.hasAttr "agent-user" crate2nixPackage.workspaceMembers
+            then getBinPkg "agent-user"
+            else pkgs.hello; # Fallback to a placeholder
+
+          agent-committee = 
+            if builtins.hasAttr "agent-committee" crate2nixPackage.workspaceMembers
+            then getBinPkg "agent-committee"
+            else pkgs.hello; # Fallback to a placeholder
+
           env-script = nixEnvScript;
+          
           # Keep default pointing to controller for now, or remove if confusing
-          default = packages.causality-controller; 
+          default = packages.env-script; 
         };
 
         # Apps for different build tasks 
@@ -156,8 +175,12 @@
               echo "Build completed successfully"
             '');
           };
-          # Set the default app to the controller
-          default = apps.controller; 
+          
+          # Import the TEL extension app
+          package-tel-extension = tel-extension.apps.${system}.tel-extension;
+          
+          # Set the default app to env
+          default = apps.env; 
           env = {
             type = "app";
             program = "${nixEnvScript}/bin/causality-env";
@@ -172,14 +195,17 @@
             pkgs.cargo-audit
             pkgs.cargo-edit
             nixEnvScript  # Include our environment script
-            # Add built agent binaries to the dev shell path?
-            packages.causality-controller
-            packages.agent-user
-            packages.agent-committee
+            # Don't include the built agent binaries as they might not exist yet
+            # Add Node.js tools for VSCode extension development
+            pkgs.nodejs
+            (pkgs.nodePackages.typescript-language-server or pkgs.nodePackages.nodejs)
           ];
           
           # Explicitly set environment variables
           inherit (commonEnv) MACOSX_DEPLOYMENT_TARGET;
+          
+          # Add npm config to allow global installs without sudo
+          NPM_CONFIG_PREFIX = "$HOME/.npm-global";
           
           shellHook = ''
             echo "Rust development environment for Causality loaded"
@@ -195,9 +221,22 @@
             echo "- nix run .#controller -- --help  # Run controller app"
             echo "- nix run .#agent-user -- --help   # Run user agent app"
             echo ""
+            echo "Development tools:"
+            echo "- nix run .#package-tel-extension  # Package TEL syntax highlighting for Cursor"
+            echo ""
             echo "Run other commands in the Nix environment with:"
             echo "- ./result/bin/causality-env cargo build   # Run cargo in Nix env"
             echo "- ./result/bin/causality-env               # Enter Nix shell"
+            
+            # Set up npm global path
+            mkdir -p $HOME/.npm-global/bin
+            export PATH=$HOME/.npm-global/bin:$PATH
+            
+            # Check for vsce and install if needed
+            if ! command -v vsce >/dev/null 2>&1; then
+              echo "Installing vsce for VSCode extension development..."
+              npm install -g @vscode/vsce
+            fi
           '';
         });
       }

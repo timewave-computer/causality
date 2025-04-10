@@ -609,10 +609,11 @@ mod tests {
     // A basic test that just verifies the contract of the Authorization struct
     #[test]
     fn test_authorization_creation() {
-        let agent_id = AgentId {
-            resource_id: ResourceId::new(ContentHash::new("blake3", vec![1, 2, 3, 4])),
-            agent_type: AgentType::User,
-        };
+        // Create agent_id using the public constructor
+        let agent_id = AgentId::new(
+            ResourceId::new(ContentHash::new("blake3", vec![1, 2, 3, 4])),
+            AgentType::User,
+        );
         
         let operation_id = ContentId::from_bytes(vec![5, 6, 7, 8]);
         

@@ -15,6 +15,7 @@ pub mod repository;
 pub mod config;
 pub mod storage;
 pub mod engine;
+pub mod mock;
 
 // Re-exports
 pub use log::{
@@ -43,11 +44,23 @@ pub use engine::Engine;
 pub use config::EngineConfig;
 pub use storage::memory::InMemoryStorage;
 
+// Re-export mock implementations for testing
+pub use mock::MockEngine;
+
 // Import and re-export TimeMap from causality-core
 pub use causality_core::time::map::TimeMap;
 
 // Error conversion utilities
 pub mod error_conversions;
+
+// Effect system re-exports
+pub use effect::executor::EffectExecutor;
+pub use effect::registry::EffectRegistry;
+pub use effect::tel::TelEffectExecutor;
+pub use effect::tel::TelEffectAdapter;
+pub use effect::tel::{create_effect_adapter, adapter_to_core_effect, register_tel_adapter_factory};
+pub use effect::tel::{TelEffectRegistry, TelEffectHandler, RegistryType, TelResourceRegistry};
+pub use effect::tel::{TegExecutor, TegExecutionResult};
 
 // Version of the library
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

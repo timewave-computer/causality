@@ -121,26 +121,39 @@ contract ResourceRegisterLibrary is Library {
     // Map of ContentId to ResourceRegister
     mapping(bytes32 => ResourceRegister) public registers;
     
-    // Track consumed/nullified registers
-    mapping(bytes32 => bool) public nullified;
+    // Reference to the SMT verifier contract
+    address public smtVerifier;
+    
+    // Current state root
+    bytes32 public stateRoot;
     
     // Configuration for this library
     struct LibraryConfig {
         Account inputAccount;
         address verifier;        // Optional ZK verifier
+        address smtVerifier;     // SMT verifier contract
     }
     
     LibraryConfig public config;
+    
+    // Events
+    event ResourceConsumed(bytes32 indexed resourceId, bytes32 nullifierId);
+    event StateRootUpdated(bytes32 oldRoot, bytes32 newRoot);
     
     constructor(
         address _owner,
         address _processor,
         bytes memory _config
-    ) Library(_owner, _processor, _config) {}
+    ) Library(_owner, _processor, _config) {
+        LibraryConfig memory decoded = validateConfig(_config);
+        config = decoded;
+        smtVerifier = decoded.smtVerifier;
+    }
     
     function validateConfig(bytes memory _config) internal pure returns (LibraryConfig memory) {
         LibraryConfig memory decodedConfig = abi.decode(_config, (LibraryConfig));
         require(address(decodedConfig.inputAccount) != address(0), "Invalid input account");
+        require(address(decodedConfig.smtVerifier) != address(0), "Invalid SMT verifier");
         return decodedConfig;
     }
     
@@ -167,12 +180,28 @@ contract ResourceRegisterLibrary is Library {
         return id;
     }
     
+    /**
+     * @dev Check if a resource has been consumed using the SMT
+     * @param resourceId The resource ID to check
+     * @return Whether the resource has been consumed
+     */
+    function isResourceConsumed(bytes32 resourceId) public view returns (bool) {
+        // The key for a nullifier in the SMT has a special prefix
+        bytes32 nullifierKey = keccak256(abi.encodePacked("nullifier:", resourceId));
+        
+        // Use the SMT verifier to check if this nullifier exists in the tree
+        // In a real implementation, we would generate and verify a proof
+        // This is a simplified placeholder
+        bytes memory proof = generateProof(nullifierKey);
+        return verifyProof(stateRoot, nullifierKey, bytes("1"), proof);
+    }
+    
     function updateRegister(
         bytes32 id,
         ResourceOperation calldata operation
     ) external onlyProcessor returns (bool) {
         require(registers[id].id != bytes32(0), "Register not found");
-        require(!nullified[id], "Register already nullified");
+        require(!isResourceConsumed(id), "Register already consumed");
         
         // Apply the operation based on type
         if (operation.operationType == 1) { // Update
@@ -184,8 +213,25 @@ contract ResourceRegisterLibrary is Library {
             registers[id].state = 1; // Active
         } else if (operation.operationType == 4) { // Consume
             registers[id].state = 5; // Consumed
-            registers[id].nullifierId = keccak256(abi.encodePacked(id, block.number));
-            nullified[id] = true;
+            
+            // Generate nullifier for this resource
+            bytes32 nullifierId = keccak256(abi.encodePacked(id, block.number));
+            registers[id].nullifierId = nullifierId;
+            
+            // Mark as nullified in the SMT instead of using a separate mapping
+            bytes32 nullifierKey = keccak256(abi.encodePacked("nullifier:", id));
+            
+            // In a real implementation, we would:
+            // 1. Generate a proof for adding this nullifier to the SMT
+            // 2. Update the SMT root with the new nullifier
+            // 3. Verify the proof
+            bytes32 oldRoot = stateRoot;
+            bytes32 newRoot = updateTreeWithNullifier(nullifierKey);
+            stateRoot = newRoot;
+            
+            // Emit events
+            emit ResourceConsumed(id, nullifierId);
+            emit StateRootUpdated(oldRoot, newRoot);
         }
         
         return true;
@@ -199,6 +245,52 @@ contract ResourceRegisterLibrary is Library {
         // This would likely involve creating a new register in the destination account
         // and nullifying the original
         return true;
+    }
+    
+    /**
+     * @dev Generate a proof for inclusion/exclusion in the SMT
+     * @param key The key to generate a proof for
+     * @return The proof bytes
+     */
+    function generateProof(bytes32 key) internal view returns (bytes memory) {
+        // In a real implementation, this would call into a service
+        // that generates SMT proofs
+        return new bytes(0); // Placeholder
+    }
+    
+    /**
+     * @dev Verify a proof against the current state root
+     * @param root The state root to verify against
+     * @param key The key being proven
+     * @param value The value being proven
+     * @param proof The proof data
+     * @return Whether the proof is valid
+     */
+    function verifyProof(
+        bytes32 root,
+        bytes32 key,
+        bytes memory value,
+        bytes memory proof
+    ) internal view returns (bool) {
+        // In a real implementation, this would call the SMT verifier contract
+        // return ISmtVerifier(smtVerifier).verify(root, key, value, proof);
+        return false; // Placeholder
+    }
+    
+    /**
+     * @dev Update the SMT with a new nullifier
+     * @param nullifierKey The nullifier key to add
+     * @return The new state root
+     */
+    function updateTreeWithNullifier(bytes32 nullifierKey) internal returns (bytes32) {
+        // In a real implementation, this would:
+        // 1. Take the current state root
+        // 2. Insert the nullifier into the tree
+        // 3. Generate a new state root
+        // 4. Return the new state root
+        
+        // For now, we just return a dummy value
+        return keccak256(abi.encodePacked(stateRoot, nullifierKey));
     }
     
     // Additional ResourceRegister operations...

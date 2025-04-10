@@ -1,0 +1,31 @@
+[package]
+name = "causality-ir"
+version = "0.1.0"
+edition = "2021"
+description = "Temporal Effect Graph (TEG) intermediate representation for Causality"
+license = "Apache-2.0"
+
+[dependencies]
+# Serialization
+borsh = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Causality crates
+causality-types = { path = "../causality-types" }
+causality-error = { path = "../causality-error" }
+causality-core = { path = "../causality-core" }
+causality-crypto = { path = "../causality-crypto" }
+
+# Utilities
+thiserror = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+async-trait = "0.1"
+hex.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+quickcheck = "1.0"
+quickcheck_macros = "1.0"
+pretty_assertions = "1.4" 
