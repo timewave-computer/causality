@@ -1,0 +1,38 @@
+{
+  "name": "tel-syntax",
+  "displayName": "Temporal Effect Language (TEL)",
+  "description": "Syntax highlighting for the Temporal Effect Language (TEL)",
+  "version": "0.1.0",
+  "publisher": "causality",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/timewave-computer/causality"
+  },
+  "files": [
+    "language-configuration.json",
+    "syntaxes/*.json",
+    "LICENSE.md"
+  ],
+  "engines": {
+    "vscode": "^1.50.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "tel",
+        "aliases": ["TEL", "tel"],
+        "extensions": [".tel"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tel",
+        "scopeName": "source.tel",
+        "path": "./syntaxes/tel.tmLanguage.json"
+      }
+    ]
+  }
+}

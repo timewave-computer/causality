@@ -5,6 +5,7 @@ members = [
     "crates/causality-types",
     "crates/causality-patterns",
     "crates/causality-tel",
+    "crates/causality-ir",
     "crates/causality-domain",
     "crates/causality-error",
     "crates/causality-core",
@@ -18,10 +19,12 @@ members = [
     "crates/agent-committee",
     "tests/test-effect",
     "tests/test-scenario",
+    "tests/query-test",
     "domains/causality-domain-sdk",
     "domains/causality-domain-succinct",
     "domains/causality-domain-cosmwasm",
-    "domains/causality-domain-evm",
+    "domains/causality-domain-evm", "standalone-test",
+    "scripts"
 ]
 
 [workspace.metadata.examples]
@@ -83,6 +86,7 @@ causality-domain-sdk = { path = "domains/causality-domain-sdk" }
 causality-domain-succinct = { path = "domains/causality-domain-succinct" }
 causality-engine = { path = "crates/causality-engine" }
 causality-error = { path = "crates/causality-error" }
+causality-ir = { path = "crates/causality-ir" }
 causality-storage = { path = "crates/causality-storage" }
 causality-tel = { path = "crates/causality-tel" }
 causality-types = { path = "crates/causality-types" }

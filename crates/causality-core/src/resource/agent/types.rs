@@ -98,6 +98,12 @@ pub enum AgentType {
     
     /// Automated system operator
     Operator,
+
+    /// Leader of a committee
+    Leader,
+
+    /// Validator in a committee
+    Validator,
 }
 
 impl fmt::Display for AgentType {
@@ -106,6 +112,8 @@ impl fmt::Display for AgentType {
             Self::User => write!(f, "user"),
             Self::Committee => write!(f, "committee"),
             Self::Operator => write!(f, "operator"),
+            Self::Leader => write!(f, "leader"),
+            Self::Validator => write!(f, "validator"),
         }
     }
 }
@@ -118,6 +126,8 @@ impl FromStr for AgentType {
             "user" => Ok(Self::User),
             "committee" => Ok(Self::Committee),
             "operator" => Ok(Self::Operator),
+            "leader" => Ok(Self::Leader),
+            "validator" => Ok(Self::Validator),
             _ => Err(AgentError::InvalidAgentType(s.to_string())),
         }
     }

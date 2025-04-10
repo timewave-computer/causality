@@ -16,10 +16,7 @@ use crate::effect::EffectContext;
 use crate::resource::types::{ResourceTypeId, ResourceTypeRegistry, ResourceTypeRegistryError};
 use crate::resource::Resource;
 use crate::id_utils::content_id_to_str;
-// Remove the unused import
-// use crate::id_utils::content_id_to_str;
-// Fix the identity import
-type IdentityId = String; // Temporary placeholder for missing IdentityId type
+use crate::identity::IdentityId;
 
 /// Unique identifier for a cross-domain resource reference
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -736,10 +733,10 @@ impl Clone for ProtocolAuthorization {
 // Helper function to create a dummy capability for clone implementation
 fn create_dummy_capability() -> Capability<Box<dyn Resource>> {
     let _resource_id = ContentId::from_bytes_unwrap(&[0, 0, 0, 0]);
-    let cap = crate::capability::resource::ResourceCapability::new(
-        crate::capability::resource::ResourceCapabilityType::Read,
-        crate::capability::resource::CapabilityGrants::read_only(),
-        crate::identity::IdentityId::new(),
+    let cap = ResourceCapability::new(
+        ResourceCapabilityType::Read,
+        CapabilityGrants::read_only(),
+        IdentityId::new()
     );
     cap.to_capability::<Box<dyn Resource>>()
 }

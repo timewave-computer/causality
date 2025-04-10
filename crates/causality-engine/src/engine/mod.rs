@@ -58,6 +58,22 @@ impl Engine {
         // Placeholder for shutdown logic
         Ok(())
     }
+    
+    /// Execute a value in the given context (placeholder for testing)
+    pub fn execute_sync<T, C>(&self, _value: &T, _context: &C) -> Result<T> 
+    where T: Clone
+    {
+        // This is just a placeholder implementation for testing
+        Ok(_value.clone())
+    }
+}
+
+impl Default for Engine {
+    fn default() -> Self {
+        // Create a memory log storage for the default engine
+        let log_storage = Arc::new(MemoryLogStorage::new());
+        Self::new(log_storage).expect("Failed to create default engine")
+    }
 }
 
 // Tests for the Engine
@@ -69,6 +85,12 @@ mod tests {
     fn test_engine_creation() {
         let log_storage = Arc::new(MemoryLogStorage::new());
         let engine = Engine::new(log_storage).unwrap();
+        assert!(engine.config().invocation_timeout_ms > 0);
+    }
+    
+    #[test]
+    fn test_engine_default() {
+        let engine = Engine::default();
         assert!(engine.config().invocation_timeout_ms > 0);
     }
 } 

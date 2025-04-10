@@ -13,6 +13,8 @@ causality-core = { path = "../causality-core" }
 causality-domain = { path = "../causality-domain" }
 causality-error = { path = "../causality-error" }
 causality-crypto = { workspace = true }
+causality-tel = { path = "../causality-tel" }
+causality-ir = { path = "../causality-ir" }
 
 # External dependencies
 anyhow = { workspace = true }

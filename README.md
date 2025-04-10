@@ -157,3 +157,21 @@ For more information about the design and implementation of the effect system, s
 - [ADR-034: Simplified Effect System](../work/adr_034_simplified_effect_system.md)
 - [ADR-001: Rust Algebraic Effects Library](../spec/adr_001_effects.md)
 - [Full Effect System Implementation Plan](../work/full_effect.md)
+
+## TEL Examples
+
+The `examples` directory contains sample TEL programs that demonstrate the syntax and features of the Temporal Effect Language. These examples align with the TEL specification.
+
+Notable examples include:
+
+- `examples/basic/functions.tel` - Demonstrates function definitions, lambda expressions, higher-order functions, and currying
+- `examples/basic/variables.tel` - Shows variable declarations and basic operations
+- `examples/basic/hello_world.tel` - A simple "Hello World" program in TEL
+
+To verify the syntax of all examples, run:
+
+```bash
+./scripts/run_tel_examples.sh
+```
+
+The TEL parser and runtime is still under development. The current implementation focuses on validating the syntax of the examples according to the specification.
