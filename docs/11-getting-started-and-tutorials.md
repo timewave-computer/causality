@@ -335,13 +335,3 @@ dune test
 Development workflow optimization through incremental compilation and caching enables efficient iteration during development while maintaining the correctness guarantees needed for reliable applications. The build system takes advantage of Rust's compilation model to minimize rebuild times.
 
 Testing integration with the build system enables comprehensive validation during development while providing confidence that changes maintain compatibility and correctness. The testing infrastructure includes both automated testing and manual testing tools that support various development scenarios.
-
-## Current Framework Capabilities
-
-The current Causality framework implementation provides a comprehensive foundation for building resource-based applications through its type system, serialization infrastructure, expression system, and development tools. Understanding the current capabilities and their limitations enables effective use of the framework while planning for future development.
-
-Type system capabilities include comprehensive resource modeling, intent processing, effect execution, and expression evaluation that support sophisticated applications while maintaining the safety and correctness properties that define the framework. The type system provides both low-level primitives and high-level abstractions that enable productive development.
-
-Development infrastructure includes comprehensive build system support, testing utilities, and development tools that enable efficient development workflows while maintaining the quality and reliability needed for critical applications. The infrastructure provides both automated capabilities and manual tools that support various development approaches.
-
-Future development will focus on enhanced runtime capabilities, additional optimization features, and expanded integration possibilities while maintaining the stability and reliability of the current foundation. The framework provides a solid base for continued development while enabling productive application development today. 
