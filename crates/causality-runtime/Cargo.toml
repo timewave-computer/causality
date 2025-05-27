@@ -1,0 +1,53 @@
+[package]
+name = "causality-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+causality-types = { path = "../causality-types", features = ["std"], version = "0.1" }
+causality-core = { path = "../causality-core", version = "0.1" }
+# causality-graph = { path = "../causality-graph" }
+causality-lisp = { path = "../causality-lisp", features = ["std", "async"], version = "0.1" }
+# Temporarily removed dependency on toolkit
+# causality-toolkit = { path = "../causality-toolkit" }
+# causality-api = { path = "../causality-api" }
+# Removed dependency on compiler to fix build
+# causality-compiler = { path = "../causality-compiler" }
+
+# Use workspace dependencies consistently
+ethereum_ssz = { workspace = true }
+ethereum_ssz_derive = { workspace = true }
+frunk = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Core utilities
+sha2 = { workspace = true } 
+log = { workspace = true }
+hex = "0.4.3"
+chrono = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+lazy_static = "1.4.0"
+uuid = { version = "1.6", features = ["v4"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Collections
+parking_lot = { workspace = true }
+
+# For async runtime to block_on in sync Lisp host functions
+tokio = { workspace = true }
+rand = "0.8"
+
+[dev-dependencies]
+# Add dev dependencies here if needed
+tokio = { version = "1.36.0", features = ["test-util", "macros", "rt-multi-thread"] }
+getrandom = "0.2"
+
+[features]
+default = []
+zk = [] # Add optional zk feature

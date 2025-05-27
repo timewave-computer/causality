@@ -1,0 +1,25 @@
+(lang dune 3.8)
+(name ml_causality)
+
+(generate_opam_files true)
+
+(package
+ (name ml_causality)
+ (allow_empty) ; Allows creating a package without any public libraries/executables initially
+ (source (github timewave-computer/causality))
+ (authors "Sam Hart")
+ (maintainers "Timewave")
+ (license Apache-2.0)
+ (synopsis "OCaml DSL for Causality Lisp Combinators")
+ (description "A toolkit in OCaml for working with the Causality Lisp ecosystem.")
+ (depends 
+  (ocaml (>= "5.0.0")) 
+  (dune (>= "3.8")) 
+  base 
+  ppx_inline_test 
+  zarith 
+  sexplib0
+  eqaf 
+  digestif
+  (ml_ssz (= :version))  ; Add ml_ssz dependency
+  )) 

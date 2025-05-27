@@ -1,0 +1,45 @@
+; Dune file for test configurations
+
+; Working tests with available dependencies
+(executable
+ (name simple_test)
+ (modules simple_test)
+ (libraries ml_causality_lib_types sexplib0))
+
+(executable
+ (name test_interop)
+ (modules test_interop)
+ (libraries ml_causality_lib_types ml_causality_lib_dsl sexplib0))
+
+(executable
+ (name transpiler_test)
+ (modules transpiler_test)
+ (libraries ml_causality_lib_types))
+
+(executable
+ (name test_phase6_enhancements)
+ (modules test_phase6_enhancements)
+ (libraries ml_causality_lib_types ml_causality_lib_dsl ml_causality_lib_capability_system sexplib0)
+ (flags (:standard -w -30)))
+
+(executable
+ (name test_bridge_workflow)
+ (modules test_bridge_workflow)
+ (libraries ml_causality_lib_types ml_causality_lib_dsl sexplib0)
+ (flags (:standard -w -30)))
+
+(executable
+ (name test_bridge_extended)
+ (modules test_bridge_extended)
+ (libraries ml_causality_lib_types ml_causality_lib_dsl sexplib0)
+ (flags (:standard -w -30)))
+
+; Tests with missing dependencies - commented out for now
+; (test
+;  (name test_lisp_ast)
+;  (modules test_lisp_ast)
+;  (preprocess (pps ppx_inline_test))
+;  (libraries ml_causality_lib_types ml_causality_lib_dsl ml_causality_lib_capability_system sexplib0 base))
+
+; Commented out SSZ test
+; (subdirs ssz) 

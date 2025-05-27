@@ -1,0 +1,5 @@
+(library
+ (name ml_causality_lib_capability_system)
+ (public_name ml_causality.lib.capability_system)
+ (modules Capability_generator)
+ (libraries ml_causality_lib_types ml_causality_lib_dsl)) 

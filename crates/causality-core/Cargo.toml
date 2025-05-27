@@ -1,0 +1,66 @@
+[package]
+name = "causality-core"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# Core serialization is now SSZ
+causality-types = { path = "../causality-types" }
+
+# Error handling
+anyhow = "1.0.75"
+thiserror = "1.0.50"
+
+# Cryptography
+sha2 = "0.10.8"
+hex = "0.4.3"
+
+# Data structures
+maplit = "1.0.2"
+
+# Async utilities
+tokio = { version = "1.34.0", features = ["full"] }
+futures = "0.3.29"
+
+# FFI tools
+libc = "0.2.152"
+
+# Traits
+async-trait = "0.1.74"
+
+# Logging
+log = "0.4.20"
+
+# Tracing functionality (moved from causality-tracing)
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["registry", "env-filter", "fmt", "json"] }
+tracing-futures = "0.2.5"
+serde = { version = "1.0", features = ["derive"] }
+
+# Optional dependencies
+getrandom = { version = "0.2.10", optional = true }
+
+# Optional features for benchmarks
+criterion = { version = "0.5.1", optional = true }
+
+# S-expression handling for Rust/OCaml interoperability
+lexpr = "0.2.7"
+
+# Thread-safe synchronization for SMT operations
+parking_lot = "0.12"
+
+# JSON handling for domain library interfaces
+serde_json = "1.0"
+
+[features]
+default = ["getrandom", "std"]
+std = []
+getrandom = ["dep:getrandom"]
+benchmarks = ["dep:criterion"]
+
+[dev-dependencies]
+tempfile = "3.8.1"
+tracing-test = "0.2"

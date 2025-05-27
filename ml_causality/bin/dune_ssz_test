@@ -1,0 +1,4 @@
+(executable
+ (public_name test_ssz_bridge)
+ (name test_ssz_bridge)
+ (libraries ml_causality.ssz_bridge)) 

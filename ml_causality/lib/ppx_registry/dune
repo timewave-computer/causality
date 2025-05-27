@@ -1,0 +1,5 @@
+(library
+ (name ml_causality_lib_ppx_registry)
+ (public_name ml_causality.lib.ppx_registry)
+ (modules Ppx_registry)
+ (libraries digestif))

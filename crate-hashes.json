@@ -1,0 +1,8 @@
+{
+  "git+https://github.com/timewave-computer/valence-domain-clients?rev=d26460ceb0f95599300b1521131ef4b078638310#0.1.0": "1jldrmj7nl0dqxcg0yhzrcgvk2ggj7f0q5nws0pf61cvyqpbj4pz",
+  "git+https://github.com/timewave-computer/valence-domain-clients?rev=d26460ceb0f95599300b1521131ef4b078638310#valence-coprocessor-client@0.1.0": "1jldrmj7nl0dqxcg0yhzrcgvk2ggj7f0q5nws0pf61cvyqpbj4pz",
+  "git+https://github.com/timewave-computer/valence-domain-clients?rev=d26460ceb0f95599300b1521131ef4b078638310#valence-core@0.1.0": "1jldrmj7nl0dqxcg0yhzrcgvk2ggj7f0q5nws0pf61cvyqpbj4pz",
+  "git+https://github.com/timewave-computer/valence-domain-clients?rev=d26460ceb0f95599300b1521131ef4b078638310#valence-cosmos@0.1.0": "1jldrmj7nl0dqxcg0yhzrcgvk2ggj7f0q5nws0pf61cvyqpbj4pz",
+  "git+https://github.com/timewave-computer/valence-domain-clients?rev=d26460ceb0f95599300b1521131ef4b078638310#valence-evm@0.1.0": "1jldrmj7nl0dqxcg0yhzrcgvk2ggj7f0q5nws0pf61cvyqpbj4pz",
+  "git+https://github.com/timewave-computer/valence-domain-clients?rev=d26460ceb0f95599300b1521131ef4b078638310#valence-proto@0.1.0": "1jldrmj7nl0dqxcg0yhzrcgvk2ggj7f0q5nws0pf61cvyqpbj4pz"
+}

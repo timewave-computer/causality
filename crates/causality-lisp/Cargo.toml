@@ -1,0 +1,37 @@
+[package]
+name = "causality-lisp"
+version = "0.1.0"
+edition = "2021"
+authors = ["Timewave Team <thetimewaves@proton.me>"]
+license = "Apache-2.0"
+repository = "https://github.com/timewave-lab/micro-causality"
+description = "Lisp interpreter for the Causality system"
+
+[features]
+default = ["std", "async", "dsl"]
+std = ["anyhow/std", "causality-types/std", "rayon"]
+async = ["async-trait"]
+wasm = []
+zk = []
+parallel = ["std", "rayon"]
+dsl = []
+
+[dependencies]
+# Standard Rust crates
+anyhow = { workspace = true }
+log = { version = "0.4.20", default-features = false }
+# Use SSZ serialization instead of ssz
+ethereum_ssz = { workspace = true }
+ethereum_ssz_derive = { workspace = true }
+sha2 = { workspace = true }
+rayon = { version = "1.8.0", optional = true }
+async-trait = { version = "0.1.74", default-features = false, optional = true }
+
+# Internal dependencies
+causality-types = { path = "../causality-types", default-features = false }
+causality-core = { path = "../causality-core" }
+
+[dev-dependencies]
+async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
+once_cell = "1.18.0"
+tokio = { version = "1.36.0", features = ["full", "rt", "macros"] }

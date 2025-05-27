@@ -1,0 +1,12 @@
+(library
+ (name ml_causality_lib_dsl)
+ (public_name ml_causality.lib.dsl)
+ (modules dsl token_primitives bridge_primitives bridge_workflow)
+ (libraries ml_causality_lib_types sexplib0 digestif batteries)
+ (flags (:standard -w -32-27)))
+
+; Test temporarily disabled due to missing seq library dependency
+; (test
+;  (name test_dsl)
+;  (modules test_dsl)
+;  (libraries ml_causality_lib_dsl alcotest re))

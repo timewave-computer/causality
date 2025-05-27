@@ -1,0 +1,48 @@
+[workspace]
+members = [
+  "crates/causality-types",
+  "crates/causality-types/derive",
+  "crates/causality-core",
+  "crates/causality-lisp",
+  "crates/causality-compiler",
+  "crates/causality-runtime",
+  "crates/causality-simulation",
+  "crates/causality-zk",
+  "crates/causality-cli",
+  "crates/causality-api",
+  "crates/causality-toolkit",
+  "e2e",
+]
+resolver = "2"
+
+[workspace.dependencies]
+# Using SSZ serialization system instead
+ethereum_ssz = { version = "0.5", default-features = false }
+ethereum_ssz_derive = { version = "0.5", default-features = false }
+getrandom = "0.2.10"
+sha2 = "0.10.8"
+hex = "0.4.3"
+anyhow = "1.0.75"
+thiserror = "1.0.50"
+async-trait = "0.1.74"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4.20"
+tokio = { version = "1.36.0", features = ["rt", "rt-multi-thread", "sync", "macros"] }
+futures = "0.3.30"
+parking_lot = "0.12.1"
+frunk = "0.4.2"
+chrono = { version = "0.4.34", features = ["serde"] }
+rand = "0.8.5"
+tokio-test = "0.4.3"
+tempfile = "3.8.1"
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+unused_crate_dependencies = "warn"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "warn"
+
+[workspace.lints.clippy]
+all = "warn"

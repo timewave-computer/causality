@@ -1,0 +1,12 @@
+[package]
+name = "ml_ssz_ffi"
+version = "0.1.0"
+edition = "2021"
+description = "Rust FFI bindings for ml_ssz OCaml library"
+
+[lib]
+name = "ml_ssz_ffi"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+ocaml = "0.24.0" 

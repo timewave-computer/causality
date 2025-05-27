@@ -1,0 +1,32 @@
+# Purpose: End-to-end tests for the Causality framework.
+[package]
+name = "causality-e2e-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false # This is a test crate, not meant to be published
+
+[dependencies]
+# Core causality crates
+causality-types = { path = "../crates/causality-types" }
+causality-core = { path = "../crates/causality-core" }
+causality-compiler = { path = "../crates/causality-compiler" }
+causality-lisp = { path = "../crates/causality-lisp" }
+
+# Testing and async
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+env_logger = "0.10"
+
+# Additional dependencies for bridge e2e test
+# causality-runtime = { path = "../crates/causality-runtime" } # Removed as per instructions
+# causality-zk = { path = "../crates/causality-zk", optional = true } # Temporarily commented out to avoid c-kzg conflict
+
+[dev-dependencies]
+# No specific dev-dependencies for this test file itself, it's a [[test]]
+tempfile = "3.10.1" # Or any recent compatible version
+
+[[test]]
+name = "bridge_e2e_test"
+path = "tests/bridge_e2e_test.rs"

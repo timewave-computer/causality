@@ -1,0 +1,1 @@
+(executable (name simple_ssz_demo) (libraries ssz))

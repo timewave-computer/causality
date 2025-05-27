@@ -1,0 +1,37 @@
+[package]
+name = "causality-simulation"
+version = "0.1.0"
+edition = "2021"
+authors = ["Timewave Computer <info@timewave.computer>"]
+license = "Apache-2.0"
+repository = "https://github.com/timewave-lab/micro-causality"
+description = "A TEL-aware simulation engine for the Causality framework."
+
+[dependencies]
+causality-types = { path = "../causality-types" }
+causality-core = { path = "../causality-core" } # For SMT functionality
+causality-lisp = { path = "../causality-lisp" }
+causality-runtime = { path = "../causality-runtime" } # For TEL interpreter & context
+causality-api = { path = "../causality-api" } # Added for ZkCoprocessorApi
+
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ethereum_ssz = { workspace = true }
+ethereum_ssz_derive = { workspace = true }
+log = { workspace = true }
+rand = { workspace = true } # For deterministic randomness
+sha2 = { workspace = true } # For hashing snapshot keys
+# Add other common dependencies as needed
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+tempfile = { workspace = true } # For creating temporary files/dirs in tests
+
+[features]
+default = ["std"]
+std = []
+# Add parallel feature if needed for parallel validation/exploration later
+# parallel = ["rayon", "causality-lisp/parallel"] 

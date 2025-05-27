@@ -1,0 +1,52 @@
+[package]
+name = "causality-api"
+version = "0.1.0"
+edition = "2021"
+authors = ["Timewave Team <thetimewaves@proton.me>"]
+license = "Apache-2.0"
+repository = "https://github.com/timewave-lab/micro-causality"
+description = "API interface management and domain mocking for Causality"
+
+[dependencies]
+paste = "1.0"
+url = "2.4.1"
+hex = { workspace = true }
+sha2 = { workspace = true }
+# Use workspace dependencies where possible
+ethereum_ssz = { workspace = true }
+ethereum_ssz_derive = { workspace = true }
+rand = "0.8.5"
+uuid = { version = "1.5", features = ["v4", "v5"] }
+dashmap = "5.5"
+
+causality-types = { path = "../causality-types", features = ["serde"] }
+causality-runtime = { path = "../causality-runtime" }
+
+# Standard Rust crates
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+log = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+
+# Blockchain client library
+valence-domain-clients = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310", default-features = false, features = ["ethereum", "neutron"] }
+valence-core = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310" }
+valence-evm = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310" }
+valence-cosmos = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310" }
+valence-coprocessor-client = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "macros", "test-util"] }
+
+[lib]
+crate-type = ["lib"]
+
+[features]
+default = []
+ethereum = []
+neutron = []
+ffi = []
+ocaml = ["ffi"]
