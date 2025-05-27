@@ -129,6 +129,8 @@ Intents represent desired state transformations within the system, expressing wh
 
 The Intent structure captures transformation requirements through input and output ResourceFlow specifications. These flows describe the types and quantities of Resources required for the transformation and the expected outputs. The framework uses this information for validation, optimization, and resource allocation.
 
+Being fundamental to system operations, `Intent` instances are SSZ (SimpleSerialize) encoded for content addressing, network transmission, and persistent storage. As composite data structures, often containing variable-length fields such as lists of `ResourceFlow` and optional `ExprId`s, their deserialization from a byte stream requires careful management of byte consumption to ensure each component is correctly parsed.
+
 ```rust
 pub struct Intent {
     pub id: EntityId,
@@ -139,9 +141,7 @@ pub struct Intent {
     pub outputs: Vec<ResourceFlow>,
     pub expression: Option<ExprId>,
     pub timestamp: Timestamp,
-    pub optimization_hint: Option<ExprId>,
-    pub target_typed_domain: Option<TypedDomain>,
-    pub process_dataflow_hint: Option<ProcessDataflowInitiationHint>,
+    pub hint: Option<ExprId>, // Optimization guidance or preferences
 }
 ```
 
@@ -155,6 +155,8 @@ Effects represent the actual state changes that occur when Intents are processed
 
 The Effect structure includes comprehensive information about the transformation context, including source and target domains, the Handler responsible for execution, and detailed resource flows. This information enables auditing, debugging, and system analysis.
 
+Similarly, `Effect` instances are SSZ-encoded to ensure verifiability and facilitate their use across system boundaries. Given their comprehensive and often variable-length structure (e.g., lists of resources, optional expression IDs), their deserialization mechanisms are designed to meticulously track the number of bytes consumed for each field, ensuring robust and accurate parsing from SSZ byte streams.
+
 ```rust
 pub struct Effect {
     pub id: EntityId,
@@ -164,22 +166,53 @@ pub struct Effect {
     pub inputs: Vec<ResourceFlow>,
     pub outputs: Vec<ResourceFlow>,
     pub expression: Option<ExprId>,
-    pub timestamp: Timestamp,
-    pub resources: Vec<ResourceFlow>,
-    pub nullifiers: Vec<ResourceFlow>,
-    pub scoped_by: HandlerId,
-    pub intent_id: Option<ExprId>,
-    pub source_typed_domain: TypedDomain,
-    pub target_typed_domain: TypedDomain,
-    pub cost_model: Option<EffectCostModel>,
-    pub resource_usage_estimate: Option<ResourceUsageEstimate>,
-    pub originating_dataflow_instance: Option<ProcessDataflowInstanceId>,
+    pub timestamp: Timestamp,  // Effect specification creation
+    pub hint: Option<ExprId>,  // Target handler, cost, performance, etc.
 }
 ```
 
 Nullifiers within Effects prove that specific Resources were consumed during the transformation. This mechanism enables privacy-preserving resource management by proving consumption without revealing the consumed Resource content.
 
 Cost models and resource usage estimates support optimization and resource planning. These fields enable the framework to make informed decisions about execution strategies and resource allocation.
+
+## Transaction Model: Resolving Intents and Effects
+
+The `Transaction` is a pivotal entity in the Causality framework, representing an immutable record of how specific `Intent`s are resolved by a set of `Effect`s. It acts as the atomic unit of commitment that bundles together desired outcomes (Intents) with the concrete actions (Effects) that achieve them, thereby formalizing the consumption of resources and the resulting state changes.
+
+```rust
+pub struct Transaction {
+    /// Unique identifier for this transaction
+    pub id: EntityId,
+    
+    /// Human-readable name or description
+    pub name: Str,
+    
+    /// Domain this transaction belongs to
+    pub domain_id: DomainId,
+    
+    /// All effects included in this transaction
+    pub effects: Vec<EntityId>,
+    
+    /// All intents satisfied by this transaction
+    pub intents: Vec<EntityId>,
+    
+    /// Aggregated resources consumed by all effects (derived from linked Intents)
+    pub inputs: Vec<ResourceFlow>,
+    
+    /// Aggregated resources produced by all effects
+    pub outputs: Vec<ResourceFlow>,
+    
+    /// When this transaction was created or executed
+    pub timestamp: Timestamp,
+}
+```
+
+Key aspects of the `Transaction` model:
+
+-   **Atomic Commitment**: A `Transaction` encapsulates a complete set of operations that are applied atomically. Either all `Effect`s within the transaction succeed, and the corresponding `Intent`s are considered satisfied, or the transaction fails.
+-   **Intent-Effect Linkage**: The `intents: Vec<EntityId>` and `effects: Vec<EntityId>` fields are crucial. They establish the explicit, many-to-many relationship between the goals declared by users or other systems (`Intent`s) and the concrete actions taken by the framework (`Effect`s). This directly supports scenarios like "coincidence of wants," where multiple `Intent`s can be fulfilled by a coordinated set of `Effect`s within a single `Transaction`.
+-   **Resource Accounting**: The `inputs` and `outputs` fields provide an aggregated view of the resources consumed and produced by the `Effect`s within the transaction. These are typically derived from the resource commitments specified in the linked `Intent`s and the actual outcomes of the `Effect`s.
+-   **Immutability and Auditability**: Once recorded, a `Transaction` provides an immutable historical record of what was intended, what actions were taken, and what resources were involved, which is essential for auditing, verification, and debugging.
 
 ## Resource Flow and Transformation Patterns
 

@@ -25,6 +25,89 @@ pub enum ValueExpr {
 
 Executable expressions (`Expr`) define computational logic as Abstract Syntax Trees (ASTs). Like `ValueExpr`, `Expr`s are SSZ-serialized, with their Merkle root forming a content-addressed `ExprId`. This "code-as-data" approach allows logic to be stored, referenced, and verified (e.g., via SMTs). Core `Expr` AST variants include: `Atom` (literals), `Const` (embedded `ValueExpr`), `Var` (variables), `Lambda` (anonymous functions, taking parameters and a boxed body expression), `Apply` (function calls, taking a boxed function and a vector of argument expressions), `Combinator` (predefined operations), and `Dynamic` (for step-bounded evaluation).
 
+## Dataflow Execution Model for Effects
+
+While `Expr` and `ValueExpr` define individual computations and data, the Causality system requires a structured way to execute a collection of `Effect`s within a transaction. This execution must be verifiable, replayable, and efficient, especially in a zero-knowledge context.
+
+The system adopts a bounded dataflow model. This model leverages the fact that each resource in Causality functions like a register in a static single-assignment (SSA) environment, making dataflow a natural fit.
+
+### Dataflow Block Structure
+
+A `DataflowBlock` represents a statically committed subgraph of execution for a concrete set of `Effect`s:
+
+```rust
+pub struct DataflowBlock {
+    pub layers: Vec<Layer>,
+    pub edges: Vec<Edge>,
+}
+
+pub struct Layer {
+    pub node_ids: Vec<NodeId>, // NodeIds typically reference Effects
+}
+
+pub struct Edge {
+    pub source: NodeId,
+    pub target: NodeId,
+    pub expression: ExpressionId, // Edge gating condition (a Lisp ExprId)
+}
+```
+
+-   `Node`s (referenced by `NodeId`) represent `Effect`s to be executed.
+-   `Edge`s describe resource and control flow between effects.
+-   `Layer`s represent execution stages: all nodes within a single layer are conceptually evaluated in parallel (or their order doesn't affect the outcome of that layer). Layers are executed sequentially.
+-   Edges can be conditionally activated using committed Lisp `expression` logic (evaluated in-circuit). This allows for dynamic control flow within the static graph.
+-   The full `DataflowBlock` is included in the `ProgramCommitment`, enabling a bounded and reproducible transaction structure. This is crucial for ZK-proofs, as the circuit can be precompiled or templated against this known topology.
+
+### Language-Level Design Goals for a Dataflow DSL
+
+To support intuitive programming that maps to this `DataflowBlock` model, a developer-facing language or DSL (likely Lisp-based) should include primitives that:
+
+#### Encourage Resource Clarity
+
+-   Use named, one-shot resource declarations (e.g., `(let x: Token (...))`).
+-   Prevent implicit reuse or mutation of resources, aligning with the SSA nature.
+-   Explicitly annotate ephemeral resources to distinguish internal data flow from long-term state.
+
+#### Express Layered Control Flow Declaratively
+
+-   Use `stage` or `layer` keywords (or similar Lisp constructs) to organize parallel evaluation:
+
+    ```lisp
+    (stage 1
+      (effect withdraw (...))
+      (effect log_event (...)))
+    (stage 2
+      (effect send_output (...) (if (> amount 0))))
+    ```
+
+-   Allow conditional edge activation via embedded `if`/`when` modifiers on effects or dataflow connections:
+
+    ```lisp
+    (effect unlock (...) (when (> time expiry)))
+    ```
+
+#### Make Dataflow Explicit but Intuitive
+
+-   Model effect outputs as bindings that flow to the next stage or to subsequent effects within the same stage if dependencies allow:
+
+    ```lisp
+    (let unlocked (effect unlock (vault_id) (when (> time expiry))))
+    (effect send_to (unlocked recipient))
+    ```
+
+-   Under the hood, these DSL constructs would expand to the appropriate `Layer` and `Edge` structures in the `DataflowBlock`, with conditional logic translating to `expression`s on `Edge`s. This translation leverages the dynamic expression system:
+    *   The conditional clause, like `(when (> time expiry))`, is compiled into a reusable Lisp `Expr` (expression tree). This `Expr` is stored, and its unique `ExprId` is referenced.
+    *   The `Effect` struct (e.g., for `unlock`) typically stores this `ExprId` in its `expression` field.
+    *   At runtime, when the system (e.g., a `Handler` orchestrating a dataflow or the `DataflowBlock` executor) encounters this effect, it uses the Lisp interpreter to evaluate the referenced `Expr`.
+    *   Crucially, the interpreter is provided with a dynamic **execution context**. This context supplies the current values for symbols used in the expression (like `time` and `expiry` for that specific effect instance).
+    *   The boolean result of this dynamic evaluation then determines if the effect proceeds and, consequently, if associated dataflow edges are activated. This allows for context-sensitive, declarative control over the execution flow.
+
+#### Enable Static Analysis and Optimizations
+
+-   The resource graph derived from the DSL can be statically validated (e.g., no reuse, type matching between effect outputs and inputs, detection of dead edges or unreachable effects).
+-   The evaluation order of effects is structurally determined by layers and gating conditions.
+-   Developers can be warned at compile-time about potential issues like resource leakage or sources of non-determinism not captured by gating conditions.
+
 ## Combinator System
 
 Atomic combinators are predefined host functions provided by the execution environment (e.g., `LispHostEnvironment` in `causality-runtime`). They are the primary means by which `Expr` logic interacts with the system, including Resources and their `ValueExpr` states. The set of available combinators is context-dependent, influenced by factors like the `TypedDomain` of an operation or the purpose of the Lisp evaluation (e.g., `"static_validation_verifiable"`, `"dataflow_orchestration"`).
