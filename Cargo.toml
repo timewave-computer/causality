@@ -1,35 +1,34 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/causality-engine",
-    "crates/causality-types",
-    "crates/causality-patterns",
-    "crates/causality-tel",
-    "crates/causality-ir",
-    "crates/causality-domain",
-    "crates/causality-error",
+    "crates/causality-codegen-core",
     "crates/causality-core",
-    "crates/causality-boundary",
-    "crates/causality-tools",
     "crates/causality-crypto",
     "crates/causality-db",
-    "crates/causality-storage",
-    "crates/causality-simulation",
-    "crates/agent-user",
-    "crates/agent-committee",
-    "tests/test-effect",
-    "tests/test-scenario",
-    "tests/query-test",
+    "crates/causality-domain-cosmwasm",
+    "crates/causality-domain-ethereum",
     "domains/causality-domain-sdk",
     "domains/causality-domain-succinct",
-    "domains/causality-domain-cosmwasm",
-    "domains/causality-domain-evm", "standalone-test",
-    "scripts"
+    "crates/causality-domain-rust",
+    "crates/causality-error",
+    "crates/causality-indexer-adapter",
+    "crates/causality-indexer-almanac-client",
+    "crates/causality-indexer-bridge", 
+    "crates/causality-indexer-client",
+    "crates/causality-ir",
+    "crates/causality-patterns",
+    "crates/causality-runtime",
+    "crates/causality-simulation",
+    "crates/causality-storage",
+    "crates/causality-storage-mem",
+    "crates/causality-storage-postgres",
+    "crates/causality-storage-rocksdb",
+    "crates/causality-tel",
+    "crates/causality-tools",
+    "crates/causality-types",
+    "tests/test-effect",
+    "tests/test-scenario",
 ]
-
-[workspace.metadata.examples]
-verification_system = { path = "examples/verification_system", enabled = false, reason = "Deprecated" }
-cross_domain_verification = { path = "examples/cross_domain_verification", enabled = false, reason = "Temporarily disabled" }
 
 [workspace.dependencies]
 # Workspace dependencies are listed here.
@@ -80,16 +79,17 @@ causality-core = { path = "crates/causality-core" }
 causality-crypto = { path = "crates/causality-crypto" }
 causality-db = { path = "crates/causality-db" }
 causality-domain = { path = "crates/causality-domain" }
-causality-domain-cosmwasm = { path = "domains/causality-domain-cosmwasm" }
-causality-domain-evm = { path = "domains/causality-domain-evm" }
+causality-domain-cosmwasm = { path = "crates/causality-domain-cosmwasm" }
+causality-domain-ethereum = { path = "crates/causality-domain-ethereum" }
 causality-domain-sdk = { path = "domains/causality-domain-sdk" }
 causality-domain-succinct = { path = "domains/causality-domain-succinct" }
-causality-engine = { path = "crates/causality-engine" }
+causality-runtime = { path = "crates/causality-runtime" }
 causality-error = { path = "crates/causality-error" }
 causality-ir = { path = "crates/causality-ir" }
 causality-storage = { path = "crates/causality-storage" }
 causality-tel = { path = "crates/causality-tel" }
 causality-types = { path = "crates/causality-types" }
+causality-tools = { path = "crates/causality-tools" }
 
 # This section is used by cargo-workspaces
 [workspace.package]

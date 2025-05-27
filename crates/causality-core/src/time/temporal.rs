@@ -7,6 +7,9 @@ use causality_error::{Error, Result};
 use std::cmp::Ordering;
 use std::fmt;
 
+use crate::time::error::TimeError;
+use crate::time::Timestamp;
+
 /// A logical timestamp that represents a point in logical time
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LogicalTimestamp {
@@ -141,7 +144,13 @@ impl VectorClock {
     }
 }
 
-/// Trait for types that provide time services
+/// Trait for sources that can provide a physical timestamp
+pub trait TimeSource: Send + Sync {
+    /// Get the current timestamp from this source
+    fn current_timestamp(&self) -> std::result::Result<Timestamp, TimeError>;
+}
+
+/// Trait for types that provide logical time services
 pub trait TimeProvider {
     /// Get the current logical timestamp
     fn current_time(&self) -> Result<LogicalTimestamp>;

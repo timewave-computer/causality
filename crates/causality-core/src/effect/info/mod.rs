@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 use anyhow::Result;
 use causality_types::ContentHash;
 use crate::utils::content_addressing;
+use anyhow::Error as AnyhowError;
 
 /// EffectType enum represents all possible effect types that can be used
 /// This replaces the trait object Vec<Box<dyn Effect>> with a concrete type
@@ -84,9 +85,10 @@ impl EffectInfo {
         self
     }
 
-    /// Get the content hash of this effect
+    /// Compute the content hash of this effect info
     pub fn content_hash(&self) -> Result<ContentHash, String> {
         content_addressing::hash_object(self)
+            .map_err(|e: AnyhowError| e.to_string())
     }
 }
 

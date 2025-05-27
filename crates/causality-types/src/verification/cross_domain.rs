@@ -15,7 +15,6 @@ use crate::crypto_primitives::{
     ContentAddressed, 
     ContentHash,
     HashError,
-    HashOutput,
 };
 
 use crate::{
@@ -27,7 +26,6 @@ use crate::{
         TrustBoundary,
         VerificationPoint,
     },
-    ContentId,
 };
 
 /// Errors specific to cross-domain verification
@@ -378,8 +376,8 @@ impl CrossDomainVerificationManager {
         source_domain: &DomainId,
         intermediate_domain: &DomainId,
         target_domain: &DomainId,
-        proof1: &VerificationProof,
-        proof2: &VerificationProof,
+        _proof1: &VerificationProof,
+        _proof2: &VerificationProof,
     ) -> Result<VerificationResult, CrossDomainVerificationError> {
         debug!(
             "Attempting indirect proof verification from {} via {} to {}",

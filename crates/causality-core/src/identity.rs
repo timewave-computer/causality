@@ -18,6 +18,12 @@ impl IdentityId {
         Self(ContentId::from(random_hash))
     }
     
+    /// Create a new random identity ID
+    /// Alias for new() to maintain backward compatibility
+    pub fn new_random() -> Self {
+        Self::new()
+    }
+    
     /// Create an identity ID from an existing content ID
     pub fn from_content_id(content_id: ContentId) -> Self {
         Self(content_id)

@@ -606,3 +606,58 @@ The Resource System is implemented in the following crates and modules:
 - [System Contract](../../../spec/system_contract.md)
 - [Effect System](./effect-system.md)
 - [Agent-Based Resources](./role-based-resources.md)
+
+## Unified Architecture (v0.5.0+)
+
+As of version 0.5.0, the resource system has been unified around a consistent model with the following key components:
+
+1. **ResourceRegister** - The core resource representation used throughout the system
+2. **UnifiedResourceTypeRegistry** - A single registry implementation with pluggable backends
+3. **Standardized ContentId** - All content addressing uses the canonical implementation
+
+### Component Relationships
+
+```mermaid
+graph TD
+    ResourceRegister[ResourceRegister] --> ContentId[ContentId]
+    ResourceRegister --> ResourceTypeId[ResourceTypeId]
+    ResourceRegister --> ResourceState[ResourceState]
+    
+    ResourceRegisterStorage[ResourceRegisterStorage] --> ResourceRegister
+    ContentAddressedRegisterStorage[ContentAddressedRegisterStorage] --> ResourceRegisterStorage
+    
+    ResourceTypeRegistry[ResourceTypeRegistry] --> ResourceTypeDefinition[ResourceTypeDefinition]
+    UnifiedResourceTypeRegistry[UnifiedResourceTypeRegistry] --> ResourceTypeRegistry
+    ResourceTypeStorage[ResourceTypeStorage] --> ResourceTypeDefinition
+    ContentAddressedTypeStorage[ContentAddressedTypeStorage] --> ResourceTypeStorage
+    
+    UnifiedResourceTypeRegistry --> ResourceTypeStorage
+    ContentAddressedRegisterStorage --> ContentAddressedStorage[ContentAddressedStorage]
+    ContentAddressedTypeStorage --> ContentAddressedStorage
+```
+
+### Key Traits and Classes
+
+- **ResourceRegister** - The core resource representation
+- **ResourceRegisterStorage** - Storage interface for resource registers
+- **ContentAddressedRegisterStorage** - Content-addressed implementation of register storage
+- **ResourceTypeRegistry** - Interface for resource type management
+- **UnifiedResourceTypeRegistry** - Primary implementation of type registry with pluggable backends
+- **ResourceTypeStorage** - Storage interface for resource types
+- **ContentAddressedTypeStorage** - Content-addressed implementation of type storage
+
+### Migration Notes
+
+The legacy implementations (`ContentAddressedResourceTypeRegistry` and `InMemoryResourceTypeRegistry`) have been marked as deprecated and will be removed in a future version. All code should migrate to the unified implementations.
+
+Helper functions are provided to simplify migration:
+
+```rust
+// Create a registry
+let registry = create_resource_type_registry(storage);
+
+// Create register storage
+let register_storage = create_register_storage(storage);
+```
+
+For more details on migration, see the [Resource System Guide](../guides/resource-system.md).

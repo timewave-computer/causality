@@ -83,16 +83,14 @@ pub struct PassStats {
     pub changed: bool,
 }
 
-/// Statistics for the entire optimization pipeline
-#[derive(Debug, Default, Clone)]
+/// Statistics about optimization results
+#[derive(Debug, Default)]
 pub struct OptimizationStats {
-    /// Stats for each pass
+    /// Statistics per pass
     pub pass_stats: HashMap<String, PassStats>,
-    
-    /// Total time spent in milliseconds
-    pub total_time_ms: u64,
-    
-    /// Whether any pass made changes
+    /// Total time spent optimizing in milliseconds
+    pub total_time_ms: u128,
+    /// Whether any pass made a change
     pub changed: bool,
 }
 
@@ -175,7 +173,7 @@ impl OptimizationPipeline {
             }
         }
         
-        stats.total_time_ms = start.elapsed().as_millis() as u64;
+        stats.total_time_ms = start.elapsed().as_millis() as u128;
         stats.changed = changed;
         
         Ok(stats)
@@ -216,48 +214,12 @@ pub fn verify_resource_structure_preservation(pipeline: &OptimizationPipeline) -
     pipeline.passes.iter().all(|pass| pass.preserves_resource_structure())
 }
 
-/// Verify the correctness of optimizations based on category theory
-///
-/// This function verifies that:
-/// 1. All optimizations preserve the adjunction property between TEL and TEG
-/// 2. All optimizations preserve the resource monoidal structure
-/// 3. All optimizations maintain semantic equivalence
+/// Verify the semantic correctness of optimizations
 pub fn verify_optimization_correctness(pipeline: &OptimizationPipeline) -> Result<bool> {
-    // Check adjunction preservation
-    let preserves_adjunction = verify_adjunction_preservation(pipeline);
-    
-    // Check resource structure preservation
-    let preserves_resource_structure = verify_resource_structure_preservation(pipeline);
-    
-    // Check that all passes individually preserve semantics
-    let all_passes_preserve_semantics = pipeline.passes.iter().all(|pass| {
-        // A pass preserves semantics if it preserves the adjunction 
-        // and resource structure, or is explicitly marked as semantics-preserving
-        pass.preserves_adjunction() && pass.preserves_resource_structure()
-    });
-    
-    // Return true only if all checks pass
-    Ok(preserves_adjunction && preserves_resource_structure && all_passes_preserve_semantics)
-}
-
-/// Statistics about optimization results
-#[derive(Debug)]
-pub struct OptimizationStats {
-    /// Number of iterations
-    pub iterations: u8,
-    
-    /// Statistics per pass
-    pub pass_stats: HashMap<String, PassStats>,
-}
-
-/// Statistics for a single optimization pass
-#[derive(Debug)]
-pub struct PassStats {
-    /// Number of times the pass was applied
-    pub applications: u32,
-    
-    /// Number of changes made
-    pub changes: u32,
+    // Implementation of correctness verification would go here
+    // For now, we just check that all optimizations preserve adjunction and resource structure
+    Ok(verify_adjunction_preservation(pipeline) && 
+       verify_resource_structure_preservation(pipeline))
 }
 
 #[cfg(test)]

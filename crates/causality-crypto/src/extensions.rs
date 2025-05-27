@@ -3,7 +3,7 @@
 //! This module provides extension traits for cryptographic types,
 //! such as ContentId and DomainId.
 
-use crate::utils::simple_hash;
+use crate::utils::simple_hash_bytes;
 use causality_types::{ContentId, domain, block, timestamp, trace};
 
 /// Trait for extended type operations
@@ -22,8 +22,8 @@ impl TypeExtensions for ContentId {
     }
     
     fn stable_hash(&self) -> u64 {
-        // Use the simple_hash function from utils module
-        simple_hash(self.hash().as_bytes())
+        // Use the simple_hash_bytes function from utils module
+        simple_hash_bytes(self.hash().as_bytes())
     }
 }
 
@@ -35,8 +35,8 @@ impl TypeExtensions for domain::DomainId {
     }
     
     fn stable_hash(&self) -> u64 {
-        // Use the simple_hash function from utils module
-        simple_hash(self.as_str())
+        // Use the simple_hash_bytes function from utils module
+        simple_hash_bytes(self.as_str().as_bytes())
     }
 }
 
@@ -47,8 +47,8 @@ impl TypeExtensions for block::BlockHash {
     }
     
     fn stable_hash(&self) -> u64 {
-        // Use the simple_hash function from utils module
-        simple_hash(self.as_str())
+        // Use the simple_hash_bytes function from utils module
+        simple_hash_bytes(self.as_str().as_bytes())
     }
 }
 
@@ -59,8 +59,8 @@ impl TypeExtensions for block::BlockHeight {
     }
     
     fn stable_hash(&self) -> u64 {
-        // Use the simple_hash function from utils module by converting to string first
-        simple_hash(&self.value().to_string())
+        // Use the simple_hash_bytes function from utils module by converting to string first
+        simple_hash_bytes(&self.value().to_string().as_bytes())
     }
 }
 
@@ -71,8 +71,8 @@ impl TypeExtensions for timestamp::Timestamp {
     }
     
     fn stable_hash(&self) -> u64 {
-        // Use the simple_hash function from utils module by converting to string first
-        simple_hash(&self.value().to_string())
+        // Use the simple_hash_bytes function from utils module by converting to string first
+        simple_hash_bytes(&self.value().to_string().as_bytes())
     }
 }
 
@@ -83,8 +83,8 @@ impl TypeExtensions for trace::TraceId {
     }
     
     fn stable_hash(&self) -> u64 {
-        // Use the simple_hash function from utils module
-        simple_hash(self.as_str())
+        // Use the simple_hash_bytes function from utils module
+        simple_hash_bytes(self.as_str().as_bytes())
     }
 }
 

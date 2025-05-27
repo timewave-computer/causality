@@ -1,0 +1,54 @@
+[package]
+name = "causality-indexer-client"
+version = "0.1.0"
+edition = "2021"
+authors = ["Causality Contributors"]
+description = "Client implementation for the Almanac indexer service in Causality"
+readme = "README.md"
+
+[dependencies]
+# Internal crates
+causality-indexer-adapter = { path = "../causality-indexer-adapter" }
+causality-types = { path = "../causality-types" }
+causality-error = { path = "../causality-error" }
+
+# Optional bridge integration
+causality-indexer-bridge = { path = "../causality-indexer-bridge", optional = true }
+indexer-core = { path = "../../almanac/crates/core", optional = true }
+indexer-storage = { path = "../../almanac/crates/storage", optional = true }
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json"] }
+
+# WebSockets
+tokio-tungstenite = "0.19"
+futures-util = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Dates and times
+chrono = "0.4"
+
+# URL parsing
+url = "2.5"
+
+# Async traits and runtime
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt", "macros", "time"] }
+
+# Logging
+tracing = "0.1"
+
+# Error handling
+thiserror = "1.0"
+
+[features]
+default = []
+bridge-integration = ["causality-indexer-bridge", "indexer-core", "indexer-storage"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+mockito = "1.0"
+wiremock = "0.5"

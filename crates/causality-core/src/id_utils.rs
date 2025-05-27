@@ -5,7 +5,6 @@
 use std::fmt;
 use causality_types::crypto_primitives::ContentId;
 use blake3;
-use crate::serialization::Serializable;
 
 /// Helper function to convert ContentId to String to avoid trait ambiguity
 pub fn content_id_to_str(content_id: &ContentId) -> String {
@@ -38,6 +37,15 @@ pub fn generate_timestamp_id() -> String {
     
     let random_suffix = generate_random_hex(8);
     format!("{:x}{}", timestamp, random_suffix)
+}
+
+/// Generate random bytes of the specified length
+pub fn generate_random_bytes(length: usize) -> Vec<u8> {
+    use rand::RngCore;
+    let mut rng = rand::thread_rng();
+    let mut bytes = vec![0u8; length];
+    rng.fill_bytes(&mut bytes);
+    bytes
 }
 
 /// Fact identifier

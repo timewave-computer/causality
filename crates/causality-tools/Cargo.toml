@@ -17,9 +17,12 @@ colored = "2.0"
 
 # Internal dependencies
 causality-types = { workspace = true }
-causality-core = { workspace = true }
-causality-engine = { workspace = true }
+causality-ir = { workspace = true }
+causality-tel = { workspace = true }
+causality-runtime = { workspace = true }
 causality-domain = { workspace = true }
+causality-domain-sdk = { workspace = true }
+causality-error = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"

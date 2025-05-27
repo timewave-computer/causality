@@ -8,14 +8,18 @@ use async_trait::async_trait;
 use tracing::{debug, info, warn};
 use std::sync::OnceLock;
 
+// Import the core agent implementations
+use causality_core::resource::agent::{
+    user::{UserAgent, UserAgentBuilder, AuthenticationMethod},
+    committee::{CommitteeAgent, CommitteeAgentBuilder, CommitteeConfig},
+    agent::AgentBuilder,
+    types::AgentState
+};
+
 // Helper to create ResourceId from string ID
 fn create_resource_id(id_str: &str) -> ResourceId {
     let hash_bytes = blake3::hash(id_str.as_bytes());
-    let content_hash = ContentHash::new(
-        &HashAlgorithm::Blake3.to_string(),
-        hash_bytes.as_bytes().to_vec()
-    );
-    ResourceId::with_name(content_hash, id_str.to_string())
+    ResourceId::from_hash_bytes(hash_bytes.as_bytes())
 }
 
 // --- Mock User Agent ---
@@ -24,13 +28,26 @@ fn create_resource_id(id_str: &str) -> ResourceId {
 pub struct MockUserAgent {
     id_str: String,
     resource_id: OnceLock<ResourceId>,
+    // Use the core UserAgent instead of reimplementing
+    user_agent: Option<UserAgent>,
 }
 
 impl MockUserAgent {
     pub fn new(id_str: String) -> Self {
+        // Create a simple UserAgent
+        let user_agent = UserAgentBuilder::new()
+            .with_display_name(&id_str)
+            .with_auth_method(AuthenticationMethod::PublicKey { 
+                public_key: format!("pk_{}", id_str) 
+            })
+            .state(AgentState::Active)
+            .build()
+            .ok();
+
         Self { 
             id_str, 
-            resource_id: OnceLock::new(), 
+            resource_id: OnceLock::new(),
+            user_agent,
         }
     }
 }
@@ -65,13 +82,32 @@ impl SimulatedAgent for MockUserAgent {
 pub struct MockCommitteeAgent {
     id_str: String,
     resource_id: OnceLock<ResourceId>,
+    // Use the core CommitteeAgent instead of reimplementing
+    committee_agent: Option<CommitteeAgent>,
 }
 
 impl MockCommitteeAgent {
     pub fn new(id_str: String) -> Self {
+        // Create a CommitteeConfig
+        let committee_config = CommitteeConfig {
+            domain: format!("domain_{}", id_str),
+            quorum_percentage: 67,
+            max_size: 5,
+            min_votes: 2,
+            protocol_version: "1.0".to_string(),
+        };
+
+        // Create a simple CommitteeAgent
+        let committee_agent = CommitteeAgentBuilder::new()
+            .with_config(committee_config)
+            .state(AgentState::Active)
+            .build()
+            .ok();
+
         Self { 
             id_str,
-            resource_id: OnceLock::new(), 
+            resource_id: OnceLock::new(),
+            committee_agent,
         }
     }
 }
@@ -90,6 +126,5 @@ impl SimulatedAgent for MockCommitteeAgent {
         self.resource_id.get_or_init(|| create_resource_id(&self.id_str))
     }
 
-    // Optional: Override shutdown for specific cleanup if needed
     // async fn shutdown(&self) -> Result<()> { ... }
 }

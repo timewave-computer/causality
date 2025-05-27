@@ -10,6 +10,7 @@ license = "Apache-2.0"
 causality-types = { path = "../causality-types" }
 causality-crypto = { path = "../causality-crypto" }
 causality-error = { path = "../causality-error" }
+causality-indexer-adapter = { path = "../causality-indexer-adapter", optional = true }
 
 # Error handling
 anyhow = "1.0"
@@ -42,6 +43,7 @@ hex = "0.4"
 
 [features]
 default = [] 
+indexer = ["causality-indexer-adapter"]
 
 [dev-dependencies]
 typetag = "0.2"

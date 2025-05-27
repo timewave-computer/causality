@@ -10,13 +10,7 @@ pub mod codes {
     use crate::ErrorCode;
     
     // Crypto error codes start with 3000
-    pub const HASH_ERROR: ErrorCode = ErrorCode(3001);
-    pub const SIGNATURE_ERROR: ErrorCode = ErrorCode(3002);
     pub const VERIFICATION_ERROR: ErrorCode = ErrorCode(3003);
-    pub const KEY_ERROR: ErrorCode = ErrorCode(3004);
-    pub const RANDOM_ERROR: ErrorCode = ErrorCode(3005);
-    pub const ENCODING_ERROR: ErrorCode = ErrorCode(3006);
-    pub const CONTENT_ID_ERROR: ErrorCode = ErrorCode(3007);
 }
 
 /// Crypto-specific error types
@@ -99,4 +93,7 @@ impl CryptoError {
     pub fn contentid_error(message: impl Into<String>) -> Self {
         CryptoError::ContentIdError(message.into())
     }
+}
+
+pub mod prelude {
 } 

@@ -1,69 +1,59 @@
-// Copyright 2023 Causality Ltd
-// Licensed under the Apache License, Version 2.0 (the "License");
+// Copyright 2024 Timewave Labs. All rights reserved.
+// Use of this source code is governed by a MIT-style license that can be
+// found in the LICENSE file.
 
-//! # Causality Core Library
+//! # Causality Core
 //!
-//! This crate provides the core functionality for the Causality system,
-//! including resource management, effect handling, concurrency control,
-//! and temporal reasoning primitives.
+//! This crate defines the core traits, types, and interfaces for the
+//! Causality system. It forms the foundation upon which other Causality
+//! crates are built.
+//!
+//! ## Key Concepts
+//!
+//! *   **Effects:** Represent units of computation or interaction.
+//! *   **Resources:** Represent state or entities that effects interact with.
+//! *   **Capabilities:** Define permissions for effects to interact with resources.
+//! *   **Domains:** Represent execution environments (e.g., blockchains, APIs).
+//! *   **Time:** Concepts related to temporal ordering and constraints.
 
-// Module exports
+// Public API
 pub mod capability;
-// pub mod crypto; // No dedicated crypto module in core
 pub mod effect;
-pub mod identity; // Add identity module
-pub mod resource;
-pub mod resource_types; // Add resource_types module for compatibility
-// pub mod role; // Role module doesn't exist yet
-pub mod time; // Re-enable the time module
-pub mod concurrency;
-pub mod serialization;
+pub mod error;
 pub mod id_utils;
-pub mod utils; // Module with utility functions
+pub mod identity;
+// Temporarily comment out observation module due to unresolved imports
+// pub mod observation;
+pub mod resource;
+pub mod time;
+pub mod utils;
+pub mod verification;
 
-// Re-export key types from submodules
-pub use capability::{Capability, ResourceGuard};
-pub use effect::{Effect, EffectContext, EffectOutcome, EffectId, EffectType};
-pub use identity::IdentityId; // Re-export IdentityId
-pub use resource::Resource;
-pub use crate::resource::types::ResourceId;
+// Re-export key types and traits for easier access
+pub use capability::Capability;
+pub use capability::CapabilityError;
+pub use capability::CapabilityGrants;
 
-// Re-export utilities for easier access
-pub use utils::content_addressing::{
-    content_hash_to_id,
-    content_id_to_hash,
-    hash_bytes,
-    hash_string,
-    default_content_hash,
-    hash_object,
-};
+pub use effect::{Effect, EffectContext, EffectHandler, EffectOutcome, EffectId, EffectTypeId, EffectError};
+pub use error::{Error, ResourceError, CoreTimeError};
 
-// Re-export core types from causality_types
-pub use causality_types::{ContentAddressed, ContentHash, ContentId};
-pub use causality_crypto::hash::ContentHasher;
+pub use id_utils::generate_content_id;
 
-// Error types
-pub use causality_error::{CausalityError, ErrorCode, ErrorDomain, Result};
+// Temporarily comment out observation re-exports
+// pub use observation::ObservationProxy;
 
-// Standard library dependencies
+pub use resource::{ResourceId, ResourceState, ResourceTypeRegistry, ResourceStateStore};
+pub use resource::storage::types::ResourceStateStorage;
 
-// Version of the library
+pub use time::Timestamp;
+
+pub use verification::{Verifiable, VerificationError, Attestation};
+
+// From causality_types
+pub use causality_types::ContentId;
+
+// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// Top-level initialization function (example)
-pub fn initialize() {
-    // Perform any necessary setup for the core library
-    println!("Causality Core library initialized (version {})", VERSION);
-}
-
-// Example usage or test function
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_initialization() {
-        initialize();
-        assert!(true); // Simple test to ensure initialization runs
-    }
-}
+// TODO: Review serialization and utils modules to see if they should remain in core or move.
+// TODO: Ensure all traits needed for external integration (storage, crypto, db) are defined here.

@@ -1,0 +1,26 @@
+[package]
+name = "causality-domain-ethereum"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+homepage = "https://github.com/timewave-computer/causality"
+repository = "https://github.com/timewave-computer/causality"
+description = "Causality Domain Adapter and TEG Generator for Ethereum/EVM"
+
+[dependencies]
+# External dependencies
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+borsh = { workspace = true }
+
+# Internal dependencies
+causality-types = { workspace = true }
+causality-core = { workspace = true }
+causality-domain = { workspace = true }
+causality-ir = { workspace = true }
+
+# Add necessary dependencies here, e.g.:
+# ethers = "..." # Or other relevant EVM library

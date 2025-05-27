@@ -79,15 +79,6 @@ pub fn verify_adjunction() -> Result<()> {
     Ok(())
 }
 
-/// Optimizes a TEG by applying graph transformations.
-/// 
-/// This can include removing redundant nodes, merging compatible operations,
-/// and other optimizations that preserve the semantics of the original graph.
-pub fn optimize_teg() -> Result<()> {
-    // Placeholder for TEG optimization
-    Ok(())
-}
-
 /// Validates the well-formedness of a TEG.
 /// 
 /// Checks that the graph structure satisfies all invariants required for

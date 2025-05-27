@@ -24,7 +24,7 @@ rand = { workspace = true }
 causality-types = { path = "../causality-types", version = "0.1.0" }
 causality-core = { path = "../causality-core", version = "0.1.0" }
 causality-domain = { path = "../causality-domain" }
-causality-engine = { path = "../causality-engine" }
+causality-runtime = { path = "../causality-runtime" }
 causality-error = { path = "../causality-error" }
 causality-crypto = { workspace = true }
 

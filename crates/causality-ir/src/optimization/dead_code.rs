@@ -3,8 +3,8 @@
 //! This module provides optimization passes that eliminate unused
 //! or unreachable code in the Temporal Effect Graph.
 
-use anyhow::Result;
-use std::collections::{HashSet, VecDeque};
+use anyhow::{Result, anyhow};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::{TemporalEffectGraph, EffectId, ResourceId};
 use super::{Optimization, OptimizationConfig};
@@ -33,54 +33,33 @@ impl DeadCodeElimination {
     
     /// Find live effect nodes by marking from outputs and side effects
     fn find_live_effects(&self, teg: &TemporalEffectGraph) -> HashSet<EffectId> {
-        let mut live_effects = HashSet::new();
-        let mut queue = VecDeque::new();
-        
-        // Start with all output nodes and nodes with side effects
-        for (effect_id, effect) in teg.effects() {
-            // Include output nodes
-            if teg.is_output(effect_id) {
-                live_effects.insert(effect_id);
-                queue.push_back(effect_id);
-            }
-            
-            // Include nodes with side effects that can't be eliminated
-            if effect.has_side_effects() && !effect.is_pure() {
-                live_effects.insert(effect_id);
-                queue.push_back(effect_id);
-            }
-        }
-        
-        // Traverse backwards to mark all nodes that contribute to live nodes
+        let mut live_effects = HashSet::<EffectId>::new();
+        let mut queue: VecDeque<EffectId> = teg.get_output_effects().into_iter().collect();
+        live_effects.extend(queue.iter().cloned());
+
         while let Some(effect_id) = queue.pop_front() {
-            // Get all predecessors
-            let predecessors = teg.get_incoming_edges(effect_id);
-            
-            for (pred_id, _) in predecessors {
-                // If we haven't seen this node yet, mark it and add to queue
-                if !live_effects.contains(&pred_id) {
-                    live_effects.insert(pred_id);
-                    queue.push_back(pred_id);
+            if let Some(deps) = teg.effect_dependencies.get(&effect_id) {
+                for dep_id in deps {
+                    if live_effects.insert(dep_id.clone()) {
+                        queue.push_back(dep_id.clone());
+                    }
                 }
             }
         }
-        
         live_effects
     }
     
     /// Find resources used by live effects
     fn find_live_resources(&self, teg: &TemporalEffectGraph, live_effects: &HashSet<EffectId>) -> HashSet<ResourceId> {
-        let mut live_resources = HashSet::new();
+        let mut live_resources = HashSet::<ResourceId>::new();
         
-        // Check each live effect for resource usage
-        for &effect_id in live_effects {
+        for effect_id in live_effects {
             if let Some(effect) = teg.get_effect(effect_id) {
-                for (resource_id, _) in effect.resource_edges() {
-                    live_resources.insert(*resource_id);
+                for resource_id in &effect.resources_accessed {
+                    live_resources.insert(resource_id.clone());
                 }
             }
         }
-        
         live_resources
     }
 }
@@ -94,35 +73,32 @@ impl Optimization for DeadCodeElimination {
         &self.description
     }
     
-    fn apply(&self, teg: &mut TemporalEffectGraph, config: &OptimizationConfig) -> Result<bool> {
+    fn apply(&self, teg: &mut TemporalEffectGraph, _config: &OptimizationConfig) -> Result<bool> {
         let mut changed = false;
         
-        // Skip if optimization level is too low
-        if config.level < 1 {
-            return Ok(false);
-        }
-        
-        // Find all live effects
+        // Find live effects and resources
         let live_effects = self.find_live_effects(teg);
+        let live_resources = self.find_live_resources(teg, &live_effects);
         
         // Remove dead effects
-        let all_effects: Vec<EffectId> = teg.effects().keys().copied().collect();
+        let all_effects: Vec<EffectId> = teg.effects().keys().cloned().collect();
         for effect_id in all_effects {
             if !live_effects.contains(&effect_id) {
-                teg.remove_effect(effect_id)?;
-                changed = true;
+                match teg.remove_effect(&effect_id) {
+                    Ok(_) => changed = true,
+                    Err(e) => return Err(anyhow!("Failed to remove dead effect {}: {}", effect_id, e)),
+                }
             }
         }
         
-        // Find live resources
-        let live_resources = self.find_live_resources(teg, &live_effects);
-        
-        // Remove unused resources
-        let all_resources: Vec<ResourceId> = teg.resources().keys().copied().collect();
+        // Remove dead resources
+        let all_resources: Vec<ResourceId> = teg.resources().keys().cloned().collect();
         for resource_id in all_resources {
             if !live_resources.contains(&resource_id) {
-                teg.remove_resource(resource_id)?;
-                changed = true;
+                match teg.remove_resource(&resource_id) {
+                     Ok(_) => changed = true,
+                     Err(e) => return Err(anyhow!("Failed to remove dead resource {}: {}", resource_id, e)),
+                }
             }
         }
         

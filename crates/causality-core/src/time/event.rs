@@ -2,11 +2,15 @@
 
 use chrono::{DateTime, Utc, Duration};
 use serde::{Deserialize, Serialize};
-use crate::resource::ResourceId;
+use crate::resource::types::ResourceId;
 use crate::effect::types::EffectId;
 use causality_types::crypto_primitives::ContentId;
 use blake3;
 use causality_types;
+use std::fmt::Debug;
+use borsh::{BorshSerialize, BorshDeserialize};
+use crate::identity::IdentityId;
+use super::Timestamp;
 
 // Placeholder for TimeEvent and TimeEventKind if needed
 pub enum TimeEventKind {

@@ -1,0 +1,13 @@
+[package]
+name = "causality-domain-rust"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0"
+serde_json = "1.0"
+causality-ir = { path = "../causality-ir" }
+causality-core = { path = "../causality-core" }
+causality-codegen-core = { path = "../causality-codegen-core" } 

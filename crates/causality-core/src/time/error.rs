@@ -1,34 +1,58 @@
-// Error types for the time module
+// Time-related errors
+//
+// This module defines errors that can occur during time-related operations.
 
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
 
-/// Represents an error within the time module
-#[derive(Debug, Error, Clone, Serialize, Deserialize)] // Added Clone, Serialize, Deserialize if needed elsewhere
+/// Errors that can occur in time-related operations
+#[derive(Debug, Error, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TimeError {
-    #[error("Domain not found: {0}")]
-    DomainNotFound(String),
+    /// Invalid time format provided
+    #[error("Invalid time format: {0}")]
+    InvalidFormat(String),
     
-    #[error("Invalid time value: {0}")]
-    InvalidTimeValue(String),
+    /// Time value out of bounds
+    #[error("Time value out of bounds: {0}")]
+    OutOfBounds(String),
     
-    #[error("Synchronization error: {0}")]
-    SynchronizationError(String),
+    /// Clock error
+    #[error("Clock error: {0}")]
+    ClockError(String),
     
-    #[error("Effect execution error: {0}")]
-    EffectError(String), // Changed from #[from] to String to avoid dependency cycles if EffectError uses TimeError
+    /// Parse error when converting from string
+    #[error("Failed to parse time: {0}")]
+    ParseError(String),
     
-    #[error("Internal time error: {0}")]
-    InternalError(String),
+    /// Invalid timestamp
+    #[error("Invalid timestamp: {0}")]
+    InvalidTimestamp(String),
     
-    #[error("Time Map error: {0}")]
-    TimeMapError(String),
+    /// System time error
+    #[error("System time error: {0}")]
+    SystemTimeError(String),
+    
+    /// Other general time errors
+    #[error("{0}")]
+    Other(String),
+}
 
-    #[error("Attestation error: {0}")]
-    AttestationError(String),
+impl TimeError {
+    /// Create a new other error from a message
+    pub fn new(msg: impl ToString) -> Self {
+        TimeError::Other(msg.to_string())
+    }
+    
+    /// Create a parse error
+    pub fn parse_error(msg: impl ToString) -> Self {
+        TimeError::ParseError(msg.to_string())
+    }
+    
+    /// Create an invalid timestamp error
+    pub fn invalid_timestamp(msg: impl ToString) -> Self {
+        TimeError::InvalidTimestamp(msg.to_string())
+    }
+}
 
-    #[error("Operation error: {0}")]
-    OperationError(String),
-
-    // Add other specific errors as needed
-} 
+/// Convenient type alias for Result with TimeError
+pub type TimeResult<T> = std::result::Result<T, TimeError>; 

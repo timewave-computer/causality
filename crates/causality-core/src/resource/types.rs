@@ -23,15 +23,32 @@ use causality_types::content_addressing::storage::{
 };
 use causality_types::crypto_primitives::{ContentAddressed, HashError, HashOutput, HashAlgorithm};
 use causality_crypto::hash::ContentHasher;
-use crate::resource::*;
-use crate::serialization::{to_bytes, from_bytes};
 use causality_types::ContentId as TypesContentId;
-use crate::id_utils::convert_from_types_content_id;
+
+// Define ResourceState enum here
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+pub enum ResourceState {
+    Created,
+    Active,
+    Inactive,
+    Locked,
+    Frozen,     // Immutable but accessible
+    Consumed,   // Used up
+    Archived,   // Kept for history but inactive
+    Deleted,    // Marked for deletion
+    Custom(String), // For domain-specific states
+}
+
+impl Default for ResourceState {
+    fn default() -> Self {
+        ResourceState::Created
+    }
+}
 
 /// Resource identifier type
 ///
 /// A unique identifier for a resource in the system, based on content addressing.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ResourceId {
     /// Content hash of the resource
     pub hash: causality_types::crypto_primitives::ContentHash,
@@ -56,12 +73,6 @@ impl ResourceId {
             hash,
             name: Some(name.into()),
         }
-    }
-    
-    /// Create from a crypto ContentHash
-    pub fn from_crypto_hash(hash: &causality_crypto::ContentHash) -> Self {
-        let types_hash = crate::utils::content_addressing::convert_legacy_to_types_hash(hash);
-        Self::new(types_hash)
     }
     
     /// Get the content hash
@@ -101,17 +112,11 @@ impl ResourceId {
         Ok(Self::new(ContentHash::new("blake3", bytes)))
     }
     
-    /// Create a resource ID from a legacy ContentId
-    pub fn from_legacy_content_id(content_id: &ContentId) -> Self {
-        // Since ContentId and TypesContentId are the same type (aliases),
-        // we can directly call from_content_id
-        Self::from_content_id(content_id)
-            .unwrap_or_else(|_| {
-                // Fallback: create a new ContentHash from the ContentId's bytes
-                let hash_value = content_id.as_bytes().to_vec();
-                let hash = ContentHash::new("blake3", hash_value);
-                Self::new(hash)
-            })
+    /// Create a new resource ID with a random content hash
+    pub fn new_random() -> Self {
+        use causality_crypto::hash::random_hash;
+        let random_bytes = random_hash().as_bytes().to_vec();
+        Self::new(ContentHash::new("blake3", random_bytes))
     }
 }
 
@@ -650,635 +655,6 @@ pub trait ResourceTypeRegistry: Send + Sync + Debug {
     ) -> ResourceTypeRegistryResult<Vec<ResourceTypeId>>;
 }
 
-/// Content-addressed implementation of resource type registry
-pub struct ContentAddressedResourceTypeRegistry {
-    /// Underlying content-addressed storage
-    storage: Arc<dyn ContentAddressedStorage>,
-    
-    /// Cache of resource type definitions
-    type_cache: HashMap<ResourceTypeId, ResourceTypeDefinition>,
-    
-    /// Index of resource types by name and namespace
-    name_index: HashMap<(String, Option<String>), Vec<ResourceTypeId>>,
-    
-    /// Index of compatibility relationships
-    compatibility_index: HashMap<ResourceTypeId, Vec<ResourceTypeId>>,
-    
-    /// Index of resource types by capability
-    capability_index: HashMap<String, Vec<ResourceTypeId>>,
-}
-
-impl Debug for ContentAddressedResourceTypeRegistry {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ContentAddressedResourceTypeRegistry")
-            .field("type_cache", &self.type_cache)
-            .field("name_index", &self.name_index)
-            .field("compatibility_index", &self.compatibility_index)
-            .field("capability_index", &self.capability_index)
-            .finish()
-    }
-}
-
-impl ContentAddressedResourceTypeRegistry {
-    /// Create a new content-addressed resource type registry
-    pub fn new(storage: Arc<dyn ContentAddressedStorage>) -> Self {
-        Self {
-            storage,
-            type_cache: HashMap::new(),
-            name_index: HashMap::new(),
-            compatibility_index: HashMap::new(),
-            capability_index: HashMap::new(),
-        }
-    }
-    
-    /// Add to name index
-    fn index_by_name(&mut self, id: &ResourceTypeId) {
-        let key = (id.name.clone(), id.namespace.clone());
-        let ids = self.name_index
-            .entry(key)
-            .or_insert_with(Vec::new);
-        
-        if !ids.contains(id) {
-            ids.push(id.clone());
-        }
-    }
-    
-    /// Add to compatibility index
-    fn index_compatibility(&mut self, definition: &ResourceTypeDefinition) {
-        // Index this type's compatibility with others
-        for compat in &definition.compatible_with {
-            let compatible_types = self.compatibility_index
-                .entry(compat.base_type.clone())
-                .or_insert_with(Vec::new);
-            
-            if !compatible_types.contains(&definition.id) {
-                compatible_types.push(definition.id.clone());
-            }
-            
-            // Also add the compatibility in the other direction
-            for compat_type in &compat.compatible_types {
-                let base_types = self.compatibility_index
-                    .entry(compat_type.clone())
-                    .or_insert_with(Vec::new);
-                
-                if !base_types.contains(&definition.id) {
-                    base_types.push(definition.id.clone());
-                }
-            }
-        }
-    }
-    
-    /// Add to capability index
-    fn index_capabilities(&mut self, definition: &ResourceTypeDefinition) {
-        for (_, caps) in &definition.required_capabilities {
-            for cap in caps {
-                let types = self.capability_index
-                    .entry(cap.clone())
-                    .or_insert_with(Vec::new);
-                
-                if !types.contains(&definition.id) {
-                    types.push(definition.id.clone());
-                }
-            }
-        }
-    }
-    
-    /// Find the latest version from a list of resource type IDs
-    fn find_latest_version(&self, ids: &[ResourceTypeId]) -> Option<ResourceTypeId> {
-        ids.iter()
-            .filter_map(|id| {
-                // Extract version components
-                let major = id.major_version();
-                let minor = id.minor_version();
-                
-                // Return with version info for sorting
-                Some((id.clone(), major?, minor.unwrap_or(0)))
-            })
-            .max_by(|a, b| {
-                // Sort by major version first, then minor
-                let (_, a_major, a_minor) = a;
-                let (_, b_major, b_minor) = b;
-                
-                a_major.cmp(&b_major).then(a_minor.cmp(&b_minor))
-            })
-            .map(|(id, _, _)| id)
-    }
-}
-
-#[async_trait]
-impl ResourceTypeRegistry for ContentAddressedResourceTypeRegistry {
-    async fn register_resource_type(
-        &self, 
-        mut definition: ResourceTypeDefinition
-    ) -> ResourceTypeRegistryResult<ResourceTypeId> {
-        // Compute content hash for the schema
-        let schema_hash = definition.schema.content_hash()
-            .map_err(|e| ResourceTypeRegistryError::SerializationError(e.to_string()))?;
-        
-        // Update schema with content hash
-        definition.schema.content_hash = Some(schema_hash);
-        
-        // Compute content hash for the resource type
-        let type_hash = definition.content_hash()
-            .map_err(|e| ResourceTypeRegistryError::SerializationError(e.to_string()))?;
-        
-        // Update resource type ID with content hash
-        let type_hash_str = type_hash.to_string();
-        let parts: Vec<&str> = type_hash_str.split(':').collect();
-        let algorithm = if parts.len() > 1 { parts[0] } else { "blake3" };
-        let value = if parts.len() > 1 { parts[1] } else { &type_hash_str };
-        
-        let content_id = ContentId::new(algorithm.to_string() + ":" + value);
-        definition.id = definition.id.with_content_hash(content_id.clone());
-        
-        // Check if already exists
-        if self.has_resource_type(&definition.id).await? {
-            return Err(ResourceTypeRegistryError::AlreadyExists(
-                format!("Resource type already exists: {}", definition.id)
-            ));
-        }
-        
-        // Serialize the definition
-        let definition_bytes = to_bytes(&definition)
-            .map_err(|e| ResourceTypeRegistryError::SerializationError(e.to_string()))?;
-        
-        // Store in content-addressed storage
-        self.storage.store_bytes(&definition_bytes)
-            .map_err(|e| ResourceTypeRegistryError::StorageError(e.to_string()))?;
-        
-        // In a real implementation, update indexes
-        // Here we would need proper locking or database transactions
-        
-        Ok(definition.id.clone())
-    }
-    
-    async fn get_resource_type(
-        &self, 
-        id: &ResourceTypeId
-    ) -> ResourceTypeRegistryResult<ResourceTypeDefinition> {
-        // Check cache first (in a real implementation)
-        
-        // Retrieve from content-addressed storage by content hash
-        if let Some(content_hash) = &id.content_hash {
-            // Convert ContentId to the type expected by the storage
-            let crypto_content_id = convert_from_types_content_id(content_hash);
-            
-            let bytes = self.storage.get_bytes(&crypto_content_id)
-                .map_err(|e| match e {
-                    StorageError::NotFound(_) => 
-                        ResourceTypeRegistryError::NotFound(format!("Resource type not found: {}", id)),
-                    _ => ResourceTypeRegistryError::StorageError(e.to_string()),
-                })?;
-            
-            // Deserialize the definition
-            let definition: ResourceTypeDefinition = from_bytes(&bytes)
-                .map_err(|e| ResourceTypeRegistryError::SerializationError(e.to_string()))?;
-            
-            Ok(definition)
-        } else {
-            Err(ResourceTypeRegistryError::NotFound(
-                format!("Resource type has no content hash: {}", id)
-            ))
-        }
-    }
-    
-    async fn has_resource_type(&self, id: &ResourceTypeId) -> ResourceTypeRegistryResult<bool> {
-        // Check if exists in storage based on content hash
-        if let Some(content_hash) = &id.content_hash {
-            // Convert ContentId to the type expected by the storage
-            let crypto_content_id = convert_from_types_content_id(content_hash);
-            
-            Ok(self.storage.contains(&crypto_content_id))
-        } else {
-            Ok(false)
-        }
-    }
-    
-    async fn find_compatible_types(
-        &self, 
-        _id: &ResourceTypeId
-    ) -> ResourceTypeRegistryResult<Vec<ResourceTypeId>> {
-        // In a real implementation, query compatibility index
-        // For now, just return empty list
-        Ok(Vec::new())
-    }
-    
-    async fn get_all_versions(
-        &self, 
-        name: &str, 
-        namespace: Option<&str>
-    ) -> ResourceTypeRegistryResult<Vec<ResourceTypeId>> {
-        // In a real implementation, query name index
-        // For now, just return empty list
-        Ok(Vec::new())
-    }
-    
-    async fn get_latest_version(
-        &self, 
-        name: &str, 
-        namespace: Option<&str>
-    ) -> ResourceTypeRegistryResult<ResourceTypeId> {
-        // Get all versions
-        let versions = self.get_all_versions(name, namespace).await?;
-        
-        if versions.is_empty() {
-            return Err(ResourceTypeRegistryError::NotFound(
-                format!("No versions found for resource type: {}", name)
-            ));
-        }
-        
-        // Find latest version
-        if let Some(latest) = self.find_latest_version(&versions) {
-            Ok(latest)
-        } else {
-            Err(ResourceTypeRegistryError::NotFound(
-                format!("No valid versions found for resource type: {}", name)
-            ))
-        }
-    }
-    
-    async fn are_compatible(
-        &self, 
-        id1: &ResourceTypeId, 
-        id2: &ResourceTypeId
-    ) -> ResourceTypeRegistryResult<bool> {
-        // Direct compatibility check
-        if id1.is_compatible_with(id2) {
-            return Ok(true);
-        }
-        
-        // Check in compatibility index
-        // In a real implementation, this would query the index
-        
-        // For now, just return false for anything not directly compatible
-        Ok(false)
-    }
-    
-    async fn validate_resource(
-        &self, 
-        resource_type: &ResourceTypeId, 
-        resource_data: &[u8]
-    ) -> ResourceTypeRegistryResult<bool> {
-        // Get the resource type definition
-        let definition = self.get_resource_type(resource_type).await?;
-        
-        // In a real implementation, use the schema to validate the resource data
-        // For now, just return true
-        Ok(true)
-    }
-    
-    async fn find_types_with_capability(
-        &self,
-        capability: &str
-    ) -> ResourceTypeRegistryResult<Vec<ResourceTypeId>> {
-        // In a real implementation, query capability index
-        // For now, just return empty list
-        Ok(Vec::new())
-    }
-}
-
-/// In-memory implementation of resource type registry for testing
-#[derive(Debug)]
-pub struct InMemoryResourceTypeRegistry {
-    types: HashMap<ResourceTypeId, ResourceTypeDefinition>,
-    name_index: HashMap<(String, Option<String>), Vec<ResourceTypeId>>,
-    compatibility_index: HashMap<ResourceTypeId, Vec<ResourceTypeId>>,
-    capability_index: HashMap<String, Vec<ResourceTypeId>>,
-}
-
-impl InMemoryResourceTypeRegistry {
-    /// Create a new in-memory resource type registry
-    pub fn new() -> Self {
-        Self {
-            types: HashMap::new(),
-            name_index: HashMap::new(),
-            compatibility_index: HashMap::new(),
-            capability_index: HashMap::new(),
-        }
-    }
-    
-    /// Add to name index
-    fn index_by_name(&mut self, id: &ResourceTypeId) {
-        let key = (id.name.clone(), id.namespace.clone());
-        let ids = self.name_index
-            .entry(key)
-            .or_insert_with(Vec::new);
-        
-        if !ids.contains(id) {
-            ids.push(id.clone());
-        }
-    }
-    
-    /// Add to compatibility index
-    fn index_compatibility(&mut self, definition: &ResourceTypeDefinition) {
-        // Index this type's compatibility with others
-        for compat in &definition.compatible_with {
-            let compatible_types = self.compatibility_index
-                .entry(compat.base_type.clone())
-                .or_insert_with(Vec::new);
-            
-            if !compatible_types.contains(&definition.id) {
-                compatible_types.push(definition.id.clone());
-            }
-            
-            // Also add the compatibility in the other direction
-            for compat_type in &compat.compatible_types {
-                let base_types = self.compatibility_index
-                    .entry(compat_type.clone())
-                    .or_insert_with(Vec::new);
-                
-                if !base_types.contains(&definition.id) {
-                    base_types.push(definition.id.clone());
-                }
-            }
-        }
-    }
-    
-    /// Add to capability index
-    fn index_capabilities(&mut self, definition: &ResourceTypeDefinition) {
-        for (_, caps) in &definition.required_capabilities {
-            for cap in caps {
-                let types = self.capability_index
-                    .entry(cap.clone())
-                    .or_insert_with(Vec::new);
-                
-                if !types.contains(&definition.id) {
-                    types.push(definition.id.clone());
-                }
-            }
-        }
-    }
-    
-    /// Find the latest version from a list of resource type IDs
-    fn find_latest_version(&self, ids: &[ResourceTypeId]) -> Option<ResourceTypeId> {
-        ids.iter()
-            .filter_map(|id| {
-                // Extract version components
-                let major = id.major_version();
-                let minor = id.minor_version();
-                
-                // Return with version info for sorting
-                Some((id.clone(), major?, minor.unwrap_or(0)))
-            })
-            .max_by(|a, b| {
-                // Sort by major version first, then minor
-                let (_, a_major, a_minor) = a;
-                let (_, b_major, b_minor) = b;
-                
-                a_major.cmp(&b_major).then(a_minor.cmp(&b_minor))
-            })
-            .map(|(id, _, _)| id)
-    }
-}
-
-#[async_trait]
-impl ResourceTypeRegistry for InMemoryResourceTypeRegistry {
-    async fn register_resource_type(
-        &self, 
-        mut definition: ResourceTypeDefinition
-    ) -> ResourceTypeRegistryResult<ResourceTypeId> {
-        // Compute content hash for the schema
-        let schema_hash = definition.schema.content_hash()
-            .map_err(|e| ResourceTypeRegistryError::SerializationError(e.to_string()))?;
-        
-        // Update schema with content hash
-        definition.schema.content_hash = Some(schema_hash);
-        
-        // Compute content hash for the resource type
-        let type_hash = definition.content_hash()
-            .map_err(|e| ResourceTypeRegistryError::SerializationError(e.to_string()))?;
-        
-        // Update resource type ID with content hash
-        let type_hash_str = type_hash.to_string();
-        let parts: Vec<&str> = type_hash_str.split(':').collect();
-        let algorithm = if parts.len() > 1 { parts[0] } else { "blake3" };
-        let value = if parts.len() > 1 { parts[1] } else { &type_hash_str };
-        
-        let content_id = ContentId::new(algorithm.to_string() + ":" + value);
-        definition.id = definition.id.with_content_hash(content_id);
-        
-        // Check if already exists
-        let mut types = self.types.clone();
-        if types.contains_key(&definition.id) {
-            return Err(ResourceTypeRegistryError::AlreadyExists(
-                format!("Resource type already exists: {}", definition.id)
-            ));
-        }
-        
-        // Store in memory
-        let type_id = definition.id.clone();
-        types.insert(type_id.clone(), definition.clone());
-        
-        // Update indexes
-        let mut name_index = self.name_index.clone();
-        let key = (type_id.name.clone(), type_id.namespace.clone());
-        let ids = name_index
-            .entry(key)
-            .or_insert_with(Vec::new);
-        
-        if !ids.contains(&type_id) {
-            ids.push(type_id.clone());
-        }
-        
-        // Update compatibility index
-        let mut compatibility_index = self.compatibility_index.clone();
-        for compat in &definition.compatible_with {
-            let compatible_types = compatibility_index
-                .entry(compat.base_type.clone())
-                .or_insert_with(Vec::new);
-            
-            if !compatible_types.contains(&definition.id) {
-                compatible_types.push(definition.id.clone());
-            }
-            
-            // Also add the compatibility in the other direction
-            for compat_type in &compat.compatible_types {
-                let base_types = compatibility_index
-                    .entry(compat_type.clone())
-                    .or_insert_with(Vec::new);
-                
-                if !base_types.contains(&definition.id) {
-                    base_types.push(definition.id.clone());
-                }
-            }
-        }
-        
-        // Update capability index
-        let mut capability_index = self.capability_index.clone();
-        for (_, caps) in &definition.required_capabilities {
-            for cap in caps {
-                let types = capability_index
-                    .entry(cap.clone())
-                    .or_insert_with(Vec::new);
-                
-                if !types.contains(&definition.id) {
-                    types.push(definition.id.clone());
-                }
-            }
-        }
-        
-        Ok(type_id)
-    }
-    
-    async fn get_resource_type(
-        &self, 
-        id: &ResourceTypeId
-    ) -> ResourceTypeRegistryResult<ResourceTypeDefinition> {
-        if let Some(definition) = self.types.get(id) {
-            Ok(definition.clone())
-        } else {
-            Err(ResourceTypeRegistryError::NotFound(
-                format!("Resource type not found: {}", id)
-            ))
-        }
-    }
-    
-    async fn has_resource_type(&self, id: &ResourceTypeId) -> ResourceTypeRegistryResult<bool> {
-        Ok(self.types.contains_key(id))
-    }
-    
-    async fn find_compatible_types(
-        &self, 
-        _id: &ResourceTypeId
-    ) -> ResourceTypeRegistryResult<Vec<ResourceTypeId>> {
-        // In a real implementation, query compatibility index
-        // For now, just return empty list
-        Ok(Vec::new())
-    }
-    
-    async fn get_all_versions(
-        &self, 
-        name: &str, 
-        namespace: Option<&str>
-    ) -> ResourceTypeRegistryResult<Vec<ResourceTypeId>> {
-        let key = (name.to_string(), namespace.map(|s| s.to_string()));
-        if let Some(versions) = self.name_index.get(&key) {
-            Ok(versions.clone())
-        } else {
-            Ok(Vec::new())
-        }
-    }
-    
-    async fn get_latest_version(
-        &self, 
-        name: &str, 
-        namespace: Option<&str>
-    ) -> ResourceTypeRegistryResult<ResourceTypeId> {
-        // Get all versions
-        let versions = self.get_all_versions(name, namespace).await?;
-        
-        if versions.is_empty() {
-            return Err(ResourceTypeRegistryError::NotFound(
-                format!("No versions found for resource type: {}", name)
-            ));
-        }
-        
-        // Find latest version
-        if let Some(latest) = self.find_latest_version(&versions) {
-            Ok(latest)
-        } else {
-            Err(ResourceTypeRegistryError::NotFound(
-                format!("No valid versions found for resource type: {}", name)
-            ))
-        }
-    }
-    
-    async fn are_compatible(
-        &self, 
-        id1: &ResourceTypeId, 
-        id2: &ResourceTypeId
-    ) -> ResourceTypeRegistryResult<bool> {
-        // Direct compatibility check
-        if id1.is_compatible_with(id2) {
-            return Ok(true);
-        }
-        
-        // Check in compatibility index
-        if let Some(compatible_types) = self.compatibility_index.get(id1) {
-            if compatible_types.contains(id2) {
-                return Ok(true);
-            }
-        }
-        
-        Ok(false)
-    }
-    
-    async fn validate_resource(
-        &self, 
-        resource_type: &ResourceTypeId, 
-        _resource_data: &[u8]
-    ) -> ResourceTypeRegistryResult<bool> {
-        // Check if the resource type exists
-        if !self.types.contains_key(resource_type) {
-            return Err(ResourceTypeRegistryError::NotFound(
-                format!("Resource type not found: {}", resource_type)
-            ));
-        }
-        
-        // In a real implementation, use the schema to validate the resource data
-        // For now, just return true
-        Ok(true)
-    }
-    
-    async fn find_types_with_capability(
-        &self,
-        capability: &str
-    ) -> ResourceTypeRegistryResult<Vec<ResourceTypeId>> {
-        if let Some(types) = self.capability_index.get(capability) {
-            Ok(types.clone())
-        } else {
-            Ok(Vec::new())
-        }
-    }
-}
-
-/// Create a configured resource type registry
-pub fn create_resource_type_registry(
-    storage: Arc<dyn ContentAddressedStorage>,
-) -> Arc<dyn ResourceTypeRegistry> {
-    Arc::new(ContentAddressedResourceTypeRegistry::new(storage))
-}
-
-pub fn create_resource_type_definition(
-    registry: &InMemoryResourceTypeRegistry,
-    name: &str,
-    version: &str,
-    schema: &str,
-) -> ResourceTypeDefinition {
-    let mut definition = ResourceTypeDefinition {
-        id: ResourceTypeId::with_version("test", name, version),
-        schema: ResourceSchema {
-            format: "json-schema".to_string(),
-            definition: schema.to_string(),
-            version: "1.0".to_string(),
-            content_hash: None,
-        },
-        description: Some(format!("Resource type for {}", name)),
-        documentation: None,
-        deprecated: false,
-        compatible_with: Vec::new(),
-        required_capabilities: HashMap::new(),
-        created_at: 12345,
-        updated_at: 12345,
-    };
-
-    // Compute schema hash
-    let schema_hash = definition.schema.content_hash().unwrap();
-    definition.schema.content_hash = Some(schema_hash);
-
-    // Compute type hash
-    let type_hash = definition.content_hash().unwrap();
-    let type_hash_str = type_hash.to_string();
-    let parts: Vec<&str> = type_hash_str.split(':').collect();
-    let algorithm = if parts.len() > 1 { parts[0] } else { "blake3" };
-    let value = if parts.len() > 1 { parts[1] } else { &type_hash_str };
-    
-    let content_id = ContentId::new(algorithm.to_string() + ":" + value);
-    definition.id = definition.id.with_content_hash(content_id);
-
-    definition
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1323,45 +699,6 @@ mod tests {
         // Different base name should not be compatible
         assert!(!type1.is_compatible_with(&type4));
     }
-    
-    #[tokio::test]
-    async fn test_in_memory_registry() {
-        let registry = InMemoryResourceTypeRegistry::new();
-        
-        // Create test resource types
-        let type1 = create_test_resource_type("user", "1.0");
-        let type2 = create_test_resource_type("user", "1.1");
-        let type3 = create_test_resource_type("profile", "1.0");
-        
-        // Register resource types
-        let id1 = registry.register_resource_type(type1.clone()).await.unwrap();
-        let id2 = registry.register_resource_type(type2.clone()).await.unwrap();
-        let id3 = registry.register_resource_type(type3.clone()).await.unwrap();
-        
-        // Verify resource types exist
-        assert!(registry.has_resource_type(&id1).await.unwrap());
-        assert!(registry.has_resource_type(&id2).await.unwrap());
-        assert!(registry.has_resource_type(&id3).await.unwrap());
-        
-        // Get resource types
-        let retrieved1 = registry.get_resource_type(&id1).await.unwrap();
-        let retrieved2 = registry.get_resource_type(&id2).await.unwrap();
-        
-        // Verify properties
-        assert_eq!(retrieved1.id, id1);
-        assert_eq!(retrieved2.id, id2);
-        assert_eq!(retrieved1.description, Some("Test resource type user".to_string()));
-        
-        // Get latest version
-        let latest = registry.get_latest_version("user", Some("test")).await.unwrap();
-        assert_eq!(latest, id2); // 1.1 is newer than 1.0
-        
-        // Get all versions
-        let versions = registry.get_all_versions("user", Some("test")).await.unwrap();
-        assert_eq!(versions.len(), 2);
-        assert!(versions.contains(&id1));
-        assert!(versions.contains(&id2));
-    }
 }
 
 // Convert ResourceId to ContentId
@@ -1382,7 +719,7 @@ impl From<ResourceId> for TypesContentId {
 
 // Convert ContentId to ResourceId
 impl TryFrom<TypesContentId> for ResourceId {
-    type Error = crate::resource::ResourceError;
+    type Error = String;
     
     fn try_from(content_id: TypesContentId) -> Result<Self, Self::Error> {
         // Get the HashOutput from ContentId and create a ContentHash
@@ -1408,7 +745,7 @@ impl ResourceId {
         ContentId::from(hash_output)
     }
     
-    pub fn from_content_id(content_id: &TypesContentId) -> Result<Self, crate::resource::ResourceError> {
+    pub fn from_content_id(content_id: &TypesContentId) -> Result<Self, String> {
         // Get the HashOutput from ContentId and create a ContentHash
         let hash_output = content_id.hash();
         let content_hash = ContentHash::from_hash_output(hash_output);

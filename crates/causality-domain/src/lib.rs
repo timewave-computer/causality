@@ -13,6 +13,14 @@ pub mod fact;
 pub mod resource;
 mod resource_impl;
 
+pub mod registry;
+pub mod types;
+
+pub mod generation;
+
+#[cfg(feature = "indexer")]
+pub mod indexer;
+
 // Re-export key types
 pub use adapter::{DomainAdapter, DomainAdapterFactory, DomainAdapterRegistry, FactQuery};
 pub use selection::{
@@ -27,6 +35,9 @@ pub use capability::{DomainCapability, DomainCapabilityManager, CapabilityExtens
 // Re-export from fact module
 pub use fact::{FactObserver, FactVerifier, FactVerification};
 pub use fact::types::FactType;
+
+#[cfg(feature = "indexer")]
+pub use indexer::{IndexerAwareDomainAdapter, IndexerExtension};
 
 use serde::{Serialize, Deserialize};
 use std::fmt;

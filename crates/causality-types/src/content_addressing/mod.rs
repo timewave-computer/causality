@@ -8,6 +8,9 @@ use borsh;
 // Export storage module
 pub mod storage;
 
+// Add error module
+pub mod error;
+
 // Extended set of types and functions for content addressing
 
 /// Standard type for content hash
@@ -276,4 +279,9 @@ fn test_poseidon_hashing() {
     assert_eq!(hash_output.algorithm(), &HashAlgorithm::Poseidon);
     // Add more specific assertions for Poseidon if needed
 }
-*/ 
+*/
+
+// Re-exports
+pub use canonical::CanonicalSerialize;
+pub use storage::{ContentAddressedStorage, ContentAddressedStorageExt};
+pub use error::ContentAddressedStorageError; 

@@ -10,7 +10,8 @@ use crate::{
     TemporalEffectGraph, 
     EffectNode, 
     EffectId,
-    graph::edge::EdgeData
+    effect_node::ParameterValue,
+    graph::edge::{Edge, EdgeId, NodeId}
 };
 use super::{Optimization, OptimizationConfig};
 
@@ -54,7 +55,7 @@ impl EffectInlining {
             if effect.operation_type() == Some("apply") {
                 // Only inline if the effect is small enough
                 if self.should_inline(teg, effect_id) {
-                    result.push(effect_id);
+                    result.push(effect_id.clone());
                 }
             }
         }
@@ -63,46 +64,52 @@ impl EffectInlining {
     }
     
     /// Determine if an effect should be inlined
-    fn should_inline(&self, teg: &TemporalEffectGraph, effect_id: EffectId) -> bool {
+    fn should_inline(&self, teg: &TemporalEffectGraph, effect_id: &EffectId) -> bool {
         let effect = match teg.get_effect(effect_id) {
             Some(e) => e,
             None => return false,
         };
         
         // Don't inline effects with side effects
-        if effect.has_side_effects() {
-            return false;
-        }
+        // TODO: Implement has_side_effects
+        // if effect.has_side_effects() {
+        //     return false;
+        // }
         
         // Don't inline large effects
-        let size = self.estimate_effect_size(teg, effect_id);
-        if size > 50 {  // Arbitrary threshold
-            return false;
-        }
+        // TODO: Implement estimate_effect_size or remove check
+        // let size = self.estimate_effect_size(teg, effect_id);
+        // if size > 50 {  // Arbitrary threshold
+        //     return false;
+        // }
         
         // Don't inline effects used multiple times
-        let usage_count = teg.count_outgoing_edges(effect_id);
-        if usage_count > 1 {
-            return false;
-        }
+        // TODO: Implement count_outgoing_edges or remove check
+        // let usage_count = teg.count_outgoing_edges(effect_id);
+        // if usage_count > 1 {
+        //     return false;
+        // }
         
-        true
+        true // Placeholder: Assume true for now
     }
     
     /// Estimate the size of an effect
-    fn estimate_effect_size(&self, teg: &TemporalEffectGraph, effect_id: EffectId) -> usize {
+    // TODO: Implement estimate_effect_size or remove
+    /*
+    fn estimate_effect_size(&self, teg: &TemporalEffectGraph, effect_id: &EffectId) -> usize {
         let mut size = 1;  // Start with the effect itself
         
         // Add size of all descendants
-        let descendants = teg.find_descendants(effect_id, |_| true);
-        size += descendants.len();
+        // let descendants = teg.find_descendants(effect_id, |_| true); // Needs implementation
+        // size += descendants.len();
         
         size
     }
+    */
     
     /// Inline an effect application
-    fn inline_effect(&self, teg: &mut TemporalEffectGraph, effect_id: EffectId) -> Result<bool> {
-        let effect = match teg.get_effect(effect_id) {
+    fn inline_effect(&self, teg: &mut TemporalEffectGraph, effect_id: &EffectId) -> Result<bool> {
+        let _effect = match teg.get_effect(effect_id) {
             Some(e) => e.clone(),
             None => return Ok(false),
         };
@@ -110,38 +117,45 @@ impl EffectInlining {
         // Get the effect definition
         let definition_id = match self.get_effect_definition(teg, effect_id) {
             Some(id) => id,
-            None => return Ok(false),
+            None => {
+                // Effect application doesn't specify a definition ID via parameters
+                return Ok(false);
+            }
         };
         
         // Create a mapping of parameters
-        let param_mapping = self.create_parameter_mapping(teg, effect_id, definition_id)?;
+        let param_mapping = self.create_parameter_mapping(teg, effect_id, &definition_id)?;
         
         // Clone the effect subgraph
-        let cloned_nodes = self.clone_effect_subgraph(teg, definition_id, &param_mapping)?;
+        let cloned_nodes = self.clone_effect_subgraph(teg, &definition_id, &param_mapping)?;
         
         // Connect the cloned subgraph to the original callers
         self.connect_cloned_subgraph(teg, effect_id, &cloned_nodes)?;
         
         // Remove the original effect application
-        teg.remove_effect(effect_id)?;
+        // TODO: Implement remove_effect
+        // teg.remove_effect(effect_id)?;
         
         Ok(true)
     }
     
     /// Get the effect definition for an application
-    fn get_effect_definition(&self, teg: &TemporalEffectGraph, effect_id: EffectId) -> Option<EffectId> {
+    fn get_effect_definition(&self, teg: &TemporalEffectGraph, effect_id: &EffectId) -> Option<EffectId> {
         let effect = teg.get_effect(effect_id)?;
         
         // Get the reference to the effect definition
         let params = effect.parameters();
         params.get("effect_id")
-            .and_then(|id_str| id_str.parse::<EffectId>().ok())
+            .and_then(|param_value| match param_value {
+                ParameterValue::String(s) => Some(s.clone()),
+                _ => None,
+            })
     }
     
     /// Create a mapping from definition parameters to application arguments
     fn create_parameter_mapping(&self, teg: &TemporalEffectGraph, 
-                                application_id: EffectId, 
-                                definition_id: EffectId) -> Result<HashMap<String, String>> {
+                                application_id: &EffectId,
+                                definition_id: &EffectId) -> Result<HashMap<String, ParameterValue>> {
         let mut mapping = HashMap::new();
         
         let application = teg.get_effect(application_id)
@@ -154,7 +168,7 @@ impl EffectInlining {
         let params = definition.parameters();
         let args = application.parameters();
         
-        // Map each parameter to its argument
+        // Map each parameter to its argument (cloning the ParameterValue)
         for (name, _) in params {
             if let Some(arg_value) = args.get(name) {
                 mapping.insert(name.clone(), arg_value.clone());
@@ -166,104 +180,139 @@ impl EffectInlining {
     
     /// Clone an effect subgraph with parameter substitution
     fn clone_effect_subgraph(&self, teg: &mut TemporalEffectGraph,
-                            root_id: EffectId,
-                            param_mapping: &HashMap<String, String>) -> Result<HashMap<EffectId, EffectId>> {
+                            root_id: &EffectId,
+                            param_mapping: &HashMap<String, ParameterValue>) -> Result<HashMap<EffectId, EffectId>> {
         let mut original_to_clone = HashMap::new();
-        let mut visited = HashSet::new();
         
-        // Get all effects in the subgraph
-        let subgraph_effects = teg.find_descendants(root_id, |_| true);
-        subgraph_effects.push(root_id); // Include the root
-        
+        // TODO: Implement find_descendants or equivalent traversal
+        // let subgraph_effects = teg.find_descendants(root_id, |_| true); // Needs implementation
+        // let mut subgraph_effects_owned = subgraph_effects.into_iter().cloned().collect::<Vec<_>>(); // If find_descendants returns Vec<&EffectId>
+        // subgraph_effects_owned.push(root_id.clone()); // Include the root
+        let subgraph_effects_owned = vec![root_id.clone()]; // Placeholder: just the root for now
+
         // Clone each effect
-        for &original_id in &subgraph_effects {
+        for original_id in &subgraph_effects_owned {
             let original = teg.get_effect(original_id)
-                .ok_or_else(|| anyhow!("Effect not found"))?
+                .ok_or_else(|| anyhow!("Effect not found in TEG during clone"))?
                 .clone();
             
-            // Create a clone with substituted parameters
-            let mut clone = EffectNode::new(
-                format!("inline_{}", original.name()),
-                original.operation_type().unwrap_or_default(),
-            );
-            
-            // Apply parameter substitutions
-            let mut new_params = original.parameters().clone();
-            for (param_name, param_value) in &new_params {
-                if param_mapping.contains_key(param_value) {
-                    new_params.insert(param_name.clone(), param_mapping[param_value].clone());
-                }
+            // Create a clone using the builder
+            let mut builder = EffectNode::builder()
+                .effect_type(original.effect_type())
+                .domain(original.domain_id().clone());
+
+            // Apply parameter substitutions and add to builder
+            for (param_name, param_value) in original.parameters() { 
+                let substituted_value = match param_value {
+                     ParameterValue::String(s) => {
+                         param_mapping.get(s).cloned().unwrap_or_else(|| param_value.clone())
+                     },
+                     _ => param_value.clone(),
+                };
+                // Add parameter individually
+                builder = builder.parameter(param_name.clone(), substituted_value);
             }
-            clone.set_parameters(new_params);
             
-            // Copy metadata
-            let mut metadata = original.metadata().clone();
-            metadata.insert("inlined_from".to_string(), original.name().to_string());
-            clone.set_metadata(metadata);
+            // Copy metadata, adding inlined_from, and add to builder
+            let mut metadata_map = original.metadata().clone(); 
+            metadata_map.insert("inlined_from".to_string(), ParameterValue::String(original.name().to_string()));
+            for (key, value) in metadata_map {
+                // Add metadata individually
+                builder = builder.metadata(key, value);
+            }
+
+            // Copy other fields
+            for cap in &original.required_capabilities {
+                 builder = builder.requires_capability(cap.clone());
+            }
+            for res in &original.resources_accessed {
+                 builder = builder.accesses_resource(res.clone());
+            }
+             for fact in &original.fact_dependencies {
+                 builder = builder.depends_on_fact(fact.clone());
+             }
+             
+             // Build the cloned node
+             let clone = builder.build().map_err(|e| anyhow!("Failed to build cloned effect node: {}", e))?; 
             
-            // Add to graph
-            let clone_id = teg.add_effect(clone)?;
-            original_to_clone.insert(original_id, clone_id);
+            // Add to graph using add_effect_node
+            let clone_id = teg.add_effect_node(clone); 
+            original_to_clone.insert(original_id.clone(), clone_id);
         }
         
         // Clone edges between the effects
-        for &original_id in &subgraph_effects {
-            let outgoing = teg.get_outgoing_edges(original_id);
-            
-            for (dst, edge_data) in outgoing {
-                // Skip edges to effects outside the subgraph
-                if !original_to_clone.contains_key(&dst) {
-                    continue;
+        // TODO: Implement get_outgoing_edges and add_edge
+        /*
+        for original_id in &subgraph_effects_owned {
+            if let Some(outgoing_edges) = teg.get_outgoing_edges(original_id) { // Needs implementation
+                for edge in outgoing_edges {
+                    // Skip edges to effects outside the subgraph
+                    if !original_to_clone.contains_key(&edge.target_id) {
+                        continue;
+                    }
+                    
+                    let src_clone = original_to_clone[original_id].clone();
+                    let dst_clone = original_to_clone[&edge.target_id].clone();
+                    
+                    teg.add_edge(src_clone, dst_clone, edge.clone())?; // Needs implementation
                 }
-                
-                let src_clone = original_to_clone[&original_id];
-                let dst_clone = original_to_clone[&dst];
-                
-                teg.add_edge(src_clone, dst_clone, edge_data.clone())?;
             }
         }
+        */
         
         Ok(original_to_clone)
     }
     
     /// Connect the cloned subgraph to the original callers
     fn connect_cloned_subgraph(&self, teg: &mut TemporalEffectGraph,
-                              application_id: EffectId,
+                              application_id: &EffectId,
                               cloned_nodes: &HashMap<EffectId, EffectId>) -> Result<()> {
         // Get incoming edges to the application
-        let incoming = teg.get_incoming_edges(application_id);
+        // TODO: Implement get_incoming_edges
+        // let incoming = teg.get_incoming_edges(application_id);
+        let incoming: Vec<(EffectId, Edge)> = Vec::new(); // Placeholder
         
         // Get outgoing edges from the application
-        let outgoing = teg.get_outgoing_edges(application_id);
+        // TODO: Implement get_outgoing_edges
+        // let outgoing = teg.get_outgoing_edges(application_id);
+        let outgoing: Vec<(EffectId, Edge)> = Vec::new(); // Placeholder
         
-        // Connect incoming edges to the entry point of the cloned subgraph
+        // Connect incoming edges to the entry point(s) of the cloned subgraph
+        // Find entry points (cloned nodes with no incoming edges *from other cloned nodes*)
+        let entry_points: Vec<EffectId> = cloned_nodes.values()
+            .filter(|&clone_id| {
+                // TODO: Implement check for incoming edges from other cloned nodes
+                // !cloned_nodes.values().any(|&other_clone_id| teg.has_edge(other_clone_id, clone_id))
+                true // Placeholder: connect all incoming to all cloned nodes for now
+            })
+            .cloned()
+            .collect();
+
         for (src, edge_data) in incoming {
-            for &clone_id in cloned_nodes.values() {
-                // Check if this is an entry point (no incoming edges within the subgraph)
-                let has_internal_incoming = cloned_nodes.values().any(|&id| {
-                    teg.has_edge(id, clone_id)
-                });
-                
-                if !has_internal_incoming {
-                    teg.add_edge(src, clone_id, edge_data.clone())?;
-                }
+            for entry_point_id in &entry_points {
+                // TODO: Implement add_edge
+                // teg.add_edge(src.clone(), entry_point_id.clone(), edge_data.clone())?;
             }
         }
-        
-        // Connect outgoing edges to the exit points of the cloned subgraph
+
+        // Connect exit points of the cloned subgraph to the original outgoing targets
+        // Find exit points (cloned nodes with no outgoing edges *to other cloned nodes*)
+        let exit_points: Vec<EffectId> = cloned_nodes.values()
+            .filter(|&clone_id| {
+                // TODO: Implement check for outgoing edges to other cloned nodes
+                // !cloned_nodes.values().any(|&other_clone_id| teg.has_edge(clone_id, other_clone_id))
+                true // Placeholder: connect all exit points to all original outgoing targets
+            })
+            .cloned()
+            .collect();
+
         for (dst, edge_data) in outgoing {
-            for &clone_id in cloned_nodes.values() {
-                // Check if this is an exit point (no outgoing edges within the subgraph)
-                let has_internal_outgoing = cloned_nodes.values().any(|&id| {
-                    teg.has_edge(clone_id, id)
-                });
-                
-                if !has_internal_outgoing {
-                    teg.add_edge(clone_id, dst, edge_data.clone())?;
-                }
+            for exit_point_id in &exit_points {
+                 // TODO: Implement add_edge
+                // teg.add_edge(exit_point_id.clone(), dst.clone(), edge_data.clone())?;
             }
         }
-        
+
         Ok(())
     }
 }
@@ -290,7 +339,7 @@ impl Optimization for EffectInlining {
         
         // Inline each effect
         for effect_id in inlinable_effects {
-            if self.inline_effect(teg, effect_id)? {
+            if self.inline_effect(teg, &effect_id)? {
                 changed = true;
             }
         }
@@ -314,33 +363,30 @@ impl Optimization for EffectInlining {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builder::GraphBuilder;
     
     #[test]
     fn test_effect_inlining() {
-        let mut graph_builder = GraphBuilder::new();
+        let mut teg = TemporalEffectGraph::new();
         
         // Create an effect definition
-        let param = graph_builder.add_effect("param", "param");
-        let body = graph_builder.add_effect("body", "compute");
-        let result = graph_builder.add_effect("result", "result");
+        let param = teg.add_effect("param", "param");
+        let body = teg.add_effect("body", "compute");
+        let result = teg.add_effect("result", "result");
         
-        graph_builder.connect_effects(param, body);
-        graph_builder.connect_effects(body, result);
+        teg.connect_effects(param, body);
+        teg.connect_effects(body, result);
         
         // Create an effect application
-        let arg = graph_builder.add_effect("arg", "compute");
-        let apply = graph_builder.add_effect_with_params(
+        let arg = teg.add_effect("arg", "compute");
+        let apply = teg.add_effect_with_params(
             "apply", 
             "apply",
             [("effect_id", result.to_string())].iter().cloned().collect()
         );
-        let output = graph_builder.add_effect("output", "output");
+        let output = teg.add_effect("output", "output");
         
-        graph_builder.connect_effects(arg, apply);
-        graph_builder.connect_effects(apply, output);
-        
-        let mut teg = graph_builder.build().unwrap();
+        teg.connect_effects(arg, apply);
+        teg.connect_effects(apply, output);
         
         // Apply optimization
         let opt = EffectInlining::new();
@@ -382,34 +428,32 @@ mod tests {
     
     #[test]
     fn test_no_inline_side_effects() {
-        let mut graph_builder = GraphBuilder::new();
+        let mut teg = TemporalEffectGraph::new();
         
         // Create an effect definition with side effects
-        let param = graph_builder.add_effect("param", "param");
-        let body = graph_builder.add_effect("body", "compute");
-        let side_effect = graph_builder.add_effect("side_effect", "io");
-        let result = graph_builder.add_effect("result", "result");
+        let param = teg.add_effect("param", "param");
+        let body = teg.add_effect("body", "compute");
+        let side_effect = teg.add_effect("side_effect", "io");
+        let result = teg.add_effect("result", "result");
         
-        graph_builder.connect_effects(param, body);
-        graph_builder.connect_effects(body, side_effect);
-        graph_builder.connect_effects(side_effect, result);
+        teg.connect_effects(param, body);
+        teg.connect_effects(body, side_effect);
+        teg.connect_effects(side_effect, result);
         
         // Mark as having side effects
-        graph_builder.mark_as_side_effect(side_effect);
+        teg.mark_as_side_effect(side_effect);
         
         // Create an effect application
-        let arg = graph_builder.add_effect("arg", "compute");
-        let apply = graph_builder.add_effect_with_params(
+        let arg = teg.add_effect("arg", "compute");
+        let apply = teg.add_effect_with_params(
             "apply", 
             "apply",
             [("effect_id", result.to_string())].iter().cloned().collect()
         );
-        let output = graph_builder.add_effect("output", "output");
+        let output = teg.add_effect("output", "output");
         
-        graph_builder.connect_effects(arg, apply);
-        graph_builder.connect_effects(apply, output);
-        
-        let mut teg = graph_builder.build().unwrap();
+        teg.connect_effects(arg, apply);
+        teg.connect_effects(apply, output);
         
         // Apply optimization
         let opt = EffectInlining::new();

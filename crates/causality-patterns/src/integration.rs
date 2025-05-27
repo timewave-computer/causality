@@ -22,6 +22,8 @@ use causality_types::{DomainId, Timestamp};
 use causality_error::Error as LogError;
 use causality_error::CausalityError;
 use rand::RngCore; // Import RngCore for random bytes
+use causality_ir::graph::TemporalEffectGraph;
+// TODO: Import other necessary types from causality_ir
 
 /// Result type for integration operations
 pub type Result<T> = std::result::Result<T, Error>;
@@ -875,4 +877,51 @@ impl Default for JsonStateHandler {
     fn default() -> Self {
         Self::new()
     }
-} 
+}
+
+// Define reusable patterns using TEG
+
+#[derive(Error, Debug)]
+pub enum PatternError {
+    #[error("Invalid pattern configuration: {0}")]
+    InvalidConfiguration(String),
+    // TODO: Add specific errors
+}
+
+// TODO: Define pattern functions that return TEG
+
+/// Example: Creates a TEG representing a simple retry pattern
+pub fn create_retry_teg(/* pattern parameters */) -> Result<TemporalEffectGraph, PatternError> {
+    let mut teg = TemporalEffectGraph::new();
+    // TODO: 
+    // 1. Create TEG nodes for the operation to retry.
+    // 2. Create TEG nodes/edges for the condition check.
+    // 3. Create TEG nodes/edges for the delay/backoff (if any).
+    // 4. Connect nodes with conditional continuation edges.
+    Ok(teg)
+}
+
+/// Example: Creates a TEG for a fan-out/fan-in pattern
+pub fn create_fan_out_in_teg(/* pattern parameters */) -> Result<TemporalEffectGraph, PatternError> {
+    let mut teg = TemporalEffectGraph::new();
+    // TODO:
+    // 1. Create TEG node for the initial split/distribution.
+    // 2. Create parallel branches (TEG subgraphs) for each fan-out task.
+    // 3. Create TEG ControlNode::Join (or similar) for fan-in.
+    // 4. Connect branches to the join node.
+    Ok(teg)
+}
+
+// TODO: Move or refactor existing logic from integration.rs 
+// (The current content seems extensive and might be related to old effect system? Needs careful review)
+// Placeholder for the extensive existing code in integration.rs
+// It needs to be refactored to generate TEG instead of its current operations.
+
+/*
+
+... (Existing code from integration.rs - approx 800+ lines) ...
+This code likely defines patterns or integrations based on the OLD effect system.
+It needs to be audited and rewritten to generate TEG structures.
+Functions like `define_cross_chain_transfer_pattern` should construct and return a `TemporalEffectGraph`.
+
+*/ 

@@ -118,8 +118,8 @@ impl SimulationRunner for LocalProcessRunner {
                .arg("--") // Separator for arguments passed to the agent app
                .arg("--agent-id")
                .arg(&agent_config.id);
-               // TODO: Pass other necessary config (e.g., controller address, domain info) 
-               //       to the agent app via command-line arguments.
+               // FUTURE: Pass other necessary config (e.g., controller address, domain info) 
+               //         to the agent app via command-line arguments when agent processes support them.
 
             info!(command = ?cmd, "Spawning agent process via Nix");
 
@@ -127,7 +127,7 @@ impl SimulationRunner for LocalProcessRunner {
             match cmd.spawn() {
                 Ok(child) => {
                     info!(agent_id = %agent_config.id, pid = child.id(), "Agent process started via Nix");
-                    // TODO: Implement proper Effect creation/return
+                    // FUTURE: Implement proper Effect creation/return for agent processes
                     // For now, just store the child handle for stopping
                     running_agents_guard.insert(agent_config.id.clone(), child);
                 }
@@ -205,8 +205,8 @@ impl SimulationRunner for LocalProcessRunner {
         // Set state to paused
         self.set_state(RunnerState::Paused)?;
         
-        // TODO: Implement actual pause logic for child processes
-        // This would involve sending SIGSTOP to all processes
+        // FUTURE: Implement actual pause logic for child processes
+        // This would involve sending SIGSTOP to all processes, but is not critical for current functionality
         
         Ok(())
     }
@@ -226,8 +226,8 @@ impl SimulationRunner for LocalProcessRunner {
         // Set state to running
         self.set_state(RunnerState::Running)?;
         
-        // TODO: Implement actual resume logic for child processes
-        // This would involve sending SIGCONT to all processes
+        // FUTURE: Implement actual resume logic for child processes
+        // This would involve sending SIGCONT to all processes, but is not critical for current functionality
         
         Ok(())
     }

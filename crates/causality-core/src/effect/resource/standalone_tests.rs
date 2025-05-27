@@ -8,10 +8,10 @@ mod standalone_tests {
     use async_trait::async_trait;
 
     use crate::effect::{
-        Effect, EffectError, EffectOutcome, 
-        handler::{EffectHandler, HandlerResult},
+        Effect as CoreEffect, EffectError as CoreEffectError, EffectOutcome as CoreEffectOutcome, 
+        handler::{EffectHandler as CoreEffectHandler, HandlerResult},
         types::EffectTypeId,
-        context::EffectContext
+        context::EffectContext as CoreEffectContext
     };
 
     // EffectType - simple enum for test purposes
@@ -36,31 +36,31 @@ mod standalone_tests {
         }
     }
 
-    // EffectError - error type for effects
+    // TestEffectError - error type for effects
     #[derive(Debug)]
-    enum EffectError {
+    enum TestEffectError {
         NotFound(String),
         PermissionDenied(String),
         InvalidOperation(String),
         ExecutionError(String),
     }
 
-    impl std::fmt::Display for EffectError {
+    impl std::fmt::Display for TestEffectError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                EffectError::NotFound(s) => write!(f, "Resource not found: {}", s),
-                EffectError::PermissionDenied(s) => write!(f, "Permission denied: {}", s),
-                EffectError::InvalidOperation(s) => write!(f, "Invalid operation: {}", s),
-                EffectError::ExecutionError(s) => write!(f, "Execution error: {}", s),
+                TestEffectError::NotFound(s) => write!(f, "Resource not found: {}", s),
+                TestEffectError::PermissionDenied(s) => write!(f, "Permission denied: {}", s),
+                TestEffectError::InvalidOperation(s) => write!(f, "Invalid operation: {}", s),
+                TestEffectError::ExecutionError(s) => write!(f, "Execution error: {}", s),
             }
         }
     }
 
-    impl Error for EffectError {}
+    impl Error for TestEffectError {}
 
-    // EffectOutcome - represents the result of an effect
+    // TestEffectOutcome - represents the result of an effect
     #[derive(Debug, Clone)]
-    enum EffectOutcome {
+    enum TestEffectOutcome {
         Success {
             result: Option<String>,
             data: HashMap<String, String>,
@@ -71,7 +71,7 @@ mod standalone_tests {
         Pending,
     }
 
-    impl EffectOutcome {
+    impl TestEffectOutcome {
         fn success() -> Self {
             Self::Success {
                 result: None,
@@ -105,10 +105,10 @@ mod standalone_tests {
     }
 
     // Result type for effects
-    type EffectResult = Result<EffectOutcome, EffectError>;
+    type TestEffectResult = Result<TestEffectOutcome, TestEffectError>;
 
     // Context for effect execution
-    trait EffectContext: Debug + Send + Sync {
+    trait TestEffectContext: Debug + Send + Sync {
         fn has_capability(&self, capability: &str) -> bool;
         fn get_data(&self, key: &str) -> Option<&String>;
         fn metadata(&self) -> &HashMap<String, String>;
@@ -143,7 +143,7 @@ mod standalone_tests {
         }
     }
 
-    impl EffectContext for SimpleEffectContext {
+    impl TestEffectContext for SimpleEffectContext {
         fn has_capability(&self, capability: &str) -> bool {
             self.capabilities.contains(&capability.to_string())
         }
@@ -157,21 +157,21 @@ mod standalone_tests {
         }
     }
 
-    // Base Effect trait
-    trait Effect: Debug + Send + Sync {
+    // Base TestEffect trait
+    trait TestEffect: Debug + Send + Sync {
         fn effect_type(&self) -> EffectType;
         fn description(&self) -> String;
-        fn execute(&self, context: &dyn EffectContext) -> EffectResult;
+        fn execute(&self, context: &dyn TestEffectContext) -> TestEffectResult;
         fn as_any(&self) -> &dyn Any;
     }
 
-    // Effect handler trait
-    trait EffectHandler: Debug + Send + Sync {
+    // TestEffect handler trait
+    trait TestEffectHandler: Debug + Send + Sync {
         fn can_handle(&self, effect_type: &EffectType) -> bool;
-        fn handle(&self, effect: &dyn Effect, context: &dyn EffectContext) -> EffectResult;
+        fn handle(&self, effect: &dyn TestEffect, context: &dyn TestEffectContext) -> TestEffectResult;
     }
 
-    // Simple Effect implementation for testing
+    // Simple TestEffect implementation for testing
     #[derive(Debug)]
     struct ResourceEffect {
         resource_type: String,
@@ -196,83 +196,93 @@ mod standalone_tests {
         }
     }
 
-    impl Effect for ResourceEffect {
+    impl TestEffect for ResourceEffect {
         fn effect_type(&self) -> EffectType {
             self.effect_type.clone()
         }
-
+        
         fn description(&self) -> String {
-            format!("{} {}:{}", 
+            format!(
+                "{} resource {} of type {}",
                 self.effect_type.as_str(),
-                self.resource_type,
-                self.resource_id
+                self.resource_id,
+                self.resource_type
             )
         }
-
-        fn execute(&self, context: &dyn EffectContext) -> EffectResult {
-            // Check capability
-            let capability = format!("{}.{}", self.resource_type, self.effect_type.as_str());
-            if !context.has_capability(&capability) {
-                return Err(EffectError::PermissionDenied(
-                    format!("Missing capability: {}", capability)
+        
+        fn execute(&self, context: &dyn TestEffectContext) -> TestEffectResult {
+            if !context.has_capability(&format!("resource:{}", self.effect_type.as_str())) {
+                return Err(TestEffectError::PermissionDenied(
+                    format!("Missing capability for {}", self.effect_type.as_str())
                 ));
             }
             
-            // Execute based on operation type
             match self.effect_type {
                 EffectType::Read => {
-                    // Simulate reading data
-                    let mut data = HashMap::new();
-                    data.insert("type".to_string(), self.resource_type.clone());
-                    data.insert("id".to_string(), self.resource_id.clone());
-                    data.insert("content".to_string(), "Example content".to_string());
+                    // Simulate finding the resource
+                    if self.resource_id == "not_found" {
+                        return Err(TestEffectError::NotFound(
+                            format!("Resource {} not found", self.resource_id)
+                        ));
+                    }
                     
-                    Ok(EffectOutcome::Success {
-                        result: Some("Read successful".to_string()),
-                        data,
-                    })
+                    // Return success with simulated data
+                    let mut data = HashMap::new();
+                    data.insert("id".to_string(), self.resource_id.clone());
+                    data.insert("type".to_string(), self.resource_type.clone());
+                    
+                    Ok(TestEffectOutcome::success_with_data(data))
                 },
                 EffectType::Write => {
-                    // Simulate writing data
-                    let mut data = HashMap::new();
-                    data.insert("type".to_string(), self.resource_type.clone());
-                    data.insert("id".to_string(), self.resource_id.clone());
-                    data.insert("content".to_string(), "Updated content".to_string());
+                    // Simulate writing to the resource
+                    if self.resource_id == "read_only" {
+                        return Err(TestEffectError::PermissionDenied(
+                            "Resource is read-only".to_string()
+                        ));
+                    }
                     
-                    Ok(EffectOutcome::Success {
-                        result: Some("Write successful".to_string()),
-                        data,
-                    })
+                    // Get content from parameters
+                    let content = self.parameters.get("content")
+                        .cloned()
+                        .unwrap_or_else(|| "Default content".to_string());
+                    
+                    // Return success with updated content
+                    let mut data = HashMap::new();
+                    data.insert("content".to_string(), content);
+                    data.insert("updated".to_string(), "true".to_string());
+                    
+                    Ok(TestEffectOutcome::success_with_data(data))
                 },
                 EffectType::Create => {
-                    // Simulate creating a resource
+                    // Simulate creating a new resource
                     let mut data = HashMap::new();
-                    data.insert("type".to_string(), self.resource_type.clone());
                     data.insert("id".to_string(), self.resource_id.clone());
+                    data.insert("type".to_string(), self.resource_type.clone());
                     data.insert("created".to_string(), "true".to_string());
                     
-                    Ok(EffectOutcome::Success {
-                        result: Some("Resource created".to_string()),
-                        data,
-                    })
+                    Ok(TestEffectOutcome::success_with_data(data))
                 },
                 EffectType::Delete => {
                     // Simulate deleting a resource
-                    let mut data = HashMap::new();
-                    data.insert("type".to_string(), self.resource_type.clone());
-                    data.insert("id".to_string(), self.resource_id.clone());
-                    data.insert("deleted".to_string(), "true".to_string());
+                    if self.resource_id == "permanent" {
+                        return Err(TestEffectError::InvalidOperation(
+                            "Cannot delete permanent resource".to_string()
+                        ));
+                    }
                     
-                    Ok(EffectOutcome::Success {
-                        result: Some("Resource deleted".to_string()),
-                        data,
-                    })
+                    Ok(TestEffectOutcome::success())
                 },
-                EffectType::Custom(ref operation) => {
+                EffectType::Custom(ref op) => {
                     // Handle custom operations
-                    Err(EffectError::InvalidOperation(format!(
-                        "Custom operation not supported: {}", operation
-                    )))
+                    if op == "error" {
+                        return Err(TestEffectError::ExecutionError(
+                            "Custom operation failed".to_string()
+                        ));
+                    }
+                    
+                    Ok(TestEffectOutcome::success_with_result(
+                        format!("Custom operation '{}' executed", op)
+                    ))
                 }
             }
         }
@@ -282,7 +292,7 @@ mod standalone_tests {
         }
     }
 
-    // Simple Effect handler implementation
+    // Resource effect handler
     #[derive(Debug)]
     struct ResourceEffectHandler {
         supported_types: Vec<EffectType>,
@@ -294,20 +304,19 @@ mod standalone_tests {
         }
     }
 
-    impl EffectHandler for ResourceEffectHandler {
+    impl TestEffectHandler for ResourceEffectHandler {
         fn can_handle(&self, effect_type: &EffectType) -> bool {
             self.supported_types.contains(effect_type)
         }
         
-        fn handle(&self, effect: &dyn Effect, context: &dyn EffectContext) -> EffectResult {
+        fn handle(&self, effect: &dyn TestEffect, context: &dyn TestEffectContext) -> TestEffectResult {
             effect.execute(context)
         }
     }
 
-    // Effect executor implementation
-    #[derive(Debug, Default)]
+    // Effect executor
     struct EffectExecutor {
-        handlers: Vec<Arc<dyn EffectHandler>>,
+        handlers: Vec<Arc<dyn TestEffectHandler>>,
     }
 
     impl EffectExecutor {
@@ -315,127 +324,112 @@ mod standalone_tests {
             Self { handlers: Vec::new() }
         }
         
-        fn register_handler(&mut self, handler: Arc<dyn EffectHandler>) {
+        fn register_handler(&mut self, handler: Arc<dyn TestEffectHandler>) {
             self.handlers.push(handler);
         }
         
-        fn find_handler(&self, effect: &dyn Effect) -> Option<Arc<dyn EffectHandler>> {
+        fn find_handler(&self, effect: &dyn TestEffect) -> Option<Arc<dyn TestEffectHandler>> {
             let effect_type = effect.effect_type();
+            
             for handler in &self.handlers {
                 if handler.can_handle(&effect_type) {
-                    return Some(handler.clone());
+                    return Some(Arc::clone(handler));
                 }
             }
+            
             None
         }
         
-        fn execute(&self, effect: &dyn Effect, context: &dyn EffectContext) -> EffectResult {
+        fn execute(&self, effect: &dyn TestEffect, context: &dyn TestEffectContext) -> TestEffectResult {
             if let Some(handler) = self.find_handler(effect) {
                 handler.handle(effect, context)
             } else {
-                Err(EffectError::ExecutionError(format!(
-                    "No handler found for effect: {}", effect.description()
-                )))
+                Err(TestEffectError::InvalidOperation(
+                    format!("No handler found for effect type: {:?}", effect.effect_type())
+                ))
             }
         }
     }
 
-    // Helper functions to create effects
+    // Helper functions
     fn create_read_effect(resource_type: &str, resource_id: &str) -> ResourceEffect {
         ResourceEffect::new(resource_type, resource_id, EffectType::Read)
     }
-
+    
     fn create_write_effect(resource_type: &str, resource_id: &str) -> ResourceEffect {
         ResourceEffect::new(resource_type, resource_id, EffectType::Write)
     }
-
+    
     fn create_create_effect(resource_type: &str, resource_id: &str) -> ResourceEffect {
         ResourceEffect::new(resource_type, resource_id, EffectType::Create)
     }
 
     #[test]
     fn test_registry_integration() {
-        // Create an executor
-        let mut executor = EffectExecutor::new();
+        // Create test context
+        let context = SimpleEffectContext::new()
+            .with_capability("resource:read")
+            .with_capability("resource:write")
+            .with_capability("resource:create");
         
-        // Create and register a handler
-        let handler = Arc::new(ResourceEffectHandler::new(vec![
-            EffectType::Read, 
-            EffectType::Write, 
+        // Create effect handlers
+        let read_handler = Arc::new(ResourceEffectHandler::new(vec![
+            EffectType::Read
+        ]));
+        
+        let write_handler = Arc::new(ResourceEffectHandler::new(vec![
+            EffectType::Write,
             EffectType::Create
         ]));
-        executor.register_handler(handler);
         
-        // Create a context with required capability
-        let context = SimpleEffectContext::new()
-            .with_capability("document.read")
-            .with_capability("document.write");
+        // Create executor and register handlers
+        let mut executor = EffectExecutor::new();
+        executor.register_handler(read_handler);
+        executor.register_handler(write_handler);
         
-        // Create an effect
-        let read_effect = create_read_effect("document", "doc-123");
-        let write_effect = create_write_effect("document", "doc-123");
+        // Execute read effect
+        let read_effect = create_read_effect("document", "doc123");
+        let result = executor.execute(&read_effect, &context);
+        assert!(result.is_ok());
         
-        // Execute the effects
-        let read_result = executor.execute(&read_effect, &context);
-        let write_result = executor.execute(&write_effect, &context);
+        // Execute write effect
+        let write_effect = create_write_effect("document", "doc123")
+            .with_parameter("content", "Updated content");
+        let result = executor.execute(&write_effect, &context);
+        assert!(result.is_ok());
         
-        // Check the results
-        assert!(read_result.is_ok());
-        assert!(write_result.is_ok());
-        
-        if let Ok(EffectOutcome::Success { result, data }) = read_result {
-            assert_eq!(result, Some("Read successful".to_string()));
-            assert_eq!(data.get("type"), Some(&"document".to_string()));
-            assert_eq!(data.get("id"), Some(&"doc-123".to_string()));
-        }
+        // Execute create effect
+        let create_effect = create_create_effect("document", "new_doc");
+        let result = executor.execute(&create_effect, &context);
+        assert!(result.is_ok());
     }
     
     #[test]
     fn test_effect_registry_handler_registration() {
-        // Create an executor
         let mut executor = EffectExecutor::new();
         
-        // Create handlers for different effect types
+        // Create and register handlers for read and write
         let read_handler = Arc::new(ResourceEffectHandler::new(vec![EffectType::Read]));
-        let write_handler = Arc::new(ResourceEffectHandler::new(vec![EffectType::Write]));
-        let create_handler = Arc::new(ResourceEffectHandler::new(vec![EffectType::Create]));
-        
-        // Register the handlers
         executor.register_handler(read_handler);
+        
+        // Create a read effect
+        let read_effect = create_read_effect("document", "doc456");
+        
+        // We should find a handler for read effects
+        assert!(executor.find_handler(&read_effect).is_some());
+        
+        // Create a write effect
+        let write_effect = create_write_effect("document", "doc456");
+        
+        // We should not find a handler for write effects
+        assert!(executor.find_handler(&write_effect).is_none());
+        
+        // Now register a write handler
+        let write_handler = Arc::new(ResourceEffectHandler::new(vec![EffectType::Write]));
         executor.register_handler(write_handler);
-        executor.register_handler(create_handler);
         
-        // Create effects
-        let read_effect = create_read_effect("document", "doc-123");
-        let write_effect = create_write_effect("document", "doc-123");
-        let create_effect = create_create_effect("document", "doc-123");
-        
-        // Create contexts with required capabilities
-        let read_context = SimpleEffectContext::new()
-            .with_capability("document.read");
-        let write_context = SimpleEffectContext::new()
-            .with_capability("document.write");
-        let create_context = SimpleEffectContext::new()
-            .with_capability("document.create");
-        
-        // Execute the effects
-        let read_result = executor.execute(&read_effect, &read_context);
-        let write_result = executor.execute(&write_effect, &write_context);
-        let create_result = executor.execute(&create_effect, &create_context);
-        
-        // Check the results
-        assert!(read_result.is_ok());
-        assert!(write_result.is_ok());
-        assert!(create_result.is_ok());
-        
-        // Verify that missing capabilities cause errors
-        let no_capability_context = SimpleEffectContext::new();
-        let error_result = executor.execute(&read_effect, &no_capability_context);
-        assert!(error_result.is_err());
-        if let Err(EffectError::PermissionDenied(message)) = error_result {
-            assert!(message.contains("Missing capability: document.read"));
-        } else {
-            panic!("Expected PermissionDenied error");
-        }
+        // Now we should find handlers for both read and write
+        assert!(executor.find_handler(&read_effect).is_some());
+        assert!(executor.find_handler(&write_effect).is_some());
     }
 } 

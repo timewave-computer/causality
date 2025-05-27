@@ -36,6 +36,11 @@ impl TimeDelta {
         self.0.num_nanoseconds().unwrap_or(0) as u64
     }
     
+    /// Get the number of milliseconds in the duration
+    pub fn as_millis(&self) -> u64 {
+        self.0.num_milliseconds() as u64
+    }
+    
     /// Get the number of seconds in the duration
     pub fn as_secs(&self) -> i64 {
         self.0.num_seconds()

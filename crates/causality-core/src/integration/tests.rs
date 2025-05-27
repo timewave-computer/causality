@@ -26,16 +26,16 @@ mod tests {
         DomainEffectRouter, DomainResourceRouter, GenericDomainAdapter,
     };
     
-    use crate::resource::protocol::create_cross_domain_protocol;
+    // Protocol dependency removed during cleanup
     
     #[tokio::test]
     async fn test_domain_integration_layer() {
         // Create a test domain integration layer
         let resource_type_registry = Arc::new(crate::resource::InMemoryResourceTypeRegistry::new());
-        let cross_domain_protocol = create_cross_domain_protocol(resource_type_registry);
+        // Protocol creation removed during cleanup
         
         let (effect_router, resource_router, adapter_factory) = 
-            create_test_domain_integration_layer(cross_domain_protocol);
+            create_test_domain_integration_layer(resource_type_registry);
         
         // Verify that test domains are registered
         let domains = adapter_factory.supported_domains();

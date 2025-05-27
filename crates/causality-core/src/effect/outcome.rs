@@ -357,21 +357,28 @@ impl EffectOutcome {
     
     /// Add data to the outcome (updates both data and result)
     pub fn with_data(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        let k = key.into();
-        let v = value.into();
-        self.data.insert(k.clone(), v.clone());
+        let key = key.into();
+        let value = value.into();
         
-        // If result is a map, update it too
+        self.data.insert(key.clone(), value.clone());
+        
+        // Also update the result if it's a map
         if let ResultData::Map(ref mut map) = self.result {
-            map.insert(k, v);
-        } else if self.result.is_none() {
-            // If no result yet, create a map
+            map.insert(key, value);
+        } else {
+            // Convert to map if not already
             let mut map = HashMap::new();
-            map.insert(k, v);
+            map.insert(key, value);
             self.result = ResultData::Map(map);
         }
         
         self
+    }
+    
+    /// Add a message to the outcome 
+    /// A convenience method that adds a message field to the data map
+    pub fn with_message(self, message: impl Into<String>) -> Self {
+        self.with_data("message", message)
     }
     
     /// Add multiple data entries (updates both data and result)
@@ -534,9 +541,10 @@ impl EffectOutcome {
 
     /// Create a failure outcome from an error
     pub fn from_error<E: std::fmt::Display>(error: E, additional_data: Option<HashMap<String, String>>) -> Self {
-        use crate::effect::utils::error_to_map;
-        
-        let mut data = error_to_map(error);
+        // Create a basic HashMap with the error information
+        let mut data = HashMap::new();
+        data.insert("error".to_string(), error.to_string());
+        data.insert("error_type".to_string(), "error".to_string());
         
         // Merge additional data if provided
         if let Some(extra_data) = additional_data {

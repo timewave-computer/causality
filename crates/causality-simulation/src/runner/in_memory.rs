@@ -1,12 +1,8 @@
 // Purpose: Implements the in-memory simulation runner.
 
 use async_trait::async_trait;
-#[allow(unused_imports)]
-use futures::future::join_all;
 use std::collections::HashMap;
 use std::sync::Arc;
-#[allow(unused_imports)]
-use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 use std::fmt; // Import fmt for Debug impl
@@ -49,17 +45,38 @@ fn create_resource_id(id_str: &str) -> ResourceId {
 }
 // --- End Helper ---
 
-// --- Simple mock agent implementations for standalone mode ---
+// --- When not using engine feature, still leverage the core agent types ---
+#[cfg(not(feature = "engine"))]
+use causality_core::resource::agent::{
+    user::{UserAgent, UserAgentBuilder, AuthenticationMethod},
+    committee::{CommitteeAgent, CommitteeAgentBuilder, CommitteeConfig},
+    agent::AgentBuilder,
+    types::AgentState
+};
+
+// --- Simple mock agent implementations that leverage core types even in standalone mode ---
 #[cfg(not(feature = "engine"))]
 struct MockUserAgent {
     agent_id: AgentId,
+    user_agent: Option<UserAgent>, // Use the core UserAgent implementation
 }
 
 #[cfg(not(feature = "engine"))]
 impl MockUserAgent {
     fn new(id_str: String) -> Self {
+        // Create a UserAgent from the core implementation
+        let user_agent = UserAgentBuilder::new()
+            .with_display_name(&id_str)
+            .with_auth_method(AuthenticationMethod::PublicKey { 
+                public_key: format!("pk_{}", id_str) 
+            })
+            .state(AgentState::Active)
+            .build()
+            .ok();
+            
         Self {
             agent_id: create_resource_id(&id_str),
+            user_agent,
         }
     }
 }
@@ -87,13 +104,31 @@ impl SimulatedAgent for MockUserAgent {
 #[cfg(not(feature = "engine"))]
 struct MockCommitteeAgent {
     agent_id: AgentId,
+    committee_agent: Option<CommitteeAgent>, // Use the core CommitteeAgent implementation
 }
 
 #[cfg(not(feature = "engine"))]
 impl MockCommitteeAgent {
     fn new(id_str: String) -> Self {
+        // Create a CommitteeConfig
+        let committee_config = CommitteeConfig {
+            domain: format!("domain_{}", id_str),
+            quorum_percentage: 67,
+            max_size: 5,
+            min_votes: 2,
+            protocol_version: "1.0".to_string(),
+        };
+
+        // Create a CommitteeAgent from the core implementation
+        let committee_agent = CommitteeAgentBuilder::new()
+            .with_config(committee_config)
+            .state(AgentState::Active)
+            .build()
+            .ok();
+            
         Self {
             agent_id: create_resource_id(&id_str),
+            committee_agent,
         }
     }
 }
@@ -117,7 +152,6 @@ impl SimulatedAgent for MockCommitteeAgent {
         Ok(())
     }
 }
-// --- End standalone mock agent implementations ---
 
 // --- Engine-integrated mock agents ---
 #[cfg(feature = "engine")]

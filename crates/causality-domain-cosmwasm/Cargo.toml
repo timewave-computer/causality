@@ -1,0 +1,24 @@
+[package]
+name = "causality-domain-cosmwasm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+homepage = "https://github.com/timewave-computer/causality"
+repository = "https://github.com/timewave-computer/causality"
+description = "Causality Domain Adapter and TEG Generator for CosmWasm"
+
+[dependencies]
+# External dependencies
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+
+# Internal dependencies
+causality-types = { workspace = true }
+causality-core = { workspace = true }
+causality-domain = { workspace = true }
+causality-ir = { workspace = true }

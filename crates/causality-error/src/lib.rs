@@ -14,7 +14,7 @@ pub use thiserror;
 mod traits;
 mod conversion;
 mod macros;
-mod common;
+pub mod common;
 
 // Include sub-modules
 mod domain;

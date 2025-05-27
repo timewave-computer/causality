@@ -1,0 +1,37 @@
+[package]
+name = "causality-zkvm"
+version = "0.1.0"
+edition = "2021"
+description = "ZK Virtual Machine compiler for Causality TEGs"
+authors = ["Timewave Labs <info@timewavewave.xyz>"]
+repository = "https://github.com/timewave-lab/causality"
+license = "MIT"
+
+[dependencies]
+# Core dependencies
+causality-ir = { path = "../causality-ir" }
+causality-types = { path = "../causality-types" }
+causality-error = { path = "../causality-error" }
+causality-crypto = { path = "../causality-crypto" }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1.37"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Async utilities
+async-trait = "0.1.68"
+tokio = { version = "1.28", features = ["full"] }
+
+# Utility libraries
+indexmap = "2.0"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.7" 

@@ -9,6 +9,7 @@ use std::ops::{Add, Sub};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::duration::TimeDelta;
+use super::error::TimeError;
 
 /// Get the current timestamp
 pub fn now() -> Timestamp {
@@ -118,6 +119,35 @@ impl Timestamp {
     /// Create a time range from this timestamp to another
     pub fn range_to(&self, end: Timestamp) -> TimeRange {
         TimeRange::new(*self, end)
+    }
+    
+    /// Add a number of milliseconds to this timestamp
+    pub fn add_millis(&self, millis: u64) -> Self {
+        Self {
+            nanos: self.nanos.checked_add(millis * 1_000_000).unwrap_or(u64::MAX),
+        }
+    }
+    
+    /// Increment this timestamp by 1 nanosecond
+    pub fn next(&self) -> Result<Self, TimeError> {
+        if self.nanos == u64::MAX {
+            Err(TimeError::OutOfBounds("Cannot increment maximum timestamp".into()))
+        } else {
+            Ok(Self { nanos: self.nanos + 1 })
+        }
+    }
+    
+    /// Add a standard duration to this timestamp
+    pub fn add_std_duration(&self, duration: std::time::Duration) -> Result<Self, TimeError> {
+        let duration_nanos = duration.as_nanos();
+        if duration_nanos > u64::MAX as u128 {
+            return Err(TimeError::OutOfBounds("Duration too large to add to timestamp".into()));
+        }
+        
+        let new_nanos = self.nanos.checked_add(duration_nanos as u64)
+            .ok_or_else(|| TimeError::OutOfBounds("Timestamp overflow when adding duration".into()))?;
+            
+        Ok(Self { nanos: new_nanos })
     }
 }
 

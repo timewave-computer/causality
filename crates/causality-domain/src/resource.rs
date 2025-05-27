@@ -17,59 +17,14 @@ use crate::selection::{DomainSelectionStrategy, SelectionCriteria, DomainId};
 use crate::{BlockHeight, Timestamp, DomainAdapter, Transaction, DomainInfo};
 use crate::adapter::FactQuery;
 use crate::fact::types::FactType;
-
-// Implement the trait to make domain adapters compatible with selection system
-struct DomainAdapterWrapper {
-    inner: Arc<dyn DomainAdapter>
-}
-
-impl std::fmt::Debug for DomainAdapterWrapper {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DomainAdapterWrapper")
-            .field("domain_id", &self.inner.domain_id())
-            .finish()
-    }
-}
-
-impl crate::selection::DomainAdapter for DomainAdapterWrapper {
-    fn domain_id(&self) -> &DomainId {
-        self.inner.domain_id()
-    }
-    
-    fn info(&self) -> crate::selection::DomainInfo {
-        // Create a selection-compatible DomainInfo
-        crate::selection::DomainInfo {
-            domain_id: self.inner.domain_id().clone(),
-            domain_type: self.inner.domain_type().to_string(),
-            capabilities: self.inner.capabilities(),
-            avg_latency: 0, // Default values, could be retrieved from adapter
-            cost: 0,
-            reliability: 1.0,
-        }
-    }
-}
+use causality_types::crypto_primitives::ContentHash;
 
 /// Content ID for resources
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct ContentId(pub String);
+/// Re-export from causality-types for compatibility
+pub use causality_types::ContentId;
 
-impl ContentId {
-    /// Create a new content ID
-    pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
-    }
-    
-    /// Convert to string
-    pub fn to_string(&self) -> String {
-        self.0.clone()
-    }
-}
-
-impl std::fmt::Display for ContentId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+// Note: The canonical ContentId implementation in causality-types
+// already provides methods like new(), to_string(), etc.
 
 /// Status of a resource lock operation
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -857,6 +812,37 @@ pub struct RegisterTransferResult {
     pub block_height: Option<BlockHeight>,
     /// Timestamp when stored
     pub timestamp: Option<Timestamp>,
+}
+
+// Implement the trait to make domain adapters compatible with selection system
+struct DomainAdapterWrapper {
+    inner: Arc<dyn DomainAdapter>
+}
+
+impl std::fmt::Debug for DomainAdapterWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DomainAdapterWrapper")
+            .field("domain_id", &self.inner.domain_id())
+            .finish()
+    }
+}
+
+impl crate::selection::DomainAdapter for DomainAdapterWrapper {
+    fn domain_id(&self) -> &DomainId {
+        self.inner.domain_id()
+    }
+    
+    fn info(&self) -> crate::selection::DomainInfo {
+        // Create a selection-compatible DomainInfo
+        crate::selection::DomainInfo {
+            domain_id: self.inner.domain_id().clone(),
+            domain_type: self.inner.domain_type().to_string(),
+            capabilities: self.inner.capabilities(),
+            avg_latency: 0, // Default values, could be retrieved from adapter
+            cost: 0,
+            reliability: 1.0,
+        }
+    }
 }
 
 #[cfg(test)]

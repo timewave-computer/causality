@@ -11,7 +11,6 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use borsh::{self, BorshSerialize, BorshDeserialize};
-use rand;
 use chrono::{DateTime, TimeZone, Utc};
 
 // Export crypto_primitives module
@@ -30,6 +29,8 @@ pub mod time_effect_system;
 pub mod content;
 // Export error module
 pub mod error;
+// Export test_content_hash module
+pub mod test_content_hash;
 
 // Export core types from crypto_primitives module
 pub use crypto_primitives::{
@@ -43,6 +44,8 @@ pub use crypto_primitives::{ContentId, ContentHash, HashOutput};
 pub use content::{ContentAddressingError}; 
 // Re-export Error type
 pub use error::Error;
+// Re-export test_content_hash
+pub use test_content_hash::test_content_hash;
 
 // Export utility functions
 pub use utils::{

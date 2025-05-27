@@ -1,0 +1,56 @@
+[package]
+name = "causality-indexer-bridge"
+version = "0.1.0"
+edition = "2021"
+authors = ["Causality Contributors"]
+description = "Bridge adapter between Almanac indexer and Causality's IndexerAdapter interface"
+readme = "README.md"
+
+[dependencies]
+# Internal crates
+causality-indexer-adapter = { path = "../causality-indexer-adapter" }
+causality-types = { path = "../causality-types" }
+causality-error = { path = "../causality-error" }
+
+# Almanac crates
+indexer-core = { path = "../../almanac/crates/core" }
+indexer-storage = { path = "../../almanac/crates/storage" }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+base64 = "0.13"
+
+# Async traits and runtime
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt", "macros", "time"] }
+futures-util = "0.3"
+
+# Logging
+tracing = "0.1"
+
+# Error handling
+thiserror = "1.0"
+
+# Time conversion
+chrono = "0.4"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+tokio-test = "0.4"
+tracing-subscriber = "0.3"
+
+# Features for enabling specific chain support
+# These can be used to selectively enable support for different chains
+[features]
+default = ["ethereum", "cosmos"]
+ethereum = [] # Support for Ethereum chains
+cosmos = [] # Support for Cosmos chains
+
+[[example]]
+name = "simple_query"
+path = "examples/simple_query.rs"
+
+[[example]]
+name = "subscription"
+path = "examples/subscription.rs"

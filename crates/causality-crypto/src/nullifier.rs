@@ -1,370 +1,319 @@
-// Nullifier generation and validation
+// Nullifier implementation for privacy-preserving operations
 // Original file: src/crypto/nullifier.rs
 
-// Content-addressed Nullifier Tracking System
+// Nullifier implementation for privacy-preserving operations
 //
-// This module implements a nullifier tracking system for content-addressed objects,
-// allowing for one-time use verification of objects.
+// Nullifiers are cryptographic constructs used to prevent double-spending
+// in privacy-preserving systems. This module provides functionality for
+// creating and verifying nullifiers.
 
-use std::collections::HashMap;
 use std::fmt;
-use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
+use std::sync::RwLock;
 use thiserror::Error;
 
-use causality_crypto::{ContentAddressed, ContentId, HashOutput, HashError, HashAlgorithm};
-use causality_crypto::{MerkleSmt, SmtKeyValue, SmtError, H256};
-use sparse_merkle_tree::default_store::DefaultStore;
-use sparse_merkle_tree::traits::{StoreReadOps, StoreWriteOps};
+use causality_types::crypto_primitives::HashError;
+use causality_types::ContentId;
 
-/// Errors related to nullifier operations
+// Import from our crate
+use crate::hash::{HashFunction, Blake3HashFunction};
+
+/// Error type for nullifier operations
 #[derive(Debug, Error)]
 pub enum NullifierError {
-    /// Nullifier already exists
-    #[error("Nullifier already exists: {0}")]
-    AlreadyExists(String),
+    /// Invalid nullifier
+    #[error("Invalid nullifier: {0}")]
+    InvalidNullifier(String),
     
-    /// Nullifier not found
-    #[error("Nullifier not found: {0}")]
-    NotFound(String),
+    /// Invalid data
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
     
-    /// Invalid nullifier format
-    #[error("Invalid nullifier format: {0}")]
-    InvalidFormat(String),
+    /// Storage error
+    #[error("Storage error: {0}")]
+    StorageError(Box<dyn std::error::Error + Send + Sync>),
     
-    /// SMT error
-    #[error("SMT error: {0}")]
-    SmtError(#[from] SmtError),
+    /// Nullifier already spent
+    #[error("Nullifier already spent")]
+    AlreadySpent,
     
     /// Hash error
     #[error("Hash error: {0}")]
     HashError(#[from] HashError),
     
-    /// General error
-    #[error("Nullifier error: {0}")]
-    GeneralError(String),
+    /// Other error
+    #[error("Other error: {0}")]
+    Other(String),
 }
 
-/// Represents a nullifier for a content-addressed object
+/// A cryptographic nullifier used to prevent double-spending
+///
+/// Nullifiers are deterministic values derived from secret data that
+/// can be publicly disclosed to prevent double-spending while maintaining
+/// privacy about the source of the nullifier.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Nullifier {
-    /// The nullifier value
-    pub value: [u8; 32],
-    /// The content ID this nullifier is for
-    pub content_id: ContentId,
-    /// Metadata associated with this nullifier
-    pub metadata: HashMap<String, String>,
+    /// The raw nullifier data
+    data: Vec<u8>,
 }
 
 impl Nullifier {
-    /// Create a new nullifier for a content-addressed object
-    pub fn new<T: ContentAddressed>(object: &T) -> Result<Self, NullifierError> {
-        let content_id = object.content_id();
-        let content_hash = object.content_hash();
-        
-        // Create a nullifier by hashing the content hash with a different algorithm
-        // or by using a different domain separator
-        let nullifier_value = Self::generate_nullifier_value(&content_hash)?;
-        
-        Ok(Self {
-            value: nullifier_value,
-            content_id,
-            metadata: HashMap::new(),
-        })
+    /// Create a new nullifier from raw data
+    pub fn new(data: Vec<u8>) -> Self {
+        Self { data }
     }
     
-    /// Generate a nullifier value from a content hash
-    fn generate_nullifier_value(content_hash: &HashOutput) -> Result<[u8; 32], NullifierError> {
-        // Add a domain separator to ensure nullifiers are different from regular hashes
-        let mut data = Vec::with_capacity(content_hash.as_bytes().len() + 8);
-        data.extend_from_slice(b"nullifr:"); // Domain separator
-        data.extend_from_slice(content_hash.as_bytes());
+    /// Create a nullifier from a secret and some public data
+    pub fn from_secret(secret: &[u8], public_data: &[u8]) -> Result<Self, NullifierError> {
+        // Combine secret and public data with a separator
+        let mut combined = Vec::new();
+        combined.extend_from_slice(secret);
+        combined.push(0); // Separator
+        combined.extend_from_slice(public_data);
         
-        // Hash the data to get the nullifier value
-        let hash_output = content_hash.algorithm()
-            .create_hasher()
-            .map_err(|e| NullifierError::HashError(e))?
-            .hash(&data);
-
-        // Convert to 32-byte array
-        let mut value = [0u8; 32];
-        let bytes = hash_output.as_bytes();
-        value.copy_from_slice(&bytes[0..32]);
+        // Hash the combined data to get the nullifier
+        let hasher = Blake3HashFunction::new();
+        let hash = hasher.hash(&combined);
         
-        Ok(value)
+        Ok(Self::new(hash.as_bytes().to_vec()))
     }
     
-    /// Convert the nullifier to an SMT key
-    pub fn to_smt_key(&self) -> H256 {
-        H256::from(self.value)
+    /// Get the raw nullifier data
+    pub fn data(&self) -> &[u8] {
+        &self.data
     }
     
-    /// Add metadata to the nullifier
-    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.metadata.insert(key.into(), value.into());
-        self
+    /// Convert the nullifier to raw bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.data.clone()
     }
     
-    /// Get metadata value
-    pub fn get_metadata(&self, key: &str) -> Option<&String> {
-        self.metadata.get(key)
+    /// Convert the nullifier to a hex string
+    pub fn to_hex(&self) -> String {
+        hex::encode(&self.data)
+    }
+    
+    /// Create a nullifier from a hex string
+    pub fn from_hex(hex: &str) -> Result<Self, NullifierError> {
+        match hex::decode(hex) {
+            Ok(data) => Ok(Self::new(data)),
+            Err(_) => Err(NullifierError::InvalidNullifier("Invalid hex format".to_string())),
+        }
+    }
+    
+    /// Create a nullifier from a content hash
+    pub fn from_content_hash(content_hash: &ContentId) -> Result<Self, NullifierError> {
+        Ok(Self::new(content_hash.as_bytes().to_vec()))
     }
 }
 
 impl fmt::Display for Nullifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{}", hex::encode(&self.value))
+        write!(f, "{}", self.to_hex())
     }
 }
 
-impl AsRef<[u8]> for Nullifier {
-    fn as_ref(&self) -> &[u8] {
-        &self.value
+/// A commitment to a nullifier and associated data
+///
+/// This struct represents a commitment to a nullifier and potentially
+/// other associated data. It can be used to prove knowledge of a
+/// nullifier without revealing it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NullifierCommitment {
+    /// The commitment data
+    data: Vec<u8>,
+}
+
+impl NullifierCommitment {
+    /// Create a new nullifier commitment from raw data
+    pub fn new(data: Vec<u8>) -> Self {
+        Self { data }
     }
-}
-
-/// Status of a nullifier
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NullifierStatus {
-    /// The nullifier is not in the registry
-    NotFound,
     
-    /// The nullifier is in the registry but not spent
-    Registered,
+    /// Create a commitment to a nullifier
+    pub fn commit(nullifier: &Nullifier) -> Self {
+        let hasher = Blake3HashFunction::new();
+        let hash = hasher.hash(nullifier.data());
+        Self::new(hash.as_bytes().to_vec())
+    }
     
-    /// The nullifier has been spent
-    Spent,
-}
-
-impl fmt::Display for NullifierStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NotFound => write!(f, "NotFound"),
-            Self::Registered => write!(f, "Registered"),
-            Self::Spent => write!(f, "Spent"),
+    /// Get the commitment data
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+    
+    /// Verify that a nullifier matches this commitment
+    pub fn verify(&self, nullifier: &Nullifier) -> bool {
+        let expected = Self::commit(nullifier);
+        self.data == expected.data
+    }
+    
+    /// Convert the commitment to raw bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.data.clone()
+    }
+    
+    /// Convert the commitment to a hex string
+    pub fn to_hex(&self) -> String {
+        hex::encode(&self.data)
+    }
+    
+    /// Create a commitment from a hex string
+    pub fn from_hex(hex: &str) -> Result<Self, NullifierError> {
+        match hex::decode(hex) {
+            Ok(data) => Ok(Self::new(data)),
+            Err(_) => Err(NullifierError::InvalidNullifier("Invalid hex format".to_string())),
         }
     }
 }
 
-/// Trait for nullifier tracking systems
-pub trait NullifierTracking {
-    /// The nullifier type
-    type Nullifier: AsRef<[u8]>;
-    
-    /// Generate a nullifier for a content hash
-    fn generate_nullifier(&self, hash: &HashOutput) -> Result<Self::Nullifier, NullifierError>;
-    
-    /// Register a nullifier
-    fn register_nullifier(&self, nullifier: &Self::Nullifier) -> Result<(), NullifierError>;
-    
-    /// Check if a nullifier has been spent
-    fn is_spent(&self, nullifier: &Self::Nullifier) -> bool;
-    
-    /// Mark a nullifier as spent
-    fn mark_spent(&self, nullifier: &Self::Nullifier) -> Result<(), NullifierError>;
-    
-    /// Get the status of a nullifier
-    fn get_status(&self, nullifier: &Self::Nullifier) -> NullifierStatus;
+/// A registry for tracking spent nullifiers
+///
+/// This struct provides an API for registering and checking nullifiers,
+/// which are typically used to prevent double-spending in privacy-preserving
+/// protocols.
+pub struct NullifierRegistry {
+    /// Map of spent nullifiers
+    spent: RwLock<HashMap<String, bool>>,
 }
 
-/// An SMT-based nullifier registry
-pub struct SmtNullifierRegistry<S: StoreReadOps<SmtKeyValue> + StoreWriteOps<SmtKeyValue>> {
-    /// The merkle tree for storing nullifiers
-    tree: RwLock<MerkleSmt<S>>,
-    /// Mapping of nullifier status
-    status: RwLock<HashMap<[u8; 32], NullifierStatus>>,
-}
-
-impl<S: StoreReadOps<SmtKeyValue> + StoreWriteOps<SmtKeyValue>> SmtNullifierRegistry<S> {
-    /// Create a new SMT-based nullifier registry
-    pub fn new(store: S) -> Self {
+impl NullifierRegistry {
+    /// Create a new nullifier registry
+    pub fn new() -> Self {
         Self {
-            tree: RwLock::new(MerkleSmt::new(store)),
-            status: RwLock::new(HashMap::new()),
+            spent: RwLock::new(HashMap::new()),
         }
     }
     
-    /// Get the current Merkle root
-    pub fn root(&self) -> Result<H256, NullifierError> {
-        let tree = self.tree.read().map_err(|_| 
-            NullifierError::GeneralError("Failed to acquire read lock on tree".to_string()))?;
+    /// Register a nullifier as spent
+    pub fn register(&self, nullifier: &Nullifier) -> Result<(), NullifierError> {
+        let mut spent = self.spent.write().unwrap();
+        let key = nullifier.to_hex();
         
-        tree.root().map_err(|e| e.into())
-    }
-}
-
-impl<S: StoreReadOps<SmtKeyValue> + StoreWriteOps<SmtKeyValue>> NullifierTracking 
-    for SmtNullifierRegistry<S> 
-{
-    type Nullifier = Nullifier;
-    
-    fn generate_nullifier(&self, hash: &HashOutput) -> Result<Self::Nullifier, NullifierError> {
-        let nullifier_value = Nullifier::generate_nullifier_value(hash)?;
-        
-        Ok(Nullifier {
-            value: nullifier_value,
-            content_id: ContentId::from(hash.clone()),
-            metadata: HashMap::new(),
-        })
-    }
-    
-    fn register_nullifier(&self, nullifier: &Self::Nullifier) -> Result<(), NullifierError> {
-        let mut status_map = self.status.write().map_err(|_| 
-            NullifierError::GeneralError("Failed to acquire write lock on status".to_string()))?;
-        
-        if status_map.contains_key(&nullifier.value) {
-            return Err(NullifierError::AlreadyExists(
-                format!("Nullifier already exists: {}", nullifier)
-            ));
+        if spent.contains_key(&key) {
+            return Err(NullifierError::AlreadySpent);
         }
         
-        // Add to the status map
-        status_map.insert(nullifier.value, NullifierStatus::Registered);
-        
+        spent.insert(key, true);
         Ok(())
     }
     
-    fn is_spent(&self, nullifier: &Self::Nullifier) -> bool {
-        let status_map = self.status.read()
-            .expect("Failed to acquire read lock on status");
+    /// Check if a nullifier has been spent
+    pub fn is_spent(&self, nullifier: &Nullifier) -> Result<bool, NullifierError> {
+        let spent = self.spent.read().unwrap();
+        let key = nullifier.to_hex();
         
-        matches!(status_map.get(&nullifier.value), Some(NullifierStatus::Spent))
+        Ok(spent.contains_key(&key))
     }
     
-    fn mark_spent(&self, nullifier: &Self::Nullifier) -> Result<(), NullifierError> {
-        let mut status_map = self.status.write().map_err(|_| 
-            NullifierError::GeneralError("Failed to acquire write lock on status".to_string()))?;
-        
-        let status = status_map.get(&nullifier.value).copied()
-            .unwrap_or(NullifierStatus::NotFound);
-        
-        match status {
-            NullifierStatus::NotFound => {
-                return Err(NullifierError::NotFound(
-                    format!("Nullifier not found: {}", nullifier)
-                ));
-            },
-            NullifierStatus::Spent => {
-                return Err(NullifierError::AlreadyExists(
-                    format!("Nullifier already spent: {}", nullifier)
-                ));
-            },
-            NullifierStatus::Registered => {
-                // Update status to spent
-                status_map.insert(nullifier.value, NullifierStatus::Spent);
-                
-                // Update the Merkle tree
-                let mut tree = self.tree.write().map_err(|_| 
-                    NullifierError::GeneralError("Failed to acquire write lock on tree".to_string()))?;
-                
-                let key = nullifier.to_smt_key();
-                let value = SmtKeyValue::from_bytes(&[1u8; 32])
-                    .map_err(|e| NullifierError::SmtError(e))?;
-                
-                tree.update(key, value).map_err(|e| NullifierError::SmtError(e))?;
-                
-                Ok(())
-            },
-        }
-    }
-    
-    fn get_status(&self, nullifier: &Self::Nullifier) -> NullifierStatus {
-        let status_map = self.status.read()
-            .expect("Failed to acquire read lock on status");
-        
-        *status_map.get(&nullifier.value).unwrap_or(&NullifierStatus::NotFound)
+    /// Clear all spent nullifiers
+    pub fn clear(&self) -> Result<(), NullifierError> {
+        let mut spent = self.spent.write().unwrap();
+        spent.clear();
+        Ok(())
     }
 }
 
-/// A factory for creating nullifier tracking implementations
-pub struct NullifierFactory;
+/// Factory for creating nullifier-related components
+pub struct NullifierFactory {
+    hash_function: Blake3HashFunction,
+}
 
 impl NullifierFactory {
-    /// Create a new SMT-based nullifier registry with default storage
-    pub fn create_smt_registry() -> Arc<dyn NullifierTracking<Nullifier = Nullifier> + Send + Sync> {
-        let store = DefaultStore::default();
-        let registry = SmtNullifierRegistry::new(store);
-        Arc::new(registry)
+    /// Create a new nullifier factory
+    pub fn new() -> Self {
+        Self {
+            hash_function: Blake3HashFunction::new(),
+        }
+    }
+    
+    /// Create a nullifier from a secret and public data
+    pub fn create_nullifier(&self, secret: &[u8], public_data: &[u8]) -> Result<Nullifier, NullifierError> {
+        Nullifier::from_secret(secret, public_data)
+    }
+    
+    /// Create a nullifier registry
+    pub fn create_registry(&self) -> NullifierRegistry {
+        NullifierRegistry::new()
+    }
+}
+
+impl Default for NullifierFactory {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_crypto::{HashFactory, HashAlgorithm};
-    use crate::crypto::ContentAddressed;
-    use borsh::{BorshSerialize, BorshDeserialize};
-    
-    #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-    struct TestObject {
-        id: u64,
-        name: String,
-    }
-    
-    impl ContentAddressed for TestObject {
-        fn content_hash(&self) -> Result<HashOutput, HashError> {
-            let hasher = HashFactory::default().create_hasher().unwrap();
-            let data = self.try_to_vec().map_err(|e| HashError::SerializationError(e.to_string()))?;
-            Ok(hasher.hash(&data))
-        }
-        
-        fn verify(&self, expected_hash: &HashOutput) -> Result<bool, HashError> {
-            let actual_hash = self.content_hash()?;
-            Ok(actual_hash == *expected_hash)
-        }
-        
-        fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
-            self.try_to_vec().map_err(|e| HashError::SerializationError(e.to_string()))
-        }
-        
-        fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> {
-            BorshDeserialize::try_from_slice(bytes)
-                .map_err(|e| HashError::SerializationError(e.to_string()))
-        }
-    }
     
     #[test]
     fn test_nullifier_creation() {
-        let obj = TestObject {
-            id: 1,
-            name: "Test".to_string(),
-        };
+        let secret = b"my_secret";
+        let public_data = b"public_data";
         
-        let nullifier = Nullifier::new(&obj).unwrap();
+        let nullifier = Nullifier::from_secret(secret, public_data).unwrap();
+        assert!(!nullifier.data().is_empty());
         
-        assert_eq!(nullifier.content_id, obj.content_id().unwrap());
-        assert!(!nullifier.value.iter().all(|&b| b == 0));
+        let hex = nullifier.to_hex();
+        let from_hex = Nullifier::from_hex(&hex).unwrap();
+        assert_eq!(nullifier, from_hex);
+    }
+    
+    #[test]
+    fn test_nullifier_commitment() {
+        let secret = b"my_secret";
+        let public_data = b"public_data";
+        
+        let nullifier = Nullifier::from_secret(secret, public_data).unwrap();
+        let commitment = NullifierCommitment::commit(&nullifier);
+        
+        assert!(commitment.verify(&nullifier));
+        
+        // Modify the nullifier - verification should fail
+        let modified = Nullifier::new(vec![0, 1, 2, 3]);
+        assert!(!commitment.verify(&modified));
     }
     
     #[test]
     fn test_nullifier_registry() {
-        let registry = NullifierFactory::create_smt_registry();
+        let registry = NullifierRegistry::new();
         
-        let obj = TestObject {
-            id: 2,
-            name: "Test Object".to_string(),
-        };
+        let nullifier1 = Nullifier::from_secret(b"secret1", b"public1").unwrap();
+        let nullifier2 = Nullifier::from_secret(b"secret2", b"public2").unwrap();
         
-        let hash = obj.content_hash().unwrap();
-        let nullifier = registry.generate_nullifier(&hash).unwrap();
+        // Initially, both nullifiers should be unspent
+        assert!(!registry.is_spent(&nullifier1).unwrap());
+        assert!(!registry.is_spent(&nullifier2).unwrap());
         
-        // Initially not in registry
-        assert_eq!(registry.get_status(&nullifier), NullifierStatus::NotFound);
-        assert!(!registry.is_spent(&nullifier));
+        // Register nullifier1
+        registry.register(&nullifier1).unwrap();
         
-        // Register the nullifier
-        registry.register_nullifier(&nullifier).unwrap();
-        assert_eq!(registry.get_status(&nullifier), NullifierStatus::Registered);
-        assert!(!registry.is_spent(&nullifier));
+        // Now, nullifier1 should be spent, but nullifier2
+        assert!(registry.is_spent(&nullifier1).unwrap());
+        assert!(!registry.is_spent(&nullifier2).unwrap());
         
-        // Mark as spent
-        registry.mark_spent(&nullifier).unwrap();
-        assert_eq!(registry.get_status(&nullifier), NullifierStatus::Spent);
-        assert!(registry.is_spent(&nullifier));
+        // Try to register nullifier1 again
+        let result = registry.register(&nullifier1);
+        assert!(result.is_err());
         
-        // Try to register again (should fail)
-        assert!(registry.register_nullifier(&nullifier).is_err());
+        // Clear the registry
+        registry.clear().unwrap();
         
-        // Try to mark as spent again (should fail)
-        assert!(registry.mark_spent(&nullifier).is_err());
+        // Both nullifiers should be unspent again
+        assert!(!registry.is_spent(&nullifier1).unwrap());
+        assert!(!registry.is_spent(&nullifier2).unwrap());
+    }
+    
+    #[test]
+    fn test_nullifier_factory() {
+        let factory = NullifierFactory::new();
+        
+        let nullifier = factory.create_nullifier(b"secret", b"public").unwrap();
+        assert!(!nullifier.data().is_empty());
+        
+        let registry = factory.create_registry();
+        assert!(!registry.is_spent(&nullifier).unwrap());
     }
 } 

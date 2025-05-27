@@ -1,105 +1,65 @@
-# Temporal Effect Graph Implementation Status
+# TEG Implementation Status
 
-This document summarizes the current implementation status of the Temporal Effect Graph (TEG) intermediate representation as defined in the implementation plan (`work/014.md`).
+This document summarizes the current implementation status of the Temporal Effect Graph (TEG).
 
 ## Completed Components
 
 ### Phase 1: Core TEG Structure
+- ✅ TemporalEffectGraph data structure
+- ✅ EffectNode and ResourceNode implementations
+- ✅ Relationship modeling between nodes
+- ✅ Basic traversal algorithms
+- ✅ TEL to TEG translation
 
-- ✅ `causality-ir` crate has been created
-- ✅ Core data structures are implemented (`EffectNode`, `ResourceNode`, `TEGFragment`, etc.)
-- ✅ Graph edge relationships are established
-- ✅ Content addressing is implemented
-- ✅ Serialization support is in place
-- ✅ Builder API for graph construction
+### Phase 2: TEG Execution
+- ✅ TEG execution engine
+- ✅ Integration with causality-core effect system
+- ✅ Resource tracking and management
+- ✅ Dependency resolution
+- ✅ Output collection from exit nodes
+- ✅ Execution tracing and metrics collection
+- ✅ Integration tests for TEG execution
+- ✅ Migration guide for users of removed/deprecated APIs
 
-### Phase 2: TEL → TEG Translator (Functor F)
+### Phase 3: Visualization and Tools
+- ✅ Topological sorting of the graph
+- ✅ Debug printing functionality
+- ✅ Mermaid graph generation
+- ✅ Graph validation utilities
 
-- ✅ `TEGFragment` struct with composition methods
-- ✅ `ToTEGFragment` trait implementation (functor F)
-- ✅ Translators for TEL combinators (I, K, S, B, C, Application, Literal, Reference)
-- ✅ Translators for effect combinators (Effect, StateTransition, ContentAddressing)
-- ✅ Translators for resource combinators (Resource, Query)
-- ✅ Functorial properties implemented (identity preservation, composition preservation)
-- ✅ Preservation of monoidal structure
+## Deprecated Components
 
-### Phase 2: Integration with causality-tel
+The following components have been deprecated in favor of the TEG execution model:
 
-- ✅ Add dependency on `causality-ir` in causality-tel
-- ✅ Implement `program_to_teg` function in compiler.rs
-- ✅ Add `to_metadata` method to `EffectDef` for TEG metadata integration
-- ✅ Implement `incorporate_fragment` and `add_effect_metadata` in TemporalEffectGraph
+- ⛔️ `TelEffectExecutor` (direct execution of TEL effects)
+- ⛔️ `TelProgramExecutor` (direct execution of TEL programs)
+- ⛔️ Legacy resource handling (replaced by TEG resource nodes)
 
-### Phase 3: Update Engine to Consume TEG
+## Ongoing Work
 
-- ✅ Update `causality-engine` to depend on `causality-ir`
-- ✅ Implement TEG executor in engine
-- ✅ Create `TegExecutor` class with execution logic
-- ❌ Update resource management for TEG
-- ❌ Integrate with existing engine components
-- ❌ Create comprehensive execution API
+- 🔄 Complete TEG-based execution approach tests
+- 🔄 Documentation updates
+- 🔄 API stability and refinement
+- 🔄 Performance optimization
 
-### Phase 6: TEG → TEL Translator (Functor G)
+## Future Work
 
-- ✅ `ToTELCombinator` trait
-- ✅ Implementation for various node types (effect nodes, resource nodes)
-- ✅ Full graph translation capability
-- ✅ Functorial property verification
-
-## Incomplete Components
-
-### Phase 3: Remaining Engine Integration
-
-- ❌ Adapt effect handling to work with TEG instead of directly executing combinators
-- ❌ Update resource management for TEG
-- ❌ Integrate with existing engine components
-- ❌ Create comprehensive execution API
-
-### Phase 4: Optimization Passes
-
-- ✅ Basic optimization framework
-- ✅ Some optimizations implemented (Dead effect elimination, Effect inlining, Constant folding)
-- ❌ Resource-specific optimizations
-- ❌ Cross-domain optimizations
-- ✅ Validation passes
-
-### Phase 5: Multi-target Code Generation
-
-- ❌ Code generation framework
-- ❌ Target implementations (Ethereum VM, CosmWasm, Native Rust)
-- ❌ Testing framework for code generation
-
-### Phase 7: TEG Graph API for External Consumption
-
-- ❌ Comprehensive graph API
-- ❌ Serialization formats for external systems
-- ❌ Graph data structure for external consumption
-- ❌ Graph query capabilities
-- ❌ Programmatic graph manipulation
-
-### Phase 8: Cleanup and Code Removal
-
-- ❌ Remove deprecated TEL execution code
-- ❌ Update executor API
-- ❌ Clean up old tests
-- ❌ Documentation updates
+- ⬜️ TEG optimization passes
+- ⬜️ Advanced dependency analysis
+- ⬜️ Parallelization and distribution
+- ⬜️ Graph compression and space optimization
+- ⬜️ Resource caching strategies
+- ⬜️ Formal verification of graph properties
+- ⬜️ Visual graph editor
 
 ## Next Steps
 
-Based on the implementation plan and current status, the following tasks should be prioritized:
+1. Complete end-to-end tests for TEG execution
+2. Finalize deprecation of legacy components
+3. Implement basic optimization passes
+4. Enhance documentation with examples and best practices
 
-1. **Complete Engine Integration**:
-   - Complete effect handling integration with TEG
-   - Update resource management to work with TEG resource nodes
-   - Integrate with existing engine components
+## References
 
-2. **Create End-to-End Tests**:
-   - Create tests for the TEL → TEG → Execution pipeline
-   - Ensure proper error handling
-   - Validate execution results
-
-3. **Complete Optimization Passes**:
-   - Implement resource-specific optimizations
-   - Implement cross-domain optimizations
-
-These tasks will enable the end-to-end use of TEG as the intermediate representation between TEL and the execution engine, realizing the category theoretic adjunction described in the architecture documents. 
+- [TEG Migration Guide](./guides/teg_migration_guide.md)
+- [TEG Implementation Summary](./teg_implementation_summary.md) 

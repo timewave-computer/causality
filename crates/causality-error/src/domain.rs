@@ -10,13 +10,10 @@ pub mod codes {
     use crate::ErrorCode;
     
     // Domain error codes start with 7000
+    pub const ERROR_DOMAIN_DOMAIN: ErrorCode = ErrorCode(7);
+
     pub const ADAPTER_ERROR: ErrorCode = ErrorCode(7001);
-    pub const CONTRACT_ERROR: ErrorCode = ErrorCode(7002);
-    pub const TRANSACTION_ERROR: ErrorCode = ErrorCode(7003);
-    pub const CHAIN_ERROR: ErrorCode = ErrorCode(7004);
-    pub const PROTOCOL_ERROR: ErrorCode = ErrorCode(7005);
     pub const VERIFICATION_ERROR: ErrorCode = ErrorCode(7006);
-    pub const BRIDGE_ERROR: ErrorCode = ErrorCode(7007);
 }
 
 /// Domain-specific error types
@@ -100,4 +97,7 @@ impl DomainError {
     pub fn chain_error(message: impl Into<String>) -> Self {
         DomainError::ChainError(message.into())
     }
+}
+
+pub mod prelude {
 } 

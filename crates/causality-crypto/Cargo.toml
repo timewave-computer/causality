@@ -15,8 +15,8 @@ sha2 = { workspace = true }
 borsh = { workspace = true }
 hex = { workspace = true }
 rand = { workspace = true }
+serde_json = { workspace = true }
 blake3 = "1.5"
-sparse-merkle-tree = "0.6"
 chrono = { workspace = true }
 lazy_static = "1.4.0"
 

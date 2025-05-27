@@ -4,18 +4,26 @@
 
 *Last updated: 2023-08-20*
 
+# Causality Agent System Reference
+
+*This document provides reference information for the agent system in Causality.*
+
+*Last updated: 2024-06-25*
+
+> **Note**: The canonical implementation of the agent system is now in the `causality-core` crate under `src/resource/agent/`. The separate agent crates have been consolidated to reduce duplication.
+
 ## Overview
 
-The `causality-agent` crate implements the agent system in Causality, providing the specialized resource types that can initiate operations and interact with the system. Agents are the primary actors in the system, holding capabilities and performing operations on resources.
+The agent system in Causality provides specialized resource types that can initiate operations and interact with the system. Agents are the primary actors in the system, holding capabilities and performing operations on resources.
 
 ## Key Modules
 
-### causality_agent::agent
+### causality_core::resource::agent
 
 Core agent implementation and management.
 
 ```rust
-use causality_agent::agent::{
+use causality_core::resource::agent::{
     Agent,
     AgentManager,
     AgentBuilder,
@@ -31,12 +39,12 @@ use causality_agent::agent::{
 | `AgentBuilder` | Builder for creating new agents |
 | `AgentState` | State of an agent |
 
-### causality_agent::user
+### causality_core::resource::agent::user
 
 User agent implementation.
 
 ```rust
-use causality_agent::user::{
+use causality_core::resource::agent::user::{
     UserAgent,
     UserAgentBuilder,
     UserCredentials,
@@ -51,12 +59,12 @@ use causality_agent::user::{
 | `UserAgentBuilder` | Builder for user agents |
 | `UserCredentials` | Credentials for user authentication |
 
-### causality_agent::committee
+### causality_core::resource::agent::committee
 
 Committee agent implementation.
 
 ```rust
-use causality_agent::committee::{
+use causality_core::resource::agent::committee::{
     CommitteeAgent,
     CommitteePolicy,
     CommitteeMember,
@@ -71,12 +79,12 @@ use causality_agent::committee::{
 | `CommitteePolicy` | Policy for committee decisions |
 | `CommitteeMember` | Member of a committee |
 
-### causality_agent::operator
+### causality_core::resource::agent::operator
 
 Operator agent implementation.
 
 ```rust
-use causality_agent::operator::{
+use causality_core::resource::agent::operator::{
     OperatorAgent,
     OperatorConfig,
     OperatorRole,
@@ -91,12 +99,12 @@ use causality_agent::operator::{
 | `OperatorConfig` | Configuration for an operator |
 | `OperatorRole` | Role of an operator |
 
-### causality_agent::operation
+### causality_core::resource::agent::operation
 
 Operation execution and lifecycle.
 
 ```rust
-use causality_agent::operation::{
+use causality_core::resource::agent::operation::{
     Operation,
     OperationContext,
     OperationBuilder,
@@ -111,12 +119,12 @@ use causality_agent::operation::{
 | `OperationContext` | Context for operation execution |
 | `OperationBuilder` | Builder for creating operations |
 
-### causality_agent::capabilities
+### causality_core::resource::agent::capabilities
 
 Agent capability management.
 
 ```rust
-use causality_agent::capabilities::{
+use causality_core::resource::agent::capabilities::{
     AgentCapability,
     CapabilityManager,
     CapabilityProof,
@@ -232,14 +240,14 @@ agent.add_relationship(
 ## Usage Example
 
 ```rust
-use causality_agent::{
-    agent::{AgentBuilder, AgentManager},
-    operation::{OperationBuilder},
-    user::{UserCredentials},
+use causality_core::resource::agent::{
+    AgentBuilder, AgentManager,
+    operation::OperationBuilder,
+    user::UserCredentials
 };
 use causality_core::{
-    resource::{ResourceManager},
-    effect::{EffectSystem},
+    resource::ResourceManager,
+    effect::EffectSystem
 };
 
 // Create a resource manager
@@ -289,12 +297,12 @@ Agents can be authenticated using various methods:
 ```rust
 // Authenticate a user agent
 let agent = agent_manager.authenticate("alice", 
-    AuthMethod::Password("password123".to_string())
+    causality_core::resource::agent::AuthMethod::Password("password123".to_string())
 )?;
 
 // Authenticate with a token
 let agent = agent_manager.authenticate("alice", 
-    AuthMethod::Token("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
+    causality_core::resource::agent::AuthMethod::Token("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
 )?;
 ```
 

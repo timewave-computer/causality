@@ -14,6 +14,8 @@ effects-integration = []
 effects-provider = ["effects-integration"]
 # Support for CosmWasm zero-knowledge proofs
 cosmwasm_zk = []
+# Support for indexer integration
+indexer = ["causality-indexer-adapter"]
 
 [dependencies]
 # External dependencies
@@ -29,11 +31,18 @@ anyhow = { workspace = true }
 borsh = { workspace = true }
 
 # Internal dependencies
-causality-types = { path = "../causality-types" }
+causality-types = { workspace = true }
 causality-core = { workspace = true }
+causality-ir = { workspace = true }
 causality-error = { workspace = true }
+causality-indexer-adapter = { path = "../causality-indexer-adapter", optional = true }
 
 # DEPRECATED: These dependencies have been consolidated into causality-core
 # All functionality is now available through the core crate
 # causality-resource = { workspace = true }
 # causality-effects = { workspace = true, optional = true }
+
+# Removing dependencies on specific domains/tools, as generation moved
+# causality-domain-ethereum = { workspace = true }
+# causality-domain-cosmwasm = { workspace = true }
+# causality-tools = { workspace = true }

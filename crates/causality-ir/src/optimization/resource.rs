@@ -9,13 +9,12 @@ use std::rc::Rc;
 
 use crate::{
     TemporalEffectGraph, 
-    EffectNode, 
-    ResourceNode,
     EffectId, 
     ResourceId,
     graph::edge::{Condition, TemporalRelation, RelationshipType, AccessMode}
 };
 use super::{Optimization, OptimizationConfig};
+use crate::effect_node::{EffectNode, ParameterValue};
 
 /// Optimizes resource access patterns by reordering operations and removing redundant accesses
 ///
@@ -41,48 +40,33 @@ impl ResourceAccessOptimization {
 
     /// Find all resource accesses in the TEG
     fn find_resource_accesses(&self, teg: &TemporalEffectGraph) -> HashMap<ResourceId, Vec<EffectId>> {
-        let mut result = HashMap::new();
-        
+        let mut result = HashMap::<ResourceId, Vec<EffectId>>::new();
         for (effect_id, effect_node) in teg.effects() {
-            // Skip non-resource operations
-            if !effect_node.is_resource_operation() {
-                continue;
-            }
-            
-            // Get the resource ID from the effect
-            let resource_id = effect_node
-                .resource_edges()
-                .iter()
-                .next()
-                .map(|(resource_id, _)| *resource_id);
-                
-            if let Some(resource_id) = resource_id {
-                result
-                    .entry(resource_id)
-                    .or_insert_with(Vec::new)
-                    .push(effect_id);
+            for resource_id in &effect_node.resources_accessed {
+                result.entry(resource_id.clone())
+                      .or_insert_with(Vec::new)
+                      .push(effect_id.clone());
             }
         }
-        
         result
     }
     
     /// Check if effect1 and effect2 can be reordered
     fn can_reorder(&self, teg: &TemporalEffectGraph, effect1: EffectId, effect2: EffectId) -> bool {
         // If there's a direct or indirect dependency between the effects, they can't be reordered
-        if teg.has_path(effect1, effect2) || teg.has_path(effect2, effect1) {
+        if teg.has_path(&effect1, &effect2) || teg.has_path(&effect2, &effect1) {
             return false;
         }
         
         // Get all resources accessed by both effects
-        let resources1 = teg.get_effect_resources(effect1);
-        let resources2 = teg.get_effect_resources(effect2);
+        let resources1 = teg.get_effect_resources(&effect1);
+        let resources2 = teg.get_effect_resources(&effect2);
         
         // If they don't share resources, they can be reordered
         let mut shared_resources = HashSet::new();
         for r1 in &resources1 {
             if resources2.contains(r1) {
-                shared_resources.insert(*r1);
+                shared_resources.insert(r1.clone());
             }
         }
         
@@ -92,8 +76,8 @@ impl ResourceAccessOptimization {
         
         // Check access modes for shared resources
         for resource_id in shared_resources {
-            let access1 = teg.get_access_mode(effect1, resource_id);
-            let access2 = teg.get_access_mode(effect2, resource_id);
+            let access1 = teg.get_access_mode(&effect1, &resource_id);
+            let access2 = teg.get_access_mode(&effect2, &resource_id);
             
             // If both are read-only, they can be reordered
             if access1 == Some(AccessMode::Read) && access2 == Some(AccessMode::Read) {
@@ -109,7 +93,7 @@ impl ResourceAccessOptimization {
     
     /// Check if a read access is redundant
     fn is_redundant_read(&self, teg: &TemporalEffectGraph, effect_id: EffectId) -> bool {
-        let effect = match teg.get_effect(effect_id) {
+        let effect = match teg.get_effect(&effect_id) {
             Some(e) => e,
             None => return false,
         };
@@ -120,15 +104,18 @@ impl ResourceAccessOptimization {
         }
         
         // Get the resource being read
-        let resource_id = match effect.resource_edges().iter().next() {
-            Some((resource_id, _)) => *resource_id,
+        let resource_id = match effect.resources_accessed.get(0) {
+            Some(id) => id,
             None => return false,
         };
         
         // Get all previous read/write operations on this resource
-        let prev_ops = teg.find_predecessors(effect_id, |e_id| {
-            let e = teg.get_effect(e_id).unwrap();
-            e.is_resource_operation() && teg.get_effect_resources(e_id).contains(&resource_id)
+        let prev_ops = teg.find_predecessors(&effect_id, |e_id| {
+            if let Some(e) = teg.get_effect(e_id) {
+                e.is_resource_operation() && teg.get_effect_resources(e_id).contains(resource_id)
+            } else {
+                false
+            }
         });
         
         // If no previous operations, it's not redundant
@@ -138,7 +125,7 @@ impl ResourceAccessOptimization {
         
         // If the most recent operation was a read with the same parameters,
         // this read is redundant
-        let latest_op = prev_ops[0];
+        let latest_op = &prev_ops[0];
         let latest_effect = teg.get_effect(latest_op).unwrap();
         
         if latest_effect.operation_type() == Some("read") &&
@@ -173,16 +160,16 @@ impl Optimization for ResourceAccessOptimization {
         // Identify redundant reads
         let mut redundant_reads = Vec::new();
         for (_, effect_ids) in &resource_accesses {
-            for &effect_id in effect_ids {
-                if self.is_redundant_read(teg, effect_id) {
-                    redundant_reads.push(effect_id);
+            for effect_id in effect_ids {
+                if self.is_redundant_read(teg, effect_id.clone()) {
+                    redundant_reads.push(effect_id.clone());
                 }
             }
         }
         
         // Remove redundant reads
         for effect_id in redundant_reads {
-            teg.remove_effect(effect_id)?;
+            teg.remove_effect(&effect_id)?;
             changed = true;
         }
         
@@ -244,7 +231,7 @@ impl ResourceOperationBatching {
                 continue;
             }
             
-            let resource = match teg.get_resource(resource_id) {
+            let resource = match teg.get_resource(&resource_id) {
                 Some(r) => r,
                 None => continue,
             };
@@ -253,14 +240,15 @@ impl ResourceOperationBatching {
             let op_types = vec!["read", "write", "create", "delete"];
             
             for op_type in op_types {
+                // Find effects of this operation type that we haven't processed yet
                 let type_ops: Vec<EffectId> = ops.iter()
-                    .filter(|&&op_id| {
-                        !processed.contains(&op_id) && 
+                    .filter(|&op_id| {
+                        !processed.contains(op_id) && 
                         teg.get_effect(op_id)
                            .map(|e| e.operation_type() == Some(op_type))
                            .unwrap_or(false)
                     })
-                    .copied()
+                    .cloned()
                     .collect();
                 
                 if type_ops.len() <= 1 {
@@ -271,19 +259,19 @@ impl ResourceOperationBatching {
                 let mut remaining = type_ops.clone();
                 
                 while !remaining.is_empty() {
-                    let start = remaining[0];
-                    let mut batch = vec![start];
+                    let start = remaining[0].clone();
+                    let mut batch = vec![start.clone()];
                     remaining.remove(0);
                     
                     // Find other operations that can be batched with start
                     let mut i = 0;
                     while i < remaining.len() {
-                        let can_batch = batch.iter().all(|&batch_op| {
-                            self.can_batch(teg, batch_op, remaining[i])
+                        let can_batch = batch.iter().all(|batch_op| {
+                            self.can_batch(teg, batch_op.clone(), remaining[i].clone())
                         });
                         
                         if can_batch {
-                            batch.push(remaining[i]);
+                            batch.push(remaining[i].clone());
                             remaining.remove(i);
                         } else {
                             i += 1;
@@ -305,60 +293,44 @@ impl ResourceOperationBatching {
     
     /// Group operations by resource
     fn group_by_resource(&self, teg: &TemporalEffectGraph) -> HashMap<ResourceId, Vec<EffectId>> {
-        let mut result = HashMap::new();
-        
+        let mut result = HashMap::<ResourceId, Vec<EffectId>>::new();
         for (effect_id, effect) in teg.effects() {
-            // Skip non-resource operations
-            if !effect.is_resource_operation() {
-                continue;
-            }
-            
-            for (resource_id, _) in effect.resource_edges() {
-                result
-                    .entry(*resource_id)
-                    .or_insert_with(Vec::new)
-                    .push(effect_id);
+            for resource_id in &effect.resources_accessed {
+                result.entry(resource_id.clone())
+                      .or_insert_with(Vec::new)
+                      .push(effect_id.clone());
             }
         }
-        
         result
     }
     
     /// Check if two operations can be batched
     fn can_batch(&self, teg: &TemporalEffectGraph, op1: EffectId, op2: EffectId) -> bool {
-        // Operations can be batched if:
-        // 1. They're the same type (both reads, both writes, etc.)
-        // 2. They don't depend on each other
-        // 3. They have compatible parameters
+        // If there's a dependency between ops, they can't be batched
+        if teg.has_path(&op1, &op2) || teg.has_path(&op2, &op1) {
+            return false;
+        }
         
-        let effect1 = match teg.get_effect(op1) {
+        let effect1 = match teg.get_effect(&op1) {
             Some(e) => e,
             None => return false,
         };
         
-        let effect2 = match teg.get_effect(op2) {
+        let effect2 = match teg.get_effect(&op2) {
             Some(e) => e,
             None => return false,
         };
         
-        // Check if they're the same type
-        if effect1.operation_type() != effect2.operation_type() {
+        // Only batch operations of the same type on the same domain
+        if effect1.operation_type() != effect2.operation_type() ||
+           effect1.domain_id() != effect2.domain_id() {
             return false;
         }
         
-        // Check if they depend on each other
-        if teg.has_path(op1, op2) || teg.has_path(op2, op1) {
-            return false;
-        }
-        
-        // Check resource compatibility
-        let resources1: HashSet<_> = effect1.resource_edges().iter()
-            .map(|(id, _)| *id)
-            .collect();
+        // Check for conflicting resource access
+        let resources1: HashSet<_> = effect1.resources_accessed.iter().cloned().collect();
             
-        let resources2: HashSet<_> = effect2.resource_edges().iter()
-            .map(|(id, _)| *id)
-            .collect();
+        let resources2: HashSet<_> = effect2.resources_accessed.iter().cloned().collect();
             
         // For now, only batch operations on the same resource
         if resources1 != resources2 {
@@ -385,64 +357,76 @@ impl Optimization for ResourceOperationBatching {
         let mut changed = false;
         
         // Skip if optimization level is too low
-        if config.level < 3 {
+        if config.level < 2 {
             return Ok(false);
         }
         
-        // Find operations that can be batched
-        let batchable_ops = self.find_batchable_operations(teg);
+        // Find batchable operations
+        let batches = self.find_batchable_operations(teg);
         
-        for batch in batchable_ops {
+        // Process each batch
+        for batch in batches {
             if batch.len() <= 1 {
                 continue;
             }
             
-            // Create a new batched operation
-            let first_op = batch[0];
+            // Get the first effect as a template
+            let first_op = &batch[0];
             let first_effect = teg.get_effect(first_op).unwrap().clone();
             
-            // Create a new effect node for the batched operation
+            // Create a new batched effect
             let mut batched_effect = EffectNode::new(
                 format!("batched_{}", first_effect.name()),
                 first_effect.operation_type().unwrap_or("unknown").to_string(),
+                first_effect.domain_id().clone(),
             );
             
-            // Copy parameters and metadata from the first operation
+            // Copy parameters from the first effect
             batched_effect.set_parameters(first_effect.parameters().clone());
             
-            // Add a metadata entry indicating this is a batched operation
+            // Add metadata about batching
             let mut metadata = first_effect.metadata().clone();
-            metadata.insert("batched".to_string(), batch.len().to_string());
+            metadata.insert(
+                "batched".to_string(), 
+                ParameterValue::String(batch.len().to_string())
+            );
             batched_effect.set_metadata(metadata);
             
             // Add the batched effect to the graph
             let batched_id = teg.add_effect(batched_effect)?;
             
-            // Connect the batched effect to all resources from the original operations
+            // Connect resources and redirect edges
             for op_id in &batch {
-                let effect = teg.get_effect(*op_id).unwrap();
+                let effect = teg.get_effect(op_id).unwrap();
                 
-                // Copy resource connections
-                for (resource_id, edge_data) in effect.resource_edges() {
-                    teg.connect_effect_to_resource(batched_id, *resource_id, edge_data.clone())?;
+                // Collect resource information before modifying the graph
+                let resources_with_access_modes: Vec<(ResourceId, AccessMode)> = effect.resources_accessed
+                    .iter()
+                    .map(|resource_id| {
+                        let access_mode = teg.get_access_mode(op_id, resource_id).unwrap_or(AccessMode::Read);
+                        (resource_id.clone(), access_mode)
+                    })
+                    .collect();
+                
+                // Now connect using the collected data
+                for (resource_id, access_mode) in resources_with_access_modes {
+                    teg.connect_effect_to_resource(&batched_id, &resource_id, access_mode)?;
                 }
                 
-                // Redirect incoming edges to the batched operation
-                let incoming = teg.get_incoming_edges(*op_id);
+                // Redirect incoming edges
+                let incoming = teg.get_incoming_edges(op_id);
                 for (src, edge_data) in incoming {
-                    teg.add_edge(src, batched_id, edge_data.clone())?;
+                    teg.add_edge(&src, &batched_id, edge_data.clone())?;
                 }
                 
-                // Redirect outgoing edges from the batched operation
-                let outgoing = teg.get_outgoing_edges(*op_id);
+                // Redirect outgoing edges
+                let outgoing = teg.get_outgoing_edges(op_id);
                 for (dst, edge_data) in outgoing {
-                    teg.add_edge(batched_id, dst, edge_data.clone())?;
+                    teg.add_edge(&batched_id, &dst, edge_data.clone())?;
                 }
-            }
-            
-            // Remove the original operations
-            for op_id in batch {
-                teg.remove_effect(op_id)?;
+                
+                // Remove the original effect
+                teg.remove_effect(&op_id)?;
             }
             
             changed = true;

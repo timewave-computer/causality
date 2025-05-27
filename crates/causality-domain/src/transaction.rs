@@ -374,8 +374,12 @@ mod tests {
             Ok(Timestamp::now())
         }
         
-        async fn time_map_entry(&self, _height: BlockHeight) -> Result<causality_domain::TimeMapEntry> {
-            unimplemented!()
+        async fn time_map_entry(&self, height: BlockHeight) -> Result<causality_domain::TimeMapEntry> {
+            Ok(causality_domain::TimeMapEntry {
+                height,
+                timestamp: Timestamp::now(),
+                hash: crate::domain::BlockHash([0; 32]),
+            })
         }
         
         async fn observe_fact(&self, _query: &crate::domain::FactQuery) -> Result<(FactType, FactObservationMeta)> {

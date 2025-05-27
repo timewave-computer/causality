@@ -440,9 +440,9 @@ impl DomainAdapterFactory for TestDomainAdapterFactory {
     }
 }
 
-/// Create a test domain integration layer with pre-configured domains
+/// Create a test domain integration layer with a factory, effect router, and resource router
 pub fn create_test_domain_integration_layer(
-    cross_domain_protocol: Arc<dyn CrossDomainResourceProtocol>,
+    resource_type_registry: Arc<dyn crate::resource::ResourceTypeRegistry>,
 ) -> (
     Arc<crate::integration::domain::DomainEffectRouter>,
     Arc<crate::integration::domain::DomainResourceRouter>,
@@ -459,7 +459,7 @@ pub fn create_test_domain_integration_layer(
     
     let resource_router = Arc::new(crate::integration::domain::DomainResourceRouter::new(
         adapter_factory.clone() as Arc<dyn DomainAdapterFactory>,
-        cross_domain_protocol,
+        resource_type_registry,
     ));
     
     (effect_router, resource_router, adapter_factory)

@@ -1,0 +1,21 @@
+[package]
+name = "causality-storage-mem"
+version = "0.1.0"
+edition = "2021"
+description = "In-memory storage implementation for Causality"
+license = "MIT"
+
+[dependencies]
+# Internal dependencies
+causality-db = { path = "../causality-db" }
+causality-types = { path = "../causality-types" }
+causality-error = { path = "../causality-error" }
+
+# External dependencies
+tracing = { workspace = true }
+async-trait = "0.1.68"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+tokio = { version = "1.28", features = ["full", "test-util"] } 

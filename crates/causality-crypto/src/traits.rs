@@ -2,10 +2,11 @@
 //
 // This module defines common traits used throughout the crypto package.
 
-use std::fmt;
-use std::sync::Arc;
+use std::fmt::Debug;
 use thiserror::Error;
-use crate::hash::{HashOutput, HashError};
+use causality_types::ContentId;
+use causality_types::crypto_primitives::{HashOutput, HashError};
+use serde_json;
 
 /// Trait for objects that can be content-addressed
 pub trait ContentAddressed {
@@ -29,24 +30,28 @@ pub trait ContentAddressed {
 #[derive(Debug, Error)]
 pub enum StorageError {
     /// Object not found
-    #[error("Object not found: {0}")]
+    #[error("Not found: {0}")]
     NotFound(String),
-    
-    /// Duplicate object in storage
-    #[error("Duplicate object: {0}")]
-    Duplicate(String),
-    
-    /// Hash mismatch during verification
-    #[error("Hash mismatch: {0}")]
-    HashMismatch(String),
-    
-    /// IO error
-    #[error("IO error: {0}")]
-    IoError(String),
     
     /// Serialization error
     #[error("Serialization error: {0}")]
     SerializationError(String),
+    
+    /// Deserialization error
+    #[error("Deserialization error: {0}")]
+    DeserializationError(String),
+    
+    /// Hashing error
+    #[error("Hashing error: {0}")]
+    HashingError(String),
+    
+    /// Storage error
+    #[error("Storage error: {0}")]
+    StorageError(String),
+    
+    /// Invalid content ID
+    #[error("Invalid content ID: {0}")]
+    InvalidContentId(String),
     
     /// Hash error
     #[error("Hash error: {0}")]
@@ -54,18 +59,18 @@ pub enum StorageError {
 }
 
 /// Standard content-addressed storage interface
-pub trait ContentAddressedStorage: Send + Sync {
+pub trait ContentAddressedStorage: Send + Sync + Debug {
     /// Store binary data and return content ID
-    fn store_bytes(&self, bytes: &[u8]) -> Result<crate::hash::ContentId, StorageError>;
+    fn store_bytes(&self, bytes: &[u8]) -> Result<ContentId, StorageError>;
     
     /// Check if an object exists in storage
-    fn contains(&self, id: &crate::hash::ContentId) -> bool;
+    fn contains(&self, id: &ContentId) -> bool;
     
     /// Retrieve binary data for an object
-    fn get_bytes(&self, id: &crate::hash::ContentId) -> Result<Vec<u8>, StorageError>;
+    fn get_bytes(&self, id: &ContentId) -> Result<Vec<u8>, StorageError>;
     
     /// Remove an object from storage
-    fn remove(&self, id: &crate::hash::ContentId) -> Result<(), StorageError>;
+    fn remove(&self, id: &ContentId) -> Result<(), StorageError>;
     
     /// Clear all objects from storage
     fn clear(&self);
@@ -82,16 +87,36 @@ pub trait ContentAddressedStorage: Send + Sync {
 /// Extension methods for ContentAddressedStorage
 pub trait ContentAddressedStorageExt: ContentAddressedStorage {
     /// Store an object in the content-addressed storage
-    fn store<T: ContentAddressed>(&self, object: &T) -> Result<crate::hash::ContentId, StorageError> {
-        // Serialize the object
-        let bytes = object.to_bytes()?;
-        // Store the bytes
+    fn store<T: ContentAddressed>(&self, object: &T) -> Result<ContentId, StorageError> {
+        let bytes = object.to_bytes()
+            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
         self.store_bytes(&bytes)
     }
     
     /// Retrieve an object from storage by its content ID
-    fn get<T: ContentAddressed>(&self, id: &crate::hash::ContentId) -> Result<T, StorageError> {
+    fn get<T: ContentAddressed>(&self, id: &ContentId) -> Result<T, StorageError> {
         let bytes = self.get_bytes(id)?;
-        T::from_bytes(&bytes).map_err(|e| StorageError::HashError(e))
+        T::from_bytes(&bytes)
+            .map_err(|e| StorageError::DeserializationError(e.to_string()))
     }
-} 
+    
+    /// Store a serializable value that is not ContentAddressed
+    fn store_value<T: serde::Serialize>(&self, value: &T) -> Result<ContentId, StorageError> {
+        let bytes = serde_json::to_vec(value)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+        self.store_bytes(&bytes)
+    }
+    
+    /// Get a deserializable value that is not ContentAddressed
+    fn get_value<T: serde::de::DeserializeOwned>(&self, id: &ContentId) -> Result<T, StorageError> {
+        let bytes = self.get_bytes(id)?;
+        serde_json::from_slice(&bytes)
+            .map_err(|e| StorageError::DeserializationError(e.to_string()))
+    }
+}
+
+// Remove the blanket implementation of ContentAddressedStorageExt for all ContentAddressedStorage types
+// This conflicts with specific implementations in other modules
+// Each type should implement ContentAddressedStorageExt explicitly
+// to avoid conflicts with trait implementations
+// impl<T: ContentAddressedStorage> ContentAddressedStorageExt for T {} 

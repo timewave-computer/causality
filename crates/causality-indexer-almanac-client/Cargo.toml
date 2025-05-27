@@ -1,0 +1,58 @@
+[package]
+name = "causality-indexer-almanac-client"
+version = "0.1.0"
+edition = "2021"
+authors = ["Timewave Labs, Inc."]
+description = "Almanac indexer client adapter for Causality"
+license = "MIT"
+
+[dependencies]
+causality-indexer-adapter = { path = "../causality-indexer-adapter" }
+causality-types = { path = "../causality-types" }
+causality-error = { path = "../causality-error" }
+
+# Async runtime and utilities
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt", "sync", "macros", "time"], optional = true }
+futures-util = { version = "0.3", optional = true }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# HTTP and WebSocket client
+reqwest = { version = "0.11", features = ["json"], optional = true }
+tokio-tungstenite = { version = "0.20", features = ["native-tls"], optional = true }
+url = { version = "2.4", optional = true }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# Base64 encoding
+base64 = "0.13"
+
+# Bridge integration dependencies
+causality-indexer-bridge = { path = "../causality-indexer-bridge", optional = true }
+indexer-core = { path = "../../almanac/crates/core", optional = true }
+indexer-storage = { path = "../../almanac/crates/storage", optional = true }
+
+[features]
+default = ["client"]
+client = ["tokio", "futures-util", "reqwest", "tokio-tungstenite", "url"]
+bridge-integration = [
+    "causality-indexer-bridge", 
+    "indexer-core", 
+    "indexer-storage", 
+    "client"
+]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+mockito = "1.1"
+wiremock = "0.5" 

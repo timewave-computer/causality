@@ -1,0 +1,39 @@
+[package]
+name = "causality-smt"
+version = "0.1.0"
+edition = "2021"
+description = "Sparse Merkle Tree implementation for Causality"
+authors = ["Timewave Labs <info@timewavewave.xyz>"]
+repository = "https://github.com/timewave-lab/causality"
+license = "MIT"
+
+[dependencies]
+# Core dependencies
+causality-types = { path = "../causality-types" }
+causality-error = { path = "../causality-error" }
+causality-crypto = { path = "../causality-crypto" }
+causality-db = { path = "../causality-db" }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+borsh = "0.10"
+
+# Logging
+tracing = "0.1.37"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Async utilities
+async-trait = "0.1.68"
+tokio = { version = "1.28", features = ["full"] }
+
+# Utility libraries
+hex = "0.4"
+blake3 = "1.4"
+
+[dev-dependencies]
+tokio-test = "0.4"
+proptest = "1.2" 

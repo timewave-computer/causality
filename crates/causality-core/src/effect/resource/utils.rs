@@ -5,8 +5,9 @@
 use std::collections::HashMap;
 
 use crate::effect::{
-    EffectError, EffectOutcome
+    EffectError, EffectOutcome, EffectResult, EffectTypeId
 };
+use causality_error::{CausalityError, ErrorCode, ErrorDomain, Result as CausalityResult, TypesError};
 use super::resource::{ResourceEffect, ResourceOperation};
 
 /// Create a resource effect for reading a resource
@@ -53,19 +54,38 @@ pub fn extract_resource_content(outcome: &EffectOutcome) -> Option<String> {
     }
 }
 
-/// Convert between resource effect error and resource error
-pub fn convert_effect_error_to_resource_error(error: EffectError) -> crate::resource::ResourceError {
+/// Convert EffectError to the appropriate ResourceError variant within TypesError
+pub fn convert_effect_error_to_resource_error(error: EffectError) -> TypesError {
     match error {
-        EffectError::NotFound(resource) => 
-            crate::resource::ResourceError::ResourceError(format!("Resource not found: {}", resource)),
-        EffectError::PermissionDenied(msg) => 
-            crate::resource::ResourceError::ValidationError(format!("Permission denied: {}", msg)),
-        EffectError::InvalidOperation(msg) => 
-            crate::resource::ResourceError::ResourceError(format!("Invalid operation: {}", msg)),
-        EffectError::ExecutionError(msg) => 
-            crate::resource::ResourceError::ResourceError(format!("Execution error: {}", msg)),
+        EffectError::MissingCapability(cap) => 
+            TypesError::ResourceError(format!("Missing capability: {}", cap)),
+        EffectError::MissingResource(id) => 
+            TypesError::ResourceError(format!("Missing resource: {}", id)),
         EffectError::Other(msg) => 
-            crate::resource::ResourceError::ResourceError(msg),
-        _ => crate::resource::ResourceError::ResourceError("Unknown error".to_string()),
+            TypesError::ResourceError(format!("Other resource error: {}", msg)),
+        EffectError::HandlerNotFound(type_id) => 
+            TypesError::ResourceError(format!("Handler not found: {}", type_id)),
+        EffectError::ValidationError(msg) => 
+            TypesError::ResourceError(format!("Validation error: {}", msg)),
+        EffectError::SerializationError(msg) => 
+            TypesError::ResourceError(format!("Serialization error: {}", msg)),
+        EffectError::ResourceAccessDenied(msg) => 
+            TypesError::ResourceError(format!("Access denied: {}", msg)),
+        EffectError::Timeout(msg) => 
+            TypesError::ResourceError(format!("Timeout: {}", msg)),
+        EffectError::NotFound(msg) => 
+            TypesError::ResourceError(format!("Not found: {}", msg)),
+        EffectError::InvalidOperation(msg) | EffectError::InvalidParameter(msg) | EffectError::InvalidArgument(msg) => 
+            TypesError::ResourceError(format!("Invalid operation/parameter: {}", msg)),
+        EffectError::DuplicateRegistration(msg) => 
+            TypesError::ResourceError(format!("Duplicate registration: {}", msg)),
+        EffectError::SystemError(msg) | EffectError::RegistryError(msg) => 
+            TypesError::ResourceError(format!("System error: {}", msg)),
+        EffectError::PermissionDenied(msg) => 
+            TypesError::ResourceError(format!("Permission denied: {}", msg)),
+        EffectError::AlreadyExists(msg) => 
+            TypesError::ResourceError(format!("Already exists: {}", msg)),
+        EffectError::ExecutionFailed(msg) => 
+            TypesError::ResourceError(format!("Execution failed: {}", msg)),
     }
 } 

@@ -8,8 +8,9 @@ use std::sync::{Arc, RwLock};
 use std::fmt::Debug;
 
 use causality_types::ContentId;
+use causality_core::resource::register::ResourceState;
 use causality_core::resource::interface::{
-    ResourceState, ResourceAccessType, LockType, DependencyType
+    ResourceAccessType, LockType, DependencyType
 };
 
 use crate::resource::CrossDomainResourceManager;

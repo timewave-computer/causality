@@ -5,6 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use serde::{Serialize, Deserialize};
 use borsh::{BorshSerialize, BorshDeserialize};
+use causality_types::{ContentHash, ContentAddressed, HashError};
 
 use crate::{
     EffectNode, ResourceNode, EffectId, ResourceId,
@@ -43,6 +44,9 @@ pub struct TEGFragment {
     
     /// Exit points for composition - effects that can be connected to next fragments
     pub exit_points: Vec<EffectId>,
+    
+    /// Content hash for this fragment
+    pub content_hash: ContentHash,
 }
 
 impl TEGFragment {
@@ -58,6 +62,7 @@ impl TEGFragment {
             temporal_constraints: HashMap::new(),
             entry_points: Vec::new(),
             exit_points: Vec::new(),
+            content_hash: ContentHash::new("blake3", vec![0; 32]),
         }
     }
     
@@ -68,23 +73,40 @@ impl TEGFragment {
         
         fragment.effect_nodes.insert(effect_id.clone(), effect);
         fragment.entry_points.push(effect_id.clone());
-        fragment.exit_points.push(effect_id);
+        fragment.exit_points.push(effect_id.clone());
+        
+        // Update content hash
+        if let Ok(hash) = fragment.content_hash() {
+            fragment.content_hash = ContentHash::from_hash_output(&hash);
+        }
         
         fragment
     }
     
     /// Add an effect node to the fragment
-    pub fn add_effect(&mut self, effect: EffectNode) -> &EffectId {
+    pub fn add_effect(&mut self, effect: EffectNode) -> EffectId {
         let effect_id = effect.id.clone();
         self.effect_nodes.insert(effect_id.clone(), effect);
-        &effect_id
+        
+        // Update content hash after modification
+        if let Ok(hash) = self.content_hash() {
+            self.content_hash = ContentHash::from_hash_output(&hash);
+        }
+        
+        effect_id
     }
     
     /// Add a resource node to the fragment
-    pub fn add_resource(&mut self, resource: ResourceNode) -> &ResourceId {
+    pub fn add_resource(&mut self, resource: ResourceNode) -> ResourceId {
         let resource_id = resource.id.clone();
         self.resource_nodes.insert(resource_id.clone(), resource);
-        &resource_id
+        
+        // Update content hash after modification
+        if let Ok(hash) = self.content_hash() {
+            self.content_hash = ContentHash::from_hash_output(&hash);
+        }
+        
+        resource_id
     }
     
     /// Compose this fragment sequentially with another fragment,
@@ -295,5 +317,35 @@ impl TEGFragment {
         }
         
         self
+    }
+}
+
+impl ContentAddressed for TEGFragment {
+    fn content_hash(&self) -> Result<causality_types::crypto_primitives::HashOutput, HashError> {
+        // We need to create a copy without the content_hash field to avoid circular hashing
+        let mut fragment_for_hash = self.clone();
+        // Reset the content hash to a default/empty value to avoid it affecting the hash
+        fragment_for_hash.content_hash = ContentHash::new("blake3", vec![0; 32]);
+        
+        // Serialize the fragment to JSON bytes
+        let serialized = serde_json::to_vec(&fragment_for_hash)
+            .map_err(|e| HashError::SerializationError(e.to_string()))?;
+        
+        // Calculate the hash of the serialized data
+        let hash_output = causality_types::content_addressing::content_hash_from_bytes(&serialized);
+        Ok(hash_output)
+    }
+    
+    fn verify(&self, expected_hash: &causality_types::crypto_primitives::HashOutput) -> Result<bool, HashError> {
+        let actual_hash = self.content_hash()?;
+        Ok(actual_hash == *expected_hash)
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+        serde_json::to_vec(self).map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> where Self: Sized {
+        serde_json::from_slice(bytes).map_err(|e| HashError::SerializationError(e.to_string()))
     }
 }

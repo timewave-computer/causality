@@ -8,8 +8,17 @@
 // for improved performance.
 
 use std::collections::HashMap;
-use causality_crypto::{DeferredHashId, HashAlgorithm, HashFunction, HashOutput, HashError};
+// Import types from causality_types primitives
+use causality_types::crypto_primitives::{HashAlgorithm, HashOutput, HashError};
+// Import hashing traits/structs from the local hash module
+use crate::hash::{HashFunction, Blake3HashFunction};
+#[cfg(test)]
+use crate::hash::HashFactory;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+// Define DeferredHashId locally as a unique identifier for deferred requests
+pub type DeferredHashId = usize; 
 
 /// Input for a deferred hash operation
 #[derive(Debug, Clone)]
@@ -22,11 +31,19 @@ pub struct DeferredHashInput {
     pub algorithm: HashAlgorithm,
 }
 
+// Counter for generating unique DeferredHashIds
+static DEFERRED_HASH_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+// Function to generate a new unique DeferredHashId
+fn generate_new_deferred_hash_id() -> DeferredHashId {
+    DEFERRED_HASH_ID_COUNTER.fetch_add(1, Ordering::SeqCst)
+}
+
 impl DeferredHashInput {
     /// Create a new deferred hash input
     pub fn new(data: Vec<u8>, algorithm: HashAlgorithm) -> Self {
         Self {
-            id: DeferredHashId::new(),
+            id: generate_new_deferred_hash_id(), // Use the generator
             data,
             algorithm,
         }
@@ -64,8 +81,6 @@ impl DeferredHashingContext {
     
     /// Create a new context with default hash functions
     pub fn default() -> Result<Self, HashError> {
-        use causality_crypto::{HashFactory, Blake3HashFunction};
-        
         let mut hash_functions = HashMap::new();
         
         // Add Blake3 by default
@@ -77,7 +92,7 @@ impl DeferredHashingContext {
         // Add Poseidon if enabled
         #[cfg(feature = "poseidon")]
         {
-            use causality_crypto::PoseidonHashFunction;
+            use crate::hash::PoseidonHashFunction;
             hash_functions.insert(
                 HashAlgorithm::Poseidon,
                 Arc::new(PoseidonHashFunction::new()) as Arc<dyn HashFunction>
@@ -96,17 +111,15 @@ impl DeferredHashingContext {
     pub fn add_hash_function(&mut self, algorithm: HashAlgorithm, function: Arc<dyn HashFunction>) {
         self.hash_functions.insert(algorithm, function);
     }
-}
 
-impl causality_crypto::DeferredHashing for DeferredHashingContext {
     /// Request a hash computation (creates a placeholder)
-    fn request_hash(
+    pub fn request_hash(
         &mut self, 
         data: &[u8], 
         algorithm: HashAlgorithm
     ) -> DeferredHashId {
         // Create a unique ID for this request
-        let id = DeferredHashId::new();
+        let id = generate_new_deferred_hash_id(); // Use the generator
         
         // Store the request for later processing
         self.deferred_hash_inputs.push(DeferredHashInput::with_id(
@@ -119,17 +132,17 @@ impl causality_crypto::DeferredHashing for DeferredHashingContext {
     }
     
     /// Check if a deferred hash result is available
-    fn has_hash_result(&self, id: &DeferredHashId) -> bool {
+    pub fn has_hash_result(&self, id: &DeferredHashId) -> bool {
         self.hash_results.lock().unwrap().contains_key(id)
     }
     
     /// Get the result of a deferred hash operation
-    fn get_hash_result(&self, id: &DeferredHashId) -> Option<HashOutput> {
+    pub fn get_hash_result(&self, id: &DeferredHashId) -> Option<HashOutput> {
         self.hash_results.lock().unwrap().get(id).cloned()
     }
     
     /// Perform all deferred hash computations
-    fn compute_deferred_hashes(&mut self) {
+    pub fn compute_deferred_hashes(&mut self) {
         let mut results = self.hash_results.lock().unwrap();
         
         for input in &self.deferred_hash_inputs {
@@ -159,8 +172,6 @@ impl DeferredHashBatchProcessor {
     
     /// Create a new batch processor with default hash functions
     pub fn default() -> Result<Self, HashError> {
-        use causality_crypto::{HashFactory, Blake3HashFunction};
-        
         let mut hash_functions = HashMap::new();
         
         // Add Blake3 by default
@@ -172,7 +183,7 @@ impl DeferredHashBatchProcessor {
         // Add Poseidon if enabled
         #[cfg(feature = "poseidon")]
         {
-            use causality_crypto::PoseidonHashFunction;
+            use crate::hash::PoseidonHashFunction;
             hash_functions.insert(
                 HashAlgorithm::Poseidon,
                 Arc::new(PoseidonHashFunction::new()) as Arc<dyn HashFunction>
@@ -209,7 +220,6 @@ impl DeferredHashBatchProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_crypto::HashFactory;
     
     #[test]
     fn test_deferred_hashing_context() {
@@ -236,7 +246,7 @@ mod tests {
         
         // Verify results
         let factory = HashFactory::default();
-        let hasher = factory.create_hasher().unwrap();
+        let hasher = factory.create_content_hasher(HashAlgorithm::Blake3).unwrap();
         
         let expected1 = hasher.hash(data1);
         let expected2 = hasher.hash(data2);
@@ -265,7 +275,7 @@ mod tests {
         
         // Verify results
         let factory = HashFactory::default();
-        let hasher = factory.create_hasher().unwrap();
+        let hasher = factory.create_content_hasher(HashAlgorithm::Blake3).unwrap();
         
         let expected1 = hasher.hash(data1);
         let expected2 = hasher.hash(data2);

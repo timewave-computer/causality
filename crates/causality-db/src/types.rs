@@ -1,6 +1,6 @@
-// Database interface types
+// Database type definitions
 //
-// This module defines the types used for the database interface
+// This module defines the common types used by the database implementations.
 
 use std::fmt::{Debug, Display};
 use std::error::Error;
@@ -20,6 +20,8 @@ pub enum DbError {
     NotFound,
     /// Generic database error
     GenericError(String),
+    /// Other error
+    Other(String),
 }
 
 impl Display for DbError {
@@ -31,6 +33,7 @@ impl Display for DbError {
             Self::DeleteError(msg) => write!(f, "Database delete error: {}", msg),
             Self::NotFound => write!(f, "Key not found"),
             Self::GenericError(msg) => write!(f, "Database error: {}", msg),
+            Self::Other(msg) => write!(f, "Other error: {}", msg),
         }
     }
 }

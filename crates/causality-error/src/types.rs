@@ -8,15 +8,15 @@ use std::any::Any;
 /// Types-specific error codes
 pub mod codes {
     use crate::ErrorCode;
-    
+
     // Types error codes start with 2000
-    pub const PARSE_ERROR: ErrorCode = ErrorCode(2001);
-    pub const CONVERSION_ERROR: ErrorCode = ErrorCode(2002);
-    pub const VALIDATION_ERROR: ErrorCode = ErrorCode(2003);
-    pub const INCOMPATIBLE_TYPE: ErrorCode = ErrorCode(2004);
-    pub const SERIALIZATION_ERROR: ErrorCode = ErrorCode(2005);
-    pub const RESOURCE_ERROR: ErrorCode = ErrorCode(2006);
-    pub const REGISTER_ERROR: ErrorCode = ErrorCode(2007);
+    // pub const PARSE_ERROR: ErrorCode = ErrorCode(2001);
+    // pub const CONVERSION_ERROR: ErrorCode = ErrorCode(2002);
+    // pub const VALIDATION_ERROR: ErrorCode = ErrorCode(2003);
+    // pub const INCOMPATIBLE_TYPE: ErrorCode = ErrorCode(2004);
+    // pub const SERIALIZATION_ERROR: ErrorCode = ErrorCode(2005);
+    // pub const RESOURCE_ERROR: ErrorCode = ErrorCode(2006);
+    // pub const REGISTER_ERROR: ErrorCode = ErrorCode(2007);
 }
 
 /// Types-specific error types
@@ -99,4 +99,7 @@ impl TypesError {
     pub fn resource_error(message: impl Into<String>) -> Self {
         TypesError::ResourceError(message.into())
     }
+}
+
+pub mod prelude {
 } 

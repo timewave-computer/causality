@@ -14,8 +14,13 @@ serde_json = "1.0"
 # Causality crates
 causality-types = { path = "../causality-types" }
 causality-error = { path = "../causality-error" }
-causality-core = { path = "../causality-core" }
 causality-crypto = { path = "../causality-crypto" }
+
+# Hashing
+blake3 = { workspace = true }
+
+# Optional dependencies
+causality-core = { path = "../causality-core", optional = true }
 
 # Utilities
 thiserror = "1.0"
@@ -23,6 +28,10 @@ anyhow = "1.0"
 tracing = "0.1"
 async-trait = "0.1"
 hex.workspace = true
+
+[features]
+default = []
+core-integration = ["causality-core"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

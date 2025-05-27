@@ -4,16 +4,39 @@
 // aspects of the Causality system, including signatures, proofs, and constraints.
 
 // Core submodules
-pub mod signatures;
+// pub mod signatures; // Moved to causality-crypto
 pub mod constraints;
-pub mod proofs;
+// pub mod proofs; // Moved to causality-crypto
 
 // Re-export key types
-pub use signatures::{Signature, Signer, Verifier};
+// pub use signatures::{Signature, Signer, Verifier}; // Now from causality-crypto
 pub use constraints::{Constraint, ConstraintSet, ConstraintVerifier};
-pub use proofs::{Proof, Prover, ProofVerifier};
+// pub use proofs::{Proof, Prover, ProofVerifier}; // Now from causality-crypto
+
+// TODO: Update imports to use causality-crypto for signatures and proofs
+// pub use causality_crypto::signatures::{Signature, Signer, Verifier};
+// pub use causality_crypto::proofs::{Proof, Prover, ProofVerifier};
 
 use std::marker::PhantomData;
+
+/// Error types for verification operations
+#[derive(thiserror::Error, Debug)]
+pub enum VerificationError {
+    #[error("The entity is invalid: {0}")]
+    Invalid(String),
+    
+    #[error("Signature verification failed: {0}")]
+    SignatureError(String),
+    
+    #[error("Constraint verification failed: {0}")]
+    ConstraintError(String),
+    
+    #[error("Proof verification failed: {0}")]
+    ProofError(String),
+    
+    #[error("Storage error during verification: {0}")]
+    StorageError(String),
+}
 
 /// A trait for entities that can be verified
 pub trait Verifiable {
@@ -58,6 +81,23 @@ pub trait VerificationContext {
     fn is_valid(&self, entity: &Self::Entity) -> bool {
         self.verify(entity).is_ok()
     }
+}
+
+/// A attestation for validating entities
+pub struct Attestation<T> {
+    /// The entity that was attested
+    pub entity_id: String,
+    
+    /// The time of attestation
+    pub timestamp: u64,
+    
+    /// The attestation signature
+    pub signature: Vec<u8>,
+    
+    /// The party that attested
+    pub attester: String,
+    
+    _phantom: PhantomData<T>,
 }
 
 /// Helper functions for verification

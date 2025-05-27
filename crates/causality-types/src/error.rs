@@ -286,6 +286,14 @@ pub enum Error {
     NetworkError(String),
 }
 
+// Implementation of utility methods for Error
+impl Error {
+    /// Create a verification error
+    pub fn verification(message: impl Into<String>) -> Self {
+        Error::ValidationError(message.into())
+    }
+}
+
 // Implement From traits for various error types
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {

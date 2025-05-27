@@ -10,18 +10,16 @@ pub mod codes {
     use crate::ErrorCode;
     
     // Engine error codes start with 5000
-    pub const HANDLER_NOT_FOUND: ErrorCode = ErrorCode(5001);
-    pub const INVALID_INVOCATION: ErrorCode = ErrorCode(5002);
     pub const EXECUTION_FAILED: ErrorCode = ErrorCode(5003);
-    pub const CONTEXT_ERROR: ErrorCode = ErrorCode(5004);
-    pub const REGISTRY_ERROR: ErrorCode = ErrorCode(5005);
-    pub const LOG_ERROR: ErrorCode = ErrorCode(5006);
-    pub const PATTERN_ERROR: ErrorCode = ErrorCode(5007);
-    pub const STORAGE_ERROR: ErrorCode = ErrorCode(5008);
-    pub const SEGMENT_ERROR: ErrorCode = ErrorCode(5009);
-    pub const SYNC_ERROR: ErrorCode = ErrorCode(5010);
-    pub const CAPABILITY_ERROR: ErrorCode = ErrorCode(5011);
-    pub const CALLBACK_ERROR: ErrorCode = ErrorCode(5012);
+    // pub const CONTEXT_ERROR: ErrorCode = ErrorCode(5004);
+    // pub const REGISTRY_ERROR: ErrorCode = ErrorCode(5005);
+    // pub const LOG_ERROR: ErrorCode = ErrorCode(5006);
+    // pub const PATTERN_ERROR: ErrorCode = ErrorCode(5007);
+    // pub const STORAGE_ERROR: ErrorCode = ErrorCode(5008);
+    // pub const SEGMENT_ERROR: ErrorCode = ErrorCode(5009);
+    // pub const SYNC_ERROR: ErrorCode = ErrorCode(5010);
+    // pub const CAPABILITY_ERROR: ErrorCode = ErrorCode(5011);
+    // pub const CALLBACK_ERROR: ErrorCode = ErrorCode(5012);
 }
 
 /// Engine-specific error types

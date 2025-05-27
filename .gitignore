@@ -122,3 +122,5 @@ migration/
 migrations/
 docs/implementation-status.md
 docs/summary-of-progress.md
+valence-coprocessor/
+almanac/

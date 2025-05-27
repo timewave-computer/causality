@@ -1098,4 +1098,73 @@ When working with the Resource System, follow these best practices:
 ### Related Architecture Documents
 - [Resource System](../../architecture/core/resource-system.md)
 - [Role-Based Resources](../../architecture/core/role-based-resources.md)
-- [Capability System](../../architecture/core/capability-system.md) 
+- [Capability System](../../architecture/core/capability-system.md)
+
+## Unified Resource System
+
+As of version 0.5.0, we have unified the resource system to use a single consistent implementation based on the `ResourceRegister` model. This provides several benefits:
+
+1. Simplified API with consistent semantics
+2. Unified content addressing using the canonical `ContentId` implementation
+3. Pluggable storage backends through unified traits
+4. Improved performance through optimized indexes and caching
+
+### Migrating from Legacy Implementations
+
+If you were using the previous resource implementations, here's how to migrate:
+
+#### From multiple ResourceTypeRegistry implementations
+
+Previously, there were two main implementations:
+- `ContentAddressedResourceTypeRegistry` - For persistent storage
+- `InMemoryResourceTypeRegistry` - For in-memory/testing use
+
+Now, use the unified `UnifiedResourceTypeRegistry` instead:
+
+```rust
+// Old approach with separate implementations
+let registry = if persistent {
+    ContentAddressedResourceTypeRegistry::new(storage)
+} else {
+    InMemoryResourceTypeRegistry::new()
+};
+
+// New unified approach
+let registry = UnifiedResourceTypeRegistry::new(storage_backend);
+
+// Or use the helper function
+let registry = create_resource_type_registry(storage);
+```
+
+#### Using ResourceRegister instead of Resource
+
+```rust
+// Old approach
+let resource = Resource::new(data, resource_type);
+
+// New approach using ResourceRegister
+let id = ContentId::compute_for_bytes(&data)?;
+let register = ResourceRegister::new(id, data, resource_type);
+
+// Store in register storage
+let register_storage = create_register_storage(storage);
+register_storage.store_register(register).await?;
+```
+
+### ContentId Standardization
+
+All content addressing now uses the canonical `ContentId` from `causality-types`. The legacy conversion methods have been removed to ensure consistency.
+
+```rust
+// Use the canonical ContentId implementation
+use causality_types::ContentId;
+
+// Create a ContentId
+let id = ContentId::compute_for_bytes(&data)?;
+
+// No more need for conversion methods like:
+// - from_legacy_content_id
+// - from_crypto_hash
+```
+
+For more details on the updated architecture, see the [Resource System Architecture](../architecture/resource-system.md) documentation. 

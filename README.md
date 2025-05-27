@@ -61,6 +61,10 @@ Content-addressed code ensures immutable, verifiable program representation thro
 
 The fact system provides a standardized representation of blockchain state using unified fact types that present common interfaces for different blockchain data. Domain-specific methods enable fact observation from various sources, while cryptographic verification ensures fact integrity. The system explicitly tracks data dependencies to maintain causal consistency.
 
+### Indexer Integration
+
+The indexer integration connects Causality with external blockchain indexing systems like Almanac. It provides a consistent interface for querying historical blockchain data and subscribing to new events through a trait-based adapter system. Domain adapters can optionally use an indexer to access historical state for resources, enhancing their ability to provide temporal context for operations. The integration maintains a clean separation of concerns, allowing indexers to operate as standalone systems while still being directly usable within Causality through a bridge implementation.
+
 ## Development
 
 ### Building with Nix

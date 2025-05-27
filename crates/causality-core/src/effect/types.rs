@@ -5,7 +5,9 @@
 use std::fmt::{self, Display, Formatter};
 use serde::{Serialize, Deserialize};
 use causality_types::crypto_primitives::ContentId;
+use causality_types::crypto_primitives::HashOutput;
 use std::str::FromStr;
+use borsh::{BorshSerialize, BorshDeserialize};
 
 /// An effect identifier
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -28,6 +30,21 @@ impl EffectId {
     /// Get the underlying string
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+    
+    /// Convert to content ID for storage
+    pub fn as_content_id(&self) -> ContentId {
+        // Use the content addressing utilities for proper conversion
+        let hash = causality_types::crypto_primitives::ContentHash::new(
+            "blake3", 
+            blake3::hash(self.0.as_bytes()).as_bytes().to_vec()
+        );
+        ContentId::from(hash.to_hash_output().unwrap())
+    }
+    
+    /// Create from content ID
+    pub fn from_content_id(content_id: &ContentId) -> Self {
+        Self(format!("effect:{}", content_id))
     }
 }
 
@@ -83,8 +100,8 @@ impl From<&str> for EffectTypeId {
     }
 }
 
-/// A right that can be granted to a resource
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// Represents the type of access right granted by a capability
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialOrd)]
 pub enum Right {
     /// Right to read a resource
     Read,
@@ -166,4 +183,9 @@ impl Display for ExecutionBoundary {
             ExecutionBoundary::Custom(c) => write!(f, "custom:{}", c),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EffectError {
+    // ... existing code ...
 } 

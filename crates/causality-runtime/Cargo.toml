@@ -1,0 +1,61 @@
+[package]
+name = "causality-runtime"
+version = "0.1.0"
+edition = "2021"
+authors = ["Causality Team <info@causality.dev>"]
+description = "Execution engine for the Causality platform"
+license = "Apache-2.0"
+
+[dependencies]
+# Core dependencies
+causality-types = { path = "../causality-types" }
+causality-core = { path = "../causality-core" }
+causality-domain = { path = "../causality-domain" }
+causality-error = { path = "../causality-error" }
+causality-crypto = { workspace = true }
+causality-tel = { path = "../causality-tel" }
+causality-ir = { path = "../causality-ir" }
+
+# External dependencies
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+base64 = "0.22"
+bincode = { workspace = true }
+blake3 = "1.6"  # For content-addressable IDs
+borsh = { workspace = true }
+byteorder = "1.5"  # For byte serialization/deserialization
+ciborium = "0.2"
+chrono = { workspace = true }
+flate2 = "1.0"
+futures = { workspace = true }
+getrandom = "0.2"  # Add this back for wasm feature
+hex = { workspace = true }
+lazy_static = "1.4"
+parking_lot = "0.12"
+rand = "0.8"
+reqwest = { version = "0.12", features = ["json"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# Test dependencies
+tempfile = "3.8"
+tokio-test = "0.4"
+
+[features]
+default = []
+md5 = []
+domain = []
+code-repo = []
+# Enable this feature for browser/wasm compatibility
+wasm = ["getrandom/js"]
+
+# DEPRECATED: Dependencies on legacy crates have been removed
+# All functionality is now available through causality-core
+# causality-resource = { workspace = true }
+# causality-effects = { workspace = true }

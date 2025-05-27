@@ -270,8 +270,8 @@ pub mod helpers {
         constraints: Vec<C>,
     ) -> impl Constraint<T, Error = E>
     where
-        C: Constraint<T, Error = E>,
-        E: From<String>,
+        C: Constraint<T, Error = E> + 'static,
+        E: From<String> + 'static,
     {
         let id = id.into();
         let description = description.into();
@@ -283,6 +283,26 @@ pub mod helpers {
             }
             Ok(())
         })
+    }
+}
+
+// Add implementation for boxed constraints
+impl<T, C> Constraint<T> for Box<C>
+where
+    C: Constraint<T> + ?Sized,
+{
+    type Error = C::Error;
+    
+    fn check(&self, value: &T) -> Result<(), Self::Error> {
+        (**self).check(value)
+    }
+    
+    fn id(&self) -> &str {
+        (**self).id()
+    }
+    
+    fn description(&self) -> &str {
+        (**self).description()
     }
 }
 
@@ -303,6 +323,13 @@ mod tests {
     }
     
     impl StdError for ConstraintError {}
+    
+    // Add From<String> implementation for ConstraintError
+    impl From<String> for ConstraintError {
+        fn from(message: String) -> Self {
+            ConstraintError(message)
+        }
+    }
     
     // A simple test constraint that checks if a number is positive
     struct PositiveConstraint;
@@ -367,13 +394,13 @@ mod tests {
     #[test]
     fn test_constraint_set() {
         // Create individual constraints
-        let positive = Box::new(PositiveConstraint);
-        let even = Box::new(EvenConstraint);
+        let positive = PositiveConstraint;
+        let even = EvenConstraint;
         
-        // Create a constraint set with these constraints
-        let mut set = ConstraintSet::new();
-        set.add(positive);
-        set.add(even);
+        // Create a constraint set with boxed constraints to allow different types
+        let mut set: ConstraintSet<i32, Box<dyn Constraint<i32, Error = ConstraintError>>, ConstraintError> = ConstraintSet::new();
+        set.add(Box::new(positive));
+        set.add(Box::new(even));
         
         assert_eq!(set.len(), 2);
         assert!(!set.is_empty());
@@ -441,8 +468,8 @@ mod tests {
         let positive = PositiveConstraint;
         let even = EvenConstraint;
         
-        // Use the same constraint type for both elements in the vector
-        let constraints: Vec<PositiveConstraint> = vec![positive];
+        // Box constraints for the combine helper
+        let constraints: Vec<Box<dyn Constraint<i32, Error = ConstraintError>>> = vec![Box::new(positive)];
         
         // Test positive constraint separately
         let combined_positive = helpers::combine(
@@ -455,7 +482,7 @@ mod tests {
         assert!(combined_positive.check(&-2).is_err());
         
         // Test even constraint separately
-        let constraints: Vec<EvenConstraint> = vec![even];
+        let constraints: Vec<Box<dyn Constraint<i32, Error = ConstraintError>>> = vec![Box::new(even)];
         let combined_even = helpers::combine(
             "even_only",
             "Checks if a number is even",

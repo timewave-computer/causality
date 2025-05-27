@@ -8,7 +8,7 @@ use serde::{Serialize, Deserialize};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use super::types::{ResourceId, ResourceType};
-use super::interface::ResourceOperation;
+use super::operation::ResourceOperation;
 
 /// Resource capability
 ///

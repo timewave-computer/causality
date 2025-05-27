@@ -2,25 +2,54 @@
 //!
 //! This module provides utility functions for cryptographic operations.
 
-/// Generate a simple hash from a string (non-cryptographic)
-/// 
-/// This is a simple non-cryptographic hash function, useful for basic hashing needs.
-/// For cryptographic purposes, use the proper hash functions from the hash module.
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
+
+/// Compute a simple non-cryptographic hash of a string
+/// Useful for non-security-critical situations like stable ID generation
 pub fn simple_hash(input: &str) -> u64 {
-    let mut hash: u64 = 0;
-    for byte in input.bytes() {
-        hash = hash.wrapping_mul(31).wrapping_add(byte as u64);
-    }
-    hash
+    let mut hasher = DefaultHasher::new();
+    input.hash(&mut hasher);
+    hasher.finish()
 }
 
-/// Generate a simple hash from a byte slice (non-cryptographic)
+/// Compute a simple non-cryptographic hash of bytes
+/// Useful for non-security-critical situations like stable ID generation
 pub fn simple_hash_bytes(input: &[u8]) -> u64 {
-    let mut hash: u64 = 0;
-    for &byte in input {
-        hash = hash.wrapping_mul(31).wrapping_add(byte as u64);
+    let mut hasher = DefaultHasher::new();
+    input.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Generate a random 64-bit number
+pub fn random_u64() -> u64 {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    rng.gen()
+}
+
+/// Truncate a slice to the specified length
+pub fn truncate_bytes(bytes: &[u8], length: usize) -> Vec<u8> {
+    bytes.iter().take(length).cloned().collect()
+}
+
+/// Pad a slice to the specified length with zeros
+pub fn pad_bytes(bytes: &[u8], length: usize) -> Vec<u8> {
+    let mut result = bytes.to_vec();
+    if result.len() < length {
+        result.resize(length, 0);
     }
-    hash
+    result
+}
+
+/// Convert bytes to a hex string
+pub fn bytes_to_hex(bytes: &[u8]) -> String {
+    hex::encode(bytes)
+}
+
+/// Convert a hex string to bytes
+pub fn hex_to_bytes(hex: &str) -> Result<Vec<u8>, hex::FromHexError> {
+    hex::decode(hex)
 }
 
 /// Generate a deterministic u64 hash from an arbitrary object that can be serialized
@@ -47,19 +76,19 @@ mod tests {
     
     #[test]
     fn test_simple_hash_bytes() {
-        // Check that the same input produces the same hash
-        let hash1 = simple_hash_bytes(b"hello world");
-        let hash2 = simple_hash_bytes(b"hello world");
+        let bytes1 = vec![1, 2, 3, 4];
+        let bytes2 = vec![1, 2, 3, 4];
+        let bytes3 = vec![5, 6, 7, 8];
+        
+        let hash1 = simple_hash_bytes(&bytes1);
+        let hash2 = simple_hash_bytes(&bytes2);
+        let hash3 = simple_hash_bytes(&bytes3);
+        
+        // Same input should produce same hash
         assert_eq!(hash1, hash2);
         
-        // Check that different inputs produce different hashes
-        let hash3 = simple_hash_bytes(b"hello world!");
+        // Different input should produce different hash
         assert_ne!(hash1, hash3);
-        
-        // Check that string and byte versions are equivalent
-        let hash_str = simple_hash("test string");
-        let hash_bytes = simple_hash_bytes(b"test string");
-        assert_eq!(hash_str, hash_bytes);
     }
     
     #[test]

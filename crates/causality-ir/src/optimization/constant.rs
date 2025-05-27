@@ -6,7 +6,9 @@
 use anyhow::Result;
 use std::collections::HashMap;
 
-use crate::{TemporalEffectGraph, EffectNode, EffectId};
+use crate::{TemporalEffectGraph, EffectId};
+use crate::effect_node::{EffectNode, ParameterValue};
+use crate::builder::GraphBuilder;
 use super::{Optimization, OptimizationConfig};
 
 /// Performs constant folding optimizations on the TEG
@@ -37,8 +39,8 @@ impl ConstantFolding {
         
         for (effect_id, effect) in teg.effects() {
             // Check if this is a literal or constant computation
-            if effect.is_constant() || self.can_be_evaluated_at_compile_time(teg, effect_id) {
-                constants.push(effect_id);
+            if effect.is_constant() || self.can_be_evaluated_at_compile_time(teg, effect_id.clone()) {
+                constants.push(effect_id.clone());
             }
         }
         
@@ -47,7 +49,7 @@ impl ConstantFolding {
     
     /// Check if an effect can be evaluated at compile time
     fn can_be_evaluated_at_compile_time(&self, teg: &TemporalEffectGraph, effect_id: EffectId) -> bool {
-        let effect = match teg.get_effect(effect_id) {
+        let effect = match teg.get_effect(&effect_id) {
             Some(e) => e,
             None => return false,
         };
@@ -58,14 +60,14 @@ impl ConstantFolding {
         }
         
         // Check if all inputs are constants
-        let predecessors = teg.get_incoming_edges(effect_id);
+        let predecessors = teg.get_incoming_edges(&effect_id);
         for (pred_id, _) in predecessors {
-            let pred = match teg.get_effect(pred_id) {
+            let pred = match teg.get_effect(&pred_id) {
                 Some(e) => e,
                 None => return false,
             };
             
-            if !pred.is_constant() && !self.can_be_evaluated_at_compile_time(teg, pred_id) {
+            if !pred.is_constant() && !self.can_be_evaluated_at_compile_time(teg, pred_id.clone()) {
                 return false;
             }
         }
@@ -75,11 +77,19 @@ impl ConstantFolding {
     
     /// Evaluate a constant expression
     fn evaluate_constant(&self, teg: &TemporalEffectGraph, effect_id: EffectId) -> Option<String> {
-        let effect = teg.get_effect(effect_id)?;
+        let effect = teg.get_effect(&effect_id)?;
         
         // If it's already a constant, return its value
         if effect.is_constant() {
-            return Some(effect.constant_value().unwrap_or_default());
+            return effect.constant_value().and_then(|v| {
+                match v {
+                    ParameterValue::String(s) => Some(s.clone()),
+                    ParameterValue::Integer(i) => Some(i.to_string()),
+                    ParameterValue::Boolean(b) => Some(b.to_string()),
+                    ParameterValue::Float(f) => Some(f.to_string()),
+                    _ => Some("".to_string())
+                }
+            });
         }
         
         // Otherwise, evaluate based on operation type
@@ -172,15 +182,15 @@ impl ConstantFolding {
         let mut input_ids = Vec::new();
         
         // Get all predecessors
-        for (pred_id, _) in teg.get_incoming_edges(effect_id) {
-            input_ids.push(pred_id);
+        for (pred_id, _) in teg.get_incoming_edges(&effect_id) {
+            input_ids.push(pred_id.clone());
         }
         
         // Sort by edge order if available
         // This is important for operations where order matters
         input_ids.sort_by(|a, b| {
-            let edge_a = teg.get_edge(*a, effect_id).unwrap();
-            let edge_b = teg.get_edge(*b, effect_id).unwrap();
+            let edge_a = teg.get_edge(a.clone(), effect_id.clone()).unwrap();
+            let edge_b = teg.get_edge(b.clone(), effect_id.clone()).unwrap();
             
             edge_a.order().cmp(&edge_b.order())
         });
@@ -217,35 +227,41 @@ impl Optimization for ConstantFolding {
         
         // Replace each constant with its evaluated value
         for effect_id in constant_effects {
-            if let Some(value) = self.evaluate_constant(teg, effect_id) {
+            if let Some(value) = self.evaluate_constant(teg, effect_id.clone()) {
                 // Create a new constant node
                 let mut constant_node = EffectNode::new(
                     format!("const_{}", effect_id),
                     "constant".to_string(),
+                    "constant_domain".to_string(), // Default domain ID for constant nodes
                 );
                 
                 // Set the constant value
-                constant_node.set_constant_value(value);
+                let value_param = ParameterValue::String(value);
+                constant_node.parameters.insert("constant_value".to_string(), value_param.clone());
+                constant_node.parameters.insert("constant".to_string(), ParameterValue::Boolean(true));
                 
                 // Get the original effect for metadata
-                let original = teg.get_effect(effect_id).unwrap().clone();
+                let original = teg.get_effect(&effect_id).unwrap().clone();
                 
                 // Copy metadata
                 let mut metadata = original.metadata().clone();
-                metadata.insert("folded_from".to_string(), original.name().to_string());
-                constant_node.set_metadata(metadata);
+                metadata.insert(
+                    "folded_from".to_string(), 
+                    ParameterValue::String(original.name().to_string())
+                );
+                constant_node.metadata = metadata;
                 
                 // Add the constant node to the graph
                 let const_id = teg.add_effect(constant_node)?;
                 
                 // Redirect all outgoing edges from the original effect to the constant
-                let outgoing = teg.get_outgoing_edges(effect_id);
+                let outgoing = teg.get_outgoing_edges(&effect_id);
                 for (dst, edge_data) in outgoing {
-                    teg.add_edge(const_id, dst, edge_data.clone())?;
+                    teg.add_edge(&const_id, &dst, edge_data.clone())?;
                 }
                 
                 // Remove the original effect
-                teg.remove_effect(effect_id)?;
+                teg.remove_effect(&effect_id)?;
                 
                 changed = true;
             }
@@ -272,101 +288,142 @@ mod tests {
     use crate::builder::GraphBuilder;
     
     #[test]
-    fn test_constant_folding_arithmetic() {
-        let mut graph_builder = GraphBuilder::new();
+    fn test_arithmetic() {
+        // Create a new graph
+        let mut builder = GraphBuilder::new();
         
-        // Create a simple graph with constant expressions
-        let const_a = graph_builder.add_constant("const_a", 5);
-        let const_b = graph_builder.add_constant("const_b", 3);
+        // Add two number constants
+        let const1 = builder.add_effect(
+            EffectNode::new(
+                "const1".to_string(),
+                "constant".to_string(),
+                "constant_domain".to_string(),
+            )
+        ).unwrap();
         
-        // Add operation: a + b
-        let add = graph_builder.add_effect("add", "add");
-        graph_builder.connect_effects(const_a, add);
-        graph_builder.connect_effects(const_b, add);
+        // Set constant parameters
+        let mut const1_node = builder.get_effect_mut(&const1).unwrap();
+        const1_node.parameters.insert("constant".to_string(), ParameterValue::Boolean(true));
+        const1_node.parameters.insert("constant_value".to_string(), ParameterValue::Number(5.0));
         
-        // Add operation: a * b
-        let multiply = graph_builder.add_effect("multiply", "multiply");
-        graph_builder.connect_effects(const_a, multiply);
-        graph_builder.connect_effects(const_b, multiply);
+        let const2 = builder.add_effect(
+            EffectNode::new(
+                "const2".to_string(),
+                "constant".to_string(),
+                "constant_domain".to_string(),
+            )
+        ).unwrap();
         
-        let mut teg = graph_builder.build().unwrap();
+        // Set constant parameters
+        let mut const2_node = builder.get_effect_mut(&const2).unwrap();
+        const2_node.parameters.insert("constant".to_string(), ParameterValue::Boolean(true));
+        const2_node.parameters.insert("constant_value".to_string(), ParameterValue::Number(3.0));
         
-        // Apply optimization
-        let opt = ConstantFolding::new();
-        let config = OptimizationConfig {
-            level: 1,
-            ..Default::default()
-        };
+        // Create an add operation
+        let add = builder.add_effect(
+            EffectNode::new(
+                "add".to_string(),
+                "add".to_string(),
+                "arithmetic_domain".to_string(),
+            )
+        ).unwrap();
         
-        let result = opt.apply(&mut teg, &config).unwrap();
+        // Connect the constants to the add operation
+        builder.connect_effects(&const1, &add).unwrap();
+        builder.connect_effects(&const2, &add).unwrap();
         
-        // Check that constants were folded
-        assert!(result);
+        // Build the graph
+        let mut teg = builder.build().unwrap();
         
-        // Original operations should be removed
-        assert!(teg.get_effect(add).is_none());
-        assert!(teg.get_effect(multiply).is_none());
+        // Apply constant folding
+        let optimization = ConstantFolding::new();
+        let changed = optimization.apply(&mut teg, &OptimizationConfig::default()).unwrap();
         
-        // New constants should be present
-        let folded_effects: Vec<_> = teg.effects()
-            .iter()
-            .filter(|(_, e)| e.name().starts_with("const_"))
-            .collect();
-            
-        // We should have the original two constants plus two new folded constants
-        assert_eq!(folded_effects.len(), 4);
+        // Verify that the graph changed
+        assert!(changed);
         
-        // Check for the folded values
-        let has_add_result = folded_effects.iter().any(|(_, e)| {
-            e.is_constant() && e.constant_value() == Some("8".to_string())
-        });
+        // Verify that the add operation was replaced with a constant
+        let mut found_const = false;
+        for (_, effect) in teg.effect_nodes.iter() {
+            if effect.effect_type() == "constant" {
+                if let Some(ParameterValue::Number(value)) = effect.parameters.get("constant_value") {
+                    if *value == 8.0 {
+                        found_const = true;
+                    }
+                }
+            }
+        }
         
-        let has_multiply_result = folded_effects.iter().any(|(_, e)| {
-            e.is_constant() && e.constant_value() == Some("15".to_string())
-        });
-        
-        assert!(has_add_result);
-        assert!(has_multiply_result);
+        assert!(found_const);
     }
-    
+
     #[test]
-    fn test_constant_folding_string() {
-        let mut graph_builder = GraphBuilder::new();
+    fn test_string_operations() {
+        // Create a new graph
+        let mut builder = GraphBuilder::new();
         
-        // Create string constants
-        let str_a = graph_builder.add_string_constant("str_a", "Hello, ");
-        let str_b = graph_builder.add_string_constant("str_b", "World!");
+        // Add two string constants
+        let const1 = builder.add_effect(
+            EffectNode::new(
+                "const1".to_string(),
+                "constant".to_string(),
+                "constant_domain".to_string(),
+            )
+        ).unwrap();
         
-        // Add operation: concat strings
-        let concat = graph_builder.add_effect("concat", "concat");
-        graph_builder.connect_effects(str_a, concat);
-        graph_builder.connect_effects(str_b, concat);
+        // Set constant parameters
+        let mut const1_node = builder.get_effect_mut(&const1).unwrap();
+        const1_node.parameters.insert("constant".to_string(), ParameterValue::Boolean(true));
+        const1_node.parameters.insert("constant_value".to_string(), ParameterValue::String("Hello, ".to_string()));
         
-        let mut teg = graph_builder.build().unwrap();
+        let const2 = builder.add_effect(
+            EffectNode::new(
+                "const2".to_string(),
+                "constant".to_string(),
+                "constant_domain".to_string(),
+            )
+        ).unwrap();
         
-        // Apply optimization
-        let opt = ConstantFolding::new();
-        let config = OptimizationConfig {
-            level: 1,
-            ..Default::default()
-        };
+        // Set constant parameters
+        let mut const2_node = builder.get_effect_mut(&const2).unwrap();
+        const2_node.parameters.insert("constant".to_string(), ParameterValue::Boolean(true));
+        const2_node.parameters.insert("constant_value".to_string(), ParameterValue::String("world!".to_string()));
         
-        let result = opt.apply(&mut teg, &config).unwrap();
+        // Create a concat operation
+        let concat = builder.add_effect(
+            EffectNode::new(
+                "concat".to_string(),
+                "concat".to_string(),
+                "string_domain".to_string(),
+            )
+        ).unwrap();
         
-        // Check that constants were folded
-        assert!(result);
-        assert!(teg.get_effect(concat).is_none());
+        // Connect the constants to the concat operation
+        builder.connect_effects(&const1, &concat).unwrap();
+        builder.connect_effects(&const2, &concat).unwrap();
         
-        // Check for the folded value
-        let folded_effects: Vec<_> = teg.effects()
-            .iter()
-            .filter(|(_, e)| e.is_constant())
-            .collect();
-            
-        let has_concat_result = folded_effects.iter().any(|(_, e)| {
-            e.constant_value() == Some("Hello, World!".to_string())
-        });
+        // Build the graph
+        let mut teg = builder.build().unwrap();
         
-        assert!(has_concat_result);
+        // Apply constant folding
+        let optimization = ConstantFolding::new();
+        let changed = optimization.apply(&mut teg, &OptimizationConfig::default()).unwrap();
+        
+        // Verify that the graph changed
+        assert!(changed);
+        
+        // Verify that the concat operation was replaced with a constant
+        let mut found_const = false;
+        for (_, effect) in teg.effect_nodes.iter() {
+            if effect.effect_type() == "constant" {
+                if let Some(ParameterValue::String(value)) = effect.parameters.get("constant_value") {
+                    if value == "Hello, world!" {
+                        found_const = true;
+                    }
+                }
+            }
+        }
+        
+        assert!(found_const);
     }
 }

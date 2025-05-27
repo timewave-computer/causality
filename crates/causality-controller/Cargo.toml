@@ -1,0 +1,50 @@
+[package]
+name = "causality-controller"
+version = "0.1.0"
+edition = "2021"
+description = "Main controller application for the Causality system"
+authors = ["Timewave Labs <info@timewavewave.xyz>"]
+repository = "https://github.com/timewave-lab/causality"
+license = "MIT"
+
+[dependencies]
+# Core Causality crates
+causality-core = { path = "../causality-core" }
+causality-runtime = { path = "../causality-runtime" }
+causality-ir = { path = "../causality-ir" }
+causality-types = { path = "../causality-types" }
+causality-tel = { path = "../causality-tel" }
+causality-crypto = { path = "../causality-crypto" }
+causality-error = { path = "../causality-error" }
+
+# Domain adapters
+causality-domain = { path = "../causality-domain" }
+causality-domain-ethereum = { path = "../causality-domain-ethereum" }
+causality-domain-cosmwasm = { path = "../causality-domain-cosmwasm" }
+
+# Storage implementations
+causality-storage-mem = { path = "../causality-storage-mem" }
+# Uncomment as needed
+# causality-storage-rocksdb = { path = "../causality-storage-rocksdb" }
+# causality-storage-postgres = { path = "../causality-storage-postgres" }
+
+# Async runtime
+tokio = { version = "1.28", features = ["full"] }
+
+# Logging and tracing
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Utility libraries
+anyhow = "1.0"
+thiserror = "1.0"
+async-trait = "0.1.68"
+clap = { version = "4.3", features = ["derive"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.7"

@@ -2,8 +2,8 @@
 // Contains fundamental types previously in causality-crypto/src/hash.rs
 
 use std::fmt;
+use std::convert::TryFrom;
 use std::str::FromStr;
-use thiserror::Error;
 use borsh::{BorshSerialize, BorshDeserialize};
 use serde::{Serialize, Deserialize};
 
@@ -308,7 +308,7 @@ pub trait ContentAddressed {
 }
 
 /// Content hash with algorithm information
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ContentHash {
     /// The algorithm used for hashing
     pub algorithm: String,

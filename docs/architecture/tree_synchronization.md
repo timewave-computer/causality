@@ -404,11 +404,11 @@ contract ValenceCausalityVerifier {
 
 This approach has several benefits:
 
-1. **Unified Data Structure**: All data (local and remote) lives in a single SMT
-2. **No Storage Conflicts**: Domain-based prefixing ensures no key collisions
-3. **Efficient Querying**: Can query state from any domain using the same root
-4. **Simplified Architecture**: Eliminates the need for separate mappings per domain
-5. **Unified Proof Mechanism**: All state proofs use the same verification methodology
+* **Unified Data Structure**: All data (local and remote) lives in a single SMT
+* **No Storage Conflicts**: Domain-based prefixing ensures no key collisions
+* **Efficient Querying**: Can query state from any domain using the same root
+* **Simplified Architecture**: Eliminates the need for separate mappings per domain
+* **Unified Proof Mechanism**: All state proofs use the same verification methodology
 
 While each chain maintains its own unified tree containing namespaced state from multiple domains, the implied global data structure that would resolve all these separate views is still inherently contentious. Programs must resolve these contentions based on their application-specific requirements.
 
@@ -431,101 +431,23 @@ This transitive propagation introduces trust assumptions:
 1. **Trusted Intermediaries**: Chain C must trust Chain B's representation of Chain A's state
 2. **Validation Requirements**: Chain C may need additional verification to ensure B hasn't misrepresented A's state
 3. **Staleness Concerns**: B's view of A may be outdated when propagated to C
-
-```rust
-// Example of tracking transitive knowledge
-struct StateKnowledgeGraph {
-    // Direct knowledge (chain -> set of chains it directly knows about)
-    direct_knowledge: HashMap<ChainId, HashSet<ChainId>>,
-    
-    // Knowledge paths (destination -> source -> path of intermediaries)
-    knowledge_paths: HashMap<ChainId, HashMap<ChainId, Vec<Vec<ChainId>>>>,
-    
-    // Timestamps of knowledge acquisition
-    knowledge_timestamps: HashMap<ChainId, HashMap<ChainId, u64>>,
-}
-
-impl StateKnowledgeGraph {
-    // Record direct knowledge acquisition
-    fn record_direct_knowledge(&mut self, from: ChainId, to: ChainId, timestamp: u64) {
-        // Record direct knowledge
-        self.direct_knowledge.entry(to).or_default().insert(from);
-        
-        // Record timestamp
-        self.knowledge_timestamps.entry(to).or_default()
-            .insert(from, timestamp);
-            
-        // Record direct path
-        self.knowledge_paths.entry(to).or_default()
-            .entry(from).or_default()
-            .push(vec![]);
-            
-        // Update transitive knowledge paths
-        self.update_transitive_knowledge(from, to, timestamp);
-    }
-    
-    // Propagate transitive knowledge
-    fn update_transitive_knowledge(&mut self, source: ChainId, through: ChainId, timestamp: u64) {
-        // Find all chains that know about 'through'
-        let knowers = self.find_knowers(through);
-        
-        for knower in knowers {
-            // Add new transitive path
-            let mut path = vec![through];
-            self.knowledge_paths.entry(knower).or_default()
-                .entry(source).or_default()
-                .push(path);
-                
-            // Update timestamps (with degraded trust factor)
-            // Lower timestamp value indicates older/less trusted knowledge
-            let degraded_timestamp = timestamp.saturating_sub(10); // Simple degradation model
-            self.knowledge_timestamps.entry(knower).or_default()
-                .entry(source).or_default()
-                .max(degraded_timestamp);
-        }
-    }
-}
-```
-
 #### Recording and Using State Knowledge
 
-All knowledge of state across chains is recorded and may be used by programs in their update and conflict resolution rules:
+The system needs to track knowledge propagation across chains, including:
 
-```rust
-// Program-level conflict resolution using state knowledge
-impl ConflictResolver for MyApplication {
-    fn resolve_conflict(
-        &self,
-        local_chain: ChainId,
-        resource_id: ResourceId,
-        views: HashMap<ChainId, ResourceView>
-    ) -> ResolvedState {
-        // Get state knowledge graph
-        let knowledge_graph = self.state_knowledge.clone();
-        
-        // Filter views based on trust assumptions
-        let trusted_views = views.into_iter()
-            .filter(|(chain_id, view)| {
-                // Direct knowledge is always trusted
-                if knowledge_graph.is_direct_knowledge(local_chain, *chain_id) {
-                    return true;
-                }
-                
-                // Check if transitive knowledge meets trust threshold
-                if let Some(paths) = knowledge_graph.get_knowledge_paths(local_chain, *chain_id) {
-                    // At least one path with length <= 2 (at most one intermediary)
-                    return paths.iter().any(|path| path.len() <= 2);
-                }
-                
-                false
-            })
-            .collect::<HashMap<_, _>>();
-            
-        // Apply application-specific resolution strategy to trusted views
-        self.apply_resolution_strategy(local_chain, resource_id, trusted_views)
-    }
-}
-```
+- **Direct Knowledge Tracking**: Recording which chains have direct knowledge of other chains' states
+- **Transitive Knowledge Paths**: Maintaining paths through which knowledge flows transitively
+- **Knowledge Timestamps**: Tracking when knowledge was acquired to assess freshness
+- **Trust Degradation**: Implementing mechanisms to reduce trust in knowledge as it passes through intermediaries
+
+When resolving conflicts, applications can use this knowledge graph to:
+
+- **Filter Views Based on Trust**: Only consider state views from chains that are directly known or trusted through short transitive paths
+- **Apply Time-Based Heuristics**: Prefer fresher knowledge over stale information
+- **Implement Chain-Specific Trust Policies**: Define which chains are trusted as intermediaries for specific types of information
+- **Resolve Conflicts Using Application Logic**: Apply domain-specific rules to reconcile different views of the same resource
+
+For example, an application might trust direct knowledge completely, trust knowledge through one intermediary with some caution, and reject knowledge that has passed through multiple intermediaries. It might also implement different resolution strategies for different resource types, such as using "last writer wins" for some resources and more complex reconciliation for others.
 
 This comprehensive recording of state knowledge—including direct updates, remote view commitments, and transitive knowledge paths—enables programs to make informed decisions about state resolution based on their specific trust and consistency requirements.
 
@@ -533,10 +455,10 @@ This comprehensive recording of state knowledge—including direct updates, remo
 
 Conflicts occur in several scenarios:
 
-1. **Concurrent Resource Consumption**: Two chains attempt to consume the same resource
-2. **Root Divergence**: Chains have different Merkle roots representing different "world states"
-3. **Conflicting Updates**: Incompatible updates to the same resource from different chains
-4. **Temporal Inconsistency**: Updates are processed in different orders on different chains
+- **Concurrent Resource Consumption**: Two chains attempt to consume the same resource
+- **Root Divergence**: Chains have different Merkle roots representing different "world states"
+- **Conflicting Updates**: Incompatible updates to the same resource from different chains
+- **Temporal Inconsistency**: Updates are processed in different orders on different chains
 
 Since each chain maintains its own view of the global state through its root, these views can become inconsistent, requiring resolution.
 
@@ -603,30 +525,30 @@ This sequence diagram illustrates the process of transferring a resource from Ch
 
 To ensure efficient SMT synchronization:
 
-1. **Batched Updates**: Multiple changes are batched into single root updates
-2. **Proof Reuse**: Generated proofs are cached and reused when possible
-3. **Lazy Verification**: Only verify proofs when explicitly needed
-4. **Incremental Updates**: Only synchronize changed subtrees rather than full trees
-5. **Prioritized Synchronization**: Critical resources get priority synchronization
-6. **Off-Chain Caching**: Extensive caching of proofs and intermediate results in off-chain components
-7. **Optimized SMT Operations**: Specialized algorithms for common SMT operations
+- **Batched Updates**: Multiple changes are batched into single root updates
+- **Proof Reuse**: Generated proofs are cached and reused when possible
+- **Lazy Verification**: Only verify proofs when explicitly needed
+- **Incremental Updates**: Only synchronize changed subtrees rather than full trees
+- **Prioritized Synchronization**: Critical resources get priority synchronization
+- **Off-Chain Caching**: Extensive caching of proofs and intermediate results in off-chain components
+- **Optimized SMT Operations**: Specialized algorithms for common SMT operations
 
 ### Concurrent SMT Updates
 
 The SMT system supports concurrent updates to the local tree with several mechanisms:
 
-1. **Optimistic Batching**: Updates are queued and processed in batches
-2. **Conflict Detection**: Overlapping resource access is detected
-3. **Lock-Free Reads**: Reads can proceed without blocking during updates
-4. **Atomic Root Updates**: Root transitions are atomic operations
+- **Optimistic Batching**: Updates are queued and processed in batches
+- **Conflict Detection**: Overlapping resource access is detected
+- **Lock-Free Reads**: Reads can proceed without blocking during updates
+- **Atomic Root Updates**: Root transitions are atomic operations
 
 Updating the SMT may face the following concurrency Limitations:
 
-1. **Serial Root Updates**: While operations can be prepared concurrently, root updates are serialized
-2. **Conflict Resolution Overhead**: Detecting and resolving conflicts adds computational overhead
-3. **Proof Invalidation**: Concurrent root changes can invalidate in-progress proof generation
-4. **Cache Coherence**: Maintaining consistent caches across concurrent operations will be challenging
-5. **Contention with Scale**: As concurrent usage increases, lock contention becomes a limiting factor
+- **Serial Root Updates**: While operations can be prepared concurrently, root updates are serialized
+- **Conflict Resolution Overhead**: Detecting and resolving conflicts adds computational overhead
+- **Proof Invalidation**: Concurrent root changes can invalidate in-progress proof generation
+- **Cache Coherence**: Maintaining consistent caches across concurrent operations will be challenging
+- **Contention with Scale**: As concurrent usage increases, lock contention becomes a limiting factor
 
 Possible avenues for overcoming these limitations:
 

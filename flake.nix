@@ -199,6 +199,11 @@
             # Add Node.js tools for VSCode extension development
             pkgs.nodejs
             (pkgs.nodePackages.typescript-language-server or pkgs.nodePackages.nodejs)
+            pkgs.clang # Add clang for C compilation/linking
+          ];
+
+          nativeBuildInputs = [
+            pkgs.clang
           ];
           
           # Explicitly set environment variables

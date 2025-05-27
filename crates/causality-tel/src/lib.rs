@@ -12,7 +12,6 @@ pub mod types;
 #[path = "parser.rs"]
 pub mod parser;
 pub mod compiler;
-pub mod handlers;
 pub mod combinators;
 pub mod cli;
 // Note: The effects module has been moved to causality-engine
@@ -86,5 +85,10 @@ pub mod teg {
     pub use causality_ir::{TemporalEffectGraph, TEGFragment, EffectNode, ResourceNode};
 }
 
-// Re-export ToTEG trait from compiler
-pub use compiler::ToTEG; 
+// Effect-specific reexports
+pub use causality_error::EngineError;
+
+// Type reexports
+pub use causality_types::HashAlgorithm;
+pub use causality_types::ContentId;
+pub use causality_types::DomainId; 

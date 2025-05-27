@@ -125,3 +125,41 @@ pub enum NodeId {
     /// Resource node identifier
     Resource(ResourceId),
 }
+
+/// Implementation for the Edge struct
+impl Edge {
+    /// Create a new edge between nodes
+    pub fn new(id: EdgeId, source: NodeId, target: NodeId, edge_type: EdgeType) -> Self {
+        Self {
+            id,
+            source,
+            target,
+            edge_type,
+        }
+    }
+
+    /// Get the order of this edge
+    /// This is used for sorting edges when order matters in operations
+    /// 
+    /// Currently uses a simple ordering based on the edge ID
+    /// In the future, this could use explicit ordering metadata
+    pub fn order(&self) -> usize {
+        // A simple default implementation using the edge ID
+        // In a more sophisticated implementation, this could use
+        // explicit ordering metadata attached to the edge
+        self.id.parse::<usize>().unwrap_or(0)
+    }
+}
+
+// Extend the AccessMode enum with a to_string method
+impl AccessMode {
+    pub fn to_string(&self) -> String {
+        match self {
+            AccessMode::Read => "read".to_string(),
+            AccessMode::Write => "write".to_string(),
+            AccessMode::ReadWrite => "read_write".to_string(),
+            AccessMode::Create => "create".to_string(),
+            AccessMode::Delete => "delete".to_string(),
+        }
+    }
+}

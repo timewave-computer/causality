@@ -10,13 +10,13 @@ pub mod codes {
     use crate::ErrorCode;
     
     // Storage error codes start with 4000
-    pub const DATABASE_ERROR: ErrorCode = ErrorCode(4001);
-    pub const KEY_NOT_FOUND: ErrorCode = ErrorCode(4002);
-    pub const SERIALIZATION_ERROR: ErrorCode = ErrorCode(4003);
-    pub const TRANSACTION_ERROR: ErrorCode = ErrorCode(4004);
-    pub const CONNECTION_ERROR: ErrorCode = ErrorCode(4005);
-    pub const SCHEMA_ERROR: ErrorCode = ErrorCode(4006);
-    pub const CONSTRAINT_ERROR: ErrorCode = ErrorCode(4007);
+    // pub const DATABASE_ERROR: ErrorCode = ErrorCode(4001);
+    // pub const KEY_NOT_FOUND: ErrorCode = ErrorCode(4002);
+    // pub const SERIALIZATION_ERROR: ErrorCode = ErrorCode(4003);
+    // pub const TRANSACTION_ERROR: ErrorCode = ErrorCode(4004);
+    // pub const CONNECTION_ERROR: ErrorCode = ErrorCode(4005);
+    // pub const SCHEMA_ERROR: ErrorCode = ErrorCode(4006);
+    // pub const CONSTRAINT_ERROR: ErrorCode = ErrorCode(4007);
 }
 
 /// Storage-specific error types
@@ -93,4 +93,7 @@ impl StorageError {
     pub fn database_error(message: impl Into<String>) -> Self {
         StorageError::DatabaseError(message.into())
     }
+}
+
+pub mod prelude {
 } 

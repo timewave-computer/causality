@@ -34,23 +34,23 @@ pub trait TelObject: Clone + Debug + PartialEq {}
 pub trait TegObject: Clone + Debug + PartialEq {}
 
 /// Trait for morphisms in the TEL category
-pub trait TelMorphism<A: TelObject> {
+pub trait TelMorphism<A: TelObject>: Send + Sync {
     fn apply(&self, a: A) -> A;
     
     /// Compose this morphism with another (g ∘ f)
-    fn compose<F: TelMorphism<A>>(&self, f: &F) -> Box<dyn TelMorphism<A>>;
+    fn compose<'a>(&'a self, f: &'a dyn TelMorphism<A>) -> Box<dyn TelMorphism<A> + 'a>;
     
-    /// Get the identity morphism for an object
-    fn identity() -> Box<dyn TelMorphism<A>>;
+    /// Create an identity morphism for the given object type
+    fn identity(&self, a: &A) -> Box<dyn TelMorphism<A>>;
 }
 
 /// Trait for morphisms in the TEG category
-pub trait TegMorphism<B: TegObject> {
+pub trait TegMorphism<B: TegObject>: Send + Sync {
     fn apply(&self, b: B) -> B;
     
     /// Compose this morphism with another (g ∘ f)
-    fn compose<F: TegMorphism<B>>(&self, f: &F) -> Box<dyn TegMorphism<B>>;
+    fn compose<'a>(&'a self, f: &'a dyn TegMorphism<B>) -> Box<dyn TegMorphism<B> + 'a>;
     
     /// Get the identity morphism for an object
-    fn identity() -> Box<dyn TegMorphism<B>>;
+    fn identity() -> Box<dyn TegMorphism<B>> where Self: Sized;
 }

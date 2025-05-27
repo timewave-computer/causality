@@ -383,7 +383,16 @@ mod tests {
         }
         
         async fn domain_info(&self) -> Result<causality_domain::DomainInfo> {
-            todo!()
+            Ok(causality_domain::DomainInfo {
+                name: "Mock Domain".to_string(),
+                description: "A mock domain for testing".to_string(),
+                version: "1.0.0".to_string(),
+                chain_id: "mock-chain-1".to_string(),
+                network_type: "testnet".to_string(),
+                currency: "TEST".to_string(),
+                features: vec!["testing".to_string()],
+                metadata: HashMap::new(),
+            })
         }
         
         async fn current_height(&self) -> Result<BlockHeight> {
@@ -398,8 +407,12 @@ mod tests {
             Ok(Timestamp::now())
         }
         
-        async fn time_map_entry(&self, _height: BlockHeight) -> Result<causality_domain::TimeMapEntry> {
-            todo!()
+        async fn time_map_entry(&self, height: BlockHeight) -> Result<causality_domain::TimeMapEntry> {
+            Ok(causality_domain::TimeMapEntry {
+                height,
+                timestamp: Timestamp::now(),
+                hash: BlockHash([0; 32]),
+            })
         }
         
         async fn observe_fact(&self, query: &crate::domain::FactQuery) -> causality_domain::FactResult {
@@ -429,19 +442,27 @@ mod tests {
         }
         
         async fn submit_transaction(&self, _tx: causality_domain::Transaction) -> Result<causality_domain::TransactionId> {
-            todo!()
+            Ok(causality_domain::TransactionId::new("mock-tx-id"))
         }
         
-        async fn transaction_receipt(&self, _tx_id: &causality_domain::TransactionId) -> Result<causality_domain::TransactionReceipt> {
-            todo!()
+        async fn transaction_receipt(&self, tx_id: &causality_domain::TransactionId) -> Result<causality_domain::TransactionReceipt> {
+            Ok(causality_domain::TransactionReceipt {
+                tx_id: tx_id.clone(),
+                status: causality_domain::TransactionStatus::Confirmed,
+                block_height: Some(BlockHeight(100)),
+                block_hash: Some(BlockHash([0; 32])),
+                timestamp: Some(Timestamp::now()),
+                fee_paid: Some(10),
+                gas_used: Some(1000),
+            })
         }
         
         async fn transaction_confirmed(&self, _tx_id: &causality_domain::TransactionId) -> Result<bool> {
-            todo!()
+            Ok(true)
         }
         
-        async fn wait_for_confirmation(&self, _tx_id: &causality_domain::TransactionId, _max_wait_ms: Option<u64>) -> Result<causality_domain::TransactionReceipt> {
-            todo!()
+        async fn wait_for_confirmation(&self, tx_id: &causality_domain::TransactionId, _max_wait_ms: Option<u64>) -> Result<causality_domain::TransactionReceipt> {
+            self.transaction_receipt(tx_id).await
         }
     }
     

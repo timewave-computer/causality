@@ -2,25 +2,37 @@
 name = "causality-db"
 version = "0.1.0"
 edition = "2021"
-description = "Causality - Database implementations (memory and RocksDB)"
-license = "MIT OR Apache-2.0"
+description = "Database abstraction layer for Causality"
+authors = ["Timewave Labs <info@timewavewave.xyz>"]
+repository = "https://github.com/timewave-lab/causality"
+license = "MIT"
 
 [features]
 default = ["memory"]
 memory = []
 rocks = ["dep:rocksdb"]
-all = ["memory", "rocks"]
+all = ["memory"]
 
 [dependencies]
 # External dependencies
-serde = { workspace = true, features = ["derive"] }
-thiserror = { workspace = true }
-anyhow = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+borsh = "0.10"
+thiserror = "1.0"
+anyhow = "1.0"
 tracing = { workspace = true }
-rocksdb = { workspace = true, optional = true }
+rocksdb = { version = "0.21", optional = true }
 
 # Internal dependencies
-causality-types = { workspace = true }
+causality-types = { path = "../causality-types" }
+causality-error = { path = "../causality-error" }
 
 # DEPRECATED: This dependency creates a circular reference
-# causality-storage = { workspace = true } 
+# causality-storage = { workspace = true }
+
+# Async utilities
+async-trait = "0.1.68"
+
+[dev-dependencies]
+tokio = { version = "1.28", features = ["full", "test-util"] }
+tokio-test = "0.4" 

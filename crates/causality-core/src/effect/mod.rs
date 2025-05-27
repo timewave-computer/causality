@@ -8,23 +8,18 @@ pub mod resource;
 pub mod capability;
 pub mod info;
 pub mod utils;
-pub mod domain;
 pub mod handler;
 pub mod types;
-pub mod registry;
 pub mod context;
 pub mod outcome;
-pub mod runtime;
 pub mod error;
-pub mod logging;
 
 // Import from domain for convenience 
-pub use domain::DomainEffect;
 pub use types::{EffectId, EffectTypeId, ExecutionBoundary, Right};
-pub use handler::{EffectHandler, EffectHandlerRegistry, HandlerResult};
-pub use registry::{EffectRegistry, BasicEffectRegistry, ThreadSafeEffectRegistry, EffectRegistryFactory, EffectRegistrar, EffectExecutor, AsyncEffectRegistry};
-pub use context::{EffectContext, BasicEffectContext, EffectContextBuilder, Capability, CapabilityError, CapabilityGrants, EffectContextError, EffectContextResult};
-pub use domain::SimpleEffectContext;
+pub use handler::EffectHandler;
+pub use handler::HandlerResult;
+pub use context::EffectContext;
+pub use context::Capability;
 pub use outcome::{EffectOutcome, EffectResult};
 
 /// Error type for effect operations
@@ -37,7 +32,7 @@ pub enum EffectError {
     MissingResource(String),
 
     #[error("Execution error: {0}")]
-    ExecutionError(String),
+    ExecutionFailed(String),
 
     #[error("Handler not found for effect type: {0}")]
     HandlerNotFound(String),
@@ -83,21 +78,6 @@ pub enum EffectError {
     
     #[error("Object already exists: {0}")]
     AlreadyExists(String),
-}
-
-impl From<registry::EffectRegistryError> for EffectError {
-    fn from(err: registry::EffectRegistryError) -> Self {
-        match err {
-            registry::EffectRegistryError::NotFound(msg) => Self::NotFound(msg),
-            registry::EffectRegistryError::DuplicateRegistration(msg) => Self::DuplicateRegistration(msg),
-            registry::EffectRegistryError::HandlerError(msg) => Self::ExecutionError(msg),
-            registry::EffectRegistryError::DomainError(msg) => Self::ExecutionError(msg),
-            registry::EffectRegistryError::ValidationError(msg) => Self::ValidationError(msg),
-            registry::EffectRegistryError::ContextError(msg) => Self::ExecutionError(msg),
-            registry::EffectRegistryError::InternalError(msg) => Self::SystemError(msg),
-            registry::EffectRegistryError::NotImplemented(msg) => Self::InvalidOperation(format!("Not implemented: {}", msg)),
-        }
-    }
 }
 
 /// The core Effect trait that all effects must implement
@@ -175,73 +155,12 @@ pub trait DomainEffectHandler: EffectHandler + Debug + Send + Sync {
     async fn handle_domain_effect(&self, effect: &dyn DomainEffect, context: &dyn EffectContext) -> EffectResult<EffectOutcome>;
 }
 
-// REMOVE local EffectRegistry trait definition
-/*
-/// Registry for effect handlers
-pub trait EffectRegistry: Debug + Send + Sync {
-    /// Register a domain effect handler
-    fn register_domain_handler<T>(&mut self, handler: Arc<T>) -> Result<(), EffectError>
-    where 
-        T: EffectHandler + Debug + Send + Sync + 'static;
-    
-    /// Register a regular effect handler
-    fn register_handler(&mut self, handler: Arc<dyn EffectHandler>);
-    
-    /// Get the effect executor
-    fn executor(&self) -> Arc<dyn EffectExecutorBase>; // Note: EffectExecutorBase was removed
-}
-*/
+// Placeholder trait definition for DomainEffect
+pub trait DomainEffect: Effect {}
 
-// REMOVE local DefaultEffectRegistry struct and impl block
-/*
-/// Default implementation of the effect registry
-#[derive(Debug)]
-pub struct DefaultEffectRegistry {
-    // Use a mutable DefaultEffectExecutor to allow handler registration
-    handlers: Vec<Arc<dyn EffectHandler>>,
-}
-
-impl DefaultEffectRegistry {
-    /// Creates a new effect registry
-    pub fn new() -> Self {
-        Self {
-            handlers: Vec::new(),
-        }
-    }
-}
-
-impl EffectRegistry for DefaultEffectRegistry {
-    fn register_domain_handler<T>(&mut self, handler: Arc<T>) -> Result<(), EffectError>
-    where 
-        T: EffectHandler + Debug + Send + Sync + 'static 
-    {
-        // In the future, this might do domain-specific registration
-        // For now, just register as a regular handler
-        self.register_handler(handler);
-        Ok(())
-    }
-    
-    fn register_handler(&mut self, handler: Arc<dyn EffectHandler>) {
-        // Add the handler to our internal collection
-        self.handlers.push(handler);
-    }
-    
-    fn executor(&self) -> Arc<dyn EffectExecutorBase> { // Note: EffectExecutorBase was removed
-        // Create a new executor with the current handlers
-        let mut executor = DefaultEffectExecutor::new(); // Note: DefaultEffectExecutor was removed
-        for handler in &self.handlers {
-            // executor.register_handler(handler.clone()); // This logic needs the removed types
-        }
-        Arc::new(executor)
-    }
-}
-*/
-
-// Keep the re-exports
-// Remove this duplicate export
-// pub use registry::EffectExecutor;
-// ... rest of file ... 
+// Re-export system errors but not EffectError which is defined above
+pub use error::EffectSystemError;
+pub use error::EffectSystemResult;
 
 // Re-export resource module types
 pub use resource::*;
-// ... rest of file ... 

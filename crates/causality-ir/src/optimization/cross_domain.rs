@@ -5,8 +5,9 @@
 
 use std::collections::{HashMap, HashSet};
 use anyhow::Result;
-use crate::{TemporalEffectGraph, EffectNode, DomainId};
+use crate::{TemporalEffectGraph, DomainId, EffectId};
 use super::{Optimization, OptimizationConfig};
+use crate::effect_node::EffectNode;
 
 /// Optimization pass that reorders cross-domain operations when safe to do so
 ///
@@ -53,13 +54,13 @@ impl CrossDomainReordering {
     }
     
     /// Check if two effects can be safely reordered
-    fn can_reorder(&self, teg: &TemporalEffectGraph, effect1: &str, effect2: &str) -> bool {
+    fn can_reorder(&self, teg: &TemporalEffectGraph, effect1: EffectId, effect2: EffectId) -> bool {
         // Two effects can be reordered if:
         // 1. They don't access the same resources
         // 2. They don't have data dependencies between them
         // 3. They don't affect the same capabilities
         
-        if let (Some(e1), Some(e2)) = (teg.get_effect(effect1), teg.get_effect(effect2)) {
+        if let (Some(e1), Some(e2)) = (teg.get_effect(&effect1), teg.get_effect(&effect2)) {
             // Check for resource conflicts
             let resources1: HashSet<_> = e1.resources_accessed.iter().collect();
             let resources2: HashSet<_> = e2.resources_accessed.iter().collect();
@@ -77,7 +78,7 @@ impl CrossDomainReordering {
             }
             
             // Check for data dependencies
-            if teg.has_path_between(effect1, effect2) || teg.has_path_between(effect2, effect1) {
+            if teg.has_path_between(&effect1, &effect2) || teg.has_path_between(&effect2, &effect1) {
                 return false;
             }
             
@@ -120,7 +121,7 @@ impl Optimization for CrossDomainReordering {
                     let (effect1, _) = &effects[i];
                     let (effect2, _) = &effects[j];
                     
-                    if self.can_reorder(teg, effect1, effect2) {
+                    if self.can_reorder(teg, effect1.clone(), effect2.clone()) {
                         // Reorder by adjusting edges
                         // In a real implementation, this would perform the actual 
                         // graph transformation to reorder operations
@@ -233,6 +234,7 @@ impl DomainSpecificSpecialization {
                 
                 // For this placeholder, we'll just collect all effects in the domain
                 let domain_effects: Vec<String> = teg.effects()
+                    .into_iter()
                     .filter_map(|(id, effect)| {
                         if &effect.domain_id == domain_id {
                             Some(id.clone())
@@ -297,6 +299,7 @@ impl Optimization for DomainSpecificSpecialization {
         
         // Get all unique domains in the graph
         let domains: HashSet<DomainId> = teg.effects()
+            .into_iter()
             .map(|(_, effect)| effect.domain_id.clone())
             .collect();
         

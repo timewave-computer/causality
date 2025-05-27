@@ -1,85 +1,15 @@
-// Physical time utilities
+// Physical Time Utilities
 //
-// This file contains utilities for handling physical time, including
-// timestamps, durations, and conversions between different time formats.
+// This module provides time formatting utilities that complement
+// the core Clock implementations from the clock module.
 
-use causality_error::{Error, Result};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, Duration, UNIX_EPOCH};
+use chrono::{DateTime, Utc, TimeZone};
 
-/// A physical timestamp that represents a point in physical time
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PhysicalTimestamp {
-    /// Milliseconds since UNIX epoch
-    millis: u64,
-}
+use crate::time::error::TimeError;
+use crate::time::Timestamp;
 
-impl PhysicalTimestamp {
-    /// Create a new physical timestamp from milliseconds since epoch
-    pub fn from_millis(millis: u64) -> Self {
-        Self { millis }
-    }
-    
-    /// Get the current physical timestamp
-    pub fn now() -> Self {
-        let millis = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_millis() as u64;
-        
-        Self { millis }
-    }
-    
-    /// Get the milliseconds since epoch
-    pub fn as_millis(&self) -> u64 {
-        self.millis
-    }
-    
-    /// Get the seconds since epoch
-    pub fn as_secs(&self) -> u64 {
-        self.millis / 1000
-    }
-    
-    /// Convert to a SystemTime
-    pub fn to_system_time(&self) -> SystemTime {
-        UNIX_EPOCH + Duration::from_millis(self.millis)
-    }
-    
-    /// Create a timestamp from a SystemTime
-    pub fn from_system_time(time: SystemTime) -> Result<Self> {
-        let duration = time.duration_since(UNIX_EPOCH)
-            .map_err(|e| Error::time(format!("Invalid system time: {}", e)))?;
-        
-        Ok(Self {
-            millis: duration.as_millis() as u64,
-        })
-    }
-    
-    /// Get the elapsed time since this timestamp
-    pub fn elapsed(&self) -> Duration {
-        let now = Self::now();
-        Duration::from_millis(now.millis - self.millis)
-    }
-    
-    /// Add a duration to this timestamp
-    pub fn add_duration(&self, duration: Duration) -> Self {
-        Self {
-            millis: self.millis + duration.as_millis() as u64,
-        }
-    }
-    
-    /// Subtract a duration from this timestamp
-    pub fn sub_duration(&self, duration: Duration) -> Result<Self> {
-        if duration.as_millis() as u64 > self.millis {
-            return Err(Error::time("Duration exceeds timestamp value"));
-        }
-        
-        Ok(Self {
-            millis: self.millis - duration.as_millis() as u64,
-        })
-    }
-}
-
-/// Format for displaying timestamps
+/// Timestamp format options
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimestampFormat {
     /// Milliseconds since epoch
@@ -94,52 +24,140 @@ pub enum TimestampFormat {
     Human,
 }
 
-/// Utilities for working with physical time
+/// Timestamp utilities for formatting, parsing, and conversion between 
+/// different time representations
 pub struct TimeUtils;
 
 impl TimeUtils {
-    /// Convert a timestamp to a string in the specified format
-    pub fn format_timestamp(ts: &PhysicalTimestamp, format: TimestampFormat) -> String {
+    /// Convert system time to DateTime
+    pub fn system_time_to_date_time(system_time: SystemTime) -> Result<DateTime<Utc>, TimeError> {
+        let duration_since_epoch = system_time
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| TimeError::Other(format!("System time error: {}", e)))?;
+        
+        let secs = duration_since_epoch.as_secs();
+        let nanos = duration_since_epoch.subsec_nanos();
+        
+        if secs > i64::MAX as u64 {
+            return Err(TimeError::OutOfBounds("Timestamp too large for DateTime".into()));
+        }
+        
+        Ok(Utc.timestamp_opt(secs as i64, nanos).single()
+            .ok_or_else(|| TimeError::InvalidFormat("Invalid timestamp for DateTime".into()))?)
+    }
+    
+    /// Convert DateTime to system time
+    pub fn date_time_to_system_time(dt: DateTime<Utc>) -> SystemTime {
+        let duration = Duration::new(dt.timestamp() as u64, dt.timestamp_subsec_nanos());
+        UNIX_EPOCH + duration
+    }
+
+    /// Convert Timestamp to DateTime
+    pub fn timestamp_to_date_time(ts: &Timestamp) -> DateTime<Utc> {
+        let secs = ts.as_secs() as i64;
+        let nanos = (ts.as_nanos() % 1_000_000_000) as u32;
+        Utc.timestamp_opt(secs, nanos).single().unwrap_or_default()
+    }
+
+    /// Convert DateTime to Timestamp
+    pub fn date_time_to_timestamp(dt: &DateTime<Utc>) -> Timestamp {
+        let secs = dt.timestamp() as u64;
+        let nanos = dt.timestamp_subsec_nanos() as u64;
+        Timestamp::from_nanos(secs * 1_000_000_000 + nanos)
+    }
+    
+    /// Format a timestamp according to the specified format
+    pub fn format_timestamp(ts: &Timestamp, format: TimestampFormat) -> String {
         match format {
-            TimestampFormat::Millis => ts.as_millis().to_string(),
-            TimestampFormat::Seconds => ts.as_secs().to_string(),
-            TimestampFormat::Iso8601 => format!(
-                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-                // This is a simplified implementation - in a real system we would
-                // use a proper date/time library to handle this correctly
-                2023, 1, 1, 0, 0, 0, 0 // Placeholder values
-            ),
-            TimestampFormat::Rfc3339 => format!(
-                "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
-                // This is a simplified implementation - in a real system we would
-                // use a proper date/time library to handle this correctly
-                2023, 1, 1, 0, 0, 0, 0 // Placeholder values
-            ),
-            TimestampFormat::Human => format!(
-                "{} seconds ago",
-                (PhysicalTimestamp::now().as_secs() - ts.as_secs())
-            ),
+            TimestampFormat::Millis => format!("{}", ts.as_millis()),
+            TimestampFormat::Seconds => format!("{}", ts.as_secs()),
+            TimestampFormat::Iso8601 => {
+                let dt = Self::timestamp_to_date_time(ts);
+                dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+            },
+            TimestampFormat::Rfc3339 => {
+                let dt = Self::timestamp_to_date_time(ts);
+                dt.to_rfc3339()
+            },
+            TimestampFormat::Human => {
+                let dt = Self::timestamp_to_date_time(ts);
+                dt.format("%Y-%m-%d %H:%M:%S.%3f").to_string()
+            },
         }
     }
     
-    /// Parse a timestamp from a string in the specified format
-    pub fn parse_timestamp(s: &str, format: TimestampFormat) -> Result<PhysicalTimestamp> {
+    /// Parse a timestamp from a string
+    pub fn parse_timestamp(s: &str, format: TimestampFormat) -> Result<Timestamp, TimeError> {
         match format {
             TimestampFormat::Millis => {
-                let millis = s.parse::<u64>()
-                    .map_err(|e| Error::time(format!("Invalid milliseconds: {}", e)))?;
-                Ok(PhysicalTimestamp::from_millis(millis))
+                s.parse::<u64>()
+                    .map(Timestamp::from_millis)
+                    .map_err(|e| TimeError::InvalidFormat(format!("Invalid milliseconds: {}", e)))
             },
             TimestampFormat::Seconds => {
-                let secs = s.parse::<u64>()
-                    .map_err(|e| Error::time(format!("Invalid seconds: {}", e)))?;
-                Ok(PhysicalTimestamp::from_millis(secs * 1000))
+                s.parse::<u64>()
+                    .map(Timestamp::from_secs)
+                    .map_err(|e| TimeError::InvalidFormat(format!("Invalid seconds: {}", e)))
             },
-            _ => {
-                // This is a simplified implementation - in a real system we would
-                // use a proper date/time library to handle this correctly
-                Err(Error::time("Complex timestamp parsing not implemented"))
-            }
+            TimestampFormat::Iso8601 | TimestampFormat::Rfc3339 => {
+                DateTime::parse_from_rfc3339(s)
+                    .map(|dt| {
+                        let utc_dt = dt.with_timezone(&Utc);
+                        Self::date_time_to_timestamp(&utc_dt)
+                    })
+                    .map_err(|e| TimeError::InvalidFormat(format!("Invalid timestamp format: {}", e)))
+            },
+            TimestampFormat::Human => {
+                Err(TimeError::InvalidFormat("Parsing human-readable format not supported".into()))
+            },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::time::clock;
+    
+    #[test]
+    fn test_timestamp_datetime_conversion() {
+        let now = Timestamp::from_secs(1600000000);
+        let dt = TimeUtils::timestamp_to_date_time(&now);
+        let converted_back = TimeUtils::date_time_to_timestamp(&dt);
+        
+        assert_eq!(now, converted_back, "Timestamp to DateTime and back should be lossless");
+    }
+    
+    #[test]
+    fn test_format_timestamp() {
+        let ts = Timestamp::from_secs(1600000000);
+        
+        // Test different formats
+        let millis = TimeUtils::format_timestamp(&ts, TimestampFormat::Millis);
+        let seconds = TimeUtils::format_timestamp(&ts, TimestampFormat::Seconds);
+        let iso = TimeUtils::format_timestamp(&ts, TimestampFormat::Iso8601);
+        
+        assert_eq!(millis, "1600000000000");
+        assert_eq!(seconds, "1600000000");
+        assert!(iso.contains("2020-09-13T12:26:40"), "ISO format should contain the correct date and time");
+    }
+    
+    #[test]
+    fn test_parse_timestamp() {
+        // Test parsing seconds
+        let secs_result = TimeUtils::parse_timestamp("1600000000", TimestampFormat::Seconds);
+        assert!(secs_result.is_ok());
+        assert_eq!(secs_result.unwrap(), Timestamp::from_secs(1600000000));
+        
+        // Test parsing milliseconds
+        let millis_result = TimeUtils::parse_timestamp("1600000000000", TimestampFormat::Millis);
+        assert!(millis_result.is_ok());
+        assert_eq!(millis_result.unwrap(), Timestamp::from_millis(1600000000000));
+        
+        // Test parsing ISO format
+        let iso_result = TimeUtils::parse_timestamp("2020-09-13T12:26:40Z", TimestampFormat::Iso8601);
+        assert!(iso_result.is_ok());
+        let expected = Timestamp::from_millis(1600000000000);
+        assert_eq!(iso_result.unwrap().as_secs(), expected.as_secs());
     }
 } 

@@ -2,6 +2,10 @@
 // Provides common error handling patterns used across the codebase
 
 use crate::BoxError;
+use std::error::Error as StdError;
+use std::fmt;
+use std::any::Any;
+use crate::CausalityError;
 
 /// Create a "not found" error with the given entity name
 pub fn not_found_error(entity: impl Into<String>) -> BoxError {
@@ -51,6 +55,36 @@ where
     E: std::error::Error + Send + Sync + 'static,
 {
     result.map_err(|e| internal_error(e.to_string()))
+}
+
+/// A generic error type that can be used to wrap any error message
+#[derive(Debug)]
+pub struct GenericError {
+    message: String,
+}
+
+impl GenericError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self { message: message.into() }
+    }
+}
+
+impl fmt::Display for GenericError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl StdError for GenericError {}
+
+impl CausalityError for GenericError {
+    fn error_code(&self) -> &'static str {
+        "GENERIC_ERROR"
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 // // Helper function to check if an error is of a specific code

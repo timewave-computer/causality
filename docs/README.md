@@ -77,3 +77,10 @@ Causality is built on a unified component architecture where:
 - [System Contract](../spec/system_contract.md): Formal specification of system guarantees
 - [GitHub Repository](https://github.com/causality/causality): Source code and issues
 - [Community Discord](https://discord.gg/causality): Community discussions
+
+## Architecture Documents
+
+You'll find detailed architecture documents in the `architecture/` directory:
+
+- [IR Integration Guide](architecture/ir/integration.md) - Guide for integrating the Temporal Effect Graph (TEG) with external systems
+- [TEL-TEG Adjunction](architecture/tel/adjunction.md) - Explanation of the categorical adjunction between TEL and TEG

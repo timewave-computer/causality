@@ -7,7 +7,8 @@ use crate::effect::{
     Effect, EffectContext, EffectOutcome, EffectResult, EffectType, HandlerResult, EffectHandler
 };
 use crate::effect::types::EffectTypeId;
-use crate::resource::Resource;
+use crate::resource::types::{ResourceId, ResourceType};
+use crate::effect::{EffectError};
 
 /// An operation on a resource
 #[derive(Debug, Clone)]
@@ -17,6 +18,8 @@ pub enum ResourceOperation {
     Update,
     Delete,
     Custom(String),
+    /// Represents all operations (for capability granting)
+    All,
 }
 
 /// A resource effect wrapping a resource operation
@@ -105,6 +108,7 @@ impl Effect for ResourceEffect {
             ResourceOperation::Update => EffectType::Write,
             ResourceOperation::Delete => EffectType::Delete,
             ResourceOperation::Custom(_) => EffectType::Custom("resource:custom".to_string()),
+            ResourceOperation::All => EffectType::Custom("resource:all".to_string()),
         }
     }
     
@@ -115,20 +119,34 @@ impl Effect for ResourceEffect {
             ResourceOperation::Update => format!("Update resource {}", self.resource_id),
             ResourceOperation::Delete => format!("Delete resource {}", self.resource_id),
             ResourceOperation::Custom(name) => format!("Custom operation {} on resource {}", name, self.resource_id),
+            ResourceOperation::All => format!("All operations on resource {}", self.resource_id),
         }
     }
     
-    async fn execute(&self, context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
-        // Basic implementation that just logs the operation
-        println!("Executing resource effect: {}", self.description());
-        
-        // Create a simple result map
-        let mut result = HashMap::new();
-        result.insert("resource_id".to_string(), self.resource_id.clone());
-        result.insert("operation".to_string(), format!("{:?}", self.operation));
-        
-        // In a real implementation, we would dispatch to a resource registry
-        Ok(EffectOutcome::success(result))
+    async fn execute(&self, _context: &dyn EffectContext) -> EffectResult<EffectOutcome> {
+        // Placeholder execution logic
+        // In a real implementation, this would interact with the resource manager
+        // based on self.operation, self.resource_id, self.resource_type, etc.
+
+        match self.operation {
+            ResourceOperation::Read | ResourceOperation::Update | ResourceOperation::Delete | ResourceOperation::Create => {
+                // Simulate successful operation for now
+                println!("Simulating {:?} on resource {} ({})", 
+                         self.operation, self.resource_id, self.resource_type);
+                Ok(EffectOutcome::success(HashMap::new()).with_message(format!("Operation {:?} simulated.", self.operation)))
+            },
+            ResourceOperation::Custom(ref name) => {
+                // Simulate custom operation
+                println!("Simulating custom operation '{}' on resource {} ({})", 
+                         name, self.resource_id, self.resource_type);
+                Ok(EffectOutcome::success(HashMap::new()).with_message(format!("Custom operation '{}' simulated.", name)))
+            },
+            ResourceOperation::All => {
+                // 'All' is typically used for capability checks, not direct execution
+                // Wrap the error string in Box::new(EffectError::Other(...))
+                Ok(EffectOutcome::error(Box::new(EffectError::Other("Cannot execute All operation directly".to_string()))))
+            }
+        }
     }
     
     fn as_any(&self) -> &dyn Any {
@@ -203,6 +221,14 @@ impl EffectHandler for ResourceEffectHandler {
                     result.insert("status".to_string(), "executed".to_string());
                     Ok(EffectOutcome::success(result))
                 },
+                ResourceOperation::All => {
+                    // This is a special case used for capability granting, not for actual execution
+                    let mut result = HashMap::new();
+                    result.insert("resource_id".to_string(), resource_effect.resource_id.clone());
+                    result.insert("status".to_string(), "permission_error".to_string());
+                    result.insert("message".to_string(), "Cannot directly execute 'All' operation".to_string());
+                    Ok(EffectOutcome::error(Box::new(crate::effect::EffectError::Other("Cannot execute All operation directly".to_string()))))
+                },
             }
         } else {
             // Not a resource effect
@@ -211,19 +237,21 @@ impl EffectHandler for ResourceEffectHandler {
     }
 }
 
-/// Create a resource effect from a resource ID and operation type
+/// Create a resource effect from resource identifiers and operation type
 pub fn create_resource_effect(
-    resource: &dyn Resource,
+    resource_id: &ResourceId,
+    resource_type: &ResourceType,
     operation_type: EffectType,
 ) -> ResourceEffect {
-    let resource_type = resource.resource_type().qualified_name();
-    let resource_id = resource.id().to_string();
+    // Get strings needed for ResourceEffect constructor
+    let type_name = resource_type.qualified_name();
+    let id_str = resource_id.to_string();
     
     match operation_type {
-        EffectType::Create => ResourceEffect::create(&resource_type, &resource_id),
-        EffectType::Read => ResourceEffect::read(&resource_type, &resource_id),
-        EffectType::Write => ResourceEffect::update(&resource_type, &resource_id),
-        EffectType::Delete => ResourceEffect::delete(&resource_type, &resource_id),
-        EffectType::Custom(name) => ResourceEffect::custom(&resource_type, &resource_id, &name),
+        EffectType::Create => ResourceEffect::create(&type_name, &id_str),
+        EffectType::Read => ResourceEffect::read(&type_name, &id_str),
+        EffectType::Write => ResourceEffect::update(&type_name, &id_str),
+        EffectType::Delete => ResourceEffect::delete(&type_name, &id_str),
+        EffectType::Custom(name) => ResourceEffect::custom(&type_name, &id_str, &name),
     }
 } 

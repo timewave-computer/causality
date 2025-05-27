@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::sync::OnceLock;
 
 use crate::effect::types::EffectId;
-use crate::resource::ResourceId;
+use crate::resource::types::ResourceId;
 use crate::effect::context::Capability as ContextCapability;
 use crate::effect::EffectContext;
 

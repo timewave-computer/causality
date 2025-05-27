@@ -5,10 +5,10 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use borsh::{BorshSerialize, BorshDeserialize};
-use causality_types::{ContentHash, ContentAddressed, ContentHashError};
-
+use causality_types::{ContentHash, ContentAddressed, HashError, HashOutput, test_content_hash};
 use crate::{ResourceId, DomainId};
 use crate::effect_node::ParameterValue;
+use serde_json::Value;
 
 /// Enumeration of resource states
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
@@ -105,15 +105,32 @@ impl ResourceNode {
 }
 
 impl ContentAddressed for ResourceNode {
-    fn content_hash(&self) -> Result<ContentHash, ContentHashError> {
-        // For now, we'll return the precalculated hash
-        // In a full implementation, we would compute the hash here
-        Ok(self.content_hash.clone())
+    fn content_hash(&self) -> Result<causality_types::HashOutput, HashError> {
+        // We need to create a copy without the content_hash field to avoid circular hashing
+        let mut resource_for_hash = self.clone();
+        // Reset the content hash to a default/empty value to avoid it affecting the hash
+        resource_for_hash.content_hash = ContentHash::new("blake3", vec![0; 32]);
+        
+        // Serialize the resource to JSON bytes
+        let serialized = serde_json::to_vec(&resource_for_hash)
+            .map_err(|e| HashError::SerializationError(e.to_string()))?;
+        
+        // Calculate the hash of the serialized data
+        let hash_output = causality_types::content_addressing::content_hash_from_bytes(&serialized);
+        Ok(hash_output)
     }
     
-    fn verify(&self) -> Result<bool, ContentHashError> {
-        let computed_hash = self.content_hash()?;
-        Ok(computed_hash == self.content_hash)
+    fn verify(&self, expected_hash: &causality_types::HashOutput) -> Result<bool, HashError> {
+        let actual_hash = self.content_hash()?;
+        Ok(actual_hash == *expected_hash)
+    }
+    
+    fn to_bytes(&self) -> Result<Vec<u8>, HashError> {
+        serde_json::to_vec(self).map_err(|e| HashError::SerializationError(e.to_string()))
+    }
+    
+    fn from_bytes(bytes: &[u8]) -> Result<Self, HashError> where Self: Sized {
+        serde_json::from_slice(bytes).map_err(|e| HashError::SerializationError(e.to_string()))
     }
 }
 
@@ -203,8 +220,8 @@ impl ResourceNodeBuilder {
         let resource_type = self.resource_type.ok_or_else(|| "Resource type is required".to_string())?;
         let domain_id = self.domain_id.ok_or_else(|| "Domain ID is required".to_string())?;
         
-        // In a real implementation, we would compute the content hash here
-        let content_hash = ContentHash::default(); // Placeholder
+        // Use test_content_hash instead of creating a placeholder
+        let content_hash = test_content_hash();
         
         Ok(ResourceNode {
             id,
