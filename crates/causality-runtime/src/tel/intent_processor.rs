@@ -7,29 +7,34 @@ use uuid::Uuid;
 
 use causality_types::{
     core::{
-        id::{EdgeId, ExprId, HandlerId, NodeId, ResourceId, TypeExprId, AsId, EntityId},
+        id::{EntityId, ExprId, ResourceId, NodeId, HandlerId, EdgeId, TypeExprId, AsId},
         str::Str as CausalityStr,
-        time::Timestamp,
-        Effect, Intent,
-    },
-    expr::{
-        value::ValueExpr,
-        result::ExprError,
-        ValueExprMap, ValueExprVec,
     },
     tel::{
-        EdgeKind, ResourceRef, EffectGraph, Edge,
-        execution_context::GraphExecutionContext,
+        EffectGraph, Edge, EdgeKind, ResourceRef,
+    },
+    effect::{
+        types::Effect,
+        intent::Intent,
+        handler::Handler,
+    },
+    expr::{value::ValueExpr, result::ExprError, ValueExprMap, ValueExprVec},
+    graph::{
+        execution::GraphExecutionContext,
         optimization::TypedDomain,
     },
-    interpreter_config::{LispContextConfig, LispEvaluator},
+    resource::flow::ResourceFlow,
+    primitive::time::Timestamp,
 };
 
 use causality_core::utils::expr::{value_expr_as_list, value_expr_as_record, value_expr_as_string, value_expr_as_bool, value_expr_as_int};
 use causality_core::id_from_hex;
-use causality_types::resource::ResourceFlow;
 
-use crate::tel::interpreter::Interpreter as LispInterpreterService;
+use crate::{
+    tel::{
+        interpreter::{Interpreter as LispInterpreterService, LispContextConfig, LispEvaluator},
+    },
+};
 
 // Type alias for a complex host function type
 #[allow(dead_code)]
@@ -89,18 +94,16 @@ pub struct IntentProcessor {
 fn create_handler_details_record(handler: &causality_types::core::Handler) -> ValueExpr {
     let mut record_map = BTreeMap::new();
     record_map.insert(CausalityStr::from_static_str(":id"), ValueExpr::String(CausalityStr::from(handler.id.to_hex())));
-    record_map.insert(CausalityStr::from_static_str(":name"), ValueExpr::String(handler.name));
-    record_map.insert(CausalityStr::from_static_str(":handles_type"), ValueExpr::String(handler.handles_type));
-    record_map.insert(CausalityStr::from_static_str(":priority"), ValueExpr::Number(causality_types::primitive::number::Number::new_integer(handler.priority as i64)));
-    
+    record_map.insert(CausalityStr::from_static_str(":name"), ValueExpr::String(handler.name.clone()));
+    record_map.insert(CausalityStr::from_static_str(":domain_id"), ValueExpr::String(CausalityStr::from(handler.domain_id.to_hex())));
+    record_map.insert(CausalityStr::from_static_str(":handles_type"), ValueExpr::String(handler.handles_type.clone()));
+    record_map.insert(CausalityStr::from_static_str(":priority"), ValueExpr::Number(causality_types::expression::value::Number::new_integer(handler.priority as i64)));
     if let Some(ref expr_id) = handler.expression {
         record_map.insert(CausalityStr::from_static_str(":expression_id"), ValueExpr::String(CausalityStr::from(expr_id.to_hex())));
     } else {
         record_map.insert(CausalityStr::from_static_str(":expression_id"), ValueExpr::Nil);
     }
     
-    record_map.insert(CausalityStr::from_static_str(":domain_id"), ValueExpr::String(CausalityStr::from(handler.domain_id.to_hex())));
-
     ValueExpr::Record(ValueExprMap(record_map))
 }
 
@@ -111,7 +114,7 @@ impl IntentProcessor {
 
     pub async fn process_intent(
         &self,
-        intent: &Intent,
+        intent: &causality_types::effect::intent::Intent, // Updated path
         initial_graph_context: &GraphExecutionContext, // Context for intent's own evaluation
     ) -> Result<EffectGraph> {
         log::info!("Processing intent {:?} (context mode: {:?})", intent.id, initial_graph_context.interpreter_mode);
@@ -442,17 +445,7 @@ impl IntentProcessor {
                                                 outputs: outputs_vec,
                                                 expression: dynamic_expr_id,
                                                 timestamp: Timestamp::now(),
-                                                resources: vec![],
-                                                nullifiers: vec![],
-                                                scoped_by: scoped_handler_id.unwrap_or(HandlerId::new([0; 32])),
-                                                intent_id: dynamic_expr_id,
-                                                source_typed_domain: intent.target_typed_domain.clone()
-                                                    .unwrap_or(TypedDomain::VerifiableDomain(intent.domain_id)),
-                                                target_typed_domain: intent.target_typed_domain.clone()
-                                                    .unwrap_or(TypedDomain::VerifiableDomain(intent.domain_id)),
-                                                cost_model: None,
-                                                resource_usage_estimate: None,
-                                                originating_dataflow_instance: None,
+                                                hint: None, // Can be set based on intent.hint if needed
                                             };
                                             effects.push(effect);
                                         } else {
@@ -492,7 +485,11 @@ impl IntentProcessor {
                                                             source: source_node_id,
                                                             target: target_node_id,
                                                             kind: edge_kind,
-                                                            metadata: metadata_val_opt,
+                                                            metadata: metadata_val_opt.map_or_else(BTreeMap::new, |val| {
+                                                                let mut map = BTreeMap::new();
+                                                                map.insert(CausalityStr::from_static_str("metadata"), val);
+                                                                map
+                                                            }),
                                                         });
                                                     }
                                                     Err(e) => log::warn!("Failed to parse EdgeKind for edge from {:?} to {:?}: {}. Skipping edge.", source_node_id, target_node_id, e),
@@ -522,10 +519,9 @@ impl IntentProcessor {
                                                 if let Some(constraint_val_list) = value_expr_as_list(constraints_list_val) {
                                                     for constraint_val in constraint_val_list {
                                                         if let Some(s) = value_expr_as_string(constraint_val) {
-                                                            if let Ok(expr_id) = <ExprId as AsId>::from_hex(s.as_str()) {
-                                                                constraints_vec.push(expr_id);
-                                                            } else {
-                                                                log::warn!("Invalid ExprId hex string in handler constraints: {}", s);
+                                                            match <ExprId as AsId>::from_hex(s.as_str()) {
+                                                                Ok(expr_id) => constraints_vec.push(expr_id),
+                                                                Err(_) => log::warn!("Invalid ExprId format for a constraint in handler constraints: {}", s),
                                                             }
                                                         }
                                                     }
@@ -541,7 +537,7 @@ impl IntentProcessor {
                                                             actual_handler_id = *temp_id_to_handler_id_map.entry(*temp_id).or_insert_with(create_unique_handler_id);
                                                         }
 
-                                                        let temp_handler = causality_types::core::Handler {
+                                                        let temp_handler = causality_types::tel::Handler {
                                                             id: EntityId::new(actual_handler_id.inner()),
                                                             name: CausalityStr::from(format!("handler_{}", actual_handler_id.to_hex())),
                                                             domain_id: intent_domain,
@@ -569,7 +565,7 @@ impl IntentProcessor {
                         // Create a TEL Intent from our resource Intent
 
                         // Map the existing intent (resource type) to the unified Intent type
-                        let tel_intent = causality_types::core::Intent {
+                        let tel_intent = causality_types::effect::intent::Intent {
                             id: intent.id,
                             name: intent.name,
                             domain_id: intent_domain,
@@ -578,20 +574,16 @@ impl IntentProcessor {
                             outputs: vec![], // Parse from intent  
                             expression: intent.expression, // Match types (Option<ExprId>)
                             timestamp: Timestamp::now(),
-                            optimization_hint: None,
-                            compatibility_metadata: Vec::new(),
-                            resource_preferences: Vec::new(),
-                            target_typed_domain: None,
-                            process_dataflow_hint: None,
+                            hint: None, // No hint for now
                         };
 
                         // Use in graph creation
                         let graph = EffectGraph {
-                            id: Some(CausalityStr::from(format!("graph_for_intent_{}", intent.id.to_hex()))),
-                            intents: vec![tel_intent],
-                            effects,
-                            handlers: handlers_vec,
-                            edges,
+                            id: EntityId::new(intent.id.inner()),
+                            domain_id: intent_domain,
+                            nodes: BTreeMap::new(), // TODO: Convert effects to nodes
+                            edges: BTreeMap::new(), // TODO: Convert edges to BTreeMap
+                            metadata: BTreeMap::new(),
                         };
                         Ok(graph)
                     }

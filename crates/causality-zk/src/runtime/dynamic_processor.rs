@@ -33,7 +33,7 @@ fn lisp_error_to_zk_error(err: LispError) -> Error {
 #[allow(dead_code)]
 fn value_expr_to_lisp_expr(val: &ValueExpr) -> Result<LispExpr, LispError> {
     match val {
-        ValueExpr::Unit => Ok(LispExpr::Atom(LispAtom::Nil)),
+        ValueExpr::Nil => Ok(LispExpr::Atom(LispAtom::Nil)),
         ValueExpr::Bool(b) => Ok(LispExpr::Atom(LispAtom::Boolean(*b))),
         ValueExpr::String(s) => Ok(LispExpr::Atom(LispAtom::String(*s))),
         ValueExpr::Number(n) => {

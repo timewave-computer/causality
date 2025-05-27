@@ -17,10 +17,10 @@ use tracing_subscriber::layer::SubscriberExt;
 /// # Arguments
 ///
 /// * `log_level`: An optional string slice specifying the log level.
-///                Defaults to "info". Examples: "trace", "debug", "info", "warn", "error".
-///                Can also include module-specific directives, e.g., "my_crate=debug,info".
+///   Defaults to "info". Examples: "trace", "debug", "info", "warn", "error".
+///   Can also include module-specific directives, e.g., "my_crate=debug,info".
 /// * `json_output`: A boolean indicating whether to output logs in JSON format.
-///                  Defaults to `false` (human-readable format).
+///   Defaults to `false` (human-readable format).
 ///
 /// # Returns
 ///

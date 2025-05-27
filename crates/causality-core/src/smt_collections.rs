@@ -1,12 +1,12 @@
 // Purpose: SMT-based collection types to replace HashMap/BTreeMap in content-addressable storage
 
 use causality_types::{
-    core::id::{DomainId, EdgeId, EntityId, ExprId, NodeId, AsId},
-    serialization::{Encode, Decode},
-    tel::{Effect, Intent, Handler},
-    tel::common_refs::ResourceRef,
-    tel::graph::Edge,
-    expr::value::ValueExpr, AsEdge,
+    primitive::ids::{DomainId, EdgeId, EntityId, ExprId, NodeId, AsId},
+    system::serialization::{Encode, Decode},
+    effect::{Effect, Intent, Handler},
+    graph::tel::{ResourceRef, Edge},
+    graph::r#trait::AsEdge,
+    expression::value::ValueExpr,
 };
 
 use crate::smt::{TegMultiDomainSmt, MemoryBackend};
@@ -178,8 +178,8 @@ impl ProjectSmtStorage {
                 NodeId::new(effect.id.inner()) // Convert EntityId to NodeId
             }
             TelNode::Resource(resource) => {
-                let entity_id = EntityId::new(resource.0.inner()); // Convert ResourceId to EntityId
-                self.resources.insert(entity_id, *resource)?;
+                let entity_id = EntityId::new(resource.resource_id.inner()); // Convert ResourceId to EntityId
+                self.resources.insert(entity_id, resource.clone())?;
                 NodeId::new(entity_id.inner()) // Convert EntityId to NodeId
             }
             TelNode::Intent(intent) => {
@@ -207,7 +207,11 @@ impl ProjectSmtStorage {
     
     /// Get a node by ID
     pub fn get_node(&self, node_id: &NodeId) -> Result<Option<TelNode>> {
-        Ok(self.nodes.get(node_id)?)
+        if let Some(node_data) = self.nodes.get(node_id)? {
+            Ok(Some(node_data.clone()))
+        } else {
+            Ok(None)
+        }
     }
     
     /// Get an effect by ID
@@ -217,7 +221,12 @@ impl ProjectSmtStorage {
     
     /// Get a resource by ID
     pub fn get_resource(&self, resource_id: &EntityId) -> Result<Option<ResourceRef>> {
-        Ok(self.resources.get(resource_id)?)
+        if let Some(resource_data) = self.resources.get(resource_id)? {
+            if resource_data.resource_id == causality_types::ResourceId(resource_id.inner()) {
+                return Ok(Some(resource_data.clone()));
+            }
+        }
+        Ok(None)
     }
     
     /// Get an intent by ID
@@ -268,7 +277,7 @@ pub fn migrate_hashmap_to_smt(
     
     // Migrate resources
     for (id, resource) in resources {
-        storage.resources.insert(id, resource)?;
+        storage.resources.insert(id, resource.clone())?;
         let node_id = NodeId::new(id.inner());
         storage.nodes.insert(node_id, TelNode::Resource(resource))?;
     }
@@ -343,4 +352,4 @@ impl SmtHandlerCollection {
         let _domain_prefix = format!("domain:{}", hex::encode(domain_id));
         Ok(Vec::new())
     }
-} 
+}

@@ -29,9 +29,9 @@ pub fn generate_lisp_function_name_for_effect_type(effect_type_str: &str) -> Str
 /// Convert a ValueExpr to unit type
 pub fn unit_from_value_expr(value: ValueExpr) -> Result<(), ConversionError> {
     match value {
-        ValueExpr::Unit | ValueExpr::Nil => Ok(()),
+        ValueExpr::Nil => Ok(()),
         other => Err(ConversionError::TypeMismatch {
-            expected: "Unit or Nil".to_string(),
+            expected: "Nil".to_string(),
             found: format!("{:?}", other),
         }),
     }
@@ -39,7 +39,7 @@ pub fn unit_from_value_expr(value: ValueExpr) -> Result<(), ConversionError> {
 
 /// Convert a unit to ValueExpr
 pub fn unit_to_value_expr(_: &()) -> Result<ValueExpr, ConversionError> {
-    Ok(ValueExpr::Unit)
+    Ok(ValueExpr::Nil)
 }
 
 /// Get the schema for unit type
@@ -119,10 +119,10 @@ mod tests {
     #[test]
     fn test_effect_input_output_unit() {
         // Test using extension trait directly
-        let unit_value = ValueExpr::Unit;
+        let unit_value = ValueExpr::Nil;
         let _: () = unit_from_value_expr(unit_value).unwrap();
         let serialized = unit_to_value_expr(&()).unwrap();
-        assert_eq!(serialized, ValueExpr::Unit);
+        assert_eq!(serialized, ValueExpr::Nil);
     }
 
     #[test]

@@ -10,18 +10,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use causality_types::serialization::Encode;
+use causality_types::{AsRegistry, ValueExprId, core::id::DomainId, expr::value::ValueExpr, serialization::{Decode, Encode}};
 use parking_lot::RwLock;
 use sha2::{Digest, Sha256};
-
-use causality_types::{
-    core::id::{ValueExprId, DomainId},
-    expr::value::ValueExpr,
-    provider::registry::AsRegistry,
-    serialization::Decode,
-};
 use causality_core::smt::{TegMultiDomainSmt, MemoryBackend};
-// Use direct ID creation instead of generate_id
+use hex;
 
 //-----------------------------------------------------------------------------
 // Storage Backend
@@ -104,9 +97,9 @@ impl RuntimeValueStore {
 
                 Ok(buf)
             }
-            ValueStorageBackend::Smt { smt, domain_id } => {
-                let value_key = format!("{}-value-{}", domain_id.namespace_prefix(), id);
-                if let Ok(Some(value_data)) = smt.lock().get_data(&value_key) {
+            ValueStorageBackend::Smt { _smt, _domain_id } => {
+                let value_key = format!("{}-value-{}", "", id);
+                if let Ok(Some(value_data)) =  TegMultiDomainSmt::<MemoryBackend>::get_data(&value_key) {
                     Ok(value_data)
                 } else {
                     Err(anyhow!("Value expression not found in SMT: {:?}", id))
@@ -119,9 +112,9 @@ impl RuntimeValueStore {
     pub fn len(&self) -> usize {
         match &self.storage {
             ValueStorageBackend::HashMap(values) => values.read().len(),
-            ValueStorageBackend::Smt { smt: _, domain_id } => {
+            ValueStorageBackend::Smt { _smt, _domain_id } => {
                 // Count values by iterating through keys with the domain prefix
-                let _prefix = format!("{}-value-", domain_id.namespace_prefix());
+                let _prefix = format!("{}-value-", "");
                 // For now, return 0 as SMT doesn't expose key iteration
                 // In a full implementation, we'd maintain a separate counter
                 0
@@ -152,9 +145,9 @@ impl RuntimeValueStore {
             ValueStorageBackend::HashMap(values) => {
                 values.write().insert(id, value);
             }
-            ValueStorageBackend::Smt { smt, domain_id } => {
-                let value_key = format!("{}-value-{}", domain_id.namespace_prefix(), id);
-                smt.lock().store_data(&value_key, &buf)
+            ValueStorageBackend::Smt { _smt, _domain_id } => {
+                let value_key = format!("{}-value-{}", "", id);
+                TegMultiDomainSmt::<MemoryBackend>::store_data(&value_key, &buf)
                     .map_err(|e| anyhow!("Failed to store value: {}", e))?;
             }
         }
@@ -164,38 +157,52 @@ impl RuntimeValueStore {
 }
 
 #[async_trait::async_trait]
-impl AsRegistry<ValueExprId, ValueExpr> for RuntimeValueStore {
+impl AsRegistry<ValueExpr> for RuntimeValueStore {
     async fn register(
         &mut self,
-        id: ValueExprId,
-        definition: ValueExpr,
+        key: String, 
+        service: ValueExpr, 
     ) -> Result<()> {
         match &mut self.storage {
             ValueStorageBackend::HashMap(values) => {
-                values.write().insert(id, definition);
+                let mut id_bytes = [0u8; 32];
+                hex::decode_to_slice(&key, &mut id_bytes)
+                    .map_err(|e| anyhow!("Invalid key format for ValueExprId (hex decode failed): {}", e))?;
+                let id = ValueExprId(id_bytes);
+                values.write().insert(id, service);
             }
-            ValueStorageBackend::Smt { smt, domain_id } => {
-                let value_data = definition.as_ssz_bytes();
-                let value_key = format!("{}-value-{}", domain_id.namespace_prefix(), id);
-                smt.lock().store_data(&value_key, &value_data)
-                    .map_err(|e| anyhow!("Failed to store value: {}", e))?;
+            ValueStorageBackend::Smt { _smt, _domain_id } => { 
+                let value_data = service.as_ssz_bytes();
+                TegMultiDomainSmt::<MemoryBackend>::store_data(&key, &value_data)
+                    .map_err(|e| anyhow!("Failed to store value in SMT: {}", e))?;
             }
         }
         Ok(())
     }
 
-    async fn get(&self, id: &ValueExprId) -> Result<Option<ValueExpr>> {
-        match &self.storage {
+    async fn unregister(&mut self, key: &str) -> Result<Option<ValueExpr>> {
+        match &mut self.storage {
             ValueStorageBackend::HashMap(values) => {
-                Ok(values.read().get(id).cloned())
+                let mut id_bytes = [0u8; 32];
+                hex::decode_to_slice(key, &mut id_bytes)
+                    .map_err(|e| anyhow!("Invalid key format for ValueExprId (hex decode failed): {}", e))?;
+                let id = ValueExprId(id_bytes);
+                Ok(values.write().remove(&id))
             }
-            ValueStorageBackend::Smt { smt, domain_id } => {
-                let value_key = format!("{}-value-{}", domain_id.namespace_prefix(), id);
-                if let Ok(Some(value_data)) = smt.lock().get_data(&value_key) {
-                    // Deserialize from SSZ bytes back to ValueExpr
-                    match ValueExpr::from_ssz_bytes(&value_data) {
-                        Ok(value_expr) => Ok(Some(value_expr)),
-                        Err(_) => Ok(None), // Deserialization failed
+            ValueStorageBackend::Smt { _smt, _domain_id } => {
+                let existing_data = TegMultiDomainSmt::<MemoryBackend>::get_data(key)
+                    .map_err(|e| anyhow!("Failed to access SMT for unregister: {}", e))?;
+                
+                TegMultiDomainSmt::<MemoryBackend>::store_data(key, &[])
+                    .map_err(|e| anyhow!("Failed to remove value from SMT: {}", e))?;
+
+                if let Some(value_data) = existing_data {
+                    if value_data.is_empty() { 
+                        Ok(None)
+                    } else {
+                        ValueExpr::from_ssz_bytes(&value_data)
+                            .map(Some)
+                            .map_err(|e| anyhow!("Failed to deserialize SMT data for unregister: {}", e))
                     }
                 } else {
                     Ok(None)
@@ -204,70 +211,34 @@ impl AsRegistry<ValueExprId, ValueExpr> for RuntimeValueStore {
         }
     }
 
-    async fn unregister(&mut self, id: &ValueExprId) -> Result<()> {
-        match &mut self.storage {
-            ValueStorageBackend::HashMap(values) => {
-                values.write().remove(id);
-            }
-            ValueStorageBackend::Smt { smt, domain_id } => {
-                // Implement SMT value removal
-                let value_key = format!("{}-value-{}", domain_id.namespace_prefix(), id);
-                // For now, we'll just mark it as removed by storing empty data
-                // In a full implementation, we'd have proper deletion
-                smt.lock().store_data(&value_key, &[])
-                    .map_err(|e| anyhow!("Failed to remove value: {}", e))?;
-            }
-        }
-        Ok(())
-    }
-
-    // Implement the missing sync methods
-    fn get_sync(&self, id: &ValueExprId) -> Result<Option<ValueExpr>> {
+    async fn lookup(&self, key: &str) -> Result<Option<&ValueExpr>> {
         match &self.storage {
             ValueStorageBackend::HashMap(values) => {
-                Ok(values.read().get(id).cloned())
-            }
-            ValueStorageBackend::Smt { smt, domain_id } => {
-                let value_key = format!("{}-value-{}", domain_id.namespace_prefix(), id);
-                if let Ok(Some(value_data)) = smt.lock().get_data(&value_key) {
-                    // Deserialize from SSZ bytes back to ValueExpr
-                    match ValueExpr::from_ssz_bytes(&value_data) {
-                        Ok(value_expr) => Ok(Some(value_expr)),
-                        Err(_) => Ok(None), // Deserialization failed
-                    }
+                let mut id_bytes = [0u8; 32];
+                hex::decode_to_slice(key, &mut id_bytes)
+                    .map_err(|e| anyhow!("Invalid key format for ValueExprId (hex decode failed): {}", e))?;
+                let id = ValueExprId(id_bytes);
+                let guard = values.read();
+                if guard.contains_key(&id) {
+                    return Err(anyhow!("HashMap lookup returning a stable reference through RwLock is complex and not safely implemented here."));
                 } else {
                     Ok(None)
                 }
             }
+            ValueStorageBackend::Smt { _smt, _domain_id } => {
+                Err(anyhow!("Lookup returning a direct reference is not supported for SMT backend."))
+            }
         }
     }
 
-    fn register_sync(&mut self, id: ValueExprId, definition: ValueExpr) -> Result<()> {
-        match &mut self.storage {
-            ValueStorageBackend::HashMap(values) => {
-                values.write().insert(id, definition);
-            }
-            ValueStorageBackend::Smt { smt, domain_id } => {
-                let value_data = definition.as_ssz_bytes();
-                let value_key = format!("{}-value-{}", domain_id.namespace_prefix(), id);
-                smt.lock().store_data(&value_key, &value_data)
-                    .map_err(|e| anyhow!("Failed to store value: {}", e))?;
-            }
-        }
-        Ok(())
-    }
-
-    async fn count(&self) -> Result<usize> {
+    async fn list_keys(&self) -> Result<Vec<String>> {
         match &self.storage {
             ValueStorageBackend::HashMap(values) => {
-                Ok(values.read().len())
+                let keys = values.read().keys().map(|id| hex::encode(id.0)).collect();
+                Ok(keys)
             }
-            ValueStorageBackend::Smt { smt: _, domain_id } => {
-                // Count values by iterating through keys with the domain prefix
-                let _prefix = format!("{}-value-", domain_id.namespace_prefix());
-                // For now, return 0 as SMT doesn't expose key iteration
-                // In a full implementation, we'd maintain a separate counter
-                Ok(0)
+            ValueStorageBackend::Smt { _smt, _domain_id } => {
+                Ok(Vec::new()) 
             }
         }
     }
@@ -277,15 +248,10 @@ impl AsRegistry<ValueExprId, ValueExpr> for RuntimeValueStore {
             ValueStorageBackend::HashMap(values) => {
                 values.write().clear();
             }
-            ValueStorageBackend::Smt { smt: _, domain_id: _ } => {
-                // Implement SMT clear by clearing all values with the domain prefix
-                // For now, we'll just return success as SMT doesn't expose bulk operations
-                // In a full implementation, we'd iterate through all keys and remove them
-                ()
+            ValueStorageBackend::Smt { _smt, _domain_id } => {
+                return Err(anyhow!("Clear operation not fully implemented for SMT backend."));
             }
         }
         Ok(())
     }
-
-    // Use the default implementation for is_registered
 }

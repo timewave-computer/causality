@@ -31,14 +31,18 @@ pub struct TegPersistenceManager {
 #[derive(Debug, Clone)]
 pub struct PersistenceConfig {
     /// Maximum snapshot size in bytes before compression
+    #[allow(dead_code)]
     max_snapshot_size_bytes: usize,
     /// Number of incremental snapshots to keep
+    #[allow(dead_code)]
     max_incremental_snapshots: usize,
     /// Enable compression for snapshots
     enable_compression: bool,
     /// Enable integrity verification on load
+    #[allow(dead_code)]
     verify_integrity_on_load: bool,
     /// Backup interval in milliseconds
+    #[allow(dead_code)]
     backup_interval_ms: u64,
 }
 

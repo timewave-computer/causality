@@ -4,12 +4,12 @@
 //! the gap between causality-types and causality-lisp during refactoring.
 
 use causality_types::{
-    core::{
-        id::AsId,
-        numeric::Number,
-        str::Str,
+    primitive::{
+        ids::AsId,
+        number::Number,
+        string::Str,
     },
-    expr::{
+    expression::{
         ast::Expr,
         value::{ValueExpr, ValueExprRef},
     },
@@ -49,7 +49,7 @@ impl StrExt for Str {
 //-----------------------------------------------------------------------------
 
 // Re-export the ExprBox type from causality-types
-pub use causality_types::expr::ast::ExprBox;
+pub use causality_types::expression::ast::ExprBox;
 
 /// Adapter functions for ExprBox
 pub mod expr_box {

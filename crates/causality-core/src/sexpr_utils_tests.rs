@@ -34,7 +34,7 @@ mod tests {
         // Test conversion of primitive ValueExpr types to S-expressions
         
         // Test unit/nil conversion
-        let unit_val = ValueExpr::Unit;
+        let unit_val = ValueExpr::Nil;
         let sexpr = value_expr_to_sexpr(&unit_val);
         assert!(sexpr.is_null());
         

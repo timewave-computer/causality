@@ -87,7 +87,7 @@ pub struct LogMessageEffectOutput;
 
 impl EffectOutput for LogMessageEffectOutput {
     fn to_value_expr(&self) -> Result<ValueExpr, ConversionError> {
-        Ok(ValueExpr::Unit)
+        Ok(ValueExpr::Nil)
     }
 
     fn schema() -> TypeExpr {

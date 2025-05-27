@@ -185,6 +185,24 @@ let vlist items : value_expr = VList items
 let vmap entries : value_expr = VMap (BatMap.of_enum (BatList.enum entries))
 
 (*-----------------------------------------------------------------------------
+  Schema Generation Utilities (for automatic ProcessDataflow schemas)
+-----------------------------------------------------------------------------*)
+
+(** Convert type_schema to string representation *)
+let rec string_of_type_schema = function
+  | Unit -> "unit"
+  | Bool -> "bool" 
+  | Integer -> "int"
+  | Number -> "number"
+  | String -> "string"
+  | List inner -> "list(" ^ (string_of_type_schema inner) ^ ")"
+  | Optional inner -> "option(" ^ (string_of_type_schema inner) ^ ")"
+  | Map (k, v) -> "map(" ^ (string_of_type_schema k) ^ ", " ^ (string_of_type_schema v) ^ ")"
+  | Record fields -> "record{" ^ (String.concat "; " (List.map (fun (name, schema) -> name ^ ": " ^ (string_of_type_schema schema)) fields)) ^ "}"
+  | Union variants -> "union(" ^ (String.concat " | " (List.map string_of_type_schema variants)) ^ ")"
+  | Any -> "any"
+
+(*-----------------------------------------------------------------------------
   Generic AST Compilation Framework
 -----------------------------------------------------------------------------*)
 
@@ -413,14 +431,31 @@ let create_pdb_edge ~from_node ~to_node ?condition ~transition_type () =
     ("transition_type", VString transition_type);
   ]))
 
-(** Create a ProcessDataflowBlock definition *)
+(** Create a ProcessDataflowBlock definition with automatic schema generation *)
+let create_typed_process_dataflow_definition ~definition_id ~name ~input_generator ~output_generator ~state_generator ~nodes ~edges ~default_typed_domain =
+  let input_schema = input_generator.generate_schema () in
+  let output_schema = output_generator.generate_schema () in
+  let state_schema = state_generator.generate_schema () in
+  
+  VStruct (BatMap.of_enum (BatList.enum [
+    ("definition_id", VString (Bytes.to_string definition_id));
+    ("name", VString name);
+    ("input_schema_gen", VString (string_of_type_schema input_schema));
+    ("output_schema_gen", VString (string_of_type_schema output_schema));
+    ("state_schema_gen", VString (string_of_type_schema state_schema));
+    ("nodes", VList nodes);
+    ("edges", VList edges);
+    ("default_typed_domain", default_typed_domain);
+  ]))
+
+(** Legacy ProcessDataflowBlock definition for compatibility *)
 let create_process_dataflow_definition ~definition_id ~name ~input_schema ~output_schema ~state_schema ~nodes ~edges ~default_typed_domain =
   VStruct (BatMap.of_enum (BatList.enum [
     ("definition_id", VString (Bytes.to_string definition_id));
     ("name", VString name);
-    ("input_schema", VMap (BatMap.map (fun type_name -> VString type_name) input_schema));
-    ("output_schema", VMap (BatMap.map (fun type_name -> VString type_name) output_schema));
-    ("state_schema", VMap (BatMap.map (fun type_name -> VString type_name) state_schema));
+    ("input_schema_gen", VNil); (* Legacy - no auto generation *)
+    ("output_schema_gen", VNil);
+    ("state_schema_gen", VNil);
     ("nodes", VList nodes);
     ("edges", VList edges);
     ("default_typed_domain", default_typed_domain);

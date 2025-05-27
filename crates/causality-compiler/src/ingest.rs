@@ -6,11 +6,11 @@ use anyhow::{anyhow, Result};
 use sha2::Digest; // Import the Digest trait for SHA256
 
 use causality_types::{
-    core::{Handler as TypesHandler},
-    core::id::{NodeId, ExprId, EntityId, HandlerId, AsId},
-    expr::{value::ValueExpr, ast::Expr},
-    graph::elements::{Node, Edge as TypesEdge},
-    serialization::Encode, // Added for as_ssz_bytes() method
+    Handler as TypesHandler,
+    primitive::ids::{NodeId, ExprId, EntityId, HandlerId, AsId},
+    expression::{value::ValueExpr, ast::Expr},
+    graph::element::{Node, Edge as TypesEdge, TypeId},
+    system::serialization::Encode, // Added for as_ssz_bytes() method
 };
 
 use crate::teg_parser::ParsedTegProgram;
@@ -149,7 +149,7 @@ pub fn ingest_parsed_teg(
             let node_id = NodeId::new(node.id.inner());
             let graph_node = Node::new(
                 node_id,
-                causality_types::graph::elements::TypeId::from_string(&node.resource_type.to_string())
+                TypeId::from_string(&node.resource_type.to_string())
             );
             current_subgraph_nodes.insert(node_id, graph_node);
         }
@@ -229,7 +229,7 @@ pub fn ingest_parsed_teg(
         let converted_edges: Vec<TypesEdge> = subgraph_data.edges.iter().map(|tel_edge| {
             TypesEdge::new(
                 tel_edge.id,
-                causality_types::graph::elements::TypeId::from_string("default_edge_type"),
+                TypeId::from_string("default_edge_type"),
                 NodeId::new(tel_edge.source.inner()),
                 NodeId::new(tel_edge.target.inner())
             )

@@ -3,22 +3,23 @@
 //! This strategy uses TEL expressions for dynamic optimization decisions,
 //! supporting custom scoring, filtering, and domain compatibility logic.
 
-use crate::optimization::{OptimizationStrategy, OptimizationContext};
+use super::super::optimization::{OptimizationStrategy, OptimizationContext};
+use crate::config::TypedDomainConfig;
+use crate::optimization::evaluation::{ConfigurationValue, EvaluationConfig, EvaluationMetrics, StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
 use anyhow::Result;
+use causality_types::AsIdConverter;
 use causality_types::{
     core::{
-        id::{EntityId, ExprId, AsId},
+        id::{EntityId, ExprId},
         str::Str,
         str::Str as CausalityStr,
         time::Timestamp,
     },
     expr::value::ValueExpr,
-    tel::{
+    graph::{
         optimization::{
             ResolutionPlan, ScoredPlan, TypedDomain, DataflowOrchestrationStep,
         },
-        cost_model::ResourceUsageEstimate,
-        strategy::{StrategyConfiguration, StrategyMetrics, ConfigurationValue},
     },
 };
 use std::collections::HashMap;
@@ -141,9 +142,9 @@ impl ExpressionBasedStrategy {
             1.0 // Perfect compatibility
         } else {
             // Cross-domain penalty, but still viable
-            match (&context.current_typed_domain, &plan.target_typed_domain) {
-                (TypedDomain::VerifiableDomain(_), TypedDomain::ServiceDomain(_)) => 0.6,
-                (TypedDomain::ServiceDomain(_), TypedDomain::VerifiableDomain(_)) => 0.7,
+            match (context.current_typed_domain.domain_type.as_str(), plan.target_typed_domain.domain_type.as_str()) {
+                ("verifiable", "service") => 0.6,
+                ("service", "verifiable") => 0.7,
                 _ => 0.8,
             }
         };
@@ -189,7 +190,7 @@ impl ExpressionBasedStrategy {
             // Basic plan
             let basic_plan = ResolutionPlan {
                 plan_id: EntityId::new(rand::random()),
-                intent_bundles: context.pending_intents.clone(),
+                intent_bundles: context.pending_intents.iter().map(|id| id.to_id()).collect(),
                 effect_sequence: vec![],
                 dataflow_steps: vec![],
                 resource_transfers: vec![],
@@ -205,7 +206,7 @@ impl ExpressionBasedStrategy {
                 let dataflow_steps = self.generate_smart_dataflow_steps(context, domain);
                 let dataflow_plan = ResolutionPlan {
                     plan_id: EntityId::new(rand::random()),
-                    intent_bundles: context.pending_intents.clone(),
+                    intent_bundles: context.pending_intents.iter().map(|id| id.to_id()).collect(),
                     effect_sequence: vec![],
                     dataflow_steps,
                     resource_transfers: vec![],
@@ -222,7 +223,7 @@ impl ExpressionBasedStrategy {
     }
     
     /// Generate smart dataflow steps based on context
-    fn generate_smart_dataflow_steps(&self, context: &OptimizationContext, domain: &TypedDomain) -> Vec<DataflowOrchestrationStep> {
+    fn generate_smart_dataflow_steps(&self, context: &OptimizationContext, _domain: &TypedDomain) -> Vec<DataflowOrchestrationStep> {
         let mut steps = Vec::new();
         
         // Prioritize dataflows that match the target domain characteristics
@@ -230,33 +231,38 @@ impl ExpressionBasedStrategy {
         sorted_dataflows.sort_by_key(|(_, _def)| {
             // In a real implementation, we'd check the dataflow definition's domain preferences
             // For now, use a simple heuristic
-            match domain {
-                TypedDomain::VerifiableDomain(_) => 0, // Prefer deterministic dataflows
-                TypedDomain::ServiceDomain(_) => 1,   // Prefer service-oriented dataflows
+            match _domain.domain_type.as_str() {
+                "verifiable" => 0, // Prefer deterministic dataflows
+                "service" => 1,   // Prefer service-oriented dataflows
+                _ => 2, // Default case
             }
         });
         
         // Add initiation steps for top dataflows
-        for (df_id, _df_def) in sorted_dataflows.iter().take(3) {
-            steps.push(DataflowOrchestrationStep::InitiateDataflow {
-                df_def_id: **df_id,
-                params: ValueExpr::String(
-                    CausalityStr::from(format!("initiate_dataflow_{}", df_id.to_hex()))
-                ),
+        for (_df_id, _df_def) in sorted_dataflows.iter().take(3) {
+            steps.push(DataflowOrchestrationStep {
+                step_id: EntityId::default(), // TODO: Replace with proper unique ID generation
+                step_type: "InitiateDataflow".into(),
+                required_resources: Vec::new(),
+                produced_resources: Vec::new(),
+                estimated_duration_ms: 0,
+                dependencies: Vec::new(),
             });
         }
         
         // Add advancement steps for active instances
-        for (instance_id, _instance_state) in &context.active_dataflow_instances {
+        for (_instance_id, _instance_state) in &context.active_dataflow_instances {
             if steps.len() >= 10 { // Use a reasonable default limit
                 break;
             }
             
-            steps.push(DataflowOrchestrationStep::AdvanceDataflow {
-                df_instance_id: *instance_id,
-                action_params: ValueExpr::String(
-                    CausalityStr::from(format!("advance_instance_{}", instance_id.to_hex()))
-                ),
+            steps.push(DataflowOrchestrationStep {
+                step_id: EntityId::default(), // TODO: Replace with proper unique ID generation
+                step_type: "AdvanceDataflow".into(),
+                required_resources: Vec::new(),
+                produced_resources: Vec::new(),
+                estimated_duration_ms: 0,
+                dependencies: Vec::new(),
             });
         }
         
@@ -267,9 +273,10 @@ impl ExpressionBasedStrategy {
     fn estimate_basic_cost(&self, domain: &TypedDomain, context: &OptimizationContext) -> u64 {
         let base_cost = 500u64;
         let intent_count = context.pending_intents.len() as u64;
-        let domain_multiplier = match domain {
-            TypedDomain::VerifiableDomain(_) => 1.1,
-            TypedDomain::ServiceDomain(_) => 0.9,
+        let domain_multiplier = match domain.domain_type.as_str() {
+            "verifiable" => 1.1,
+            "service" => 0.9,
+            _ => 1.0,
         };
         
         ((base_cost * intent_count) as f64 * domain_multiplier) as u64
@@ -286,9 +293,10 @@ impl ExpressionBasedStrategy {
     fn estimate_basic_time(&self, domain: &TypedDomain, context: &OptimizationContext) -> u64 {
         let base_time = 2000u64; // 2 seconds
         let intent_count = context.pending_intents.len() as u64;
-        let domain_multiplier = match domain {
-            TypedDomain::VerifiableDomain(_) => 1.3, // ZK proofs take longer
-            TypedDomain::ServiceDomain(_) => 0.8,   // Service calls can be faster
+        let domain_multiplier = match domain.domain_type.as_str() {
+            "verifiable" => 1.3, // ZK proofs take longer
+            "service" => 0.8,   // Service calls can be faster
+            _ => 1.0,
         };
         
         ((base_time * intent_count) as f64 * domain_multiplier) as u64
@@ -367,43 +375,35 @@ impl OptimizationStrategy for ExpressionBasedStrategy {
         true // Expression-based strategy is flexible and supports all domains
     }
     
-    fn get_configuration(&self) -> StrategyConfiguration {
-        self.config.clone()
+    fn get_configuration(&self) -> crate::optimization::evaluation::EvaluationConfig {
+        // Convert our internal config to EvaluationConfig
+        crate::optimization::evaluation::EvaluationConfig {
+            max_evaluation_time_ms: self.config.max_evaluation_time_ms,
+            max_concurrent_evaluations: 4,
+            enable_caching: true,
+            cache_expiration_ms: 3_600_000,
+            scoring_weights: crate::optimization::evaluation::ScoringWeights::default(),
+            domain_parameters: std::collections::HashMap::new(),
+            enable_detailed_analysis: false,
+        }
     }
     
-    fn update_configuration(&mut self, config: StrategyConfiguration) -> Result<()> {
-        // Update expression IDs if provided
-        if let Some(ConfigurationValue::String(expr_str)) = config.parameters.get(&Str::from("scoring_expression")) {
-            // In a real implementation, this would parse the expression string to ExprId
-            // For now, we'll store it as a placeholder
-            self.scoring_expression = Some(ExprId::new([0u8; 32])); // Placeholder
-        }
-        
-        if let Some(ConfigurationValue::String(expr_str)) = config.parameters.get(&Str::from("filter_expression")) {
-            self.filter_expression = Some(ExprId::new([0u8; 32])); // Placeholder
-        }
-        
-        if let Some(ConfigurationValue::String(expr_str)) = config.parameters.get(&Str::from("domain_compatibility_expression")) {
-            self.domain_compatibility_expression = Some(ExprId::new([0u8; 32])); // Placeholder
-        }
-        
-        // Update default weights if provided
-        for (key, value) in &config.parameters {
-            if let ConfigurationValue::Float(weight) = value {
-                let key_str = key.as_str();
-                if key_str.ends_with("_weight") {
-                    let metric_name = key_str.trim_end_matches("_weight");
-                    self.default_weights.insert(metric_name.to_string(), *weight);
-                }
-            }
-        }
-        
-        self.config = config;
+    fn update_configuration(&mut self, config: crate::optimization::evaluation::EvaluationConfig) -> Result<()> {
+        self.config.max_evaluation_time_ms = config.max_evaluation_time_ms;
         Ok(())
     }
     
-    fn get_metrics(&self) -> StrategyMetrics {
-        self.metrics.clone()
+    fn get_metrics(&self) -> crate::optimization::evaluation::EvaluationMetrics {
+        // Convert our internal metrics to EvaluationMetrics
+        crate::optimization::evaluation::EvaluationMetrics {
+            total_evaluations: self.metrics.total_evaluations,
+            successful_evaluations: self.metrics.successful_evaluations,
+            failed_evaluations: 0, // Not tracked in our internal metrics
+            avg_evaluation_time_ms: self.metrics.avg_evaluation_time_ms,
+            cache_hit_rate: 0.0, // Not tracked in our internal metrics
+            domain_performance: std::collections::HashMap::new(),
+            last_updated: self.metrics.last_updated,
+        }
     }
     
     fn reset(&mut self) {

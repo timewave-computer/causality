@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use crate::primitive::ids::{EdgeId, NodeId};
 use crate::expr::value::ValueExpr;
 use crate::serialization::{Encode, Decode, SimpleSerialize, DecodeError};
+use crate::AsId;
 
 
 // Define our own TypeId for graph element types
@@ -74,8 +75,8 @@ impl Node {
 // Edge Definition
 //-----------------------------------------------------------------------------
 
-/// Represents an edge in the graph
-#[derive(Debug, Clone)]
+/// Edge represents a connection between two nodes in the graph
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edge {
     /// Unique identifier for this edge
     pub id: EdgeId,
@@ -245,3 +246,15 @@ impl Decode for Edge {
 }
 
 impl SimpleSerialize for Edge {}
+
+impl Default for Edge {
+    fn default() -> Self {
+        Self {
+            id: <EdgeId as AsId>::null(),
+            type_id: TypeId([0u8; 32]),
+            source_id: <NodeId as AsId>::null(),
+            target_id: <NodeId as AsId>::null(),
+            properties: BTreeMap::new(),
+        }
+    }
+}

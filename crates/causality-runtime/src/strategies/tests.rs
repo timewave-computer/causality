@@ -3,7 +3,7 @@
 use super::*;
 use crate::optimization::{OptimizationStrategy, OptimizationContext};
 use causality_types::{
-    core::id::DomainId,
+    core::id::{DomainId, ExprId},
     tel::optimization::TypedDomain,
 };
 
@@ -38,8 +38,6 @@ fn test_expression_based_strategy_creation() {
 
 #[test]
 fn test_expression_based_strategy_configuration() {
-    use causality_types::primitive::ids::ExprId;
-    
     // Test builder pattern
     let expr_id = ExprId::new([1u8; 32]);
     let configured_strategy = ExpressionBasedStrategy::new()

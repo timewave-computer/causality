@@ -3,7 +3,8 @@
 //! This strategy focuses on optimizing ProcessDataflowBlock orchestration,
 //! parameter generation, and step decision-making across TypedDomains.
 
-use crate::optimization::{OptimizationStrategy, OptimizationContext};
+use super::super::optimization::{OptimizationStrategy, OptimizationContext};
+use crate::optimization::evaluation::{ConfigurationValue, EvaluationConfig, EvaluationMetrics, StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
 use anyhow::Result;
 use causality_types::{
     core::{
@@ -13,14 +14,13 @@ use causality_types::{
         time::Timestamp,
     },
     expr::value::ValueExpr,
-    tel::{
+    graph::{
         optimization::{
             ResolutionPlan, ScoredPlan, TypedDomain, DataflowOrchestrationStep,
         },
-        cost_model::ResourceUsageEstimate,
-        strategy::{StrategyConfiguration, StrategyMetrics, ConfigurationValue},
     },
 };
+use causality_types::AsIdConverter; // Added import
 use std::collections::HashMap;
 
 /// Strategy that focuses on optimizing ProcessDataflowBlock orchestration
@@ -45,7 +45,7 @@ impl ProcessDataflowOrchestrationStrategy {
             config: StrategyConfiguration {
                 strategy_id: Str::from("dataflow_orchestration"),
                 parameters: HashMap::new(),
-                enabled_domains: vec![],
+                enabled_domains: Vec::new(),
                 priority: 12,
                 max_evaluation_time_ms: 4000,
                 version: 1,
@@ -127,9 +127,10 @@ impl ProcessDataflowOrchestrationStrategy {
         score += step_efficiency * 0.3;
         
         // Domain compatibility bonus
-        let domain_bonus = match plan.target_typed_domain {
-            TypedDomain::VerifiableDomain(_) => 0.2, // Good for deterministic dataflows
-            TypedDomain::ServiceDomain(_) => 0.1,   // Less ideal but workable
+        let domain_bonus = match plan.target_typed_domain.domain_type.as_str() {
+            "verifiable" => 0.2, // Good for deterministic dataflows
+            "service" => 0.1,   // Less ideal but workable
+            _ => 0.05, // Default case
         };
         
         score += domain_bonus;
@@ -163,7 +164,7 @@ impl OptimizationStrategy for ProcessDataflowOrchestrationStrategy {
             
             let plan = ResolutionPlan {
                 plan_id: EntityId::new(rand::random()),
-                intent_bundles: context.pending_intents.clone(),
+                intent_bundles: context.pending_intents.iter().map(|id| id.to_id()).collect(), // Re-applied AsIdConverter import and EntityId to ExprId conversion
                 effect_sequence: vec![],
                 dataflow_steps,
                 resource_transfers: vec![],
@@ -181,9 +182,10 @@ impl OptimizationStrategy for ProcessDataflowOrchestrationStrategy {
                 cost_efficiency_score: 0.7, // Lower due to orchestration overhead
                 time_efficiency_score: 0.6, // Lower due to coordination time
                 resource_utilization_score: 0.9, // High due to dataflow optimization
-                domain_compatibility_score: match domain {
-                    TypedDomain::VerifiableDomain(_) => 0.9,
-                    TypedDomain::ServiceDomain(_) => 0.7,
+                domain_compatibility_score: match domain.domain_type.as_str() {
+                    "verifiable" => 0.9,
+                    "service" => 0.7,
+                    _ => 0.5,
                 },
                 strategy_name: Str::from(self.strategy_name()),
                 evaluated_at: Timestamp::now(),
@@ -207,9 +209,10 @@ impl OptimizationStrategy for ProcessDataflowOrchestrationStrategy {
             cost_efficiency_score: 0.7,
             time_efficiency_score: 0.6,
             resource_utilization_score: 0.9,
-            domain_compatibility_score: match plan.target_typed_domain {
-                TypedDomain::VerifiableDomain(_) => 0.9,
-                TypedDomain::ServiceDomain(_) => 0.7,
+            domain_compatibility_score: match plan.target_typed_domain.domain_type.as_str() {
+                "verifiable" => 0.9,
+                "service" => 0.7,
+                _ => 0.5,
             },
             strategy_name: Str::from(self.strategy_name()),
             evaluated_at: Timestamp::now(),
@@ -218,33 +221,42 @@ impl OptimizationStrategy for ProcessDataflowOrchestrationStrategy {
     
     fn supports_typed_domain(&self, domain: &TypedDomain) -> bool {
         // ProcessDataflow orchestration works better with VerifiableDomain but supports both
-        match domain {
-            TypedDomain::VerifiableDomain(_) => true,
-            TypedDomain::ServiceDomain(_) => true,
+        match domain.domain_type.as_str() {
+            "verifiable" => true,
+            "service" => true,
+            _ => false, // Only support known domain types
         }
     }
     
-    fn get_configuration(&self) -> StrategyConfiguration {
-        self.config.clone()
+    fn get_configuration(&self) -> crate::optimization::evaluation::EvaluationConfig {
+        // Convert our internal config to EvaluationConfig
+        crate::optimization::evaluation::EvaluationConfig {
+            max_evaluation_time_ms: self.config.max_evaluation_time_ms,
+            max_concurrent_evaluations: 4,
+            enable_caching: true,
+            cache_expiration_ms: 3_600_000,
+            scoring_weights: crate::optimization::evaluation::ScoringWeights::default(),
+            domain_parameters: std::collections::HashMap::new(),
+            enable_detailed_analysis: false,
+        }
     }
     
-    fn update_configuration(&mut self, config: StrategyConfiguration) -> Result<()> {
-        // Update max_dataflow_steps if provided
-        if let Some(ConfigurationValue::Integer(max_steps)) = config.parameters.get(&Str::from("max_dataflow_steps")) {
-            self.max_dataflow_steps = (*max_steps as usize).max(1);
-        }
-        
-        // Update prefer_parallel_execution if provided
-        if let Some(ConfigurationValue::Boolean(prefer_parallel)) = config.parameters.get(&Str::from("prefer_parallel_execution")) {
-            self.prefer_parallel_execution = *prefer_parallel;
-        }
-        
-        self.config = config;
+    fn update_configuration(&mut self, config: crate::optimization::evaluation::EvaluationConfig) -> Result<()> {
+        self.config.max_evaluation_time_ms = config.max_evaluation_time_ms;
         Ok(())
     }
     
-    fn get_metrics(&self) -> StrategyMetrics {
-        self.metrics.clone()
+    fn get_metrics(&self) -> crate::optimization::evaluation::EvaluationMetrics {
+        // Convert our internal metrics to EvaluationMetrics
+        crate::optimization::evaluation::EvaluationMetrics {
+            total_evaluations: self.metrics.total_evaluations,
+            successful_evaluations: self.metrics.successful_evaluations,
+            failed_evaluations: 0, // Not tracked in our internal metrics
+            avg_evaluation_time_ms: self.metrics.avg_evaluation_time_ms,
+            cache_hit_rate: 0.0, // Not tracked in our internal metrics
+            domain_performance: std::collections::HashMap::new(),
+            last_updated: self.metrics.last_updated,
+        }
     }
     
     fn reset(&mut self) {

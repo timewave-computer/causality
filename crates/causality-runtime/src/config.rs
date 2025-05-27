@@ -6,9 +6,9 @@
 
 use causality_types::{
     core::str::Str as CausalityStr,
-    tel::optimization::TypedDomain,
-    anyhow::Result,
+    graph::optimization::TypedDomain,
 };
+use anyhow::Result;
 use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
@@ -405,32 +405,32 @@ impl OptimizationConfig {
     
     /// Get TypedDomain-specific configuration
     pub fn get_typed_domain_config(&self, domain: &TypedDomain) -> TypedDomainConfig {
-        let domain_key = match domain {
-            TypedDomain::VerifiableDomain(_) => "verifiable",
-            TypedDomain::ServiceDomain(_) => "service",
-        };
+        let domain_key = domain.domain_type.as_str();
         
         self.typed_domain_overrides
             .get(domain_key)
             .cloned()
             .unwrap_or_else(|| {
                 let mut config = TypedDomainConfig::default();
-                match domain {
-                    TypedDomain::VerifiableDomain(_) => {
+                match domain.domain_type.as_str() {
+                    "verifiable" => {
                         config.enable_zk_optimizations = true;
                         config.preferred_strategies = vec![
                             CausalityStr::from("capital_efficiency"),
                             CausalityStr::from("expression_based"),
                         ];
                     }
-                    TypedDomain::ServiceDomain(_) => {
+                    "service" => {
                         config.enable_service_optimizations = true;
                         config.preferred_strategies = vec![
                             CausalityStr::from("priority_based"),
                             CausalityStr::from("pdb_orchestration"),
                         ];
                     }
-                }
+                    _ => {
+                        // For other domain types, config remains TypedDomainConfig::default()
+                    }
+                };
                 config
             })
     }
@@ -508,7 +508,9 @@ impl OptimizationConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+    use std::collections::HashMap;
+    use causality_types::core::id::DomainId;
+
     #[test]
     fn test_default_config() {
         let config = OptimizationConfig::default();
@@ -517,8 +519,6 @@ mod tests {
     
     #[test]
     fn test_typed_domain_config() {
-        use causality_types::primitive::ids::DomainId;
-        
         let config = OptimizationConfig::default();
         let domain_id = DomainId::new([1u8; 32]);
         

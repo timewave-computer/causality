@@ -2,15 +2,14 @@
 //! Intents represent desired outcomes or goals that can be satisfied by effects.
 
 use crate::primitive::{
-    ids::{NodeId, AsId, EntityId, DomainId, ExprId},
+    ids::{NodeId, AsId, EntityId, ExprId, DomainId},
     string::Str,
     time::Timestamp,
-    trait_::{AsIdentifiable, HasDomainId, HasInputs, HasOutputs, HasExpression, HasTimestamp, AsIntent, AsEffect},
+    trait_::{AsIdentifiable, HasInputs, HasOutputs, HasExpression, HasTimestamp, AsIntent, AsEffect, HasDomainId},
 };
 use crate::graph::r#trait::AsNode;
 use crate::resource::flow::ResourceFlow;
-use crate::graph::optimization::{TypedDomain, ProcessDataflowInitiationHint, EffectCompatibility, ResourcePreference};
-use crate::system::serialization::{Encode, Decode, SimpleSerialize, DecodeError};
+use crate::system::serialization::{Encode, DecodeWithLength, DecodeError, SimpleSerialize, Decode};
 
 /// Unified Intent type representing a desired outcome or goal in the system
 #[derive(Debug, Clone, PartialEq)]
@@ -39,20 +38,8 @@ pub struct Intent {
     /// When this intent was created or became active
     pub timestamp: Timestamp,
     
-    /// Optimization hint expression for strategy guidance
-    pub optimization_hint: Option<ExprId>,
-    
-    /// Effect compatibility metadata for optimization
-    pub compatibility_metadata: Vec<EffectCompatibility>,
-    
-    /// Resource preferences for optimization strategies
-    pub resource_preferences: Vec<ResourcePreference>,
-    
-    /// Target typed domain for execution
-    pub target_typed_domain: Option<TypedDomain>,
-    
-    /// ProcessDataflowBlock initiation hint
-    pub process_dataflow_hint: Option<ProcessDataflowInitiationHint>,
+    /// Hint expression for optimization guidance or preferences
+    pub hint: Option<ExprId>,
 }
 
 impl Intent {
@@ -72,11 +59,7 @@ impl Intent {
             outputs: Vec::new(),
             expression: None,
             timestamp: Timestamp::now(),
-            optimization_hint: None,
-            compatibility_metadata: Vec::new(),
-            resource_preferences: Vec::new(),
-            target_typed_domain: None,
-            process_dataflow_hint: None,
+            hint: None,
         }
     }
 
@@ -104,33 +87,9 @@ impl Intent {
         self
     }
 
-    /// Builder method to set optimization hint
-    pub fn with_optimization_hint(mut self, optimization_hint: ExprId) -> Self {
-        self.optimization_hint = Some(optimization_hint);
-        self
-    }
-
-    /// Builder method to set compatibility metadata
-    pub fn with_compatibility_metadata(mut self, compatibility_metadata: Vec<EffectCompatibility>) -> Self {
-        self.compatibility_metadata = compatibility_metadata;
-        self
-    }
-
-    /// Builder method to set resource preferences
-    pub fn with_resource_preferences(mut self, resource_preferences: Vec<ResourcePreference>) -> Self {
-        self.resource_preferences = resource_preferences;
-        self
-    }
-
-    /// Builder method to set target typed domain
-    pub fn with_target_typed_domain(mut self, target_typed_domain: TypedDomain) -> Self {
-        self.target_typed_domain = Some(target_typed_domain);
-        self
-    }
-
-    /// Builder method to set process dataflow hint
-    pub fn with_process_dataflow_hint(mut self, process_dataflow_hint: ProcessDataflowInitiationHint) -> Self {
-        self.process_dataflow_hint = Some(process_dataflow_hint);
+    /// Builder method to set hint
+    pub fn with_hint(mut self, hint: ExprId) -> Self {
+        self.hint = Some(hint);
         self
     }
 }
@@ -146,11 +105,7 @@ impl Default for Intent {
             outputs: Vec::new(),
             expression: None,
             timestamp: Timestamp::now(),
-            optimization_hint: None,
-            compatibility_metadata: Vec::new(),
-            resource_preferences: Vec::new(),
-            target_typed_domain: None,
-            process_dataflow_hint: None,
+            hint: None,
         }
     }
 }
@@ -183,12 +138,6 @@ impl AsIdentifiable for Intent {
     }
 }
 
-impl HasDomainId for Intent {
-    fn domain_id(&self) -> &DomainId {
-        &self.domain_id
-    }
-}
-
 impl HasInputs for Intent {
     fn inputs(&self) -> &[ResourceFlow] {
         &self.inputs
@@ -210,6 +159,12 @@ impl HasExpression for Intent {
 impl HasTimestamp for Intent {
     fn timestamp(&self) -> &Timestamp {
         &self.timestamp
+    }
+}
+
+impl HasDomainId for Intent {
+    fn domain_id(&self) -> &DomainId {
+        &self.domain_id
     }
 }
 
@@ -245,182 +200,114 @@ impl AsIntent for Intent {
 impl Encode for Intent {
     fn as_ssz_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-        
-        // Encode each field in order
+
+        // id: EntityId
         bytes.extend_from_slice(&self.id.as_ssz_bytes());
+
+        // name: Str
         bytes.extend_from_slice(&self.name.as_ssz_bytes());
+
+        // domain_id: DomainId
         bytes.extend_from_slice(&self.domain_id.as_ssz_bytes());
-        bytes.extend_from_slice(&self.priority.to_le_bytes());
+
+        // priority: u32
+        bytes.extend_from_slice(&self.priority.as_ssz_bytes());
+
+        // inputs: Vec<ResourceFlow>
         bytes.extend_from_slice(&self.inputs.as_ssz_bytes());
+
+        // outputs: Vec<ResourceFlow>
         bytes.extend_from_slice(&self.outputs.as_ssz_bytes());
-        
-        // Handle optional expression
-        if let Some(ref expr) = self.expression {
-            bytes.push(1); // Some marker
-            bytes.extend_from_slice(&expr.as_ssz_bytes());
-        } else {
-            bytes.push(0); // None marker
-        }
-        
+
+        // expression: Option<ExprId>
+        bytes.extend_from_slice(&self.expression.as_ssz_bytes());
+
+        // timestamp: Timestamp
         bytes.extend_from_slice(&self.timestamp.as_ssz_bytes());
-        
-        // Handle optional optimization hint
-        if let Some(ref hint) = self.optimization_hint {
-            bytes.push(1); // Some marker
-            bytes.extend_from_slice(&hint.as_ssz_bytes());
-        } else {
-            bytes.push(0); // None marker
-        }
-        
-        // Handle compatibility metadata
-        bytes.extend_from_slice(&self.compatibility_metadata.as_ssz_bytes());
-        
-        // Handle resource preferences
-        bytes.extend_from_slice(&self.resource_preferences.as_ssz_bytes());
-        
-        // Handle optional target typed domain
-        if let Some(ref domain) = self.target_typed_domain {
-            bytes.push(1); // Some marker
-            bytes.extend_from_slice(&domain.as_ssz_bytes());
-        } else {
-            bytes.push(0); // None marker
-        }
-        
-        // Handle optional process dataflow hint
-        if let Some(ref hint) = self.process_dataflow_hint {
-            bytes.push(1); // Some marker
-            bytes.extend_from_slice(&hint.as_ssz_bytes());
-        } else {
-            bytes.push(0); // None marker
-        }
+
+        // hint: Option<ExprId>
+        bytes.extend_from_slice(&self.hint.as_ssz_bytes());
         
         bytes
     }
 }
 
-impl Decode for Intent {
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+impl DecodeWithLength for Intent {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
         let mut offset = 0;
-        
-        // Decode each field in order
-        let id = EntityId::from_ssz_bytes(&bytes[offset..])?;
-        offset += id.as_ssz_bytes().len();
-        
-        let name = Str::from_ssz_bytes(&bytes[offset..])?;
-        offset += name.as_ssz_bytes().len();
-        
-        let domain_id = DomainId::from_ssz_bytes(&bytes[offset..])?;
-        offset += domain_id.as_ssz_bytes().len();
-        
-        if offset + 4 > bytes.len() {
-            return Err(DecodeError { message: "Insufficient bytes for priority".to_string() });
+
+        // id: EntityId (fixed size: 32 bytes)
+        if bytes.len() < offset + 32 {
+            return Err(DecodeError::new("Intent: Input bytes too short for id"));
+        }
+        let id = EntityId::from_ssz_bytes(&bytes[offset..offset + 32])?;
+        offset += 32;
+
+        // name: Str (variable size)
+        let (name, consumed) = Str::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += consumed;
+
+        // domain_id: DomainId (fixed size: 32 bytes)
+        if bytes.len() < offset + 32 {
+            return Err(DecodeError::new("Intent: Input bytes too short for domain_id"));
+        }
+        let domain_id = DomainId::from_ssz_bytes(&bytes[offset..offset + 32])?;
+        offset += 32;
+
+        // priority: u32 (fixed size: 4 bytes)
+        if bytes.len() < offset + 4 {
+            return Err(DecodeError::new("Intent: Input bytes too short for priority"));
         }
         let priority = u32::from_le_bytes([
             bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]
         ]);
         offset += 4;
-        
-        let inputs = Vec::<ResourceFlow>::from_ssz_bytes(&bytes[offset..])?;
-        offset += inputs.as_ssz_bytes().len();
-        
-        let outputs = Vec::<ResourceFlow>::from_ssz_bytes(&bytes[offset..])?;
-        offset += outputs.as_ssz_bytes().len();
-        
-        // Handle optional expression
-        if offset >= bytes.len() {
-            return Err(DecodeError { message: "Insufficient bytes for expression marker".to_string() });
+
+        // inputs: Vec<ResourceFlow> (variable size)
+        let (inputs, consumed) = <Vec<ResourceFlow>>::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += consumed;
+
+        // outputs: Vec<ResourceFlow> (variable size)
+        let (outputs, consumed) = <Vec<ResourceFlow>>::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += consumed;
+
+        // expression: Option<ExprId> (variable size)
+        let (expression, consumed) = Option::<ExprId>::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += consumed;
+
+        // timestamp: Timestamp (fixed size: 48 bytes)
+        if bytes.len() < offset + 48 {
+            return Err(DecodeError::new("Intent: Input bytes too short for timestamp"));
         }
-        
-        let expression = if bytes[offset] == 1 {
-            offset += 1;
-            Some(ExprId::from_ssz_bytes(&bytes[offset..])?)
-        } else {
-            offset += 1;
-            None
-        };
-        
-        if let Some(ref expr) = expression {
-            offset += expr.as_ssz_bytes().len();
-        }
-        
-        let timestamp = Timestamp::from_ssz_bytes(&bytes[offset..])?;
-        offset += timestamp.as_ssz_bytes().len();
-        
-        // Handle optional optimization hint
-        if offset >= bytes.len() {
-            return Err(DecodeError { message: "Insufficient bytes for optimization hint marker".to_string() });
-        }
-        
-        let optimization_hint = if bytes[offset] == 1 {
-            offset += 1;
-            Some(ExprId::from_ssz_bytes(&bytes[offset..])?)
-        } else {
-            offset += 1;
-            None
-        };
-        
-        if let Some(ref hint) = optimization_hint {
-            offset += hint.as_ssz_bytes().len();
-        }
-        
-        // Handle compatibility metadata
-        let compatibility_metadata = Vec::<EffectCompatibility>::from_ssz_bytes(&bytes[offset..])?;
-        offset += compatibility_metadata.as_ssz_bytes().len();
-        
-        // Handle resource preferences
-        let resource_preferences = Vec::<ResourcePreference>::from_ssz_bytes(&bytes[offset..])?;
-        offset += resource_preferences.as_ssz_bytes().len();
-        
-        // Handle optional target typed domain
-        if offset >= bytes.len() {
-            return Err(DecodeError { message: "Insufficient bytes for target typed domain marker".to_string() });
-        }
-        
-        let target_typed_domain = if bytes[offset] == 1 {
-            offset += 1;
-            Some(TypedDomain::from_ssz_bytes(&bytes[offset..])?)
-        } else {
-            offset += 1;
-            None
-        };
-        
-        if let Some(ref domain) = target_typed_domain {
-            offset += domain.as_ssz_bytes().len();
-        }
-        
-        // Handle optional process dataflow hint
-        if offset >= bytes.len() {
-            return Err(DecodeError { message: "Insufficient bytes for process dataflow hint marker".to_string() });
-        }
-        
-        let process_dataflow_hint = if bytes[offset] == 1 {
-            // offset += 1; // Not needed since we don't use offset after this
-            Some(ProcessDataflowInitiationHint::from_ssz_bytes(&bytes[offset + 1..])?)
-        } else {
-            // offset += 1; // Not needed since we don't use offset after this
-            None
-        };
-        
-        if let Some(ref hint) = process_dataflow_hint {
-            let _ = hint.as_ssz_bytes().len(); // Consume the length but don't update offset since it's not used
-        }
-        
-        Ok(Intent {
-            id,
-            name,
-            domain_id,
-            priority,
-            inputs,
-            outputs,
-            expression,
-            timestamp,
-            optimization_hint,
-            compatibility_metadata,
-            resource_preferences,
-            target_typed_domain,
-            process_dataflow_hint,
-        })
+        let timestamp = Timestamp::from_ssz_bytes(&bytes[offset..offset + 48])?;
+        offset += 48;
+
+        // hint: Option<ExprId> (variable size)
+        let (hint, consumed) = Option::<ExprId>::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += consumed;
+
+        Ok((
+            Intent {
+                id,
+                name,
+                domain_id,
+                priority,
+                inputs,
+                outputs,
+                expression,
+                timestamp,
+                hint,
+            },
+            offset,
+        ))
     }
 }
 
-impl SimpleSerialize for Intent {} 
+impl Decode for Intent {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let (intent, _) = Self::from_ssz_bytes_with_length(bytes)?;
+        Ok(intent)
+    }
+}
+
+impl SimpleSerialize for Intent {}

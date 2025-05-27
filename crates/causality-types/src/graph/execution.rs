@@ -190,7 +190,7 @@ pub struct ExecutionStrategyConfiguration {
 }
 
 /// Performance metrics for execution tracking
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExecutionMetrics {
     /// Total execution time in milliseconds
     pub execution_time_ms: u64,
@@ -211,21 +211,10 @@ pub struct ExecutionMetrics {
     pub error_count: u32,
 }
 
-impl Default for ExecutionMetrics {
-    fn default() -> Self {
-        Self {
-            execution_time_ms: 0,
-            effects_processed: 0,
-            dataflow_steps_executed: 0,
-            resource_consumption: BTreeMap::new(),
-            strategy_performance: BTreeMap::new(),
-            error_count: 0,
-        }
-    }
-}
+
 
 /// Plan execution tracking information
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct PlanExecutionState {
     /// Currently executing plan ID
     pub current_plan_id: Option<ExprId>,
@@ -240,16 +229,7 @@ pub struct PlanExecutionState {
     pub checkpoints: Vec<Str>,
 }
 
-impl Default for PlanExecutionState {
-    fn default() -> Self {
-        Self {
-            current_plan_id: None,
-            completed_steps: Vec::new(),
-            failed_plans: Vec::new(),
-            checkpoints: Vec::new(),
-        }
-    }
-}
+
 
 /// A reference to a resource within the TEL system (simplified version)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -8,21 +8,24 @@ use sha2::Digest;
 
 use causality_types::{
     core::{
-        id::{ResourceId, HandlerId, ValueExprId, ExprId, DomainId, AsId, SubgraphId},
-        resource_conversion::ToValueExpr,
+        id::{ResourceId, HandlerId, ValueExprId, ExprId, DomainId, SubgraphId},
         str::Str as CausalityStr,
     },
     expr::{
-        value::ValueExpr,
         ast::{Expr as TypesExpr, AtomicCombinator},
     },
-    resource::{Resource, Nullifier},
-    provider::context::{AsExprContext, AsExecutionContext, AsRuntimeContext, TelContextInterface},
-    TypeExpr,
+    expression::{
+        value::ValueExpr,
+        result::{ExprResult, ExprError},
+        r#type::TypeExpr,
+    },
+    resource::{Resource, nullifier::Nullifier, conversion::ToValueExpr},
+    effect::core::HandlerError,
+    system::provider::{AsExprContext, AsExecutionContext, AsRuntimeContext, TelContextInterface},
     serialization::Encode,
-    interpreter_config::{LispContextConfig, LispEvaluator, LispEvaluationError},
-    effects_core::HandlerError as CausalityHandlerError,
-    compiler_output::{CompiledTeg, CompiledSubgraph as CompilerCompiledSubgraph},
+    // TODO: Replace these with actual types when available
+    // config::{LispContextConfig, LispEvaluator, LispEvaluationError},
+    // CompiledSubgraph as CompilerCompiledSubgraph,
 };
 
 use causality_lisp::{
@@ -31,7 +34,39 @@ use causality_lisp::{
     Interpreter as LispConcreteInterpreter,
 };
 
-use causality_types::expr::result::{ExprResult, ExprError as LispError};
+// Additional types that were missing
+#[derive(Debug, Clone, Default)]
+pub struct CompiledTeg {
+    pub expressions: std::collections::BTreeMap<ExprId, TypesExpr>,
+    pub handlers: std::collections::BTreeMap<HandlerId, ()>, // Placeholder for handler data
+    pub subgraphs: std::collections::BTreeMap<SubgraphId, CompilerCompiledSubgraph>,
+}
+
+pub type CompilerCompiledSubgraph = (); // Placeholder
+
+#[derive(Debug, Clone, Default)]
+pub struct LispContextConfig {
+    pub host_function_profile: Option<CausalityStr>,
+    pub initial_bindings: std::collections::BTreeMap<CausalityStr, ValueExpr>,
+    pub additional_host_functions: BTreeMap<CausalityStr, ()>, // Placeholder for function definitions
+}
+
+pub type LispEvaluationError = LispEvaluationErrorLocal; // Use our local type
+pub type CausalityHandlerError = HandlerError; // Use HandlerError instead of ExprError
+// LispEvaluator trait - define the actual trait instead of a placeholder
+#[async_trait]
+pub trait LispEvaluator: Send + Sync {
+    fn get_expr_sync(&self, id: &ExprId) -> Result<Option<TypesExpr>, LispEvaluationError>;
+    async fn evaluate_lisp_in_context(
+        &self,
+        expr_to_eval: &TypesExpr,
+        args: Vec<ValueExpr>,
+        config: &LispContextConfig,
+    ) -> Result<ValueExpr, LispEvaluationError>;
+    async fn store_value_expr(&self, value_expr: ValueExpr) -> Result<ValueExprId, LispEvaluationError>;
+    async fn create_resource_for_evaluator(&mut self, resource: Resource) -> Result<ResourceId, LispEvaluationError>;
+    async fn nullify_resource_for_evaluator(&mut self, nullifier: Nullifier) -> Result<(), LispEvaluationError>;
+}
 
 use causality_core::extension_traits::ValueExprExt;
 
@@ -192,8 +227,8 @@ impl Interpreter {
             // (list (defun ...) (defmacro ...) ...)
             let list_combinator_expr = TypesExpr::Combinator(AtomicCombinator::List);
             let definitions_payload = TypesExpr::Apply(
-                causality_types::expr::ExprBox(Box::new(list_combinator_expr)), 
-                causality_types::expr::ExprVec(global_defs_to_load) // moved here
+                causality_types::expr::ast::ExprBox(Box::new(list_combinator_expr)), 
+                causality_types::expr::ast::ExprVec(global_defs_to_load) // moved here
             );
             
             log::info!("Loading {} global Lisp definitions into interpreter...", def_count);
@@ -231,7 +266,7 @@ impl Interpreter {
         Ok(())
     }
 
-    pub async fn load_lisp_definitions(&self, definitions_expr: &TypesExpr) -> Result<(), LispError> {
+    pub async fn load_lisp_definitions(&self, definitions_expr: &TypesExpr) -> Result<(), LispEvaluationError> {
         // The TypesExpr enum doesn't have a List variant. We need to work with the structure available
         if let TypesExpr::Apply(combinator, operands) = definitions_expr {
             // Check if the combinator is the List combinator
@@ -241,7 +276,7 @@ impl Interpreter {
                     // Log the definition
                     if let TypesExpr::Apply(def_type_box, def_args) = def_expr {
                         if let TypesExpr::Var(ref name) = &***def_type_box {  // Note the triple dereference
-                            // Convert bytes to string for comparison
+                            // Check if the symbol string starts with "defun" or "defmacro"
                             let name_str = String::from_utf8_lossy(name.as_bytes());
                             if name_str.starts_with("defun") || name_str.starts_with("defmacro") {
                                 if let Some(TypesExpr::Var(ref func_name)) = def_args.0.first() {
@@ -266,7 +301,7 @@ impl Interpreter {
                         Ok(_) => log::trace!("Successfully loaded Lisp definition"),
                         Err(e) => {
                             log::error!("Failed to load Lisp definition: {}", e);
-                            return Err(e);
+                            return Err(LispEvaluationError::EvaluationFailed(e.to_string()));
                         }
                     }
                     
@@ -274,14 +309,14 @@ impl Interpreter {
                 }
                 Ok(())
             } else {
-                Err(LispError::ExecutionError { 
-                    message: CausalityStr::from("Expected a List combinator at the root of definitions_expr")
-                })
+                Err(LispEvaluationError::EvaluationFailed(
+                    "Expected a List combinator at the root of definitions_expr".to_string()
+                ))
             }
         } else {
-            Err(LispError::ExecutionError { 
-                message: CausalityStr::from("Expected an Apply expression at the root of definitions_expr")
-            })
+            Err(LispEvaluationError::EvaluationFailed(
+                "Expected an Apply expression at the root of definitions_expr".to_string()
+            ))
         }
     }
 
@@ -560,7 +595,7 @@ impl TelContextInterface for Interpreter {
     fn domain_id(&self) -> Option<DomainId> {
         self.domain_id
     }
-    fn call_host_function(&mut self, name: &CausalityStr, args: Vec<ValueExpr>) -> Result<ValueExpr, LispError> {
+    fn call_host_function(&mut self, name: &CausalityStr, args: Vec<ValueExpr>) -> Result<ValueExpr, ExprError> {
         // This should delegate to the global_lisp_adapter's context
         // However, global_lisp_adapter.lock().await.call_host_function requires &mut TelLispAdapter
         // and here we have &mut Interpreter. This needs careful handling of MutexGuard.
@@ -582,7 +617,7 @@ impl TelContextInterface for Interpreter {
             match host_fn_result {
                 Some(Ok(value)) => Ok(value),
                 Some(Err(e)) => Err(e),
-                None => Err(LispError::ExecutionError { message: CausalityStr::from(format!("Host function not available: {}", name)) })
+                None => Err(ExprError::ExecutionError { message: CausalityStr::from(format!("Host function not available: {}", name)) })
             }
         })
     }
@@ -619,7 +654,7 @@ impl TelContextInterface for Interpreter {
             Err(_) => ExprResult::Value(ValueExpr::String("State manager lock error".into()))
         }
     }
-    fn get_initial_binding(&self, name: &CausalityStr) -> Option<ValueExpr> {
+    fn get_initial_binding(&self, _name: &CausalityStr) -> Option<ValueExpr> {
         // Return None for now - this would be used for initial symbol bindings
         None
     }
@@ -688,14 +723,12 @@ fn convert_lisp_result_to_value_expr(
 ) -> Result<ValueExpr, CausalityHandlerError> {
     match result {
         causality_types::expr::result::ExprResult::Value(v) => Ok(v), // ValueExpr is directly usable
-        causality_types::expr::result::ExprResult::Atom(atom) => match atom {
-            causality_types::expr::ast::Atom::Nil => Ok(ValueExpr::Unit),
-            causality_types::expr::ast::Atom::Boolean(b) => Ok(ValueExpr::Bool(b)),
-            causality_types::expr::ast::Atom::String(s) => Ok(ValueExpr::String(s)),
-            causality_types::expr::ast::Atom::Integer(n) => Ok(ValueExpr::Number(causality_types::primitive::number::Number::Integer(n))),
-        },
+        causality_types::expr::ast::Atom::Nil => Ok(ValueExpr::Nil),
+        causality_types::expr::ast::Atom::String(s) => Ok(ValueExpr::String(s.clone())),
+        causality_types::expr::ast::Atom::Integer(n) => Ok(ValueExpr::Number(causality_types::expression::value::Number::new_integer(n))),
+        causality_types::expr::ast::Atom::Boolean(b) => Ok(ValueExpr::Bool(b)),
         causality_types::expr::result::ExprResult::Bool(b) => Ok(ValueExpr::Bool(b)),
-        causality_types::expr::result::ExprResult::Unit => Ok(ValueExpr::Unit),
+        causality_types::expr::result::ExprResult::Unit => Ok(ValueExpr::Nil),
         causality_types::expr::result::ExprResult::Resource(r_id) => {
             // Convert ResourceId to a String representation
             Ok(ValueExpr::String(CausalityStr::from(r_id.to_string())))
@@ -703,26 +736,25 @@ fn convert_lisp_result_to_value_expr(
         // Other ExprResult variants (Combinator, Function, ExternalHostFnRef, etc.) 
         // do not have a direct, general conversion to a simple ValueExpr.
         // The caller should handle these if they expect them.
-        other => Err(CausalityHandlerError::InternalError(format!(
-            "Cannot convert Lisp ExprResult variant {:?} to ValueExpr in this context",
-            other
-        ))),
+        other => Err(CausalityHandlerError::InternalError(
+            format!("Cannot convert Lisp ExprResult variant {:?} to ValueExpr in this context", other)
+        )),
     }
 }
 
 #[allow(dead_code)]
-fn atom_to_value_expr(atom: causality_types::expr::ast::Atom) -> ValueExpr {
+fn atom_to_value_expr(atom: &causality_types::expr::ast::Atom) -> ValueExpr {
     match atom {
-        causality_types::expr::ast::Atom::Nil => ValueExpr::Unit,
-        causality_types::expr::ast::Atom::Boolean(b) => ValueExpr::Bool(b),
-        causality_types::expr::ast::Atom::String(s) => ValueExpr::String(s),
-        causality_types::expr::ast::Atom::Integer(i) => ValueExpr::Number(causality_types::primitive::number::Number::Integer(i)),
+        causality_types::expr::ast::Atom::Nil => ValueExpr::Nil,
+        causality_types::expr::ast::Atom::String(s) => ValueExpr::String(s.clone()),
+        causality_types::expr::ast::Atom::Integer(i) => ValueExpr::Number(causality_types::expression::value::Number::new_integer(*i)),
+        causality_types::expr::ast::Atom::Boolean(b) => ValueExpr::Bool(*b),
     }
 }
 
 // Add a wrapper function to convert between LispError and LispEvaluationError
-impl From<LispError> for LispEvaluationErrorLocal {
-    fn from(err: LispError) -> Self {
+impl From<ExprError> for LispEvaluationErrorLocal {
+    fn from(err: ExprError) -> Self {
         LispEvaluationErrorLocal::EvaluationFailed(err.to_string())
     }
 }

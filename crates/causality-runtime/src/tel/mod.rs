@@ -53,18 +53,19 @@ pub mod types;
 
 // Re-export core TEL types
 pub use graph::TelGraph;
-pub use interpreter::Interpreter;
+pub use interpreter::{Interpreter, LispContextConfig};
 pub use graph_executor::EffectGraphExecutor;
-pub use causality_types::tel::InterpreterMode;
-pub use causality_types::tel::execution_context::GraphExecutionContext as TelExecutionContext;
+pub use causality_types::graph::execution::InterpreterMode;
+pub use causality_types::graph::execution::GraphExecutionContext as TelExecutionContext;
 pub use types::{TelEdgeTypes, TelNodeTypes};
 pub use crate::state_manager::StateManager;
 pub use intent_processor::IntentProcessor;
 
 // Re-export optimization framework types
 pub use crate::optimization::{
-    OptimizationStrategy, OptimizationContext, StrategyRegistry, 
-    PlanEvaluator
+    OptimizationStrategy, OptimizationContext, 
+    registry::StrategyRegistry, 
+    evaluation::PlanEvaluator
 };
 pub use crate::optimization::registry::DefaultStrategyRegistry;
 pub use crate::strategies::{
@@ -73,17 +74,14 @@ pub use crate::strategies::{
 };
 
 // Re-export key optimization types from causality-types
-pub use causality_types::tel::{
+pub use causality_types::graph::{
     optimization::{
-        TypedDomain, ResolutionPlan, ScoredPlan, DataflowOrchestrationStep,
+        TypedDomain, //ResolutionPlan, ScoredPlan, DataflowOrchestrationStep,
         EffectCompatibility, ResourcePreference, ProcessDataflowInitiationHint
     },
-    cost_model::{
-        EffectCostModel, ResourceUsageEstimate, DomainSpecificEstimate
-    },
-    process_dataflow::{
+    dataflow::{
         ProcessDataflowDefinition, ProcessDataflowInstanceState, 
-        DataflowNode, DataflowEdge, ProcessDataflowReference
+        ProcessDataflowNode as DataflowNode, ProcessDataflowEdge as DataflowEdge, // ProcessDataflowReference
     }
 };
 

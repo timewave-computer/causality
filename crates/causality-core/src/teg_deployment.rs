@@ -389,6 +389,7 @@ impl TegDeploymentManager {
 
 /// Runtime synchronization client for valence coprocessor
 pub struct RuntimeSyncClient {
+    #[allow(dead_code)]
     config: CoprocessorConfig,
 }
 

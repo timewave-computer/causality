@@ -6,15 +6,17 @@
 // Imports
 //-----------------------------------------------------------------------------
 
-use causality_types::serialization::{SimpleSerialize, Encode, Decode, DecodeError};
-use causality_types::primitive::ids::{EffectId, NodeId};
-use causality_types::expr::ValueExpr;
-use causality_types::graph::traits::{
-    AsContainsEdgeType, AsContainsNodeType, AsEdgeTypesList, AsNodeTypesList,
+use causality_types::{
+    serialization::{SimpleSerialize, Encode, Decode, DecodeError},
+    core::id::{EffectId, NodeId},
+    expr::value::ValueExpr,
+    graph::r#trait::{
+        AsContainsEdgeType, AsContainsNodeType, AsEdgeTypesList, AsNodeTypesList,
+    },
+    resource::Resource,
+    graph::element::Edge,
+    core::{Effect, Handler},
 };
-use causality_types::resource::Resource;
-use causality_types::tel::Edge;
-use causality_types::core::{Effect, Handler};
 use frunk::{HCons, HNil};
 
 //-----------------------------------------------------------------------------

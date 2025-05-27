@@ -313,7 +313,7 @@ impl DomainConfig {
 //-----------------------------------------------------------------------------
 
 /// Top-level system configuration that combines all configuration types
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SystemConfig {
     /// Runtime configuration
     pub runtime: RuntimeConfig,
@@ -328,16 +328,7 @@ pub struct SystemConfig {
     pub lisp_config: LispContextConfig,
 }
 
-impl Default for SystemConfig {
-    fn default() -> Self {
-        Self {
-            runtime: RuntimeConfig::default(),
-            default_domain: DomainConfig::default(),
-            domain_configs: BTreeMap::new(),
-            lisp_config: LispContextConfig::default(),
-        }
-    }
-}
+
 
 impl SystemConfig {
     /// Create a new system configuration

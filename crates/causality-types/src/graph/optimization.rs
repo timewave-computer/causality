@@ -3,10 +3,11 @@
 //! Defines optimization strategies, cost models, and resource usage estimation
 //! for efficient execution of Temporal Effect Language graphs.
 
-use crate::primitive::ids::{DomainId, ResourceId};
+use crate::primitive::ids::{DomainId, ResourceId, ExprId, EntityId};
 use crate::primitive::string::Str;
 use crate::primitive::time::Timestamp;
 use crate::system::serialization::{Encode, Decode, SimpleSerialize, DecodeError};
+use std::collections::HashMap;
 
 //-----------------------------------------------------------------------------
 // Optimization Strategy Types (from tel/strategy.rs)
@@ -94,6 +95,8 @@ impl Default for EffectCostModel {
     }
 }
 
+impl Eq for EffectCostModel {}
+
 impl EffectCostModel {
     /// Calculate total cost for a given number of resources
     pub fn calculate_total_cost(&self, resource_count: u64) -> u64 {
@@ -114,7 +117,7 @@ impl EffectCostModel {
 }
 
 /// Resource usage estimation
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceUsageEstimate {
     pub cpu_time_ms: u64,
     pub memory_bytes: u64,
@@ -140,7 +143,7 @@ impl Default for ResourceUsageEstimate {
 //-----------------------------------------------------------------------------
 
 /// Typed domain for optimization decisions
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct TypedDomain {
     /// Domain identifier
     pub domain_id: DomainId,
@@ -177,7 +180,7 @@ impl TypedDomain {
 }
 
 /// Performance profile for a domain
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DomainPerformanceProfile {
     /// Average latency in milliseconds
     pub avg_latency_ms: u64,
@@ -779,4 +782,84 @@ impl Decode for ResourceUsageEstimate {
     }
 }
 
-impl SimpleSerialize for ResourceUsageEstimate {} 
+impl SimpleSerialize for ResourceUsageEstimate {}
+
+//-----------------------------------------------------------------------------
+// Plan Types for Optimization
+//-----------------------------------------------------------------------------
+
+/// A resolution plan for executing a set of intents
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolutionPlan {
+    /// Unique identifier for this plan
+    pub plan_id: EntityId,
+    /// Intent bundles to be processed
+    pub intent_bundles: Vec<ExprId>,
+    /// Sequence of effects to execute
+    pub effect_sequence: Vec<EntityId>,
+    /// Dataflow orchestration steps
+    pub dataflow_steps: Vec<DataflowOrchestrationStep>,
+    /// Resource transfers required
+    pub resource_transfers: Vec<ResourceTransfer>,
+    /// Target typed domain for execution
+    pub target_typed_domain: TypedDomain,
+    /// Estimated execution cost
+    pub estimated_cost: u64,
+    /// Estimated execution time in milliseconds
+    pub estimated_time_ms: u64,
+    /// Additional metadata
+    pub metadata: HashMap<Str, String>,
+}
+
+/// A scored resolution plan with evaluation metrics
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScoredPlan {
+    /// The underlying resolution plan
+    pub plan: ResolutionPlan,
+    /// Overall score (0.0 to 1.0)
+    pub overall_score: f64,
+    /// Cost efficiency score
+    pub cost_efficiency_score: f64,
+    /// Time efficiency score
+    pub time_efficiency_score: f64,
+    /// Resource utilization score
+    pub resource_utilization_score: f64,
+    /// Domain compatibility score
+    pub domain_compatibility_score: f64,
+    /// Name of the strategy that generated this plan
+    pub strategy_name: Str,
+    /// When this plan was evaluated
+    pub evaluated_at: Timestamp,
+}
+
+/// A dataflow orchestration step
+#[derive(Debug, Clone, PartialEq)]
+pub struct DataflowOrchestrationStep {
+    /// Step identifier
+    pub step_id: EntityId,
+    /// Step type (e.g., "compute", "transfer", "verify")
+    pub step_type: Str,
+    /// Required resources
+    pub required_resources: Vec<ResourceId>,
+    /// Produced resources
+    pub produced_resources: Vec<ResourceId>,
+    /// Estimated execution time
+    pub estimated_duration_ms: u64,
+    /// Dependencies on other steps
+    pub dependencies: Vec<EntityId>,
+}
+
+/// A resource transfer specification
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResourceTransfer {
+    /// Resource being transferred
+    pub resource_id: ResourceId,
+    /// Source domain
+    pub source_domain: DomainId,
+    /// Target domain
+    pub target_domain: DomainId,
+    /// Transfer cost
+    pub transfer_cost: u64,
+    /// Transfer time estimate
+    pub transfer_time_ms: u64,
+} 

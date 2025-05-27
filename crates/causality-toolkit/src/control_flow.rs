@@ -65,7 +65,7 @@ impl EffectInput for ControlFlowInput {
                 
                 let parameters = record.0.get(&Str::from("parameters"))
                     .cloned()
-                    .unwrap_or(ValueExpr::Unit);
+                    .unwrap_or(ValueExpr::Nil);
                 
                 Ok(ControlFlowInput { condition, parameters })
             }

@@ -122,13 +122,13 @@ pub fn map_sexpr(items: Vec<(String, SexprValue)>) -> SexprValue {
 pub fn extract_field<'a>(sexpr: &'a SexprValue, field_name: &str) -> Result<&'a SexprValue> {
     // Handle lexpr list iteration
     if sexpr.is_list() {
-        let mut iter = sexpr.list_iter().ok_or_else(|| anyhow!("Expected a list"))?;
+        let iter = sexpr.list_iter().ok_or_else(|| anyhow!("Expected a list"))?;
         
-        while let Some(element) = iter.next() {
+        for element in iter {
             if element.is_list() {
                 let mut pair_iter = element.list_iter().ok_or_else(|| anyhow!("Expected a list"))?;
                 if let (Some(key), Some(value)) = (pair_iter.next(), pair_iter.next()) {
-                    if let Some(keyword) = get_keyword_value(&key) {
+                    if let Some(keyword) = get_keyword_value(key) {
                         if keyword == field_name {
                             return Ok(value);
                         }

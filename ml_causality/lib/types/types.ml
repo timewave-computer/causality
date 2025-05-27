@@ -166,17 +166,50 @@ and pdb_edge = {
   transition_type: str_t;
 }
 
-(** ProcessDataflowBlock definition structure *)
+(** Type schema representation matching Rust's TypeExpr *)
+and type_schema = 
+  | Unit
+  | Bool
+  | Integer
+  | Number
+  | String
+  | List of type_schema
+  | Optional of type_schema
+  | Map of type_schema * type_schema
+  | Record of (str_t * type_schema) list
+  | Union of type_schema list
+  | Any
+
+(** Auto-schema generator trait interface *)
+type 'a schema_generator = {
+  generate_schema: unit -> type_schema;
+  schema_name: string;
+}
+
+(** ProcessDataflowBlock definition structure with automatic schema generation *)
 and process_dataflow_definition = {
   definition_id: expr_id;
   name: str_t;
-  input_schema: (str_t, str_t) BatMap.t;  (* field_name -> type_name *)
-  output_schema: (str_t, str_t) BatMap.t;
-  state_schema: (str_t, str_t) BatMap.t;
+  (* Removed manual schema fields - now generated automatically *)
   nodes: pdb_node list;
   edges: pdb_edge list;
   default_typed_domain: typed_domain;
+  (* Type phantom data - would be used for generic schema generation *)
+  input_schema_gen: type_schema option;
+  output_schema_gen: type_schema option;
+  state_schema_gen: type_schema option;
 }
+
+(** Typed ProcessDataflow definition with automatic schema generation *)
+type ('input, 'output, 'state) typed_process_dataflow = {
+  definition: process_dataflow_definition;
+  input_generator: 'input schema_generator;
+  output_generator: 'output schema_generator;
+  state_generator: 'state schema_generator;
+}
+
+(** Legacy ProcessDataflowDefinition for compatibility *)
+type legacy_process_dataflow_definition = process_dataflow_definition
 
 (** ProcessDataflowBlock instance state *)
 and process_dataflow_instance_state = {
@@ -354,3 +387,87 @@ type tel_edge = {
   kind: edge_kind;
   metadata: value_expr option;
 }
+
+(*-----------------------------------------------------------------------------
+  Schema Generation Module (for automatic ProcessDataflow schemas)
+-----------------------------------------------------------------------------*)
+
+(** Schema generation utilities *)
+module SchemaGen = struct
+  
+  (** Generate schema for basic types *)
+  let string_schema : string schema_generator = {
+    generate_schema = (fun () -> String);
+    schema_name = "string";
+  }
+  
+  let int_schema : int schema_generator = {
+    generate_schema = (fun () -> Integer);
+    schema_name = "int";
+  }
+  
+  let bool_schema : bool schema_generator = {
+    generate_schema = (fun () -> Bool);
+    schema_name = "bool";
+  }
+  
+  let unit_schema : unit schema_generator = {
+    generate_schema = (fun () -> Unit);
+    schema_name = "unit";
+  }
+  
+  (** Generate schema for lists *)
+  let list_schema (inner : 'a schema_generator) : 'a list schema_generator = {
+    generate_schema = (fun () -> List (inner.generate_schema ()));
+    schema_name = "list_" ^ inner.schema_name;
+  }
+  
+  (** Generate schema for options *)
+  let option_schema (inner : 'a schema_generator) : 'a option schema_generator = {
+    generate_schema = (fun () -> Optional (inner.generate_schema ()));
+    schema_name = "option_" ^ inner.schema_name;
+  }
+  
+  (** Generate schema for maps *)
+  let map_schema (key : 'k schema_generator) (value : 'v schema_generator) : ('k, 'v) BatMap.t schema_generator = {
+    generate_schema = (fun () -> Map (key.generate_schema (), value.generate_schema ()));
+    schema_name = "map_" ^ key.schema_name ^ "_" ^ value.schema_name;
+  }
+  
+  (** Generate schema for records - manual definition required *)
+  let record_schema (fields : (string * type_schema) list) (name : string) = {
+    generate_schema = (fun () -> Record fields);
+    schema_name = name;
+  }
+  
+end
+
+(** Create a typed ProcessDataflow with automatic schema generation *)
+let create_typed_dataflow 
+    (definition_id : expr_id)
+    (name : str_t)
+    (input_gen : 'input schema_generator)
+    (output_gen : 'output schema_generator)
+    (state_gen : 'state schema_generator) : ('input, 'output, 'state) typed_process_dataflow =
+  let definition = {
+    definition_id;
+    name;
+    nodes = [];
+    edges = [];
+    default_typed_domain = VerifiableDomain { domain_id = Bytes.of_string "default"; zk_constraints = true; deterministic_only = true };
+    input_schema_gen = Some (input_gen.generate_schema ());
+    output_schema_gen = Some (output_gen.generate_schema ());
+    state_schema_gen = Some (state_gen.generate_schema ());
+  } in
+  {
+    definition;
+    input_generator = input_gen;
+    output_generator = output_gen;
+    state_generator = state_gen;
+  }
+
+(** Get auto-generated schemas from typed dataflow *)
+let get_schemas (dataflow : ('i, 'o, 's) typed_process_dataflow) = 
+  (dataflow.input_generator.generate_schema (),
+   dataflow.output_generator.generate_schema (),
+   dataflow.state_generator.generate_schema ())

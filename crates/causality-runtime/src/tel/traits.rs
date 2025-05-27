@@ -8,14 +8,14 @@
 
 use anyhow::Result;
 
-use causality_types::primitive::string::Str;
+use causality_types::core::str::Str; // Updated path
 use causality_types::ValueExpr;
 use causality_types::TypeExpr;
 // use causality_types::lisp::error::LispError;
 use thiserror::Error; 
 
 // Re-export AsExprContext from causality-types
-pub use causality_types::provider::context::AsExecutionContext; 
+pub use causality_types::AsExecutionContext; 
 
 //-----------------------------------------------------------------------------
 // Store Interface Traits
@@ -175,7 +175,7 @@ impl From<crate::tel::lisp_bridge::BridgeError> for HostCallError {
 // If a specific variant should chain another error, use `#[error("...: {source}")] source: UnderlyingError`
 // or `#[from] UnderlyingError`.
 
-// AsExecutionContext is now re-exported from causality_types
+// AsExecutionContext is now re-exported from causality-types
 // pub trait AsExecutionContext: AsExprContext + Send + Sync { ... }
 
 // --- Simulation Mocking Primitives ---
@@ -214,7 +214,7 @@ pub trait MockProvider: Send + Sync {
         effect_type: &Str,
         input: &ValueExpr, // The actual input to the effect instance
         output_schema: &TypeExpr, // The schema of the expected output
-    ) -> Result<ValueExpr, causality_types::effects_core::HandlerError>;
+    ) -> Result<ValueExpr, causality_types::HandlerError>;
 }
 
 //-----------------------------------------------------------------------------

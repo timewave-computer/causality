@@ -209,10 +209,10 @@ impl CompiledTeg {
     /// Validate the compiled TEG for consistency
     pub fn validate(&self) -> Result<(), CompilerValidationError> {
         // Check that all referenced expressions exist
-        for (_, handler) in &self.handlers {
+        for handler in self.handlers.values() {
             if let Some(expr_id) = &handler.expression {
                 if !self.expressions.contains_key(expr_id) {
-                    return Err(CompilerValidationError::MissingExpression(expr_id.clone()));
+                    return Err(CompilerValidationError::MissingExpression(*expr_id));
                 }
             }
         }

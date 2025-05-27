@@ -12,7 +12,7 @@ pub use crate::resource::Resource;
 // TEL Core Types (from tel/graph.rs, tel/graph_structure.rs, tel/graph_types.rs, tel/common_refs.rs)
 //-----------------------------------------------------------------------------
 
-use crate::primitive::ids::{EntityId, DomainId, ResourceId, NodeId, EdgeId, AsId};
+use crate::primitive::ids::{EntityId, DomainId, ResourceId, NodeId, EdgeId, HandlerId, AsId};
 use crate::primitive::string::Str;
 use crate::expression::value::ValueExpr;
 use crate::graph::r#trait::AsEdge;
@@ -70,40 +70,66 @@ impl Encode for ResourceRef {
 
 impl Decode for ResourceRef {
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let (resource_ref, _consumed) = Self::from_ssz_bytes_with_length(bytes)?;
+        Ok(resource_ref)
+    }
+}
+
+impl DecodeWithLength for ResourceRef {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
         let mut offset = 0;
         
-        // Decode resource_id
-        let resource_id = ResourceId::from_ssz_bytes(&bytes[offset..])?;
-        offset += resource_id.as_ssz_bytes().len();
+        // Decode resource_id (32 bytes)
+        if bytes.len() < offset + 32 {
+            return Err(DecodeError::new("ResourceRef: Input bytes too short for resource_id"));
+        }
+        let resource_id = ResourceId::from_ssz_bytes(&bytes[offset..offset+32])?;
+        offset += 32;
         
-        // Decode domain_id
-        let domain_id = DomainId::from_ssz_bytes(&bytes[offset..])?;
-        offset += domain_id.as_ssz_bytes().len();
+        // Decode domain_id (32 bytes)
+        if bytes.len() < offset + 32 {
+            return Err(DecodeError::new("ResourceRef: Input bytes too short for domain_id"));
+        }
+        let domain_id = DomainId::from_ssz_bytes(&bytes[offset..offset+32])?;
+        offset += 32;
         
         // Decode optional resource_type
         if offset >= bytes.len() {
-            return Err(DecodeError {
-                message: "Insufficient bytes for resource_type variant".to_string(),
-            });
+            return Err(DecodeError::new("ResourceRef: Insufficient bytes for resource_type variant"));
         }
         
         let resource_type = match bytes[offset] {
-            0u8 => None, // None variant
+            0u8 => {
+                offset += 1;
+                None // None variant
+            }
             1u8 => {
                 offset += 1;
                 let resource_type = Str::from_ssz_bytes(&bytes[offset..])?;
+                let type_len = resource_type.as_ssz_bytes().len();
+                offset += type_len;
                 Some(resource_type)
             }
-            _ => return Err(DecodeError {
-                message: "Invalid variant for resource_type".to_string(),
-            }),
+            _ => return Err(DecodeError::new("ResourceRef: Invalid variant for resource_type")),
         };
         
-        Ok(ResourceRef {
+        Ok((ResourceRef {
             resource_id,
             domain_id,
             resource_type,
-        })
+        }, offset))
+    }
+}
+
+impl SimpleSerialize for ResourceRef {}
+
+impl From<ResourceId> for ResourceRef {
+    fn from(resource_id: ResourceId) -> Self {
+        Self {
+            resource_id,
+            domain_id: DomainId::null(), // Default domain
+            resource_type: None,
+        }
     }
 }
 
@@ -120,6 +146,22 @@ pub enum EdgeKind {
     Constraint,
     /// A custom edge type with a string identifier
     Custom(Str),
+    /// Control flow edge
+    ControlFlow,
+    /// Next edge with target node
+    Next(NodeId),
+    /// Dependency edge with target node
+    DependsOn(NodeId),
+    /// Resource consumption edge
+    Consumes(ResourceRef),
+    /// Resource production edge
+    Produces(ResourceRef),
+    /// Handler application edge
+    Applies(HandlerId),
+    /// Scoping edge
+    ScopedBy(HandlerId),
+    /// Override edge
+    Override(HandlerId),
 }
 
 impl Encode for EdgeKind {
@@ -131,8 +173,37 @@ impl Encode for EdgeKind {
             EdgeKind::ResourceFlow => bytes.push(2u8),
             EdgeKind::Constraint => bytes.push(3u8),
             EdgeKind::Custom(s) => {
-                bytes.push(4u8); // Corrected discriminant
+                bytes.push(4u8);
                 bytes.extend_from_slice(&s.as_ssz_bytes());
+            }
+            EdgeKind::ControlFlow => bytes.push(5u8),
+            EdgeKind::Next(node_id) => {
+                bytes.push(6u8);
+                bytes.extend_from_slice(&node_id.as_ssz_bytes());
+            }
+            EdgeKind::DependsOn(node_id) => {
+                bytes.push(7u8);
+                bytes.extend_from_slice(&node_id.as_ssz_bytes());
+            }
+            EdgeKind::Consumes(resource_ref) => {
+                bytes.push(8u8);
+                bytes.extend_from_slice(&resource_ref.as_ssz_bytes());
+            }
+            EdgeKind::Produces(resource_ref) => {
+                bytes.push(9u8);
+                bytes.extend_from_slice(&resource_ref.as_ssz_bytes());
+            }
+            EdgeKind::Applies(handler_id) => {
+                bytes.push(10u8);
+                bytes.extend_from_slice(&handler_id.as_ssz_bytes());
+            }
+            EdgeKind::ScopedBy(handler_id) => {
+                bytes.push(11u8);
+                bytes.extend_from_slice(&handler_id.as_ssz_bytes());
+            }
+            EdgeKind::Override(handler_id) => {
+                bytes.push(12u8);
+                bytes.extend_from_slice(&handler_id.as_ssz_bytes());
             }
         }
         bytes
@@ -150,12 +221,38 @@ impl Decode for EdgeKind {
             1 => Ok(EdgeKind::Temporal),
             2 => Ok(EdgeKind::ResourceFlow),
             3 => Ok(EdgeKind::Constraint),
-            4 => { // Corrected discriminant
-                if bytes.len() < 1 + 64 { // 1 for discriminant, 64 for Str
-                    return Err(DecodeError::new("EdgeKind::Custom: Input bytes too short for Str payload"));
-                }
-                let s = Str::from_ssz_bytes(&bytes[1..1+64])?;
+            4 => {
+                let s = Str::from_ssz_bytes(&bytes[1..])?;
                 Ok(EdgeKind::Custom(s))
+            }
+            5 => Ok(EdgeKind::ControlFlow),
+            6 => {
+                let node_id = NodeId::from_ssz_bytes(&bytes[1..])?;
+                Ok(EdgeKind::Next(node_id))
+            }
+            7 => {
+                let node_id = NodeId::from_ssz_bytes(&bytes[1..])?;
+                Ok(EdgeKind::DependsOn(node_id))
+            }
+            8 => {
+                let resource_ref = ResourceRef::from_ssz_bytes(&bytes[1..])?;
+                Ok(EdgeKind::Consumes(resource_ref))
+            }
+            9 => {
+                let resource_ref = ResourceRef::from_ssz_bytes(&bytes[1..])?;
+                Ok(EdgeKind::Produces(resource_ref))
+            }
+            10 => {
+                let handler_id = HandlerId::from_ssz_bytes(&bytes[1..])?;
+                Ok(EdgeKind::Applies(handler_id))
+            }
+            11 => {
+                let handler_id = HandlerId::from_ssz_bytes(&bytes[1..])?;
+                Ok(EdgeKind::ScopedBy(handler_id))
+            }
+            12 => {
+                let handler_id = HandlerId::from_ssz_bytes(&bytes[1..])?;
+                Ok(EdgeKind::Override(handler_id))
             }
             _ => Err(DecodeError::new(&format!("EdgeKind: Unknown discriminant: {}", discriminant))),
         }
@@ -173,12 +270,39 @@ impl DecodeWithLength for EdgeKind {
             1 => Ok((EdgeKind::Temporal, 1)),
             2 => Ok((EdgeKind::ResourceFlow, 1)),
             3 => Ok((EdgeKind::Constraint, 1)),
-            4 => { // Corrected discriminant
-                if bytes.len() < 1 + 64 { // 1 for discriminant, 64 for Str
-                    return Err(DecodeError::new("EdgeKind::Custom (with length): Input bytes too short for Str payload"));
-                }
-                let s = Str::from_ssz_bytes(&bytes[1..1+64])?;
-                Ok((EdgeKind::Custom(s), 1 + 64))
+            4 => {
+                let s = Str::from_ssz_bytes(&bytes[1..])?;
+                let s_len = s.as_ssz_bytes().len();
+                Ok((EdgeKind::Custom(s), 1 + s_len))
+            }
+            5 => Ok((EdgeKind::ControlFlow, 1)),
+            6 => {
+                let node_id = NodeId::from_ssz_bytes(&bytes[1..])?;
+                Ok((EdgeKind::Next(node_id), 1 + 32))
+            }
+            7 => {
+                let node_id = NodeId::from_ssz_bytes(&bytes[1..])?;
+                Ok((EdgeKind::DependsOn(node_id), 1 + 32))
+            }
+            8 => {
+                let (resource_ref, ref_len) = ResourceRef::from_ssz_bytes_with_length(&bytes[1..])?;
+                Ok((EdgeKind::Consumes(resource_ref), 1 + ref_len))
+            }
+            9 => {
+                let (resource_ref, ref_len) = ResourceRef::from_ssz_bytes_with_length(&bytes[1..])?;
+                Ok((EdgeKind::Produces(resource_ref), 1 + ref_len))
+            }
+            10 => {
+                let handler_id = HandlerId::from_ssz_bytes(&bytes[1..])?;
+                Ok((EdgeKind::Applies(handler_id), 1 + 32))
+            }
+            11 => {
+                let handler_id = HandlerId::from_ssz_bytes(&bytes[1..])?;
+                Ok((EdgeKind::ScopedBy(handler_id), 1 + 32))
+            }
+            12 => {
+                let handler_id = HandlerId::from_ssz_bytes(&bytes[1..])?;
+                Ok((EdgeKind::Override(handler_id), 1 + 32))
             }
             _ => Err(DecodeError::new(&format!("EdgeKind (with length): Unknown discriminant: {}", discriminant))),
         }

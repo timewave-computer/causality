@@ -1,13 +1,12 @@
 // Purpose: Utility functions for converting between Message and ValueExpr.
 
 use causality_types::{
-    core::{
-        id::{DomainId, MessageId, ResourceId},
-        str::Str,
+    primitive::{
+        ids::{DomainId, MessageId, ResourceId},
+        string::Str,
     },
-    expr::{
-        value::{ValueExpr, ValueExprMap},
-        value_conversion::ValueConversionError,
+    expression::{
+        value::{ValueExpr, ValueExprMap, ValueConversionError},
     },
     system::pattern::Message,
 };
@@ -34,7 +33,7 @@ pub fn message_to_value_expr(message: &Message) -> ValueExpr {
             ValueExpr::String(Str::new(id_to_hex(&id))),
         );
     } else {
-        map_data.insert(Str::new("source_domain_id"), ValueExpr::Unit);
+        map_data.insert(Str::new("source_domain_id"), ValueExpr::Nil);
     }
 
     if let Some(id) = message.target_resource_id {
@@ -43,13 +42,13 @@ pub fn message_to_value_expr(message: &Message) -> ValueExpr {
             ValueExpr::String(Str::new(id_to_hex(&id))),
         );
     } else {
-        map_data.insert(Str::new("target_resource_id"), ValueExpr::Unit);
+        map_data.insert(Str::new("target_resource_id"), ValueExpr::Nil);
     }
 
     if let Some(ref content_val) = message.content {
         map_data.insert(Str::new("content"), content_val.clone());
     } else {
-        map_data.insert(Str::new("content"), ValueExpr::Unit);
+        map_data.insert(Str::new("content"), ValueExpr::Nil);
     }
 
     ValueExpr::Map(ValueExprMap(map_data))
@@ -121,11 +120,11 @@ pub fn message_try_from_value_expr(
                 })?)
             }
         }
-        Some(ValueExpr::Unit) => None, // Explicitly Unit means None
+        Some(ValueExpr::Nil) => None, // Explicitly Nil means None
         None => None,                  // Field not present means None
         Some(_) => {
             return Err(ValueConversionError::InvalidType(
-                "source_domain_id field must be a String or Unit".to_string(),
+                "source_domain_id field must be a String or Nil".to_string(),
             ));
         }
     };
@@ -145,17 +144,17 @@ pub fn message_try_from_value_expr(
                 })?)
             }
         }
-        Some(ValueExpr::Unit) => None, // Explicitly Unit means None
+        Some(ValueExpr::Nil) => None, // Explicitly Nil means None
         None => None,                  // Field not present means None
         Some(_) => {
             return Err(ValueConversionError::InvalidType(
-                "target_resource_id field must be a String or Unit".to_string(),
+                "target_resource_id field must be a String or Nil".to_string(),
             ));
         }
     };
 
     let content = match map_data.get(&Str::new("content")) {
-        Some(ValueExpr::Unit) => None,
+        Some(ValueExpr::Nil) => None,
         Some(content_val) => Some(content_val.clone()),
         None => None, // If content field is missing, treat as None
     };

@@ -7,12 +7,11 @@ use anyhow::{Context, Result};
 use log;
 
 use causality_types::{
-    core::{Effect, Handler, Intent},
-    tel::graph::Edge,
-    graph::traits::AsNode,
-    core::id::{DomainId, EdgeId, NodeId},
-    tel::common_refs::ResourceRef,
-
+    Effect, Handler, Intent,
+    graph::tel::Edge,
+    graph::r#trait::AsNode,
+    primitive::ids::{DomainId, EdgeId, NodeId},
+    graph::tel::ResourceRef,
 };
 
 use crate::ids::{ProgramId};
@@ -92,7 +91,7 @@ impl ProgramProject {
             let smt_node = SmtTelNode::Effect(effect_node.clone());
             self.storage.add_tel_node(smt_node)?;
         } else if let Some(resource_node) = (node as &dyn Any).downcast_ref::<ResourceRef>() {
-            let smt_node = SmtTelNode::Resource(*resource_node);
+            let smt_node = SmtTelNode::Resource(resource_node.clone());
             self.storage.add_tel_node(smt_node)?;
         } else if let Some(intent_node) = (node as &dyn Any).downcast_ref::<Intent>() {
             let smt_node = SmtTelNode::Intent(intent_node.clone());

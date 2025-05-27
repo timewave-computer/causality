@@ -12,14 +12,11 @@ use crate::project::ProgramProject;
 // External Crate Imports (causality_types)
 //-----------------------------------------------------------------------------
 use causality_types::{
-    core::{
-        id::{DomainId, CircuitId, NodeId, EdgeId},
-    },
-    tel::graph_types::TelNodeTypes,
-    serialization::Encode,
+    primitive::ids::{DomainId, CircuitId, NodeId, EdgeId},
+    system::serialization::Encode,
 };
 
-use causality_core::graph_registry::NodeRegistry;
+// use causality_core::graph_registry::NodeRegistry;
 
 //-----------------------------------------------------------------------------
 // Type Aliases
@@ -145,7 +142,6 @@ impl ProgramGenerator {
 pub fn get_node_domain(
     node_id: &NodeId,
     project: &ProgramProject,
-    _node_registry: &NodeRegistry<TelNodeTypes>, // Marking as unused for now, logic simplified
 ) -> Option<DomainId> {
     // For the SMT-backed storage, we use the project's domain_id
     // since the current structure supports a single domain per project

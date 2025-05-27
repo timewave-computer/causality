@@ -196,7 +196,7 @@ impl ZkCombinatorInterpreter {
         atom: &Atom,
     ) -> Result<ExprResult, InterpreterError> {
         Ok(match atom {
-            Atom::Nil => ExprResult::Value(ValueExpr::Unit),
+            Atom::Nil => ExprResult::Value(ValueExpr::Nil),
             Atom::Boolean(b) => ExprResult::Value(ValueExpr::Bool(*b)),
             Atom::Integer(n) => {
                 ExprResult::Value(ValueExpr::Number(Number::new_integer(*n)))

@@ -6,14 +6,14 @@
 
 // use crate::expr_utils::{expr_as_value, value_as_expr}; // Removed, as value_as_expr doesn't exist and expr_as_value was unused.
 use causality_types::{
-    core::id::{CapabilityId, DomainId, ExprId, ResourceId, TypeExprId},
-    effects_core::ConversionError, // EffectInput/Output unused
-    expr::{
+    primitive::ids::{DomainId, ExprId, ResourceId, TypeExprId},
+    effect::core::ConversionError, // EffectInput/Output unused
+    expression::{
         ast::Expr,
-        expr_type::TypeExpr,
+        r#type::TypeExpr,
         value::ValueExpr,
     },
-    serialization::{Decode, Encode},
+    system::serialization::{Decode, Encode},
 };
 use sha2::{Digest, Sha256};
 
@@ -307,14 +307,4 @@ impl IdFromStr for DomainId {
     }
 }
 
-impl IdFromStr for CapabilityId {
-    fn from_str_ext(s: &str) -> Result<Self, anyhow::Error> {
-        let bytes = hex::decode(s)?;
-        if bytes.len() != 32 {
-            return Err(anyhow::anyhow!("Invalid CapabilityId length"));
-        }
-        let mut id_bytes = [0u8; 32];
-        id_bytes.copy_from_slice(&bytes);
-        Ok(CapabilityId::new(id_bytes))
-    }
-}
+

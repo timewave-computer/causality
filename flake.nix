@@ -108,6 +108,12 @@
             # Other dependencies
             openssl
             cacert
+            
+            # Add scripts directory to PATH
+            (pkgs.writeShellScriptBin "generate-cargo-nix" ''
+              ${pkgs.crate2nix}/bin/crate2nix generate
+              echo "Cargo.nix file regenerated from Cargo.toml"
+            '')
           ] ++ ocamlLibDeps ++ ocamlToolDeps # Add lib and tool deps to shell packages
           ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
             pkgs.darwin.apple_sdk.frameworks.Security

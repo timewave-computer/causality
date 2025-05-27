@@ -3,20 +3,19 @@
 //! This strategy optimizes for capital efficiency across TypedDomains, considering
 //! domain-specific cost multipliers and ProcessDataflowBlock complexity.
 
-use crate::optimization::{OptimizationStrategy, OptimizationContext};
-use anyhow::{anyhow, Result};
+use super::super::optimization::{OptimizationStrategy, OptimizationContext};
+use crate::optimization::evaluation::{ConfigurationValue, EvaluationConfig, EvaluationMetrics, StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
+use anyhow::Result;
 use causality_types::{
     core::{
-        id::{EntityId, AsId},
+        id::{EntityId, DomainId, ExprId},
         str::Str,
         time::Timestamp,
     },
-    tel::{
+    graph::{
         optimization::{
             ResolutionPlan, ScoredPlan, TypedDomain,
         },
-        cost_model::ResourceUsageEstimate,
-        strategy::{StrategyConfiguration, StrategyMetrics},
     },
 };
 use std::collections::HashMap;
@@ -40,14 +39,13 @@ impl CapitalEfficiencyStrategy {
     /// Create a new capital efficiency strategy
     pub fn new() -> Self {
         let mut domain_cost_multipliers = HashMap::new();
-        // VerifiableDomain typically has higher computational costs but lower trust costs
+        // Different domain types have different cost characteristics
         domain_cost_multipliers.insert(
-            TypedDomain::VerifiableDomain(causality_types::primitive::ids::DomainId::new([0u8; 32])), 
+            TypedDomain::new(DomainId::new([0u8; 32]), Str::from("verifiable")), 
             1.2
         );
-        // ServiceDomain has variable costs depending on external services
         domain_cost_multipliers.insert(
-            TypedDomain::ServiceDomain(causality_types::primitive::ids::DomainId::new([0u8; 32])), 
+            TypedDomain::new(DomainId::new([1u8; 32]), Str::from("service")), 
             0.8
         );
         
@@ -119,20 +117,13 @@ impl CapitalEfficiencyStrategy {
     
     /// Estimate execution time for a specific domain
     fn estimate_domain_time(&self, domain: &TypedDomain, context: &OptimizationContext) -> u64 {
-        match domain {
-            TypedDomain::VerifiableDomain(_) => {
-                // ZK proof generation takes longer
-                let base_time = 5000u64; // 5 seconds base
-                let intent_count = context.pending_intents.len() as u64;
-                base_time * intent_count
-            },
-            TypedDomain::ServiceDomain(_) => {
-                // Service calls are typically faster but variable
-                let base_time = 1000u64; // 1 second base
-                let intent_count = context.pending_intents.len() as u64;
-                base_time * intent_count
-            },
-        }
+        let base_time = match domain.domain_type.as_str() {
+            "verifiable" => 5000u64, // ZK proof generation takes longer
+            "service" => 1000u64,    // Service calls are typically faster
+            _ => 2000u64,            // Default case
+        };
+        let intent_count = context.pending_intents.len() as u64;
+        base_time * intent_count
     }
 }
 
@@ -157,7 +148,7 @@ impl OptimizationStrategy for CapitalEfficiencyStrategy {
             // Create a basic resolution plan for this domain
             let plan = ResolutionPlan {
                 plan_id: EntityId::new(rand::random()),
-                intent_bundles: context.pending_intents.clone(),
+                intent_bundles: context.pending_intents.iter().map(|id| id.to_id::<ExprId>()).collect(),
                 effect_sequence: vec![], // Would be populated by actual planning logic
                 dataflow_steps: vec![], // Minimal dataflow for efficiency
                 resource_transfers: vec![],
@@ -211,20 +202,35 @@ impl OptimizationStrategy for CapitalEfficiencyStrategy {
         true // Capital efficiency applies to all domains
     }
     
-    fn get_configuration(&self) -> StrategyConfiguration {
-        self.config.clone()
+    fn get_configuration(&self) -> crate::optimization::evaluation::EvaluationConfig {
+        // Convert our internal config to EvaluationConfig
+        crate::optimization::evaluation::EvaluationConfig {
+            max_evaluation_time_ms: self.config.max_evaluation_time_ms,
+            max_concurrent_evaluations: 4,
+            enable_caching: true,
+            cache_expiration_ms: 3_600_000,
+            scoring_weights: crate::optimization::evaluation::ScoringWeights::default(),
+            domain_parameters: std::collections::HashMap::new(),
+            enable_detailed_analysis: false,
+        }
     }
     
-    fn update_configuration(&mut self, config: StrategyConfiguration) -> Result<()> {
-        if config.strategy_id != self.config.strategy_id {
-            return Err(anyhow!("Strategy ID mismatch"));
-        }
-        self.config = config;
+    fn update_configuration(&mut self, config: crate::optimization::evaluation::EvaluationConfig) -> Result<()> {
+        self.config.max_evaluation_time_ms = config.max_evaluation_time_ms;
         Ok(())
     }
     
-    fn get_metrics(&self) -> StrategyMetrics {
-        self.metrics.clone()
+    fn get_metrics(&self) -> crate::optimization::evaluation::EvaluationMetrics {
+        // Convert our internal metrics to EvaluationMetrics
+        crate::optimization::evaluation::EvaluationMetrics {
+            total_evaluations: self.metrics.total_evaluations,
+            successful_evaluations: self.metrics.successful_evaluations,
+            failed_evaluations: 0, // Not tracked in our internal metrics
+            avg_evaluation_time_ms: self.metrics.avg_evaluation_time_ms,
+            cache_hit_rate: 0.0, // Not tracked in our internal metrics
+            domain_performance: std::collections::HashMap::new(),
+            last_updated: self.metrics.last_updated,
+        }
     }
     
     fn reset(&mut self) {

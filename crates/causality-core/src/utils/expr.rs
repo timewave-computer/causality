@@ -30,7 +30,7 @@ pub fn create_expr_from_value_expr(value: ValueExpr) -> Expr {
         ValueExpr::String(s) => Expr::Atom(Atom::String(s)),
         ValueExpr::Number(Number::Integer(i)) => Expr::Atom(Atom::Integer(i)),
         ValueExpr::Bool(b) => Expr::Atom(Atom::Boolean(b)),
-        ValueExpr::Unit | ValueExpr::Nil => Expr::Atom(Atom::Nil),
+        ValueExpr::Nil => Expr::Atom(Atom::Nil),
         _ => Expr::Const(value),
     }
 }
@@ -156,7 +156,7 @@ pub fn deserialize_expr(bytes: &[u8]) -> Result<Expr, String> {
 
 /// ValueExpr constructors
 pub fn create_value_expr_unit() -> ValueExpr {
-    ValueExpr::Unit
+    ValueExpr::Nil
 }
 
 pub fn create_value_expr_bool(b: bool) -> ValueExpr {
@@ -329,7 +329,7 @@ pub fn value_expr_as_ref(value: &ValueExpr) -> Option<&ValueExprRef> {
 
 /// Predicate functions for ValueExpr
 pub fn value_expr_is_unit(value: &ValueExpr) -> bool {
-    matches!(value, ValueExpr::Unit)
+    matches!(value, ValueExpr::Nil)
 }
 
 pub fn value_expr_is_bool(value: &ValueExpr) -> bool {
@@ -373,7 +373,7 @@ pub fn value_expr_as_bytes(value: &ValueExpr) -> Option<Vec<u8>> {
 
 pub fn value_expr_get_variant_name(value: &ValueExpr) -> &'static str {
     match value {
-        ValueExpr::Unit => "Unit",
+        ValueExpr::Nil => "Nil",
         ValueExpr::Bool(_) => "Bool",
         ValueExpr::Number(_) => "Number",
         ValueExpr::String(_) => "String",
@@ -382,7 +382,6 @@ pub fn value_expr_get_variant_name(value: &ValueExpr) -> &'static str {
         ValueExpr::Record(_) => "Record",
         ValueExpr::Ref(_) => "Ref",
         ValueExpr::Lambda { .. } => "Lambda",
-        ValueExpr::Nil => "Nil",
     }
 }
 

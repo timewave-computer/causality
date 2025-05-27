@@ -59,7 +59,7 @@ impl RuntimeTypeChecker {
         expected_type: TypeExpr,
     ) -> Result<(), InterpreterError> {
         let matches = match (&expected_type, value) {
-            (TypeExpr::Unit, ValueExpr::Unit) => true,
+            (TypeExpr::Unit, ValueExpr::Nil) => true,
             (TypeExpr::Bool, ValueExpr::Bool(_)) => true,
             (TypeExpr::String, ValueExpr::String(_)) => true,
             (TypeExpr::Number, ValueExpr::Number(_)) => true,
@@ -127,7 +127,7 @@ impl RuntimeTypeChecker {
 /// Helper function to check type compatibility between a type and a value
 fn check_type_compatibility(expected_type: &TypeExpr, value: &ValueExpr) -> bool {
     match (expected_type, value) {
-        (TypeExpr::Unit, ValueExpr::Unit) => true,
+        (TypeExpr::Unit, ValueExpr::Nil) => true,
         (TypeExpr::Bool, ValueExpr::Bool(_)) => true,
         (TypeExpr::String, ValueExpr::String(_)) => true,
         (TypeExpr::Number, ValueExpr::Number(_)) => true,

@@ -229,7 +229,7 @@ pub mod value_exprs {
 
     /// Create a unit value expression
     pub fn unit() -> ValueExpr {
-        ValueExpr::Unit
+        ValueExpr::Nil
     }
 
     /// Create a list value expression
@@ -322,7 +322,7 @@ mod tests {
         assert!(matches!(string_expr, ValueExpr::String(_)));
         assert!(matches!(int_expr, ValueExpr::Number(_)));
         assert!(matches!(bool_expr, ValueExpr::Bool(_)));
-        assert!(matches!(unit_expr, ValueExpr::Unit));
+        assert!(matches!(unit_expr, ValueExpr::Nil));
         assert!(matches!(list_expr, ValueExpr::List(_)));
         assert!(matches!(map_expr, ValueExpr::Map(_)));
     }

@@ -5,13 +5,10 @@ use std::collections::{BTreeMap, HashSet};
 use anyhow::Result;
 
 use causality_types::{
-    core::{
-        id::{ResourceId, EffectId},
-        resource_conversion::ToValueExpr,
-    },
+    core::id::{ResourceId, EffectId},
     expr::value::ValueExpr,
-    trace::{EffectDetail, ExecutionTrace},
-    state::ResourceState,
+    effect::trace::{EffectDetail, ExecutionTrace},
+    resource::{state::ResourceState, conversion::ToValueExpr},
 };
 use crate::state_manager::StateManager;
 

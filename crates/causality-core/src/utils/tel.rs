@@ -2,19 +2,18 @@
 
 use crate::extension_traits::ValueExprExt;
 use causality_types::{
-    core::{
-        id::{AsId, DomainId, EntityId, ExprId, compute_id},
-        numeric::Number,
-        str::Str,
-        Effect, Intent, Handler,
-        resource_conversion::ToValueExpr,
+    primitive::{
+        ids::{AsId, DomainId, EntityId, ExprId, compute_id},
+        number::Number,
+        string::Str,
     },
-    expr::{
-        expr_type::{TypeExpr, TypeExprMap},
+    effect::{Effect, Intent, Handler},
+    resource::{Resource, conversion::ToValueExpr},
+    expression::{
+        r#type::{TypeExpr, TypeExprMap},
         value::{ValueExpr, ValueExprMap, ValueExprVec},
     },
-    Resource,
-    serialization::Encode,
+    system::serialization::Encode,
 };
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -258,8 +257,7 @@ pub fn create_resource(
 /// Checks if a ValueExpr is considered a "basic type" for direct inclusion
 pub fn is_basic_type_value_expr(value_expr: &ValueExpr) -> bool {
     match value_expr {
-        ValueExpr::Unit
-        | ValueExpr::Nil
+        ValueExpr::Nil
         | ValueExpr::Bool(_)
         | ValueExpr::String(_)
         | ValueExpr::Number(_) => true,

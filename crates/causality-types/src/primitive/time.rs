@@ -7,7 +7,7 @@
 use anyhow::Result;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::primitive::ids::DomainId;
+use crate::primitive::ids::{DomainId, AsId};
 
 //-----------------------------------------------------------------------------
 // Constant
@@ -85,7 +85,7 @@ pub struct WallClock(pub u64);
 /// A comprehensive timestamp combining logical clock, wall clock, and domain ID
 ///
 /// This timestamp provides the foundation for causal ordering in the system
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Timestamp {
     /// Domain ID where this timestamp originated
     pub domain_id: DomainId,
@@ -95,6 +95,16 @@ pub struct Timestamp {
 
     /// Wall clock time (ms since epoch, for human-readable time)
     pub wall: WallClock,
+}
+
+impl Default for Timestamp {
+    fn default() -> Self {
+        Self {
+            domain_id: DomainId::null(),
+            logical: 0,
+            wall: WallClock(0),
+        }
+    }
 }
 
 /// Mock clock state for deterministic testing

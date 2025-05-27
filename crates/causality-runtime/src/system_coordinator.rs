@@ -1,13 +1,17 @@
-// Purpose: Orchestrates the processing of an Intent into an EffectGraph and its subsequent execution.
+//! System Coordinator - Main orchestration component for Causality Runtime
+//!
+//! Handles high-level coordination of runtime components and execution flow.
 
 use std::sync::Arc;
 use anyhow::Result;
 
 // Import TEL-specific types with explicit imports to avoid confusion
-use causality_types::tel::{EffectGraph, InterpreterMode};
-use causality_types::tel::execution_context::GraphExecutionContext;
-// Use qualified path for the TEL Intent to avoid confusion with the resource Intent
-use causality_types::core::Intent as CoreIntent;
+use causality_types::{
+    tel::EffectGraph,
+    graph::execution::InterpreterMode,
+    graph::execution::GraphExecutionContext,
+    core::Intent as CoreIntent,
+};
 use crate::tel::interpreter::Interpreter as LispInterpreterService;
 use crate::tel::intent_processor::IntentProcessor;
 use crate::tel::graph_executor::EffectGraphExecutor;

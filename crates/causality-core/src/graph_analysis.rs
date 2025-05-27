@@ -3,16 +3,19 @@
 
 use crate::graph_registry::EdgeRegistry; // Changed from crate::graph::registry::EdgeRegistry
 use causality_types::primitive::ids::NodeId;
-use causality_types::tel::Edge as TelEdge; // Changed from crate::tel::Edge
-use causality_types::tel::TelEdgeTypes; // Changed from crate::tel::TelEdgeTypes
+use causality_types::graph::tel::Edge as TelEdge; // Changed from crate::tel::Edge
+// Note: TelEdgeTypes is defined in causality-runtime, not causality-types
 use std::collections::HashSet;
 
 /// Checks for cycles in a subgraph defined by a set of nodes and an edge registry.
 /// This is a basic DFS-based cycle detection.
-pub fn tel_graph_has_cycles(
+pub fn tel_graph_has_cycles<L>(
     nodes_in_subgraph: &HashSet<NodeId>,
-    edge_registry: &EdgeRegistry<TelEdgeTypes>,
-) -> bool {
+    edge_registry: &EdgeRegistry<L>,
+) -> bool 
+where
+    L: causality_types::graph::r#trait::AsEdgeTypesList + causality_types::graph::r#trait::AsContainsEdgeType<TelEdge>,
+{
     let mut visited_global = HashSet::new(); // Global tracker for visited nodes across all DFS calls
 
     for node_id in nodes_in_subgraph {
@@ -33,13 +36,16 @@ pub fn tel_graph_has_cycles(
 }
 
 // Helper DFS function for cycle detection
-fn dfs_cycle_check(
+fn dfs_cycle_check<L>(
     current_node_id: NodeId,
     visited_global: &mut HashSet<NodeId>,
     recursion_stack_path: &mut HashSet<NodeId>,
     nodes_in_subgraph: &HashSet<NodeId>,
-    edge_registry: &EdgeRegistry<TelEdgeTypes>,
-) -> bool {
+    edge_registry: &EdgeRegistry<L>,
+) -> bool 
+where
+    L: causality_types::graph::r#trait::AsEdgeTypesList + causality_types::graph::r#trait::AsContainsEdgeType<TelEdge>,
+{
     if !nodes_in_subgraph.contains(&current_node_id) {
         return false; // Not part of the subgraph we are checking
     }

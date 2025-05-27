@@ -12,7 +12,6 @@ use causality_types::{
     serialization::{MerkleProof, MerkleTree, SimpleSerialize, Encode, Decode, DecodeError},
 };
 use std::collections::HashMap;
-use causality_core::extension_traits::ValueExprExt;
 
 /// A proof that a particular resource exists in the state
 #[derive(Debug, Clone)]
@@ -38,7 +37,14 @@ impl Encode for ResourceProof {
     fn as_ssz_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend(self.resource_id.as_ssz_bytes());
-        bytes.extend(self.proof.as_ssz_bytes());
+        // Manually serialize MerkleProof fields
+        bytes.extend_from_slice(&(self.proof.leaf_index as u64).to_le_bytes());
+        bytes.extend_from_slice(&self.proof.leaf_hash);
+        bytes.extend_from_slice(&(self.proof.proof_hashes.len() as u64).to_le_bytes());
+        for hash in &self.proof.proof_hashes {
+            bytes.extend_from_slice(hash);
+        }
+        bytes.extend_from_slice(&self.proof.root);
         bytes
     }
 }
@@ -47,7 +53,32 @@ impl Decode for ResourceProof {
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         let resource_id = ResourceId::from_ssz_bytes(bytes)?;
         let id_len = resource_id.as_ssz_bytes().len();
-        let proof = MerkleProof::from_ssz_bytes(&bytes[id_len..])?;
+        
+        // Manually deserialize MerkleProof fields
+        let mut offset = id_len;
+        let leaf_index = u64::from_le_bytes(bytes[offset..offset+8].try_into().unwrap()) as usize;
+        offset += 8;
+        let mut leaf_hash = [0u8; 32];
+        leaf_hash.copy_from_slice(&bytes[offset..offset+32]);
+        offset += 32;
+        let proof_hashes_len = u64::from_le_bytes(bytes[offset..offset+8].try_into().unwrap()) as usize;
+        offset += 8;
+        let mut proof_hashes = Vec::new();
+        for _ in 0..proof_hashes_len {
+            let mut hash = [0u8; 32];
+            hash.copy_from_slice(&bytes[offset..offset+32]);
+            proof_hashes.push(hash);
+            offset += 32;
+        }
+        let mut root = [0u8; 32];
+        root.copy_from_slice(&bytes[offset..offset+32]);
+        
+        let proof = MerkleProof {
+            leaf_index,
+            leaf_hash,
+            proof_hashes,
+            root,
+        };
         
         Ok(ResourceProof {
             resource_id,
@@ -62,7 +93,14 @@ impl Encode for ValueProof {
     fn as_ssz_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend(self.value_id.as_ssz_bytes());
-        bytes.extend(self.proof.as_ssz_bytes());
+        // Manually serialize MerkleProof fields
+        bytes.extend_from_slice(&(self.proof.leaf_index as u64).to_le_bytes());
+        bytes.extend_from_slice(&self.proof.leaf_hash);
+        bytes.extend_from_slice(&(self.proof.proof_hashes.len() as u64).to_le_bytes());
+        for hash in &self.proof.proof_hashes {
+            bytes.extend_from_slice(hash);
+        }
+        bytes.extend_from_slice(&self.proof.root);
         bytes
     }
 }
@@ -71,7 +109,32 @@ impl Decode for ValueProof {
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         let value_id = ValueExprId::from_ssz_bytes(bytes)?;
         let id_len = value_id.as_ssz_bytes().len();
-        let proof = MerkleProof::from_ssz_bytes(&bytes[id_len..])?;
+        
+        // Manually deserialize MerkleProof fields
+        let mut offset = id_len;
+        let leaf_index = u64::from_le_bytes(bytes[offset..offset+8].try_into().unwrap()) as usize;
+        offset += 8;
+        let mut leaf_hash = [0u8; 32];
+        leaf_hash.copy_from_slice(&bytes[offset..offset+32]);
+        offset += 32;
+        let proof_hashes_len = u64::from_le_bytes(bytes[offset..offset+8].try_into().unwrap()) as usize;
+        offset += 8;
+        let mut proof_hashes = Vec::new();
+        for _ in 0..proof_hashes_len {
+            let mut hash = [0u8; 32];
+            hash.copy_from_slice(&bytes[offset..offset+32]);
+            proof_hashes.push(hash);
+            offset += 32;
+        }
+        let mut root = [0u8; 32];
+        root.copy_from_slice(&bytes[offset..offset+32]);
+        
+        let proof = MerkleProof {
+            leaf_index,
+            leaf_hash,
+            proof_hashes,
+            root,
+        };
         
         Ok(ValueProof {
             value_id,
@@ -123,7 +186,7 @@ impl StateProofGenerator {
             let resource_id = ResourceId::new(resource.id.inner());
             self.resource_indices.insert(resource_id, i);
         }
-        self.resources_tree = Some(MerkleTree::new(resources));
+        self.resources_tree = Some(MerkleTree::new(resources)?);
         
         // Build value tree
         self.value_indices.clear();
@@ -136,7 +199,7 @@ impl StateProofGenerator {
             self.value_indices.insert(value_id, i);
             value_with_ids.push((value_id, value.clone()));
         }
-        self.values_tree = Some(MerkleTree::new(&value_with_ids));
+        self.values_tree = Some(MerkleTree::new(&value_with_ids)?);
         
         Ok(())
     }
@@ -149,8 +212,7 @@ impl StateProofGenerator {
         let resources_tree = self.resources_tree.as_ref()
             .ok_or_else(|| anyhow!("Resources tree not built"))?;
         
-        let proof = resources_tree.generate_proof(*index)
-            .ok_or_else(|| anyhow!("Failed to generate proof for resource"))?;
+        let proof = resources_tree.generate_proof(*index)?;
         
         Ok(ResourceProof {
             resource_id: *resource_id,
@@ -166,8 +228,7 @@ impl StateProofGenerator {
         let values_tree = self.values_tree.as_ref()
             .ok_or_else(|| anyhow!("Values tree not built"))?;
         
-        let proof = values_tree.generate_proof(*index)
-            .ok_or_else(|| anyhow!("Failed to generate proof for value"))?;
+        let proof = values_tree.generate_proof(*index)?;
         
         Ok(ValueProof {
             value_id: *value_id,
@@ -210,12 +271,22 @@ impl StateProofVerifier {
     
     /// Verify a resource proof
     pub fn verify_resource_proof(&self, proof: &ResourceProof) -> bool {
-        causality_types::serialization::verify_proof(&self.resources_root, &proof.proof)
+        causality_types::serialization::verify_proof(
+            proof.proof.leaf_index,
+            &proof.proof.leaf_hash,
+            &proof.proof.proof_hashes,
+            &self.resources_root, // This should align with the root used for generating the proof
+        )
     }
     
     /// Verify a value proof
     pub fn verify_value_proof(&self, proof: &ValueProof) -> bool {
-        causality_types::serialization::verify_proof(&self.values_root, &proof.proof)
+        causality_types::serialization::verify_proof(
+            proof.proof.leaf_index,
+            &proof.proof.leaf_hash,
+            &proof.proof.proof_hashes,
+            &self.values_root, // This should align with the root used for generating the proof
+        )
     }
 }
 
@@ -231,16 +302,20 @@ impl ResourceProof {
         let mut hasher = Sha256::new();
         hasher.update(&_resource_bytes);
         let hash_result = hasher.finalize();
-        let mut leaf = [0u8; 32];
-        leaf.copy_from_slice(&hash_result);
+        let mut leaf_hash_val = [0u8; 32];
+        leaf_hash_val.copy_from_slice(&hash_result);
         
+        // For a mock proof with no intermediate hashes, the root can be the leaf hash itself.
+        // Or a predefined mock root if that's more appropriate for testing.
+        let mock_root = leaf_hash_val; // Or some other fixed hash for mock purposes
+
         Self {
             resource_id,
             proof: MerkleProof {
-                path: Vec::new(),
-                siblings: Vec::new(),
-                leaf,
-                index: 0,
+                leaf_index: 0, // Mock value
+                leaf_hash: leaf_hash_val,
+                proof_hashes: Vec::new(), // Mock value: no intermediate hashes
+                root: mock_root, // Mock value
             },
         }
     }
@@ -258,16 +333,19 @@ impl ValueProof {
         let mut hasher = Sha256::new();
         hasher.update(&_value_bytes);
         let hash_result = hasher.finalize();
-        let mut leaf = [0u8; 32];
-        leaf.copy_from_slice(&hash_result);
-        
+        let mut leaf_hash_val = [0u8; 32];
+        leaf_hash_val.copy_from_slice(&hash_result);
+
+        // For a mock proof with no intermediate hashes, the root can be the leaf hash itself.
+        let mock_root = leaf_hash_val; // Or some other fixed hash for mock purposes
+
         Self {
             value_id,
             proof: MerkleProof {
-                path: Vec::new(),
-                siblings: Vec::new(),
-                leaf,
-                index: 0,
+                leaf_index: 0, // Mock value
+                leaf_hash: leaf_hash_val,
+                proof_hashes: Vec::new(), // Mock value: no intermediate hashes
+                root: mock_root, // Mock value
             },
         }
     }
@@ -276,10 +354,10 @@ impl ValueProof {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_types::primitive::ids::{DomainId, EntityId};
-    use causality_types::primitive::string::Str;
-    use causality_types::primitive::number::Number;
     use causality_types::expr::value::ValueExprMap;
+    use causality_types::core::id::{AsId, DomainId, EntityId};
+    use causality_types::core::number::Number;
+    use causality_types::expr::value::ValueExpr;
     use std::collections::BTreeMap;
     
     /// Helper function to create a test resource
@@ -353,7 +431,7 @@ mod tests {
         
         // Test with invalid proof (tampered proof)
         let mut invalid_proof = resource_proof;
-        invalid_proof.proof.leaf[0] ^= 0xFF; // Flip bits in the first byte of the leaf hash
+        invalid_proof.proof.leaf_hash[0] ^= 0xFF; // Flip bits in the first byte of the leaf hash
         
         // Verification should fail
         assert!(!verifier.verify_resource_proof(&invalid_proof), "Tampered proof should fail verification");

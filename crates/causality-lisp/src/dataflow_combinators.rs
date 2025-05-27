@@ -14,13 +14,16 @@ use causality_types::{
         result::{ExprError, ExprResult},
         value::{ValueExpr, ValueExprMap},
     },
-    tel::{
+    graph::{
         optimization::TypedDomain,
-        process_dataflow::{ProcessDataflowDefinition, ProcessDataflowInstanceState, DataflowNode},
+        dataflow::{ProcessDataflowDefinition, ProcessDataflowNode as DataflowNode},
+        execution::ProcessDataflowInstanceState,
     },
+    serialization::Encode, // Added Encode trait for as_ssz_bytes()
 };
 use crate::core::{ExprContextual, Evaluator};
 use std::collections::BTreeMap;
+use hex; // Added hex crate for encoding
 
 /// Context for dataflow orchestration operations
 pub struct DataflowOrchestrationContext<'a> {
@@ -157,21 +160,13 @@ pub async fn instantiate_effect_from_node(
     let effect = Effect {
         id: effect_id,
         name: Str::from("generated_effect"),
-        domain_id: context.current_typed_domain.domain_id(),
+        domain_id: context.current_typed_domain.domain_id,
         effect_type,
         inputs: Vec::new(), // Would be populated from template and params
         outputs: Vec::new(), // Would be populated from template and params
         expression: None,
         timestamp: Timestamp::now(),
-        resources: Vec::new(),
-        nullifiers: Vec::new(),
-        scoped_by: HandlerId::null(),
-        intent_id: None,
-        source_typed_domain: context.current_typed_domain.clone(),
-        target_typed_domain: context.current_typed_domain.clone(),
-        cost_model: None,
-        resource_usage_estimate: None,
-        originating_dataflow_instance: None,
+        hint: None,
     };
     
     // Add the effect to the generated effects queue
@@ -216,21 +211,13 @@ pub async fn emit_effect_on_domain(
     let effect = Effect {
         id: effect_id,
         name: Str::from("generated_effect"),
-        domain_id: target_typed_domain.domain_id(),
+        domain_id: target_typed_domain.domain_id,
         effect_type,
         inputs: Vec::new(), // Would be populated from effect_value_expr
         outputs: Vec::new(), // Would be populated from effect_value_expr
         expression: None,
         timestamp: Timestamp::now(),
-        resources: Vec::new(),
-        nullifiers: Vec::new(),
-        scoped_by: HandlerId::null(),
-        intent_id: None,
-        source_typed_domain: target_typed_domain.clone(),
-        target_typed_domain,
-        cost_model: None,
-        resource_usage_estimate: None,
-        originating_dataflow_instance: None,
+        hint: None,
     };
     
     // Add the effect to the generated effects queue
@@ -247,64 +234,51 @@ pub async fn update_dataflow_instance_state(
     df_instance_id: ResourceId,
     new_state_value_expr: ValueExpr,
 ) -> Result<ValueExpr, ExprError> {
-    // Get the current instance state
-    let mut instance_state = context.active_instances.get(&df_instance_id)
-        .ok_or_else(|| ExprError::ExecutionError {
-            message: Str::from(format!("ProcessDataflowBlock instance not found: {}", df_instance_id.to_hex())),
-        })?
-        .clone();
-    
-    // Parse the new state from the value expression
-    let new_state_map = match new_state_value_expr {
-        ValueExpr::Map(map) => map,
-        _ => return Err(ExprError::ExecutionError {
-            message: Str::from("New state must be provided as a map"),
-        })
-    };
-    
-    // Update the instance state
-    if let Some(current_node_id) = new_state_map.get(&Str::from("current_node_id")) {
-        if let ValueExpr::String(node_id_str) = current_node_id {
-            // Simply update with the string value directly
-            instance_state.current_node_id = node_id_str.clone();
-        }
-    }
-    
-    // Update state values if provided
-    if let Some(state_values) = new_state_map.get(&Str::from("state_values")) {
-        instance_state.state_values = state_values.clone();
-    }
-    
-    // Update the instance in the context
-    context.active_instances.insert(df_instance_id, instance_state);
-    
-    // Return success indicator
-    Ok(ValueExpr::String(Str::from(format!("state_updated_{}", df_instance_id.to_hex()))))
+    let instance_state = context
+        .active_instances
+        .get_mut(&df_instance_id)
+        .ok_or_else(|| {
+            ExprError::ReferenceError {
+                name: format!("Dataflow instance not found: {}", df_instance_id).into(),
+            }
+        })?;
+
+    // Serialize the new_state_value_expr to SSZ bytes, then to a hex string
+    let state_bytes = new_state_value_expr.as_ssz_bytes();
+    let state_hex_string = hex::encode(state_bytes); // Requires hex crate
+
+    instance_state.state = state_hex_string.into();
+
+    // The original logic for extracting node_id_str and state_values from new_state_value_expr
+    // is removed as we are now storing the whole ValueExpr serialized.
+    // If specific fields are needed elsewhere, they would be deserialized from instance_state.state.
+
+    // For now, we return a simple confirmation or the ID of the updated instance.
+    // The actual return value might need to be more meaningful depending on Lisp expectations.
+    Ok(ValueExpr::String(Str::from(format!(
+        "Updated instance {}",
+        df_instance_id
+    ))))
 }
 
 /// Helper function to determine TypedDomain from DomainId
 fn determine_typed_domain_from_domain_id(domain_id: &DomainId) -> TypedDomain {
-    let domain_hex = domain_id.to_hex();
-    if domain_hex.starts_with("00") {
-        TypedDomain::VerifiableDomain(*domain_id)
+    let type_str = if domain_id.to_string().contains("zk") || domain_id.to_string().contains("verifiable") {
+        Str::from("verifiable")
+    } else if domain_id.to_string().contains("svc") || domain_id.to_string().contains("service") {
+        Str::from("service")
     } else {
-        TypedDomain::ServiceDomain(*domain_id)
-    }
+        Str::from("unknown") // Default or error case
+    };
+    TypedDomain::new(*domain_id, type_str)
 }
 
 /// Check if an operation is compatible with ZK verification
 pub fn is_zk_compatible_operation(
-    operation_type: &str,
+    _operation_type: &str, // Parameter kept for now, but logic focuses on domain_type
     current_domain: &TypedDomain,
 ) -> bool {
-    match current_domain {
-        TypedDomain::VerifiableDomain(_) => {
-            matches!(operation_type, "verify-proof" | "generate-proof" | "zk-computation")
-        }
-        TypedDomain::ServiceDomain(_) => {
-            matches!(operation_type, "relay-message" | "cross-domain-call")
-        }
-    }
+    current_domain.domain_type == Str::from("verifiable")
 }
 
 /// Validate dataflow step constraints based on target domain
@@ -313,17 +287,31 @@ pub fn validate_dataflow_step_constraints(
     target_domain: &TypedDomain,
     parameters: &ValueExpr,
 ) -> Result<(), ExprError> {
-    match target_domain {
-        TypedDomain::VerifiableDomain(_) => {
-            if step_type == "zk-operation" {
-                validate_zk_parameters(parameters)?;
+    if target_domain.domain_type == Str::from("verifiable") {
+        // ZK-specific validation
+        validate_zk_parameters(parameters).map_err(|e| {
+            ExprError::ExecutionError {
+                message: format!(
+                    "Invalid ZK parameters for step '{}': {}",
+                    step_type,
+                    e
+                ).into(),
             }
-        }
-        TypedDomain::ServiceDomain(_) => {
-            if step_type == "service-call" {
-                validate_service_parameters(parameters)?;
+        })?; // Added ? to propagate error
+    } else if target_domain.domain_type == Str::from("service") {
+        // Service-specific validation (if any)
+        validate_service_parameters(parameters).map_err(|e| {
+            ExprError::ExecutionError {
+                message: format!(
+                    "Invalid Service parameters for step '{}': {}",
+                    step_type,
+                    e
+                ).into(),
             }
-        }
+        })?; // Added ? to propagate error
+    } else {
+        // Default: No specific validation or handle unknown domain type
+        // For now, let's assume no validation for other types.
     }
     Ok(())
 }

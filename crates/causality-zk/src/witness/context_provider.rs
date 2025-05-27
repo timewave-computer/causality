@@ -70,7 +70,7 @@ fn zk_error_to_lisp_error(err: ZkError) -> ExprError {
 #[allow(dead_code)]
 fn value_expr_to_ast_atom(val: &ValueExpr) -> Result<Atom, ExprError> {
     match val {
-        ValueExpr::Unit => Ok(Atom::Nil),
+        ValueExpr::Nil => Ok(Atom::Nil),
         ValueExpr::Bool(b) => Ok(Atom::Boolean(*b)),
         ValueExpr::String(s) => Ok(Atom::String(*s)),
         ValueExpr::Number(n) => {
@@ -96,7 +96,7 @@ fn value_expr_to_ast_atom(val: &ValueExpr) -> Result<Atom, ExprError> {
 #[allow(dead_code)]
 fn ast_expr_to_value_expr(expr: &Expr) -> Result<ValueExpr, ExprError> {
     match expr {
-        Expr::Atom(Atom::Nil) => Ok(ValueExpr::Unit),
+        Expr::Atom(Atom::Nil) => Ok(ValueExpr::Nil),
         Expr::Atom(Atom::Boolean(b)) => Ok(ValueExpr::Bool(*b)),
         Expr::Atom(Atom::String(s)) => Ok(ValueExpr::String(*s)), // ValueExpr::String takes Str
         Expr::Atom(Atom::Integer(i)) => Ok(ValueExpr::Number(causality_types::primitive::number::Number::new_integer(*i))),
@@ -320,7 +320,7 @@ impl<'a> ZkEvalContext<'a> {
         Self { provider }
     }
 
-    // Direct method to get TypeExpr, used by wasm.rs before calling interpreter
+    // Direct method to get a TypeExpr, used by wasm.rs before calling interpreter
     pub fn get_actual_expr(&self, id: &ExprId) -> Option<&Expr> {
         self.provider.get_lisp_expr(id) // Use the method from ZkContextProvider trait
     }

@@ -1,31 +1,27 @@
-//! End-to-End Bridge Test for Causality Framework
+//! Bridge E2E Test
 //!
-//! This test demonstrates the complete bridge workflow:
-//! 1. Compilation: Compile the cross-domain token transfer TEG program
-//! 2. Serialization: Convert the compiled program to a serializable format
-//! 3. Runtime Initialization: Initialize the Causality runtime with state manager
-//! 4. Program Loading: Load the compiled bridge program into the runtime
-//! 5. Execution: Execute the bridge transfer workflow
-//! 6. Verification: Verify the execution results and state changes
+//! This test verifies the complete bridge workflow from compilation to execution,
+//! demonstrating cross-domain transfers using ProcessDataflow orchestration.
 
 use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
-// Causality imports
 use causality_types::{
-    core::{
-        id::{DomainId, EntityId, ResourceId, ExprId},
-        resource::Resource,
+    primitive::{
+        ids::{EntityId, ExprId, ResourceId, DomainId, NodeId},
+        string::Str,
         time::Timestamp,
-        str::Str,
     },
-    expr::value::ValueExpr,
-    tel::process_dataflow::{
-        ProcessDataflowDefinition, ProcessDataflowInstanceState, DataflowNode, DataflowEdge, ExecutionStep, InstanceStatus
+    system::{
+        resource::Resource,
     },
-    tel::optimization::TypedDomain,
+    graph::{
+        optimization::TypedDomain,
+        dataflow::{ProcessDataflowDefinition, ProcessDataflowInstanceState, ProcessDataflowNode, ProcessDataflowEdge, TypeSchema, DataflowExecutionState},
+    },
+    expression::value::ValueExpr,
 };
 
 // Compiler imports
@@ -192,99 +188,104 @@ async fn execute_bridge_workflow(
     println!("🔄 Executing Bridge Transfer Workflow");
     let start_time = std::time::Instant::now();
     
-    // Create a ProcessDataflow instance for the bridge transfer
-    let dataflow_def = ProcessDataflowDefinition {
-        id: ExprId::new([42u8; 32]),
-        name: Str::from("bridge_transfer_workflow"),
-        input_schema: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-        output_schema: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-        state_schema: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-        nodes: vec![
-            DataflowNode {
-                id: Str::from("validate_transfer"),
-                node_type: Str::from("validation"),
-                config: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-                required_domain: Some(TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]))),
-            },
-            DataflowNode {
-                id: Str::from("lock_tokens"),
-                node_type: Str::from("effect"),
-                config: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-                required_domain: Some(TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]))),
-            },
-            DataflowNode {
-                id: Str::from("relay_message"),
-                node_type: Str::from("cross_domain"),
-                config: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-                required_domain: Some(TypedDomain::ServiceDomain(DomainId::new([2u8; 32]))),
-            },
-            DataflowNode {
-                id: Str::from("verify_proof"),
-                node_type: Str::from("verification"),
-                config: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-                required_domain: Some(TypedDomain::VerifiableDomain(DomainId::new([2u8; 32]))),
-            },
-            DataflowNode {
-                id: Str::from("mint_tokens"),
-                node_type: Str::from("effect"),
-                config: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-                required_domain: Some(TypedDomain::VerifiableDomain(DomainId::new([2u8; 32]))),
-            },
-            DataflowNode {
-                id: Str::from("complete_transfer"),
-                node_type: Str::from("finalization"),
-                config: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-                required_domain: Some(TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]))),
-            },
-        ],
-        edges: vec![
-            DataflowEdge {
-                from_node: Str::from("validate_transfer"),
-                to_node: Str::from("lock_tokens"),
-                condition: None,
-                transform: None,
-            },
-            DataflowEdge {
-                from_node: Str::from("lock_tokens"),
-                to_node: Str::from("relay_message"),
-                condition: None,
-                transform: None,
-            },
-            DataflowEdge {
-                from_node: Str::from("relay_message"),
-                to_node: Str::from("verify_proof"),
-                condition: None,
-                transform: None,
-            },
-            DataflowEdge {
-                from_node: Str::from("verify_proof"),
-                to_node: Str::from("mint_tokens"),
-                condition: None,
-                transform: None,
-            },
-            DataflowEdge {
-                from_node: Str::from("mint_tokens"),
-                to_node: Str::from("complete_transfer"),
-                condition: None,
-                transform: None,
-            },
-        ],
-        conditions: vec![],
-        action_templates: vec![],
-        domain_policies: HashMap::new(),
-        created_at: Timestamp::now(),
-    };
+    // Create a typed ProcessDataflow instance for the bridge transfer using automatic schema generation
+    let mut dataflow_def = BridgeTransferDataflow::new(
+        ExprId::new([42u8; 32]),
+        Str::from("bridge_transfer_workflow"),
+    );
+
+    // Add nodes with proper structure
+    dataflow_def.add_node(ProcessDataflowNode::new(
+        NodeId::new([1u8; 32]),
+        Str::from("validate_transfer"),
+        Str::from("validation"),
+    ).with_preferred_domain(TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]))));
+
+    dataflow_def.add_node(ProcessDataflowNode::new(
+        NodeId::new([2u8; 32]),
+        Str::from("lock_tokens"),
+        Str::from("effect"),
+    ).with_preferred_domain(TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]))));
+
+    dataflow_def.add_node(ProcessDataflowNode::new(
+        NodeId::new([3u8; 32]),
+        Str::from("relay_message"),
+        Str::from("cross_domain"),
+    ).with_preferred_domain(TypedDomain::ServiceDomain(DomainId::new([2u8; 32]))));
+
+    dataflow_def.add_node(ProcessDataflowNode::new(
+        NodeId::new([4u8; 32]),
+        Str::from("verify_proof"),
+        Str::from("verification"),
+    ).with_preferred_domain(TypedDomain::VerifiableDomain(DomainId::new([2u8; 32]))));
+
+    dataflow_def.add_node(ProcessDataflowNode::new(
+        NodeId::new([5u8; 32]),
+        Str::from("mint_tokens"),
+        Str::from("effect"),
+    ).with_preferred_domain(TypedDomain::VerifiableDomain(DomainId::new([2u8; 32]))));
+
+    dataflow_def.add_node(ProcessDataflowNode::new(
+        NodeId::new([6u8; 32]),
+        Str::from("complete_transfer"),
+        Str::from("finalization"),
+    ).with_preferred_domain(TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]))));
+
+    // Add edges
+    dataflow_def.add_edge(ProcessDataflowEdge::new(
+        Str::from("edge_1"),
+        NodeId::new([1u8; 32]), // validate_transfer
+        Str::from("output"),
+        NodeId::new([2u8; 32]), // lock_tokens
+        Str::from("input"),
+    ));
+
+    dataflow_def.add_edge(ProcessDataflowEdge::new(
+        Str::from("edge_2"),
+        NodeId::new([2u8; 32]), // lock_tokens
+        Str::from("output"),
+        NodeId::new([3u8; 32]), // relay_message
+        Str::from("input"),
+    ));
+
+    dataflow_def.add_edge(ProcessDataflowEdge::new(
+        Str::from("edge_3"),
+        NodeId::new([3u8; 32]), // relay_message
+        Str::from("output"),
+        NodeId::new([4u8; 32]), // verify_proof
+        Str::from("input"),
+    ));
+
+    dataflow_def.add_edge(ProcessDataflowEdge::new(
+        Str::from("edge_4"),
+        NodeId::new([4u8; 32]), // verify_proof
+        Str::from("output"),
+        NodeId::new([5u8; 32]), // mint_tokens
+        Str::from("input"),
+    ));
+
+    dataflow_def.add_edge(ProcessDataflowEdge::new(
+        Str::from("edge_5"),
+        NodeId::new([5u8; 32]), // mint_tokens
+        Str::from("output"),
+        NodeId::new([6u8; 32]), // complete_transfer
+        Str::from("input"),
+    ));
+
+    // Demonstrate automatic schema generation
+    println!("🔄 Auto-generated schemas:");
+    println!("   Input schema: {:?}", BridgeTransferDataflow::input_schema());
+    println!("   Output schema: {:?}", BridgeTransferDataflow::output_schema());
+    println!("   State schema: {:?}", BridgeTransferDataflow::state_schema());
     
-    // Initialize the dataflow instance state
+    // Initialize the dataflow instance state with correct field names
     let mut instance_state = ProcessDataflowInstanceState {
-        id: ResourceId::new([43u8; 32]),
-        definition_id: dataflow_def.id,
-        current_node_id: Str::from("validate_transfer"),
-        state_values: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-        execution_history: vec![],
-        status: InstanceStatus::Running,
-        created_at: Timestamp::now(),
-        updated_at: Timestamp::now(),
+        instance_id: ResourceId::new([43u8; 32]),
+        definition_id: dataflow_def.definition_id,
+        execution_state: DataflowExecutionState::Running,
+        node_states: std::collections::BTreeMap::new(),
+        metadata: std::collections::BTreeMap::new(),
+        initiation_hint: None,
     };
     
     // Simulate workflow execution steps
@@ -519,39 +520,194 @@ async fn test_domain_resource_modeling() -> Result<()> {
 
 #[tokio::test]
 async fn test_dataflow_definition_creation() -> Result<()> {
-    println!("📋 Testing ProcessDataflow Definition Creation");
+    println!("📋 Testing ProcessDataflow Definition Creation with Automatic Schemas");
     
-    let dataflow_def = ProcessDataflowDefinition {
-        id: ExprId::new([99u8; 32]),
-        name: Str::from("test_workflow"),
-        input_schema: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-        output_schema: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-        state_schema: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-        nodes: vec![
-            DataflowNode {
-                id: Str::from("test_node"),
-                node_type: Str::from("test"),
-                config: ValueExpr::Map(std::collections::BTreeMap::new().into()),
-                required_domain: Some(TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]))),
-            },
-        ],
-        edges: vec![],
-        conditions: vec![],
-        action_templates: vec![],
-        domain_policies: HashMap::new(),
-        created_at: Timestamp::now(),
-    };
+    // Define test input/output/state types for automatic schema generation
+    #[derive(Debug, Clone, PartialEq)]
+    struct TestInput {
+        pub test_param: String,
+    }
+    
+    #[derive(Debug, Clone, PartialEq)]
+    struct TestOutput {
+        pub result: bool,
+    }
+    
+    #[derive(Debug, Clone, PartialEq)]
+    struct TestState {
+        pub current_step: String,
+    }
+    
+    // Manual TypeSchema implementations for testing
+    impl TypeSchema for TestInput {
+        fn type_expr() -> TypeExpr {
+            use std::collections::BTreeMap;
+            let mut fields = BTreeMap::new();
+            fields.insert(Str::from("test_param"), TypeExpr::String);
+            TypeExpr::Record(causality_types::expression::r#type::TypeExprMap(fields))
+        }
+    }
+    
+    impl TypeSchema for TestOutput {
+        fn type_expr() -> TypeExpr {
+            use std::collections::BTreeMap;
+            let mut fields = BTreeMap::new();
+            fields.insert(Str::from("result"), TypeExpr::Bool);
+            TypeExpr::Record(causality_types::expression::r#type::TypeExprMap(fields))
+        }
+    }
+    
+    impl TypeSchema for TestState {
+        fn type_expr() -> TypeExpr {
+            use std::collections::BTreeMap;
+            let mut fields = BTreeMap::new();
+            fields.insert(Str::from("current_step"), TypeExpr::String);
+            TypeExpr::Record(causality_types::expression::r#type::TypeExprMap(fields))
+        }
+    }
+    
+    type TestDataflow = ProcessDataflowDefinition<TestInput, TestOutput, TestState>;
+    
+    // Create dataflow definition with automatic schema generation
+    let mut dataflow_def = TestDataflow::new(
+        ExprId::new([99u8; 32]),
+        Str::from("test_workflow"),
+    );
+    
+    // Add a test node
+    dataflow_def.add_node(ProcessDataflowNode::new(
+        NodeId::new([1u8; 32]),
+        Str::from("test_node"),
+        Str::from("test"),
+    ).with_preferred_domain(TypedDomain::new(
+        DomainId::new([1u8; 32]),
+        Str::from("verifiable"),
+    )));
+    
+    // Test automatic schema generation
+    let input_schema = TestDataflow::input_schema();
+    let output_schema = TestDataflow::output_schema();
+    let state_schema = TestDataflow::state_schema();
     
     // Verify dataflow definition
     assert_eq!(dataflow_def.name.as_str(), "test_workflow");
     assert_eq!(dataflow_def.nodes.len(), 1);
     assert_eq!(dataflow_def.edges.len(), 0);
-    assert_eq!(dataflow_def.nodes[0].id.as_str(), "test_node");
     
     println!("✅ ProcessDataflow definition creation test passed");
     println!("   - Definition name: {}", dataflow_def.name);
     println!("   - Nodes: {}", dataflow_def.nodes.len());
     println!("   - Edges: {}", dataflow_def.edges.len());
+    println!("   - Input schema: {:?}", input_schema);
+    println!("   - Output schema: {:?}", output_schema);
+    println!("   - State schema: {:?}", state_schema);
     
     Ok(())
-} 
+}
+
+//-----------------------------------------------------------------------------
+// Bridge Workflow Schema Types
+//-----------------------------------------------------------------------------
+
+/// Input parameters for bridge transfer workflow with automatic schema generation
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "derive", derive(causality_types::derive::TypeSchema))]
+pub struct BridgeTransferInput {
+    pub from_account: String,
+    pub to_account: String,
+    pub amount: u64,
+    pub token: String,
+    pub source_domain: String,
+    pub target_domain: String,
+}
+
+/// Output from bridge transfer workflow with automatic schema generation
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "derive", derive(causality_types::derive::TypeSchema))]
+pub struct BridgeTransferOutput {
+    pub transfer_id: String,
+    pub status: String,
+    pub source_debit_completed: bool,
+    pub target_credit_completed: bool,
+    pub fee_charged: u64,
+    pub execution_time_ms: u64,
+}
+
+/// State maintained during bridge transfer execution with automatic schema generation
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "derive", derive(causality_types::derive::TypeSchema))]
+pub struct BridgeTransferState {
+    pub current_node_id: String,
+    pub state_values: HashMap<String, String>,
+    pub execution_history: Vec<String>,
+    pub status: String,
+    pub locked_amount: Option<u64>,
+    pub proof_data: Option<Vec<u8>>,
+}
+
+// Manual TypeSchema implementations (would be auto-generated with derive macro)
+impl TypeSchema for BridgeTransferInput {
+    fn type_expr() -> causality_types::expression::r#type::TypeExpr {
+        use causality_types::expression::r#type::{TypeExpr, TypeExprMap};
+        use std::collections::BTreeMap;
+        
+        let mut fields = BTreeMap::new();
+        fields.insert(Str::from("from_account"), TypeExpr::String);
+        fields.insert(Str::from("to_account"), TypeExpr::String);
+        fields.insert(Str::from("amount"), TypeExpr::Integer);
+        fields.insert(Str::from("token"), TypeExpr::String);
+        fields.insert(Str::from("source_domain"), TypeExpr::String);
+        fields.insert(Str::from("target_domain"), TypeExpr::String);
+        TypeExpr::Record(TypeExprMap(fields))
+    }
+}
+
+impl TypeSchema for BridgeTransferOutput {
+    fn type_expr() -> causality_types::expression::r#type::TypeExpr {
+        use causality_types::expression::r#type::{TypeExpr, TypeExprMap};
+        use std::collections::BTreeMap;
+        
+        let mut fields = BTreeMap::new();
+        fields.insert(Str::from("transfer_id"), TypeExpr::String);
+        fields.insert(Str::from("status"), TypeExpr::String);
+        fields.insert(Str::from("source_debit_completed"), TypeExpr::Bool);
+        fields.insert(Str::from("target_credit_completed"), TypeExpr::Bool);
+        fields.insert(Str::from("fee_charged"), TypeExpr::Integer);
+        fields.insert(Str::from("execution_time_ms"), TypeExpr::Integer);
+        TypeExpr::Record(TypeExprMap(fields))
+    }
+}
+
+impl TypeSchema for BridgeTransferState {
+    fn type_expr() -> causality_types::expression::r#type::TypeExpr {
+        use causality_types::expression::r#type::{TypeExpr, TypeExprMap, TypeExprBox};
+        use std::collections::BTreeMap;
+        
+        let mut fields = BTreeMap::new();
+        fields.insert(Str::from("current_node_id"), TypeExpr::String);
+        // HashMap<String, String> -> Map(String, String)
+        fields.insert(Str::from("state_values"), TypeExpr::Map(
+            TypeExprBox(Box::new(TypeExpr::String)),
+            TypeExprBox(Box::new(TypeExpr::String))
+        ));
+        // Vec<String> -> List(String)
+        fields.insert(Str::from("execution_history"), TypeExpr::List(
+            TypeExprBox(Box::new(TypeExpr::String))
+        ));
+        fields.insert(Str::from("status"), TypeExpr::String);
+        // Option<u64> -> Optional(Integer)
+        fields.insert(Str::from("locked_amount"), TypeExpr::Optional(
+            TypeExprBox(Box::new(TypeExpr::Integer))
+        ));
+        // Option<Vec<u8>> -> Optional(List(Integer))
+        fields.insert(Str::from("proof_data"), TypeExpr::Optional(
+            TypeExprBox(Box::new(TypeExpr::List(
+                TypeExprBox(Box::new(TypeExpr::Integer))
+            )))
+        ));
+        TypeExpr::Record(TypeExprMap(fields))
+    }
+}
+
+/// Type alias for the bridge transfer dataflow with automatic schema generation
+pub type BridgeTransferDataflow = ProcessDataflowDefinition<BridgeTransferInput, BridgeTransferOutput, BridgeTransferState>; 

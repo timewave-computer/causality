@@ -8,11 +8,10 @@
 
 use anyhow::Result;
 use causality_types::expr::ExprError as LispError;
-use causality_types::primitive::number::Number; // Corrected import
+use causality_types::core::number::Number;
 use causality_types::expr::ast::Atom as LispAtom;
 use causality_types::expr::result::ExprResult as LispValue;
-use causality_types::expr::ValueExpr; // Changed alias // This is causality_lisp::ExprError
-                                      // use std::convert::TryFrom; // Not explicitly used after changes
+use causality_types::expr::value::ValueExpr;
 
 //-----------------------------------------------------------------------------
 // Error Types
@@ -39,30 +38,30 @@ pub enum BridgeError {
 // Conversion Functions
 //-----------------------------------------------------------------------------
 
-/// Converts a `causality_types::expr::ValueExpr` to a `causality_types::expr::result::ExprResult`.
+/// Converts a `causality_types::expr::value::ValueExpr` to a `causality_types::expr::result::ExprResult`.
 pub fn value_expr_to_lisp_value(
     value_expr: ValueExpr,
 ) -> Result<LispValue, BridgeError> {
-    Ok(LispValue::Value(value_expr)) // LispValue is ExprResult
+    Ok(LispValue::Value(value_expr)) 
 }
 
-/// Converts a `causality_types::expr::result::ExprResult` to a `causality_types::expr::ValueExpr`.
+/// Converts a `causality_types::expr::result::ExprResult` to a `causality_types::expr::value::ValueExpr`.
 pub fn lisp_value_to_value_expr(
     lisp_value: LispValue,
-) -> Result<ValueExpr, BridgeError> {
+) -> Result<ValueExpr, LispError> {
     match lisp_value {
         LispValue::Value(v) => Ok(v),
         LispValue::Atom(atom) => {
             // LispAtom is causality_types::expr::ast::Atom
             match atom {
                 LispAtom::Integer(i) => Ok(ValueExpr::Number(Number::Integer(i))),
-                LispAtom::String(s) => Ok(ValueExpr::String(s)), // ast::Atom::String uses Str
+                LispAtom::String(s) => Ok(ValueExpr::String(s)), 
                 LispAtom::Boolean(b) => Ok(ValueExpr::Bool(b)),
                 LispAtom::Nil => Ok(ValueExpr::Nil),
             }
         }
         LispValue::Bool(b) => Ok(ValueExpr::Bool(b)),
-        LispValue::Unit => Ok(ValueExpr::Unit),
+        LispValue::Unit => Ok(ValueExpr::Nil),
         // Other ExprResult variants are not directly convertible to a single ValueExpr
         _ => Err(BridgeError::UnsupportedLispType(format!(
             "LispValue variant {:?} not supported for direct conversion to ValueExpr.",
@@ -83,4 +82,4 @@ fn lisp_value_try_into_i64(lisp_value: &LispValue) -> Result<i64, BridgeError> {
         _ => Err(BridgeError::LispToValueMismatch(format!("Expected Lisp Integer atom, found {:?}", lisp_value))),
     }
 }
-*/
+*/ 

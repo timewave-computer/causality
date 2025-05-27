@@ -1,13 +1,14 @@
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_types::primitive::ids::{DomainId, ExprId, ResourceId, ValueExprId};
-    use causality_types::primitive::string::Str;
+    use crate::error::RuntimeError;
+    use causality_types::core::id::{DomainId, ExprId, ResourceId, ValueExprId};
+    use causality_types::core::str::Str;
+    use causality_types::core::number::Number;
     use causality_types::expr::value::ValueExpr;
-    use causality_types::resource::Resource;
+    use causality_types::resource::types::Resource;
     use causality_types::tel::InterpreterMode;
     use std::collections::BTreeMap;
-    use causality_types::primitive::number::Number;
 
     // Helper function to create a test resource
     fn create_test_resource() -> Resource {

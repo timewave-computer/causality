@@ -88,7 +88,6 @@ pub fn assert_intent_eq(left: &Intent, right: &Intent) {
 /// Assert that two value expressions are equal
 pub fn assert_value_expr_eq(left: &ValueExpr, right: &ValueExpr) {
     match (left, right) {
-        (ValueExpr::Unit, ValueExpr::Unit) => {},
         (ValueExpr::Nil, ValueExpr::Nil) => {},
         (ValueExpr::Bool(l), ValueExpr::Bool(r)) => assert_eq!(l, r, "Boolean values don't match"),
         (ValueExpr::String(l), ValueExpr::String(r)) => assert_eq!(l, r, "String values don't match"),

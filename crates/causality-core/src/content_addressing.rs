@@ -8,7 +8,7 @@ use sha2::{Sha256, Digest};
 use causality_types::serialization::Encode;
 
 // Re-export the comprehensive ContentAddressable trait from causality-types
-pub use causality_types::core::content_addressable::{
+pub use causality_types::primitive::content::{
     ContentAddressable, ContentTraversable, DomainValidated, ContentAddressableCollection
 };
 

@@ -18,6 +18,8 @@ use std::collections::{HashMap, BTreeMap};
 use std::hash::Hash;
 use std::io;
 use std::fmt;
+#[allow(unused_imports)] // Used in generic type matching for Vec decode
+use std::any::TypeId;
 use anyhow::Result;
 use sha2::{Digest, Sha256};
 use crate::primitive::string::Str;
@@ -111,6 +113,21 @@ pub fn serialize<T: Encode>(value: &T) -> Vec<u8> {
 /// Deserializes a value using SSZ
 pub fn deserialize<T: Decode>(bytes: &[u8]) -> Result<T, DecodeError> {
     T::from_ssz_bytes(bytes)
+}
+
+/// Helper function to decode length prefix from SSZ bytes
+pub fn decode_length(bytes: &[u8]) -> Result<(u32, usize), DecodeError> {
+    if bytes.len() < 4 {
+        return Err(DecodeError {
+            message: "Not enough bytes for length prefix".to_string(),
+        });
+    }
+    
+    let length = u32::from_le_bytes([
+        bytes[0], bytes[1], bytes[2], bytes[3]
+    ]);
+    
+    Ok((length, 4))
 }
 
 /// Helper function for serializing potentially recursive structures
@@ -439,7 +456,7 @@ impl<T: Decode + Encode + 'static> Decode for Vec<T> {
                 offset += 8;
                 result.push(item);
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<bool>() {
-                if remaining_bytes.len() < 1 {
+                if remaining_bytes.is_empty() {
                     return Err(DecodeError {
                         message: "Not enough bytes for bool".to_string(),
                     });
@@ -568,11 +585,11 @@ impl<T: Decode + Default + Copy + Encode, const N: usize> Decode for [T; N] {
         let mut result = [T::default(); N];
         let mut offset = 0;
         
-        for i in 0..N {
+        for item_slot in result.iter_mut() {
             let item = T::from_ssz_bytes(&bytes[offset..])?;
             let item_bytes = item.as_ssz_bytes();
             offset += item_bytes.len();
-            result[i] = item;
+            *item_slot = item;
         }
         
         Ok(result)

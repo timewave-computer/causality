@@ -11,16 +11,16 @@ use std::sync::Arc;
 use causality_types::{
     core::{
         id::{ResourceId, ValueExprId, ExprId, HandlerId, DomainId, EntityId, AsIdConverter},
-        resource::{Resource, Nullifier},
         time::Timestamp,
         Handler,
     },
-    expr::{ast::Expr as TypesExpr, ValueExpr},
-    provider::context::{AsExprContext, AsExecutionContext, AsRuntimeContext},
+    resource::{Resource, Nullifier},
+    expr::{ast::Expr as TypesExpr, value::ValueExpr},
+    system::provider::{AsExprContext, AsExecutionContext, AsRuntimeContext},
     serialization::Encode,
 };
 use causality_core::extension_traits::ValueExprExt; // For .id() on ValueExpr
-use causality_core::utils::tel::ResourceExt; // Updated import path for compute_hash
+use causality_types::system::util::get_current_time_ms;
 use sha2::{Digest, Sha256};
 
 use crate::state::state_proof::{StateProofGenerator, ResourceProof, ValueProof};
@@ -104,11 +104,12 @@ impl DefaultStateManager {
     }
 
     pub async fn add_resource(&mut self, resource: Resource) -> Result<()> {
+        let entity_id = resource.id; // Resource.id is EntityId
         let mut resources_map = self.resources.lock().await;
-        if resources_map.contains_key(&resource.id) {
-            return Err(anyhow!("Resource with ID {:?} already exists", resource.id));
+        if resources_map.contains_key(&entity_id) {
+            return Err(anyhow!("Resource with ID {:?} already exists", entity_id));
         }
-        resources_map.insert(resource.id, resource);
+        resources_map.insert(entity_id, resource);
         Ok(())
     }
 }
@@ -127,12 +128,12 @@ impl AsExprContext for DefaultStateManager {
         if let Some(resource) = resource_result {
             // Extract field from resource based on field name
             match field {
-                "id" => Ok(Some(ValueExpr::String(causality_types::primitive::string::Str::from(format!("{:?}", resource.id))))),
+                "id" => Ok(Some(ValueExpr::String(causality_types::core::str::Str::from(format!("{:?}", resource.id))))),
                 "name" => Ok(Some(ValueExpr::String(resource.name.clone()))),
-                "domain_id" => Ok(Some(ValueExpr::String(causality_types::primitive::string::Str::from(format!("{:?}", resource.domain_id))))),
+                "domain_id" => Ok(Some(ValueExpr::String(causality_types::core::str::Str::from(format!("{:?}", resource.domain_id))))),
                 "resource_type" => Ok(Some(ValueExpr::String(resource.resource_type.clone()))),
-                "quantity" => Ok(Some(ValueExpr::Number(causality_types::primitive::number::Number::Integer(resource.quantity as i64)))),
-                "timestamp" => Ok(Some(ValueExpr::Number(causality_types::primitive::number::Number::Integer(resource.timestamp.as_millis() as i64)))),
+                "quantity" => Ok(Some(ValueExpr::Number(causality_types::core::number::Number::Integer(resource.quantity as i64)))),
+                "timestamp" => Ok(Some(ValueExpr::Number(causality_types::core::number::Number::Integer(resource.timestamp.as_millis() as i64)))),
                 // "ephemeral" field was removed from Resource type
                 "ephemeral" => Ok(Some(ValueExpr::Bool(false))), // Default to false
                 _ => Ok(None), // Field not found

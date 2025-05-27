@@ -1,9 +1,11 @@
 //! Mock implementations for system-level testing
 
 use async_trait::async_trait;
-use causality_types::core::{
-    logger::{AsLogger, LogDomainId, LogEntry, LogError, LogLevel},
-    str::Str,
+use causality_types::{
+    primitive::{
+        logging::{AsLogger, LogDomainId, LogEntry, LogError, LogLevel},
+        string::Str,
+    },
 };
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -158,6 +160,7 @@ impl AsLogger for MockLogger {
 #[derive(Debug, Clone)]
 pub struct MockProvider {
     data: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    #[allow(dead_code)]
     fail_on_missing: bool,
 }
 

@@ -105,6 +105,7 @@ pub enum TegWitness {
 pub struct TegDevelopmentVerifier {
     smt: Arc<Mutex<TegMultiDomainSmt<MemoryBackend>>>,
     /// Cache of verification circuits by domain
+    #[allow(dead_code)]
     circuit_cache: HashMap<DomainId, TegVerificationCircuit>,
 }
 

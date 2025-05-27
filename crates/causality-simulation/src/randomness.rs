@@ -110,7 +110,8 @@ impl SeededRng {
             return None;
         }
 
-        let mut random_weight = self.rng.gen::<f64>() * total_weight;
+        let random_value: f64 = self.rng.gen(); // Generate f64 in [0.0, 1.0)
+        let mut random_weight = random_value * total_weight;
         
         for (item, weight) in items {
             random_weight -= weight;
@@ -149,8 +150,6 @@ impl RngCore for SeededRng {
 //-----------------------------------------------------------------------------
 // Tests
 //-----------------------------------------------------------------------------
-
-
 
 #[cfg(test)]
 mod tests {

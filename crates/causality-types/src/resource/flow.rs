@@ -2,7 +2,7 @@
 
 use crate::primitive::ids::DomainId;
 use crate::primitive::string::Str;
-use crate::serialization::{Encode, Decode, DecodeError, SimpleSerialize};
+use crate::serialization::{Encode, Decode, DecodeError, SimpleSerialize, DecodeWithLength};
 use std::collections::BTreeMap;
 
 /// ResourceFlow represents the flow of resources between components
@@ -89,6 +89,43 @@ impl Decode for ResourceFlow {
             quantity,
             domain_id,
         })
+    }
+}
+
+impl DecodeWithLength for ResourceFlow {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        let mut offset = 0;
+        
+        // resource_type: Str (variable length)
+        let (resource_type, resource_type_len) = Str::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += resource_type_len;
+        
+        // quantity: u64 (8 bytes)
+        if bytes.len() < offset + 8 {
+            return Err(DecodeError {
+                message: "ResourceFlow: insufficient bytes for quantity".to_string(),
+            });
+        }
+        let quantity = u64::from_le_bytes([
+            bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3],
+            bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]
+        ]);
+        offset += 8;
+        
+        // domain_id: DomainId (32 bytes)
+        if bytes.len() < offset + 32 {
+            return Err(DecodeError {
+                message: "ResourceFlow: insufficient bytes for domain_id".to_string(),
+            });
+        }
+        let domain_id = DomainId::from_ssz_bytes(&bytes[offset..offset + 32])?;
+        offset += 32;
+        
+        Ok((Self {
+            resource_type,
+            quantity,
+            domain_id,
+        }, offset))
     }
 }
 

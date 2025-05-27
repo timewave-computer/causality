@@ -1,9 +1,9 @@
 // Purpose: Core utility functions for ID generation, content addressing, and fundamental operations.
 
 use causality_types::primitive::ids::{
-    AsId, CapabilityId, DomainId, ExprId, ResourceId, TypeExprId,
+    AsId, DomainId, ExprId, ResourceId, TypeExprId,
 };
-use causality_types::serialization::Encode;
+use causality_types::system::serialization::Encode;
 use sha2::{Digest, Sha256};
 use std::fmt::Write as FmtWrite;
 
@@ -104,11 +104,7 @@ pub fn domain_id_from_str(s: &str) -> Result<DomainId, anyhow::Error> {
     DomainId::from_str_ext(s)
 }
 
-/// Parse a CapabilityId from a string using the extension trait
-pub fn capability_id_from_str(s: &str) -> Result<CapabilityId, anyhow::Error> {
-    use crate::extension_traits::IdFromStr;
-    CapabilityId::from_str_ext(s)
-}
+
 
 //-----------------------------------------------------------------------------
 // Common Core Utilities

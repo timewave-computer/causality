@@ -34,7 +34,7 @@ fn write_value_expr_to_string<W: Write>(
     writer: &mut W,
 ) -> std::fmt::Result {
     match value {
-        ValueExpr::Unit | ValueExpr::Nil => writer.write_str("nil")?,
+        ValueExpr::Nil => writer.write_str("nil")?,
         ValueExpr::Bool(b) => writer.write_str(if *b {
             "true"
         } else {

@@ -12,19 +12,19 @@ use std::collections::BTreeMap; // For Map conversion
 
 use causality_lisp::core::ExprContextual as LispCoreExprContextual; // Alias to avoid clash
 // Aliases for lisp interpreter's value and error types
-use causality_types::expr::ValueExpr as LispValue;
+use causality_types::expr::value::ValueExpr as LispValue; // Updated path
 
 use causality_types::{
     core::{
-        id::{ResourceId},
+        id::ResourceId,
         str::Str,
     },
-    provider::context::{AsExprContext as TypesAsExprContext, TelContextInterface as TypesTelContextInterface}, // Used TypesAsExprContext
     expr::{
         ast::Expr as TypesExpr, 
         value::{ValueExpr, ValueExprMap, ValueExprVec, Number}, // Added ValueExpr for proper import
         result::{ExprResult as TypesExprResult, ExprError as TypesExprError, TypeErrorData},
     },
+    system::provider::{AsExprContext as TypesAsExprContext, TelContextInterface as TypesTelContextInterface}, // New path
 };
 use std::sync::Arc;
 use tokio::sync::{Mutex as TokioMutex, MutexGuard as TokioMutexGuard}; 
@@ -55,7 +55,7 @@ pub enum LispBridgeError {
 pub fn from_lisp_value(lisp_val: LispValue) -> Result<ValueExpr, LispBridgeError> {
     match lisp_val {
         LispValue::Nil => Ok(ValueExpr::Nil),
-        LispValue::Unit => Ok(ValueExpr::Unit),
+        LispValue::Unit => Ok(ValueExpr::Nil),
         LispValue::Bool(b) => Ok(ValueExpr::Bool(b)),
         LispValue::String(s) => Ok(ValueExpr::String(s)), // Str is Copy
         LispValue::Number(n) => match n {
@@ -96,8 +96,8 @@ pub fn from_lisp_value(lisp_val: LispValue) -> Result<ValueExpr, LispBridgeError
 
 pub fn to_lisp_value(types_val: ValueExpr) -> Result<LispValue, LispBridgeError> {
     match types_val {
-        ValueExpr::Nil => Ok(LispValue::Nil),
-        ValueExpr::Unit => Ok(LispValue::Unit),
+        ValueExpr::Nil => Ok(LispValue::Unit),
+        // ValueExpr::Unit doesn't exist, this case is handled by Nil
         ValueExpr::Bool(b) => Ok(LispValue::Bool(b)),
         ValueExpr::String(s) => Ok(LispValue::String(s)), // Str is Copy
         ValueExpr::Number(n) => match n {
@@ -232,13 +232,13 @@ impl LispCoreExprContextual for TelLispAdapter { // Use aliased LispCoreExprCont
         }
     }
 
-    async fn is_effect_completed(&self, _effect_id: &causality_types::primitive::ids::ExprId) -> Result<bool, TypesExprError> {
+    async fn is_effect_completed(&self, _effect_id: &causality_types::core::id::ExprId) -> Result<bool, TypesExprError> {
         // Since effect completion tracking is not implemented in this adapter,
         // return false to indicate effects are not considered completed
         Ok(false)
     }
 
-    async fn get_expr_by_id(&self, _id: &causality_types::primitive::ids::ExprId) -> Result<&TypesExpr, TypesExprError> {
+    async fn get_expr_by_id(&self, _id: &causality_types::core::id::ExprId) -> Result<&TypesExpr, TypesExprError> {
         // Expression storage by ID is not implemented in this adapter
         Err(TypesExprError::ExecutionError { 
             message: "Expression storage by ID not implemented in TelLispAdapter".into() 

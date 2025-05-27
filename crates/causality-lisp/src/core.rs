@@ -11,7 +11,7 @@ use causality_types::{
     core::numeric::Number, // Added for Number::Integer, Number::BigInt
     expr::result::ExprError,
     expr::{ast::Expr, result::ExprResult, value::ValueExpr},
-    provider::context::AsExprContext,
+    system::provider::AsExprContext,
     // resource::Resource, // For AsExprContext methods
 };
 
@@ -142,7 +142,7 @@ impl<'a, C: ExprContextual + Send + Sync + ?Sized> BindingExprContext<'a, C> {
         let (name, value) = btree_bindings.into_iter().next().unwrap_or_else(|| 
             // Provide default dummy binding if map is empty, to satisfy struct fields.
             // This choice might affect behavior if not handled carefully in get_symbol.
-            (Str::from("__dummy_binding_if_empty__"), ExprResult::Value(ValueExpr::Unit)) // Changed from Null to Unit
+            (Str::from("__dummy_binding_if_empty__"), ExprResult::Value(ValueExpr::Nil)) // Changed from Null to Nil
         );
 
         BindingExprContext {
@@ -257,14 +257,14 @@ impl<'a, C: ExprContextual + Send + Sync + ?Sized> LambdaBindingContext<'a, C> {
                 match v {
                     ExprResult::Value(val) => Some((k, val)),
                     ExprResult::Atom(atom) => match atom {
-                        causality_types::expr::ast::Atom::Nil => Some((k, ValueExpr::Unit)),
+                        causality_types::expr::ast::Atom::Nil => Some((k, ValueExpr::Nil)),
                         causality_types::expr::ast::Atom::Boolean(b) => Some((k, ValueExpr::Bool(b))),
                         causality_types::expr::ast::Atom::String(s) => Some((k, ValueExpr::String(s))),
                         causality_types::expr::ast::Atom::Integer(i) => Some((k, ValueExpr::Number(Number::Integer(i)))),
                         // Atom does not have BigInt or Float variants
                     },
                     ExprResult::Bool(b) => Some((k, ValueExpr::Bool(b))),
-                    ExprResult::Unit => Some((k, ValueExpr::Unit)),
+                    ExprResult::Unit => Some((k, ValueExpr::Nil)),
                     _ => None, // Skip other ExprResult variants
                 }
             })
@@ -354,8 +354,7 @@ pub fn type_name(result: &ExprResult) -> &'static str {
             ValueExpr::Number(_) => "number",
             ValueExpr::String(_) => "string",
             ValueExpr::Bool(_) => "bool",
-            ValueExpr::Unit => "nil",
-            ValueExpr::Nil => "nil",
+            ValueExpr::Nil => "nil", // Corrected from Null
             ValueExpr::List(_) => "list",
             ValueExpr::Map(_) => "map",
             ValueExpr::Record(_) => "record",
@@ -391,8 +390,7 @@ pub fn is_truthy(result: &ExprResult) -> bool {
             ValueExpr::Bool(b) => *b,
             ValueExpr::Number(n) => !matches!(n, causality_types::primitive::number::Number::Integer(0)),
             ValueExpr::String(s) => !s.is_empty(), // Empty string is falsy
-            ValueExpr::Unit => false,              // nil is falsy
-            ValueExpr::Nil => false,               // nil is falsy
+            ValueExpr::Nil => false,              // nil is falsy (Corrected from Null)
             ValueExpr::List(list) => !list.0.is_empty(), // Empty list is falsy
             ValueExpr::Map(map) => !map.0.is_empty(), // Empty map is falsy
             ValueExpr::Record(record) => !record.0.is_empty(), // Empty record is falsy

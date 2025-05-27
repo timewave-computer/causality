@@ -50,7 +50,7 @@ mod tests {
         let nil_expr = Expr::Atom(Atom::Nil);
         let result = interpreter.evaluate_expr(&nil_expr, &ctx).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), ValueExpr::Unit);
+        assert_eq!(result.unwrap(), ValueExpr::Nil);
     }
 
     #[tokio::test]

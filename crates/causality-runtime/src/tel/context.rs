@@ -12,15 +12,15 @@ use causality_types::{
         result::{ExprError, ExprResult, TypeErrorData},
         value::{ValueExpr, ValueExprVec},
     },
-    provider::context::{
+    resource::{Resource, Nullifier, conversion::ToValueExpr},
+    system::provider::{
         AsExecutionContext, 
         AsExprContext, 
         AsRuntimeContext,
         TelContextInterface,
         StaticExprContext,
     },
-    resource::{Resource, Nullifier},
-    core::resource_conversion::ToValueExpr,
+    Effect, // Core effect type
 };
 
 use causality_lisp::Interpreter;
@@ -61,16 +61,16 @@ pub struct LispHostEnvironment {
     // === PDB ORCHESTRATION ENHANCEMENTS ===
     
     /// Reference to the current GraphExecutionContext for PDB operations
-    pub graph_execution_context: Option<Arc<Mutex<causality_types::tel::execution_context::GraphExecutionContext>>>,
+    pub graph_execution_context: Option<Arc<Mutex<causality_types::graph::execution::GraphExecutionContext>>>,
     
     /// Available ProcessDataflowDefinitions for orchestration
-    pub dataflow_definitions: Arc<Mutex<BTreeMap<ExprId, causality_types::tel::process_dataflow::ProcessDataflowDefinition>>>,
+    pub dataflow_definitions: Arc<Mutex<BTreeMap<ExprId, causality_types::graph::dataflow::ProcessDataflowDefinition>>>,
     
     /// Queue for effects generated during Lisp execution (to be returned to Graph Executor)
-    pub generated_effects: Arc<Mutex<Vec<causality_types::core::Effect>>>,
+    pub generated_effects: Arc<Mutex<Vec<Effect>>>, // Updated type
     
     /// Current TypedDomain for domain-aware operations
-    pub current_typed_domain: Option<causality_types::tel::optimization::TypedDomain>,
+    pub current_typed_domain: Option<causality_types::graph::optimization::TypedDomain>,
 }
 
 pub trait StaticExprContextExt: StaticExprContext + Send + Sync + std::fmt::Debug {}
@@ -137,49 +137,49 @@ impl LispHostEnvironment {
         // This avoids the runtime blocking issues
         match field {
             "test_field" => Ok(ValueExpr::String(Str::from("test_value"))),
-            "nonexistent_field" => Ok(ValueExpr::Unit),
-            _ => Ok(ValueExpr::Unit)
+            "nonexistent_field" => Ok(ValueExpr::Nil),
+            _ => Ok(ValueExpr::Nil)
         }
     }
 
     // === PDB ORCHESTRATION METHODS ===
     
     /// Set the GraphExecutionContext for PDB operations
-    pub fn set_graph_execution_context(&mut self, context: Arc<Mutex<causality_types::tel::execution_context::GraphExecutionContext>>) {
+    pub fn set_graph_execution_context(&mut self, context: Arc<Mutex<causality_types::graph::execution::GraphExecutionContext>>) {
         self.graph_execution_context = Some(context);
     }
     
     /// Set the current TypedDomain
-    pub fn set_current_typed_domain(&mut self, domain: causality_types::tel::optimization::TypedDomain) {
+    pub fn set_current_typed_domain(&mut self, domain: causality_types::graph::optimization::TypedDomain) {
         self.current_typed_domain = Some(domain);
     }
     
     /// Add a ProcessDataflowDefinition for orchestration
-    pub async fn add_dataflow_definition(&self, id: ExprId, definition: causality_types::tel::process_dataflow::ProcessDataflowDefinition) {
+    pub async fn add_dataflow_definition(&self, id: ExprId, definition: causality_types::graph::dataflow::ProcessDataflowDefinition) {
         let mut definitions = self.dataflow_definitions.lock().await;
         definitions.insert(id, definition);
     }
     
     /// Get a ProcessDataflowDefinition by ID
-    pub async fn get_dataflow_definition(&self, id: &ExprId) -> Option<causality_types::tel::process_dataflow::ProcessDataflowDefinition> {
+    pub async fn get_dataflow_definition(&self, id: &ExprId) -> Option<causality_types::graph::dataflow::ProcessDataflowDefinition> {
         let definitions = self.dataflow_definitions.lock().await;
         definitions.get(id).cloned()
     }
     
     /// Add a generated effect to the queue
-    pub async fn add_generated_effect(&self, effect: causality_types::core::Effect) {
+    pub async fn add_generated_effect(&self, effect: Effect) { // Updated type
         let mut effects = self.generated_effects.lock().await;
         effects.push(effect);
     }
     
     /// Get all generated effects and clear the queue
-    pub async fn take_generated_effects(&self) -> Vec<causality_types::core::Effect> {
+    pub async fn take_generated_effects(&self) -> Vec<Effect> { // Updated type
         let mut effects = self.generated_effects.lock().await;
         std::mem::take(&mut *effects)
     }
     
     /// Get the current TypedDomain
-    pub fn get_current_typed_domain(&self) -> Option<&causality_types::tel::optimization::TypedDomain> {
+    pub fn get_current_typed_domain(&self) -> Option<&causality_types::graph::optimization::TypedDomain> {
         self.current_typed_domain.as_ref()
     }
     
@@ -189,7 +189,7 @@ impl LispHostEnvironment {
     }
     
     /// Signal an effect back to the Graph Executor
-    pub async fn signal_effect_to_graph_executor(&self, effect: causality_types::core::Effect) -> Result<(), ExprError> {
+    pub async fn signal_effect_to_graph_executor(&self, effect: Effect) -> Result<(), ExprError> { // Updated type
         // Add the effect to the generated effects queue
         self.add_generated_effect(effect).await;
         
@@ -205,7 +205,7 @@ impl LispHostEnvironment {
     }
     
     /// Update PDB instance state through the graph execution context
-    pub async fn update_pdb_instance_state(&self, instance_id: ResourceId, state: causality_types::tel::process_dataflow::ProcessDataflowInstanceState) -> Result<(), ExprError> {
+    pub async fn update_pdb_instance_state(&self, instance_id: ResourceId, state: causality_types::graph::execution::ProcessDataflowInstanceState) -> Result<(), ExprError> {
         if let Some(context_ref) = &self.graph_execution_context {
             let mut context = context_ref.lock().await;
             context.update_pdb_instance(&instance_id, state);
@@ -932,5 +932,3 @@ impl Clone for HostFunction {
         HostFunction(Arc::clone(&self.0))
     }
 }
-
-

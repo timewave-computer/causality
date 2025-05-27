@@ -1,17 +1,16 @@
 //! Effect type definition for the unified core type system
 
 use std::fmt;
-use crate::primitive::ids::{EntityId, DomainId, ExprId, HandlerId, AsId, NodeId, ResourceId};
+use crate::primitive::ids::{EntityId, DomainId, ExprId, AsId, NodeId};
 use crate::primitive::string::Str;
 use crate::primitive::time::Timestamp;
 use crate::primitive::trait_::{HasInputs, HasOutputs, AsResource, AsIdentifiable, HasDomainId, HasExpression, HasTimestamp, AsEffect};
 use crate::resource::flow::{ResourceFlow, ResourcePattern};
 use crate::graph::r#trait::AsNode;
-use crate::graph::optimization::{TypedDomain, EffectCostModel, ResourceUsageEstimate};
-use crate::system::serialization::{Encode, Decode, SimpleSerialize, DecodeError};
+use crate::system::serialization::{Encode, DecodeWithLength, DecodeError, SimpleSerialize, Decode};
 
-/// Effect represents a computational effect in the causality system
-#[derive(Debug, Clone, PartialEq)]
+/// Effect represents a computational effect (algebraic effect specification) in the causality system
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Effect {
     pub id: EntityId,
     pub name: Str,
@@ -20,26 +19,12 @@ pub struct Effect {
     pub inputs: Vec<ResourceFlow>,
     pub outputs: Vec<ResourceFlow>,
     pub expression: Option<ExprId>,
-    pub timestamp: Timestamp,
-    pub resources: Vec<ResourceFlow>,
-    pub nullifiers: Vec<ResourceFlow>,
-    pub scoped_by: HandlerId,
-    pub intent_id: Option<ExprId>,
-    
-    /// Source typed domain for this effect
-    pub source_typed_domain: TypedDomain,
-    /// Target typed domain for this effect
-    pub target_typed_domain: TypedDomain,
-    /// Cost estimation metadata
-    pub cost_model: Option<EffectCostModel>,
-    /// Resource usage prediction
-    pub resource_usage_estimate: Option<ResourceUsageEstimate>,
-    /// ProcessDataflowBlock instance this effect originates from
-    pub originating_dataflow_instance: Option<ResourceId>,
+    pub timestamp: Timestamp, // Timestamp of the effect specification's creation
+    pub hint: Option<ExprId>,   // For preferences like target handler, cost, performance, etc.
 }
 
 impl Effect {
-    /// Create a new Effect with required parameters
+    /// Create a new Effect specification with required parameters
     pub fn new(
         id: EntityId,
         name: Str,
@@ -55,15 +40,7 @@ impl Effect {
             outputs: Vec::new(),
             expression: None,
             timestamp: Timestamp::now(),
-            resources: Vec::new(),
-            nullifiers: Vec::new(),
-            scoped_by: HandlerId::null(),
-            intent_id: None,
-            source_typed_domain: TypedDomain::default(),
-            target_typed_domain: TypedDomain::default(),
-            cost_model: None,
-            resource_usage_estimate: None,
-            originating_dataflow_instance: None,
+            hint: None,
         }
     }
 
@@ -91,33 +68,9 @@ impl Effect {
         self
     }
 
-    /// Builder method to set source typed domain
-    pub fn with_source_typed_domain(mut self, source_typed_domain: TypedDomain) -> Self {
-        self.source_typed_domain = source_typed_domain;
-        self
-    }
-    
-    /// Builder method to set target typed domain
-    pub fn with_target_typed_domain(mut self, target_typed_domain: TypedDomain) -> Self {
-        self.target_typed_domain = target_typed_domain;
-        self
-    }
-    
-    /// Builder method to set cost model
-    pub fn with_cost_model(mut self, cost_model: EffectCostModel) -> Self {
-        self.cost_model = Some(cost_model);
-        self
-    }
-    
-    /// Builder method to set resource usage estimate
-    pub fn with_resource_usage_estimate(mut self, resource_usage_estimate: ResourceUsageEstimate) -> Self {
-        self.resource_usage_estimate = Some(resource_usage_estimate);
-        self
-    }
-    
-    /// Builder method to set originating dataflow instance
-    pub fn with_originating_dataflow_instance(mut self, originating_dataflow_instance: ResourceId) -> Self {
-        self.originating_dataflow_instance = Some(originating_dataflow_instance);
+    /// Builder method to set hint expression
+    pub fn with_hint(mut self, hint: ExprId) -> Self {
+        self.hint = Some(hint);
         self
     }
 }
@@ -133,15 +86,7 @@ impl Default for Effect {
             outputs: Vec::new(),
             expression: None,
             timestamp: Timestamp::now(),
-            resources: Vec::new(),
-            nullifiers: Vec::new(),
-            scoped_by: HandlerId::null(),
-            intent_id: None,
-            source_typed_domain: TypedDomain::default(),
-            target_typed_domain: TypedDomain::default(),
-            cost_model: None,
-            resource_usage_estimate: None,
-            originating_dataflow_instance: None,
+            hint: None,
         }
     }
 }
@@ -195,48 +140,96 @@ impl Encode for Effect {
         bytes.extend_from_slice(&self.name.as_ssz_bytes());
         bytes.extend_from_slice(&self.domain_id.as_ssz_bytes());
         bytes.extend_from_slice(&self.effect_type.as_ssz_bytes());
+
+        // Encode inputs (Vec<ResourceFlow>)
+        bytes.extend_from_slice(&self.inputs.as_ssz_bytes());
+
+        // Encode outputs (Vec<ResourceFlow>)
+        bytes.extend_from_slice(&self.outputs.as_ssz_bytes());
+
+        // Encode expression (Option<ExprId>)
+        bytes.extend_from_slice(&self.expression.as_ssz_bytes());
+
+        // Encode timestamp (Timestamp)
         bytes.extend_from_slice(&self.timestamp.as_ssz_bytes());
+
+        // Encode hint (Option<ExprId>)
+        bytes.extend_from_slice(&self.hint.as_ssz_bytes());
+
         bytes
+    }
+}
+
+impl DecodeWithLength for Effect {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        let mut offset = 0;
+
+        // id: EntityId (fixed size: 32 bytes)
+        if bytes.len() < offset + 32 {
+            return Err(DecodeError::new("Effect: Input bytes too short for id"));
+        }
+        let id = EntityId::from_ssz_bytes(&bytes[offset..offset + 32])?;
+        offset += 32;
+
+        // name: Str (variable size)
+        let (name, consumed) = Str::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += consumed;
+
+        // domain_id: DomainId (fixed size: 32 bytes)
+        if bytes.len() < offset + 32 {
+            return Err(DecodeError::new("Effect: Input bytes too short for domain_id"));
+        }
+        let domain_id = DomainId::from_ssz_bytes(&bytes[offset..offset + 32])?;
+        offset += 32;
+
+        // effect_type: Str (variable size)
+        let (effect_type, consumed) = Str::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += consumed;
+
+        // inputs: Vec<ResourceFlow> (variable size)
+        let (inputs, consumed) = <Vec<ResourceFlow>>::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += consumed;
+
+        // outputs: Vec<ResourceFlow> (variable size)
+        let (outputs, consumed) = <Vec<ResourceFlow>>::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += consumed;
+
+        // expression: Option<ExprId> (variable size)
+        let (expression, consumed) = Option::<ExprId>::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += consumed;
+
+        // timestamp: Timestamp (fixed size: 48 bytes)
+        if bytes.len() < offset + 48 {
+            return Err(DecodeError::new("Effect: Input bytes too short for timestamp"));
+        }
+        let timestamp = Timestamp::from_ssz_bytes(&bytes[offset..offset + 48])?;
+        offset += 48;
+
+        // hint: Option<ExprId> (variable size)
+        let (hint, consumed) = Option::<ExprId>::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += consumed;
+
+        Ok((
+            Effect {
+                id,
+                name,
+                domain_id,
+                effect_type,
+                inputs,
+                outputs,
+                expression,
+                timestamp,
+                hint,
+            },
+            offset,
+        ))
     }
 }
 
 impl Decode for Effect {
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        let mut offset = 0;
-        
-        let id = EntityId::from_ssz_bytes(&bytes[offset..])?;
-        offset += id.as_ssz_bytes().len();
-        
-        let name = Str::from_ssz_bytes(&bytes[offset..])?;
-        offset += name.as_ssz_bytes().len();
-        
-        let domain_id = DomainId::from_ssz_bytes(&bytes[offset..])?;
-        offset += domain_id.as_ssz_bytes().len();
-        
-        let effect_type = Str::from_ssz_bytes(&bytes[offset..])?;
-        offset += effect_type.as_ssz_bytes().len();
-        
-        let timestamp = Timestamp::from_ssz_bytes(&bytes[offset..])?;
-        
-        Ok(Effect {
-            id,
-            name,
-            domain_id,
-            effect_type,
-            inputs: Vec::new(), // Simplified for now
-            outputs: Vec::new(), // Simplified for now
-            expression: None,
-            timestamp,
-            resources: Vec::new(),
-            nullifiers: Vec::new(),
-            scoped_by: HandlerId::null(),
-            intent_id: None,
-            source_typed_domain: TypedDomain::default(),
-            target_typed_domain: TypedDomain::default(),
-            cost_model: None,
-            resource_usage_estimate: None,
-            originating_dataflow_instance: None,
-        })
+        let (effect, _) = Self::from_ssz_bytes_with_length(bytes)?;
+        Ok(effect)
     }
 }
 
@@ -280,4 +273,4 @@ impl AsEffect for Effect {
     fn effect_type(&self) -> &Str {
         &self.effect_type
     }
-} 
+}

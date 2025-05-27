@@ -3,20 +3,17 @@
 //! This strategy optimizes based on intent priorities and TypedDomain preferences,
 //! favoring simpler execution paths and current domain efficiency.
 
-use crate::optimization::{OptimizationStrategy, OptimizationContext};
+use super::super::optimization::{OptimizationStrategy, OptimizationContext};
+use crate::optimization::evaluation::{ConfigurationValue, EvaluationConfig, EvaluationMetrics, StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
 use anyhow::Result;
-use causality_types::{
-    core::{
-        id::{EntityId, AsId},
-        str::Str,
-        time::Timestamp,
-    },
-    tel::{
-        optimization::{
-            ResolutionPlan, ScoredPlan, TypedDomain,
-        },
-        cost_model::ResourceUsageEstimate,
-        strategy::{StrategyConfiguration, StrategyMetrics, ConfigurationValue},
+use causality_types::primitive::{
+    ids::{EntityId, DomainId, ExprId, AsIdConverter},
+    string::Str,
+    time::Timestamp,
+};
+use causality_types::graph::{
+    optimization::{
+        ResolutionPlan, ScoredPlan, TypedDomain,
     },
 };
 use std::collections::HashMap;
@@ -42,11 +39,11 @@ impl PriorityBasedStrategy {
         let mut domain_priorities = HashMap::new();
         // Default priorities - can be configured
         domain_priorities.insert(
-            TypedDomain::VerifiableDomain(causality_types::primitive::ids::DomainId::new([0u8; 32])), 
+            TypedDomain::new(DomainId::new([0u8; 32]), Str::from("VerifiableDomain")), 
             10
         );
         domain_priorities.insert(
-            TypedDomain::ServiceDomain(causality_types::primitive::ids::DomainId::new([0u8; 32])), 
+            TypedDomain::new(DomainId::new([0u8; 32]), Str::from("ServiceDomain")), 
             8
         );
         
@@ -128,11 +125,11 @@ impl OptimizationStrategy for PriorityBasedStrategy {
         
         for domain in domains_to_try {
             let plan = ResolutionPlan {
-                plan_id: EntityId::new(rand::random()),
-                intent_bundles: context.pending_intents.clone(),
-                effect_sequence: vec![],
-                dataflow_steps: vec![], // Keep simple for priority-based approach
-                resource_transfers: vec![],
+                plan_id: EntityId::new(rand::random()), // Placeholder for actual plan ID generation
+                intent_bundles: context.pending_intents.iter().map(|id| id.to_id()).collect(),
+                effect_sequence: Vec::new(), // Placeholder
+                dataflow_steps: Vec::new(), // Keep simple for priority-based approach
+                resource_transfers: Vec::new(),
                 target_typed_domain: domain.clone(),
                 estimated_cost: 800, // Lower cost estimate for priority approach
                 estimated_time_ms: 3000, // Faster execution estimate
@@ -180,22 +177,27 @@ impl OptimizationStrategy for PriorityBasedStrategy {
         true // Priority-based strategy works with all domains
     }
     
-    fn get_configuration(&self) -> StrategyConfiguration {
-        self.config.clone()
+    fn get_configuration(&self) -> EvaluationConfig {
+        EvaluationConfig::default() // Convert from StrategyConfiguration if needed
     }
     
-    fn update_configuration(&mut self, config: StrategyConfiguration) -> Result<()> {
-        // Update prefer_current_domain if provided
-        if let Some(ConfigurationValue::Boolean(prefer)) = config.parameters.get(&Str::from("prefer_current_domain")) {
-            self.prefer_current_domain = *prefer;
-        }
-        
-        self.config = config;
+    fn update_configuration(&mut self, config: EvaluationConfig) -> Result<()> {
+        // Update internal configuration based on EvaluationConfig
+        // For now, just update the max evaluation time
+        self.config.max_evaluation_time_ms = config.max_evaluation_time_ms;
         Ok(())
     }
     
-    fn get_metrics(&self) -> StrategyMetrics {
-        self.metrics.clone()
+    fn get_metrics(&self) -> EvaluationMetrics {
+        EvaluationMetrics {
+            total_evaluations: self.metrics.total_evaluations,
+            successful_evaluations: self.metrics.successful_evaluations,
+            failed_evaluations: 0, // Not tracked in StrategyMetrics
+            avg_evaluation_time_ms: self.metrics.avg_evaluation_time_ms,
+            cache_hit_rate: 0.0, // Not tracked in StrategyMetrics
+            domain_performance: HashMap::new(), // Convert if needed
+            last_updated: self.metrics.last_updated,
+        }
     }
     
     fn reset(&mut self) {

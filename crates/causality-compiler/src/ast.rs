@@ -279,7 +279,7 @@ impl ExprHelpers {
     
     /// Create a placeholder expression (for testing/initialization)
     pub fn placeholder() -> Expr {
-        Expr::Const(ValueExpr::Unit)
+        Expr::Const(ValueExpr::Nil)
     }
 
     /// An empty expression (placeholder)

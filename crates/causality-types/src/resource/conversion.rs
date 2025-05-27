@@ -8,10 +8,11 @@ use std::collections::BTreeMap;
 use crate::{
     effect::Effect,
     resource::{Resource, flow::{ResourceFlow, ResourcePattern}},
+    Intent, Handler, Transaction, 
     primitive::{
-        ids::{EntityId, DomainId, ExprId, HandlerId, AsId},
         string::Str,
         time::Timestamp,
+        ids::{EntityId, DomainId, ExprId, AsId},
     },
     expression::{
         value::{ValueExpr, ValueExprMap, ValueExprVec, Number},
@@ -120,16 +121,16 @@ impl ToValueExpr for Effect {
 impl FromValueExpr for Effect {
     fn from_value_expr(expr: &ValueExpr) -> Result<Self, ConversionError> {
         if let ValueExpr::Record(ValueExprMap(map)) = expr {
-            let id = extract_entity_id_from_map(map, "id")?;
-            let name = extract_string_from_map(map, "name")?;
-            let domain_id = extract_domain_id_from_map(map, "domain_id")?;
-            let effect_type = extract_string_from_map(map, "effect_type")?;
+            let id = extract_entity_id(map, "id")?;
+            let name = extract_string(map, "name")?;
+            let domain_id = extract_domain_id(map, "domain_id")?;
+            let effect_type = extract_string(map, "effect_type")?;
             
             let inputs = Vec::new(); 
             let outputs = Vec::new();
             
-            let expression = extract_optional_expr_id_from_map(map, "expression")?;
-            let timestamp = extract_timestamp_from_map(map, "timestamp")?;
+            let expression = extract_optional_expr_id(map, "expression")?;
+            let timestamp = extract_timestamp(map, "timestamp")?;
             
             Ok(Effect {
                 id,
@@ -140,15 +141,7 @@ impl FromValueExpr for Effect {
                 outputs,
                 expression,
                 timestamp,
-                resources: Vec::new(),
-                nullifiers: Vec::new(),
-                scoped_by: HandlerId::new([0u8; 32]),
-                intent_id: None,
-                source_typed_domain: crate::graph::optimization::TypedDomain::default(),
-                target_typed_domain: crate::graph::optimization::TypedDomain::default(),
-                cost_model: None,
-                resource_usage_estimate: None,
-                originating_dataflow_instance: None,
+                hint: None,
             })
         } else {
             Err(ConversionError {
@@ -194,15 +187,7 @@ impl AsResourceData for Effect {
             )],
             expression: None,
             timestamp: Timestamp::now(),
-            resources: Vec::new(),
-            nullifiers: Vec::new(),
-            scoped_by: HandlerId::new([0u8; 32]),
-            intent_id: None,
-            source_typed_domain: crate::graph::optimization::TypedDomain::default(),
-            target_typed_domain: crate::graph::optimization::TypedDomain::default(),
-            cost_model: None,
-            resource_usage_estimate: None,
-            originating_dataflow_instance: None,
+            hint: None,
         })
     }
 }
@@ -238,14 +223,14 @@ impl ToValueExpr for Intent {
 impl FromValueExpr for Intent {
     fn from_value_expr(value: &ValueExpr) -> Result<Self, ConversionError> {
         if let ValueExpr::Record(ValueExprMap(map)) = value {
-            let id = extract_entity_id_from_map(map, "id")?;
-            let name = extract_string_from_map(map, "name")?;
-            let domain_id = extract_domain_id_from_map(map, "domain_id")?;
-            let priority = extract_u32_from_map(map, "priority")?;
-            let inputs = extract_resource_flows_from_map(map, "inputs")?;
-            let outputs = extract_resource_flows_from_map(map, "outputs")?;
-            let expression = extract_optional_expr_id_from_map(map, "expression")?;
-            let timestamp = extract_timestamp_from_map(map, "timestamp")?;
+            let id = extract_entity_id(map, "id")?;
+            let name = extract_string(map, "name")?;
+            let domain_id = extract_domain_id(map, "domain_id")?;
+            let priority = extract_u32(map, "priority")?;
+            let inputs = extract_resource_flows(map, "inputs")?;
+            let outputs = extract_resource_flows(map, "outputs")?;
+            let expression = extract_optional_expr_id(map, "expression")?;
+            let timestamp = extract_timestamp(map, "timestamp")?;
             
             let mut intent = Intent::new(id, name, domain_id, priority)
                 .with_inputs(inputs)
@@ -294,22 +279,22 @@ impl AsResourceData for Intent {
 
 impl ToValueExpr for Handler {
     fn to_value_expr(&self) -> ValueExpr {
-        let mut map = BTreeMap::new();
+        let mut btree_map = BTreeMap::new(); // Use BTreeMap directly
+        // The 'type' field is important for distinguishing this ValueExpr from others
+        btree_map.insert(Str::from("type"), ValueExpr::String(Str::from("handler")));
+        btree_map.insert(Str::from("id"), ValueExpr::String(Str::from(self.id.to_hex())));
+        btree_map.insert(Str::from("name"), ValueExpr::String(self.name.clone()));
+        btree_map.insert(Str::from("domain_id"), ValueExpr::String(Str::from(self.domain_id.to_hex())));
+        btree_map.insert(Str::from("handles_type"), ValueExpr::String(self.handles_type.clone()));
+        btree_map.insert(Str::from("priority"), ValueExpr::Number(Number::new_integer(self.priority as i64)));
         
-        map.insert(Str::from("type"), ValueExpr::String(Str::from("handler")));
-        map.insert(Str::from("id"), ValueExpr::String(Str::from(self.id.to_hex())));
-        map.insert(Str::from("name"), ValueExpr::String(self.name));
-        map.insert(Str::from("domain_id"), ValueExpr::String(Str::from(self.domain_id.to_hex())));
-        map.insert(Str::from("handles_type"), ValueExpr::String(self.handles_type));
-        map.insert(Str::from("priority"), ValueExpr::Number(Number::Integer(self.priority as i64)));
-        
-        if let Some(ref expr) = self.expression {
-            map.insert(Str::from("expression"), ValueExpr::String(Str::from(expr.to_hex())));
+        if let Some(expr_id) = self.expression {
+            btree_map.insert(Str::from("expression"), ValueExpr::String(Str::from(expr_id.to_hex())));
         }
+        // If expression is None, it's omitted from the map
         
-        map.insert(Str::from("timestamp"), ValueExpr::Number(Number::Integer(self.timestamp.wall.0 as i64)));
-        
-        ValueExpr::Record(ValueExprMap(map))
+        btree_map.insert(Str::from("timestamp"), ValueExpr::Number(Number::new_integer(self.timestamp.wall.0 as i64)));
+        ValueExpr::Record(ValueExprMap(btree_map)) // Changed Map to Record
     }
 }
 
@@ -484,6 +469,20 @@ fn extract_domain_id_from_map(map: &BTreeMap<Str, ValueExpr>, key: &str) -> Resu
     }
 }
 
+fn extract_u64_from_map(map: &BTreeMap<Str, ValueExpr>, key: &str) -> Result<u64, ConversionError> {
+    match map.get(&Str::from(key)) {
+        Some(ValueExpr::Number(Number::Integer(i))) => {
+            if *i >= 0 {
+                Ok(*i as u64)
+            } else {
+                Err(ConversionError { message: format!("Integer out of range for u64: {}", i) })
+            }
+        },
+        Some(_) => Err(ConversionError { message: format!("Expected integer for key '{}'", key) }),
+        None => Err(ConversionError { message: format!("Missing key '{}'", key) }),
+    }
+}
+
 fn extract_u32(map: &BTreeMap<Str, ValueExpr>, key: &str) -> Result<u32, ConversionError> {
     match map.get(&Str::from(key)) {
         Some(ValueExpr::Number(Number::Integer(i))) => {
@@ -634,47 +633,6 @@ impl FromValueExpr for ResourcePattern {
     }
 }
 
-fn extract_u64_from_map(map: &BTreeMap<Str, ValueExpr>, key: &str) -> Result<u64, ConversionError> {
-    match map.get(&Str::from(key)) {
-        Some(ValueExpr::Number(Number::Integer(i))) => {
-            if *i >= 0 {
-                Ok(*i as u64)
-            } else {
-                Err(ConversionError { message: format!("Integer out of range for u64: {}", i) })
-            }
-        },
-        Some(_) => Err(ConversionError { message: format!("Expected integer for key '{}'", key) }),
-        None => Err(ConversionError { message: format!("Missing key '{}'", key) }),
-    }
-}
-
-fn extract_u32_from_map(map: &BTreeMap<Str, ValueExpr>, key: &str) -> Result<u32, ConversionError> {
-    match map.get(&Str::from(key)) {
-        Some(ValueExpr::Number(Number::Integer(i))) => {
-            if *i >= 0 && *i <= u32::MAX as i64 {
-                Ok(*i as u32)
-            } else {
-                Err(ConversionError { message: format!("Integer out of range for u32: {}", i) })
-            }
-        },
-        Some(_) => Err(ConversionError { message: format!("Expected integer for key '{}'", key) }),
-        None => Err(ConversionError { message: format!("Missing key '{}'", key) }),
-    }
-}
-
-fn extract_resource_flows_from_map(map: &BTreeMap<Str, ValueExpr>, key: &str) -> Result<Vec<ResourceFlow>, ConversionError> {
-    match map.get(&Str::from(key)) {
-        Some(ValueExpr::List(ValueExprVec(flows))) => {
-            flows.iter()
-                .map(ResourceFlow::from_value_expr)
-                .collect()
-        },
-        Some(_) => Err(ConversionError { message: format!("Expected list for key '{}'", key) }),
-        None => Ok(Vec::new()),
-    }
-}
-
-// Add missing function aliases
 fn extract_entity_id(map: &BTreeMap<Str, ValueExpr>, key: &str) -> Result<EntityId, ConversionError> {
     extract_entity_id_from_map(map, key)
 }
@@ -702,10 +660,16 @@ fn extract_timestamp(map: &BTreeMap<Str, ValueExpr>, key: &str) -> Result<Timest
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitive::ids::{EntityId, DomainId, ExprId, HandlerId};
-    use crate::primitive::time::Timestamp;
-    use crate::primitive::string::Str;
     use crate::effect::Effect;
+    use crate::effect::Intent;
+    use crate::effect::Handler;
+    use crate::effect::Transaction;
+    use crate::primitive::ids::{EntityId, DomainId, ExprId}; 
+    use crate::primitive::string::Str;
+    use crate::primitive::time::Timestamp;
+    use crate::resource::ResourceFlow;
+    use crate::resource::ResourcePattern;
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_effect_conversion_round_trip() {
@@ -719,15 +683,7 @@ mod tests {
             outputs: vec![],
             expression: Some(ExprId::new([3u8; 32])),
             timestamp: Timestamp::now(),
-            resources: vec![],
-            nullifiers: vec![],
-            scoped_by: HandlerId::new([4u8; 32]),
-            intent_id: Some(ExprId::new([5u8; 32])),
-            source_typed_domain: crate::graph::optimization::TypedDomain::default(),
-            target_typed_domain: crate::graph::optimization::TypedDomain::default(),
-            cost_model: None,
-            resource_usage_estimate: None,
-            originating_dataflow_instance: None,
+            hint: None,
         };
 
         // Convert to ValueExpr and back
@@ -755,11 +711,7 @@ mod tests {
             outputs: vec![],
             expression: Some(ExprId::new([3u8; 32])),
             timestamp: Timestamp::now(),
-            optimization_hint: None,
-            compatibility_metadata: vec![],
-            resource_preferences: vec![],
-            target_typed_domain: None,
-            process_dataflow_hint: None,
+            hint: None,
         };
 
         // Convert to ValueExpr and back
@@ -886,11 +838,7 @@ mod tests {
             outputs: vec![],
             expression: None,
             timestamp: Timestamp::now(),
-            optimization_hint: None,
-            compatibility_metadata: vec![],
-            resource_preferences: vec![],
-            target_typed_domain: None,
-            process_dataflow_hint: None,
+            hint: None,
         };
 
         let resource = intent.to_resource(domain_id);

@@ -80,7 +80,7 @@ impl EffectOutput for DeclareTypeEffectOutput {
     }
     
     fn to_value_expr(&self) -> Result<ValueExpr, ConversionError> {
-        Ok(ValueExpr::Unit)
+        Ok(ValueExpr::Nil)
     }
 }
 

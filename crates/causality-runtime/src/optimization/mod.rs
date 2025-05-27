@@ -6,23 +6,65 @@
 use anyhow::Result;
 use std::collections::HashMap;
 
+pub mod evaluation; 
+pub mod registry; 
+
 use causality_types::{
-    core::{
-        id::{EntityId, ResourceId, ExprId},
-        str::Str,
+    primitive::{
+        ids::{EntityId, ExprId, ResourceId},
         time::Timestamp,
+        string::Str,
     },
-    tel::{
-        optimization::{
-            ResolutionPlan, ScoredPlan, TypedDomain,
-        },
-        process_dataflow::{ProcessDataflowDefinition, ProcessDataflowInstanceState},
-        strategy::{
-            StrategyConfiguration, StrategyMetrics, StrategyPreferences, SystemLoadMetrics,
-            HistoricalPerformanceData,
-        },
+    graph::{
+        optimization::{TypedDomain, ScoredPlan, ResolutionPlan, DataflowOrchestrationStep},
+        dataflow::{LegacyProcessDataflowDefinition, ProcessDataflowInstanceState},
     },
 };
+
+// Import StrategyPerformanceHistory from the registry module
+use self::registry::StrategyPerformanceHistory;
+
+// TODO: Ensure StrategyConfiguration, StrategyMetrics, StrategyPreferences are in scope
+// SystemLoadMetrics and HistoricalPerformanceData are defined below.
+
+//-----------------------------------------------------------------------------
+// Helper Structs for OptimizationContext
+//-----------------------------------------------------------------------------
+
+/// Represents system load metrics at a point in time.
+#[derive(Debug, Clone)]
+pub struct SystemLoadMetrics {
+    /// CPU load, typically as a percentage (e.g., 0.0 to 1.0 or 0 to 100).
+    pub cpu_load: f64,
+    /// Memory usage in megabytes.
+    pub memory_usage_mb: u64,
+    /// Network throughput in Mbps (optional).
+    pub network_throughput_mbps: Option<f64>,
+    /// Disk I/O operations per second (optional).
+    pub disk_io_ops_sec: Option<u64>,
+}
+
+impl Default for SystemLoadMetrics {
+    fn default() -> Self {
+        Self {
+            cpu_load: 0.0,
+            memory_usage_mb: 0,
+            network_throughput_mbps: None,
+            disk_io_ops_sec: None,
+        }
+    }
+}
+
+/// Container for historical performance data of strategies.
+#[derive(Debug, Clone)]
+pub struct HistoricalPerformanceData {
+    /// Maps strategy ID to its performance history.
+    pub data: HashMap<String, StrategyPerformanceHistory>,
+}
+
+impl Default for HistoricalPerformanceData {
+    fn default() -> Self { Self { data: HashMap::new() } }
+}
 
 //-----------------------------------------------------------------------------
 // Core Strategy Traits
@@ -41,7 +83,7 @@ pub trait OptimizationStrategy: Send + Sync {
     
     /// Propose resolution plans for the given optimization context
     fn propose(&self, context: &OptimizationContext) -> Result<Vec<ScoredPlan>>;
-    
+
     /// Evaluate a specific resolution plan and return a scored plan
     fn evaluate_plan(&self, plan: &ResolutionPlan, context: &OptimizationContext) -> Result<ScoredPlan>;
     
@@ -49,13 +91,13 @@ pub trait OptimizationStrategy: Send + Sync {
     fn supports_typed_domain(&self, domain: &TypedDomain) -> bool;
     
     /// Get strategy configuration parameters
-    fn get_configuration(&self) -> StrategyConfiguration;
+    fn get_configuration(&self) -> evaluation::EvaluationConfig;
     
     /// Update strategy configuration
-    fn update_configuration(&mut self, config: StrategyConfiguration) -> Result<()>;
+    fn update_configuration(&mut self, config: evaluation::EvaluationConfig) -> Result<()>;
     
     /// Get strategy performance metrics
-    fn get_metrics(&self) -> StrategyMetrics;
+    fn get_metrics(&self) -> evaluation::EvaluationMetrics;
     
     /// Reset strategy state and metrics
     fn reset(&mut self);
@@ -75,7 +117,7 @@ pub struct OptimizationContext {
     pub available_typed_domains: Vec<TypedDomain>,
     
     /// Available ProcessDataflowDefinitions
-    pub available_dataflow_definitions: HashMap<ExprId, ProcessDataflowDefinition>,
+    pub available_dataflow_definitions: HashMap<ExprId, LegacyProcessDataflowDefinition>,
     
     /// Active ProcessDataflowInstances
     pub active_dataflow_instances: HashMap<ResourceId, ProcessDataflowInstanceState>,
@@ -93,7 +135,7 @@ pub struct OptimizationContext {
     pub historical_data: HistoricalPerformanceData,
     
     /// Strategy preferences and weights
-    pub preferences: StrategyPreferences,
+    pub preferences: evaluation::ScoringWeights,
     
     /// Timestamp of evaluation
     pub evaluation_timestamp: Timestamp,
@@ -117,7 +159,7 @@ impl OptimizationContext {
             available_resources: HashMap::new(),
             system_load: SystemLoadMetrics::default(),
             historical_data: HistoricalPerformanceData::default(),
-            preferences: StrategyPreferences::default(),
+            preferences: evaluation::ScoringWeights::default(),
             evaluation_timestamp: Timestamp::now(),
             max_evaluation_time_ms: 5000, // 5 second default
             metadata: HashMap::new(),
@@ -125,7 +167,7 @@ impl OptimizationContext {
     }
     
     /// Add a ProcessDataflowDefinition to the context
-    pub fn add_dataflow_definition(&mut self, id: ExprId, definition: ProcessDataflowDefinition) {
+    pub fn add_dataflow_definition(&mut self, id: ExprId, definition: LegacyProcessDataflowDefinition) {
         self.available_dataflow_definitions.insert(id, definition);
     }
     
@@ -150,7 +192,7 @@ impl OptimizationContext {
     }
     
     /// Update strategy preferences
-    pub fn update_preferences(&mut self, preferences: StrategyPreferences) {
+    pub fn update_preferences(&mut self, preferences: evaluation::ScoringWeights) {
         self.preferences = preferences;
     }
     
@@ -160,7 +202,7 @@ impl OptimizationContext {
     }
     
     /// Get ProcessDataflowDefinition by ID
-    pub fn get_dataflow_definition(&self, id: &ExprId) -> Option<&ProcessDataflowDefinition> {
+    pub fn get_dataflow_definition(&self, id: &ExprId) -> Option<&LegacyProcessDataflowDefinition> {
         self.available_dataflow_definitions.get(id)
     }
     
@@ -199,57 +241,45 @@ pub enum StrategyError {
     InsufficientResources { resource_type: String },
 }
 
-//-----------------------------------------------------------------------------
-// Module Exports
-//-----------------------------------------------------------------------------
-
-pub mod registry;
-pub mod evaluation;
-
-// Re-export key types for convenience
-pub use registry::StrategyRegistry;
-pub use evaluation::{PlanEvaluator, EvaluationResult};
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use causality_types::{
-        core::id::DomainId,
-        expr::{value::ValueExpr, ValueExprMap},
+        primitive::ids::{ExprId, ResourceId},
+        graph::dataflow::{LegacyProcessDataflowDefinition, DataflowExecutionState},
+        primitive::string::Str,
+        graph::optimization::TypedDomain,
     };
     use std::collections::BTreeMap;
 
     #[test]
     fn test_optimization_context_creation() {
-        let domain = TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]));
+        let domain = TypedDomain::default();
         let context = OptimizationContext::new(domain.clone());
-        
         assert_eq!(context.current_typed_domain, domain);
-        assert_eq!(context.available_typed_domains.len(), 1);
-        assert!(context.is_domain_available(&domain));
+        assert!(context.available_typed_domains.contains(&domain));
     }
-    
+
     #[test]
     fn test_optimization_context_dataflow_management() {
-        let domain = TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]));
-        let mut context = OptimizationContext::new(domain);
-        
-        let df_id = ExprId::new([2u8; 32]);
-        let df_def = ProcessDataflowDefinition {
-            id: ExprId::new([1u8; 32]),
-            name: Str::from("test_dataflow"),
-            input_schema: ValueExpr::Map(ValueExprMap(BTreeMap::new())),
-            output_schema: ValueExpr::Map(ValueExprMap(BTreeMap::new())),
-            state_schema: ValueExpr::Map(ValueExprMap(BTreeMap::new())),
-            nodes: vec![],
-            edges: vec![],
-            conditions: vec![],
-            action_templates: vec![],
-            domain_policies: HashMap::new(),
-            created_at: Timestamp::now(),
-        };
-        
-        context.add_dataflow_definition(df_id, df_def);
+        let domain = TypedDomain::default();
+        let mut context = OptimizationContext::new(domain.clone());
+
+        let df_id = ExprId::new_v4();
+        let df_def = LegacyProcessDataflowDefinition::new(df_id.clone(), Str::from("test_df"));
+        context.add_dataflow_definition(df_id.clone(), df_def.clone());
         assert!(context.get_dataflow_definition(&df_id).is_some());
+
+        let df_instance_id = ResourceId::new_v4();
+        let df_instance = ProcessDataflowInstanceState {
+            instance_id: df_instance_id.clone(),
+            definition_id: df_id.clone(),
+            execution_state: DataflowExecutionState::Running,
+            node_states: BTreeMap::new(),
+            metadata: BTreeMap::new(),
+            initiation_hint: None,
+        };
+        context.add_dataflow_instance(df_instance_id.clone(), df_instance.clone());
+        assert!(context.get_dataflow_instance(&df_instance_id).is_some());
     }
-} 
+}

@@ -4,22 +4,20 @@ use std::sync::Arc;
 use anyhow::Result; 
 use uuid::Uuid;
 
-use causality_types::{
-    core::{
-        id::{EntityId, ExprId, ResourceId, NodeId, AsId, DomainId, EffectId},
-        str::Str as CausalityStr, Handler,
+use causality_types::{ // Consolidate imports from causality_types
+    primitive::{
+        ids::{EntityId, ExprId, ResourceId, NodeId, AsId, DomainId, EffectId, EdgeId},
+        string::Str as CausalityStr,
     },
-    tel::{
-        EffectGraph,
-        execution_context::GraphExecutionContext,
+    effect::handler::Handler,
+    graph::{
+        tel::EffectGraph, 
+        execution::GraphExecutionContext,
+        optimization::TypedDomain,
+        dataflow::{ProcessDataflowDefinition, ProcessDataflowNode as DataflowNode},
     },
-    EdgeId,
-    ValueExpr,
+    expression::value::ValueExpr,
 };
-
-// Add optimization imports
-use causality_types::tel::optimization::{TypedDomain};
-use causality_types::tel::process_dataflow::{ProcessDataflowDefinition, DataflowNode};
 
 use crate::tel::interpreter::Interpreter as LispInterpreterService;
 use causality_core::id_from_hex; // Import functions directly
@@ -100,7 +98,7 @@ impl EffectGraphExecutor {
         graph: EffectGraph,
         context: GraphExecutionContext,
     ) -> Result<(EffectGraph, GraphExecutionContext)> {
-        log::info!("Executing TEL graph with {} effects", graph.effects.len());
+        log::info!("Executing TEL graph with {} nodes", graph.nodes.len());
         
         // For now, return the graph and context unchanged
         // In a full implementation, this would execute all effects in the graph
@@ -128,27 +126,27 @@ impl EffectGraphExecutor {
 
     /// Estimate cross-domain transfer cost
     fn estimate_cross_domain_cost(&self, from_domain: &TypedDomain, to_domain: &TypedDomain) -> u64 {
-        match (from_domain, to_domain) {
-            (TypedDomain::VerifiableDomain(_), TypedDomain::ServiceDomain(_)) => 1000,
-            (TypedDomain::ServiceDomain(_), TypedDomain::VerifiableDomain(_)) => 1500,
+        match (from_domain.domain_type.as_str(), to_domain.domain_type.as_str()) {
+            ("VerifiableDomain", "ServiceDomain") => 1000,
+            ("ServiceDomain", "VerifiableDomain") => 1500,
             _ => 100, // Same domain or other combinations
         }
     }
     
     /// Estimate cross-domain transfer time
     fn estimate_cross_domain_time(&self, from_domain: &TypedDomain, to_domain: &TypedDomain) -> u64 {
-        match (from_domain, to_domain) {
-            (TypedDomain::VerifiableDomain(_), TypedDomain::ServiceDomain(_)) => 2000,
-            (TypedDomain::ServiceDomain(_), TypedDomain::VerifiableDomain(_)) => 3000,
+        match (from_domain.domain_type.as_str(), to_domain.domain_type.as_str()) {
+            ("VerifiableDomain", "ServiceDomain") => 2000,
+            ("ServiceDomain", "VerifiableDomain") => 3000,
             _ => 500, // Same domain or other combinations
         }
     }
     
     /// Determine transfer type for cross-domain operations
     fn determine_transfer_type(&self, from_domain: &TypedDomain, to_domain: &TypedDomain) -> TransferType {
-        match (from_domain, to_domain) {
-            (TypedDomain::VerifiableDomain(_), TypedDomain::ServiceDomain(_)) => TransferType::ZkToService,
-            (TypedDomain::ServiceDomain(_), TypedDomain::VerifiableDomain(_)) => TransferType::ServiceToZk,
+        match (from_domain.domain_type.as_str(), to_domain.domain_type.as_str()) {
+            ("VerifiableDomain", "ServiceDomain") => TransferType::ZkToService,
+            ("ServiceDomain", "VerifiableDomain") => TransferType::ServiceToZk,
             _ => TransferType::DirectTransfer,
         }
     }
