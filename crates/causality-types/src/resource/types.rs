@@ -13,9 +13,7 @@ use crate::{
     graph::r#trait::AsNode,
     system::serialization::{Encode, Decode, DecodeError, SimpleSerialize}, 
 };
-use super::{flow::{ResourceFlow, ResourcePattern}, nullifier::Nullifier};
-use sha2::{Sha256, Digest};
-use std::collections::BTreeMap;
+use super::flow::ResourcePattern;
 use std::default::Default;
 
 /// Unified Resource type representing a quantifiable asset or capability

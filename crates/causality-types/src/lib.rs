@@ -54,8 +54,29 @@ pub mod system;
 /// Core primitive type re-exports
 pub mod core {
     pub use crate::primitive::*;
-    pub use crate::resource::*;
-    pub use crate::effect::*;
+    pub use crate::resource::{Resource, ResourceFlow, ResourcePattern, ResourceType, Nullifier, state::ResourceState};
+    pub use crate::effect::{Effect, Intent, Handler, Transaction, Domain, trace::{ExecutionTrace, ZkExecutionMetadata, ZkExecutionTrace}};
+    
+    // Legacy compatibility re-exports
+    pub mod id {
+        pub use crate::primitive::ids::*;
+    }
+    
+    pub mod str {
+        pub use crate::primitive::string::*;
+    }
+    
+    pub mod numeric {
+        pub use crate::primitive::number::*;
+    }
+    
+    pub mod resource {
+        pub use crate::resource::*;
+    }
+    
+    pub mod time {
+        pub use crate::primitive::time::*;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -75,7 +96,7 @@ pub use primitive::{
 // Resource types
 pub use resource::{
     Resource, ResourceFlow, ResourcePattern, ResourceType, Nullifier,
-    conversion::{AsResourceData, ToValueExpr, FromValueExpr, ConversionError},
+    conversion::{AsResourceData, ToValueExpr, FromValueExpr, ConversionError as ResourceConversionError},
     state::ResourceState,
 };
 
@@ -90,8 +111,8 @@ pub use expression::{
 
 // Effect types
 pub use effect::{
-    EffectStruct as Effect, Intent, Handler, Transaction, Domain,
-    core::{EffectHandler, EffectInput, EffectOutput, HandlerError},
+    Effect, Intent, Handler, Transaction, Domain,
+    core::{EffectHandler, EffectInput, EffectOutput, HandlerError, ConversionError as EffectConversionError},
     trace::{ExecutionTrace, ZkExecutionMetadata, ZkExecutionTrace},
 };
 
@@ -148,8 +169,6 @@ pub mod utils {
 pub mod provider {
     pub use crate::system::provider::*;
 }
-
-
 
 /// Legacy tel module - points to graph::tel
 pub mod tel {

@@ -430,9 +430,9 @@ mod tests {
     fn test_lisp_context_config_builder() {
         let config = LispContextConfig::default()
             .with_host_function_profile(Some(Str::new("test_profile")))
-            .with_initial_binding(Str::new("test_var"), ValueExpr::Int(42));
+            .with_initial_binding(Str::new("test_var"), ValueExpr::Number(crate::primitive::number::Number::Integer(42)));
 
         assert_eq!(config.host_function_profile, Some(Str::new("test_profile")));
-        assert_eq!(config.initial_bindings.get(&Str::new("test_var")), Some(&ValueExpr::Int(42)));
+        assert_eq!(config.initial_bindings.get(&Str::new("test_var")), Some(&ValueExpr::Number(crate::primitive::number::Number::Integer(42))));
     }
 } 

@@ -2,9 +2,9 @@
 // This file is independent from the main codebase to avoid compilation issues during transition
 
 use causality_types::{
-    core::str::Str,
-    expr::ast::{Atom, AtomicCombinator, Expr, ExprBox, ExprVec},
-    serialization::{Decode, Encode},
+    primitive::string::Str,
+    expression::ast::{Atom, AtomicCombinator, Expr, ExprBox, ExprVec},
+    system::serialization::{Decode, Encode},
 };
 
 #[test]

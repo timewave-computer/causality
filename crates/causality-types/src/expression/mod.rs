@@ -18,4 +18,4 @@ pub use r#type::*;
 pub use result::*;
 pub use helper::*;
 pub use sexpr::*;
-pub use numeric::*; 
+// pub use numeric::*; // Numeric S-expr exports available but not re-exported by default 

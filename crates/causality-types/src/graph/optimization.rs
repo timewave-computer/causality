@@ -3,12 +3,10 @@
 //! Defines optimization strategies, cost models, and resource usage estimation
 //! for efficient execution of Temporal Effect Language graphs.
 
-use crate::primitive::ids::{EntityId, DomainId, ExprId, ResourceId};
+use crate::primitive::ids::{DomainId, ResourceId};
 use crate::primitive::string::Str;
 use crate::primitive::time::Timestamp;
-use crate::expression::value::ValueExpr;
 use crate::system::serialization::{Encode, Decode, SimpleSerialize, DecodeError};
-use std::collections::BTreeMap;
 
 //-----------------------------------------------------------------------------
 // Optimization Strategy Types (from tel/strategy.rs)

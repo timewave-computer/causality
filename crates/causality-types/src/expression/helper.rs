@@ -78,7 +78,7 @@ impl ValueExprMapHelpers for BTreeMap<Str, ValueExpr> {
         if let Some(value) = self.get(key) {
             match value {
                 ValueExpr::String(s) => Ok(Some(s.as_str().to_string())),
-                ValueExpr::Unit | ValueExpr::Nil => Ok(None),
+                ValueExpr::Nil => Ok(None),
                 _ => Err(ValueConversionError::InvalidType(format!(
                     "Value for key '{}' is not a string",
                     key
@@ -115,7 +115,7 @@ impl ValueExprMapHelpers for BTreeMap<Str, ValueExpr> {
     ) -> Result<Option<&ValueExpr>, ValueConversionError> {
         if let Some(value) = self.get(key) {
             match value {
-                ValueExpr::Unit | ValueExpr::Nil => Ok(None),
+                ValueExpr::Nil => Ok(None),
                 _ => Ok(Some(value)),
             }
         } else {
@@ -130,7 +130,7 @@ impl ValueExprMapHelpers for BTreeMap<Str, ValueExpr> {
         if let Some(value) = self.get(key) {
             match value {
                 ValueExpr::List(list) => Ok(Some(&list[..])),
-                ValueExpr::Unit | ValueExpr::Nil => Ok(None),
+                ValueExpr::Nil => Ok(None),
                 _ => Err(ValueConversionError::InvalidType(format!(
                     "Value for key '{}' is not a list",
                     key
@@ -159,7 +159,7 @@ impl ValueExprMapHelpers for BTreeMap<Str, ValueExpr> {
                         ))
                     })
                 }
-                ValueExpr::Unit | ValueExpr::Nil => Ok(None),
+                ValueExpr::Nil => Ok(None),
                 _ => Err(ValueConversionError::InvalidType(format!(
                     "Value for key '{}' is not a string ID",
                     key

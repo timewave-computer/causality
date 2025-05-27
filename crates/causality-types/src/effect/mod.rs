@@ -4,7 +4,7 @@
 //! domains, and execution traces.
 
 pub mod core;
-pub mod effect;
+pub mod types;
 pub mod intent;
 pub mod handler;
 pub mod transaction;
@@ -18,7 +18,7 @@ pub use core::{
 };
 
 // Use explicit imports to avoid name conflicts
-pub use effect::Effect;
+pub use types::Effect;
 pub use intent::*;
 pub use handler::*;
 pub use transaction::*;

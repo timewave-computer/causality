@@ -3,51 +3,56 @@
 //! Defines process dataflow definitions, nodes, and domain-aware execution
 //! for complex multi-step workflows in the Temporal Effect Language.
 
-use crate::primitive::ids::{EntityId, DomainId, ExprId, ResourceId, NodeId};
+use crate::primitive::ids::{DomainId, ExprId, ResourceId, NodeId};
 use crate::primitive::string::Str;
-use crate::primitive::time::Timestamp;
 use crate::expression::value::ValueExpr;
+use crate::expression::r#type::TypeExpr;
 use crate::graph::optimization::{TypedDomain, ProcessDataflowInitiationHint, ResourceUsageEstimate};
 use crate::system::serialization::{Encode, Decode, SimpleSerialize, DecodeError};
 use std::collections::BTreeMap;
+use std::marker::PhantomData;
 
 //-----------------------------------------------------------------------------
 // Process Dataflow Types
 //-----------------------------------------------------------------------------
 
-/// Definition of a process dataflow workflow
+/// Definition of a process dataflow workflow with type-safe schemas
 #[derive(Debug, Clone, PartialEq)]
-pub struct ProcessDataflowDefinition {
+pub struct ProcessDataflowDefinition<I = (), O = (), S = ()> 
+where
+    I: Clone + PartialEq,
+    O: Clone + PartialEq,
+    S: Clone + PartialEq,
+{
     /// Unique identifier for this dataflow definition
     pub definition_id: ExprId,
     /// Human-readable name
     pub name: Str,
-    /// Input schema definition
-    pub input_schema: BTreeMap<Str, Str>,
-    /// Output schema definition
-    pub output_schema: BTreeMap<Str, Str>,
-    /// State schema definition
-    pub state_schema: BTreeMap<Str, Str>,
     /// Processing nodes in the dataflow
     pub nodes: Vec<ProcessDataflowNode>,
     /// Edges connecting the nodes
     pub edges: Vec<ProcessDataflowEdge>,
     /// Default typed domain for execution
     pub default_typed_domain: TypedDomain,
+    /// Type markers for compile-time schema generation
+    _phantom: PhantomData<(I, O, S)>,
 }
 
-impl ProcessDataflowDefinition {
+impl<I, O, S> ProcessDataflowDefinition<I, O, S>
+where
+    I: Clone + PartialEq,
+    O: Clone + PartialEq, 
+    S: Clone + PartialEq,
+{
     /// Create a new process dataflow definition
     pub fn new(definition_id: ExprId, name: Str) -> Self {
         Self {
             definition_id,
             name,
-            input_schema: BTreeMap::new(),
-            output_schema: BTreeMap::new(),
-            state_schema: BTreeMap::new(),
             nodes: Vec::new(),
             edges: Vec::new(),
             default_typed_domain: TypedDomain::default(),
+            _phantom: PhantomData,
         }
     }
 
@@ -67,6 +72,95 @@ impl ProcessDataflowDefinition {
         self
     }
 }
+
+/// Auto-generated schema support for ProcessDataflowDefinition
+impl<I, O, S> ProcessDataflowDefinition<I, O, S>
+where
+    I: Clone + PartialEq + 'static,
+    O: Clone + PartialEq + 'static,
+    S: Clone + PartialEq + 'static,
+{
+    /// Get the input schema automatically derived from the type parameter I
+    pub fn input_schema() -> TypeExpr 
+    where
+        I: TypeSchema,  // Requires the type to implement TypeSchema
+    {
+        I::type_expr()
+    }
+
+    /// Get the output schema automatically derived from the type parameter O
+    pub fn output_schema() -> TypeExpr 
+    where
+        O: TypeSchema,
+    {
+        O::type_expr()
+    }
+
+    /// Get the state schema automatically derived from the type parameter S
+    pub fn state_schema() -> TypeExpr 
+    where
+        S: TypeSchema,
+    {
+        S::type_expr()
+    }
+
+    /// Get all schemas as a tuple for validation
+    pub fn schemas() -> (TypeExpr, TypeExpr, TypeExpr)
+    where
+        I: TypeSchema,
+        O: TypeSchema,
+        S: TypeSchema,
+    {
+        (Self::input_schema(), Self::output_schema(), Self::state_schema())
+    }
+}
+
+/// Trait for types that can provide TypeExpr schemas (would be auto-derived)
+pub trait TypeSchema {
+    fn type_expr() -> TypeExpr;
+}
+
+// Provide default implementations for common types
+impl TypeSchema for () {
+    fn type_expr() -> TypeExpr {
+        TypeExpr::Unit
+    }
+}
+
+impl TypeSchema for String {
+    fn type_expr() -> TypeExpr {
+        TypeExpr::String
+    }
+}
+
+impl TypeSchema for bool {
+    fn type_expr() -> TypeExpr {
+        TypeExpr::Bool
+    }
+}
+
+impl TypeSchema for i64 {
+    fn type_expr() -> TypeExpr {
+        TypeExpr::Integer
+    }
+}
+
+impl<T: TypeSchema> TypeSchema for Vec<T> {
+    fn type_expr() -> TypeExpr {
+        use crate::expression::r#type::TypeExprBox;
+        TypeExpr::List(TypeExprBox(Box::new(T::type_expr())))
+    }
+}
+
+impl<T: TypeSchema> TypeSchema for Option<T> {
+    fn type_expr() -> TypeExpr {
+        use crate::expression::r#type::TypeExprBox;
+        TypeExpr::Optional(TypeExprBox(Box::new(T::type_expr())))
+    }
+}
+
+/// Legacy non-generic version for compatibility
+pub type LegacyProcessDataflowDefinition = ProcessDataflowDefinition<(), (), ()>;
 
 /// A node in a process dataflow
 #[derive(Debug, Clone, PartialEq)]
@@ -344,9 +438,6 @@ impl Encode for ProcessDataflowDefinition {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&self.definition_id.as_ssz_bytes());
         bytes.extend_from_slice(&self.name.as_ssz_bytes());
-        bytes.extend_from_slice(&self.input_schema.as_ssz_bytes());
-        bytes.extend_from_slice(&self.output_schema.as_ssz_bytes());
-        bytes.extend_from_slice(&self.state_schema.as_ssz_bytes());
         bytes.extend_from_slice(&self.nodes.as_ssz_bytes());
         bytes.extend_from_slice(&self.edges.as_ssz_bytes());
         bytes.extend_from_slice(&self.default_typed_domain.as_ssz_bytes());
@@ -364,15 +455,6 @@ impl Decode for ProcessDataflowDefinition {
         let name = Str::from_ssz_bytes(&bytes[offset..])?;
         offset += name.as_ssz_bytes().len();
         
-        let input_schema = BTreeMap::<Str, Str>::from_ssz_bytes(&bytes[offset..])?;
-        offset += input_schema.as_ssz_bytes().len();
-        
-        let output_schema = BTreeMap::<Str, Str>::from_ssz_bytes(&bytes[offset..])?;
-        offset += output_schema.as_ssz_bytes().len();
-        
-        let state_schema = BTreeMap::<Str, Str>::from_ssz_bytes(&bytes[offset..])?;
-        offset += state_schema.as_ssz_bytes().len();
-        
         let nodes = Vec::<ProcessDataflowNode>::from_ssz_bytes(&bytes[offset..])?;
         offset += nodes.as_ssz_bytes().len();
         
@@ -384,17 +466,159 @@ impl Decode for ProcessDataflowDefinition {
         Ok(ProcessDataflowDefinition {
             definition_id,
             name,
-            input_schema,
-            output_schema,
-            state_schema,
             nodes,
             edges,
             default_typed_domain,
+            _phantom: PhantomData,
         })
     }
 }
 
 impl SimpleSerialize for ProcessDataflowDefinition {}
+
+// SSZ implementations for ProcessDataflowNode
+impl Encode for ProcessDataflowNode {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.node_id.as_ssz_bytes());
+        bytes.extend_from_slice(&self.name.as_ssz_bytes());
+        bytes.extend_from_slice(&self.node_type.as_ssz_bytes());
+        bytes.extend_from_slice(&self.input_ports.as_ssz_bytes());
+        bytes.extend_from_slice(&self.output_ports.as_ssz_bytes());
+        bytes.extend_from_slice(&self.processing_logic.as_ssz_bytes());
+        bytes.extend_from_slice(&self.preferred_domain.as_ssz_bytes());
+        bytes.extend_from_slice(&self.resource_requirements.as_ssz_bytes());
+        bytes
+    }
+}
+
+impl Decode for ProcessDataflowNode {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let mut offset = 0;
+        
+        let node_id = NodeId::from_ssz_bytes(&bytes[offset..])?;
+        offset += node_id.as_ssz_bytes().len();
+        
+        let name = Str::from_ssz_bytes(&bytes[offset..])?;
+        offset += name.as_ssz_bytes().len();
+        
+        let node_type = Str::from_ssz_bytes(&bytes[offset..])?;
+        offset += node_type.as_ssz_bytes().len();
+        
+        let input_ports = Vec::<DataflowPort>::from_ssz_bytes(&bytes[offset..])?;
+        offset += input_ports.as_ssz_bytes().len();
+        
+        let output_ports = Vec::<DataflowPort>::from_ssz_bytes(&bytes[offset..])?;
+        offset += output_ports.as_ssz_bytes().len();
+        
+        let processing_logic = Option::<ExprId>::from_ssz_bytes(&bytes[offset..])?;
+        offset += processing_logic.as_ssz_bytes().len();
+        
+        let preferred_domain = Option::<TypedDomain>::from_ssz_bytes(&bytes[offset..])?;
+        offset += preferred_domain.as_ssz_bytes().len();
+        
+        let resource_requirements = Option::<ResourceUsageEstimate>::from_ssz_bytes(&bytes[offset..])?;
+        
+        Ok(ProcessDataflowNode {
+            node_id,
+            name,
+            node_type,
+            input_ports,
+            output_ports,
+            processing_logic,
+            preferred_domain,
+            resource_requirements,
+        })
+    }
+}
+
+impl SimpleSerialize for ProcessDataflowNode {}
+
+// SSZ implementations for ProcessDataflowEdge
+impl Encode for ProcessDataflowEdge {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.edge_id.as_ssz_bytes());
+        bytes.extend_from_slice(&self.source_node.as_ssz_bytes());
+        bytes.extend_from_slice(&self.source_port.as_ssz_bytes());
+        bytes.extend_from_slice(&self.target_node.as_ssz_bytes());
+        bytes.extend_from_slice(&self.target_port.as_ssz_bytes());
+        bytes.extend_from_slice(&self.transformation.as_ssz_bytes());
+        bytes
+    }
+}
+
+impl Decode for ProcessDataflowEdge {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let mut offset = 0;
+        
+        let edge_id = Str::from_ssz_bytes(&bytes[offset..])?;
+        offset += edge_id.as_ssz_bytes().len();
+        
+        let source_node = NodeId::from_ssz_bytes(&bytes[offset..])?;
+        offset += source_node.as_ssz_bytes().len();
+        
+        let source_port = Str::from_ssz_bytes(&bytes[offset..])?;
+        offset += source_port.as_ssz_bytes().len();
+        
+        let target_node = NodeId::from_ssz_bytes(&bytes[offset..])?;
+        offset += target_node.as_ssz_bytes().len();
+        
+        let target_port = Str::from_ssz_bytes(&bytes[offset..])?;
+        offset += target_port.as_ssz_bytes().len();
+        
+        let transformation = Option::<ExprId>::from_ssz_bytes(&bytes[offset..])?;
+        
+        Ok(ProcessDataflowEdge {
+            edge_id,
+            source_node,
+            source_port,
+            target_node,
+            target_port,
+            transformation,
+        })
+    }
+}
+
+impl SimpleSerialize for ProcessDataflowEdge {}
+
+// SSZ implementations for DataflowPort
+impl Encode for DataflowPort {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.port_id.as_ssz_bytes());
+        bytes.extend_from_slice(&self.name.as_ssz_bytes());
+        bytes.extend_from_slice(&self.data_type.as_ssz_bytes());
+        bytes.extend_from_slice(&self.required.as_ssz_bytes());
+        bytes
+    }
+}
+
+impl Decode for DataflowPort {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let mut offset = 0;
+        
+        let port_id = Str::from_ssz_bytes(&bytes[offset..])?;
+        offset += port_id.as_ssz_bytes().len();
+        
+        let name = Str::from_ssz_bytes(&bytes[offset..])?;
+        offset += name.as_ssz_bytes().len();
+        
+        let data_type = Str::from_ssz_bytes(&bytes[offset..])?;
+        offset += data_type.as_ssz_bytes().len();
+        
+        let required = bool::from_ssz_bytes(&bytes[offset..])?;
+        
+        Ok(DataflowPort {
+            port_id,
+            name,
+            data_type,
+            required,
+        })
+    }
+}
+
+impl SimpleSerialize for DataflowPort {}
 
 // TODO: Additional serialization implementations would be needed for other types
 // but are omitted here for brevity. In a full implementation, all types would

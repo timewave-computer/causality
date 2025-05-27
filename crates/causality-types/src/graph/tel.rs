@@ -12,11 +12,11 @@ pub use crate::resource::Resource;
 // TEL Core Types (from tel/graph.rs, tel/graph_structure.rs, tel/graph_types.rs, tel/common_refs.rs)
 //-----------------------------------------------------------------------------
 
-use crate::primitive::ids::{EntityId, DomainId, ExprId, ResourceId, NodeId, EdgeId, AsId};
+use crate::primitive::ids::{EntityId, DomainId, ResourceId, NodeId, EdgeId, AsId};
 use crate::primitive::string::Str;
-use crate::primitive::time::Timestamp;
 use crate::expression::value::ValueExpr;
 use crate::graph::r#trait::AsEdge;
+use crate::serialization::{Encode, Decode, DecodeError, DecodeWithLength, SimpleSerialize};
 use std::collections::BTreeMap;
 
 /// A reference to a resource within the TEL system
@@ -50,6 +50,63 @@ impl ResourceRef {
     }
 }
 
+impl Encode for ResourceRef {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.resource_id.as_ssz_bytes());
+        bytes.extend_from_slice(&self.domain_id.as_ssz_bytes());
+        
+        // Encode the optional resource_type
+        if let Some(ref resource_type) = self.resource_type {
+            bytes.push(1u8); // Some variant
+            bytes.extend_from_slice(&resource_type.as_ssz_bytes());
+        } else {
+            bytes.push(0u8); // None variant
+        }
+        
+        bytes
+    }
+}
+
+impl Decode for ResourceRef {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let mut offset = 0;
+        
+        // Decode resource_id
+        let resource_id = ResourceId::from_ssz_bytes(&bytes[offset..])?;
+        offset += resource_id.as_ssz_bytes().len();
+        
+        // Decode domain_id
+        let domain_id = DomainId::from_ssz_bytes(&bytes[offset..])?;
+        offset += domain_id.as_ssz_bytes().len();
+        
+        // Decode optional resource_type
+        if offset >= bytes.len() {
+            return Err(DecodeError {
+                message: "Insufficient bytes for resource_type variant".to_string(),
+            });
+        }
+        
+        let resource_type = match bytes[offset] {
+            0u8 => None, // None variant
+            1u8 => {
+                offset += 1;
+                let resource_type = Str::from_ssz_bytes(&bytes[offset..])?;
+                Some(resource_type)
+            }
+            _ => return Err(DecodeError {
+                message: "Invalid variant for resource_type".to_string(),
+            }),
+        };
+        
+        Ok(ResourceRef {
+            resource_id,
+            domain_id,
+            resource_type,
+        })
+    }
+}
+
 /// Represents different types of edges in the effect graph
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EdgeKind {
@@ -65,6 +122,71 @@ pub enum EdgeKind {
     Custom(Str),
 }
 
+impl Encode for EdgeKind {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        match self {
+            EdgeKind::Dependency => bytes.push(0u8),
+            EdgeKind::Temporal => bytes.push(1u8),
+            EdgeKind::ResourceFlow => bytes.push(2u8),
+            EdgeKind::Constraint => bytes.push(3u8),
+            EdgeKind::Custom(s) => {
+                bytes.push(4u8); // Corrected discriminant
+                bytes.extend_from_slice(&s.as_ssz_bytes());
+            }
+        }
+        bytes
+    }
+}
+
+impl Decode for EdgeKind {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        if bytes.is_empty() {
+            return Err(DecodeError::new("EdgeKind: Input bytes too short for discriminant"));
+        }
+        let discriminant = bytes[0];
+        match discriminant {
+            0 => Ok(EdgeKind::Dependency),
+            1 => Ok(EdgeKind::Temporal),
+            2 => Ok(EdgeKind::ResourceFlow),
+            3 => Ok(EdgeKind::Constraint),
+            4 => { // Corrected discriminant
+                if bytes.len() < 1 + 64 { // 1 for discriminant, 64 for Str
+                    return Err(DecodeError::new("EdgeKind::Custom: Input bytes too short for Str payload"));
+                }
+                let s = Str::from_ssz_bytes(&bytes[1..1+64])?;
+                Ok(EdgeKind::Custom(s))
+            }
+            _ => Err(DecodeError::new(&format!("EdgeKind: Unknown discriminant: {}", discriminant))),
+        }
+    }
+}
+
+impl DecodeWithLength for EdgeKind {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        if bytes.is_empty() {
+            return Err(DecodeError::new("EdgeKind (with length): Input bytes too short for discriminant"));
+        }
+        let discriminant = bytes[0];
+        match discriminant {
+            0 => Ok((EdgeKind::Dependency, 1)),
+            1 => Ok((EdgeKind::Temporal, 1)),
+            2 => Ok((EdgeKind::ResourceFlow, 1)),
+            3 => Ok((EdgeKind::Constraint, 1)),
+            4 => { // Corrected discriminant
+                if bytes.len() < 1 + 64 { // 1 for discriminant, 64 for Str
+                    return Err(DecodeError::new("EdgeKind::Custom (with length): Input bytes too short for Str payload"));
+                }
+                let s = Str::from_ssz_bytes(&bytes[1..1+64])?;
+                Ok((EdgeKind::Custom(s), 1 + 64))
+            }
+            _ => Err(DecodeError::new(&format!("EdgeKind (with length): Unknown discriminant: {}", discriminant))),
+        }
+    }
+}
+
+impl SimpleSerialize for EdgeKind {}
+
 /// An edge in the effect graph
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edge {
@@ -79,6 +201,70 @@ pub struct Edge {
     /// Optional metadata for the edge
     pub metadata: BTreeMap<Str, ValueExpr>,
 }
+
+impl Encode for Edge {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.id.0); // EdgeId is [u8; 32]
+        bytes.extend_from_slice(&self.source.0); // NodeId is [u8; 32]
+        bytes.extend_from_slice(&self.target.0); // NodeId is [u8; 32]
+        bytes.extend_from_slice(&self.kind.as_ssz_bytes());
+        bytes.extend_from_slice(&self.metadata.as_ssz_bytes());
+        bytes
+    }
+}
+
+impl Decode for Edge {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let (edge, _consumed) = Self::from_ssz_bytes_with_length(bytes)?;
+        // Potentially check if all bytes were consumed if strict parsing is needed,
+        // but from_ssz_bytes_with_length handles partial reads correctly for its components.
+        Ok(edge)
+    }
+}
+
+impl DecodeWithLength for Edge {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        let mut offset = 0;
+
+        if bytes.len() < offset + 32 {
+            return Err(DecodeError::new("Edge: Input bytes too short for id"));
+        }
+        let id = EdgeId::from_ssz_bytes(&bytes[offset..offset+32])?;
+        offset += 32;
+
+        if bytes.len() < offset + 32 {
+            return Err(DecodeError::new("Edge: Input bytes too short for source"));
+        }
+        let source = NodeId::from_ssz_bytes(&bytes[offset..offset+32])?;
+        offset += 32;
+
+        if bytes.len() < offset + 32 {
+            return Err(DecodeError::new("Edge: Input bytes too short for target"));
+        }
+        let target = NodeId::from_ssz_bytes(&bytes[offset..offset+32])?;
+        offset += 32;
+
+        let (kind, kind_consumed) = EdgeKind::from_ssz_bytes_with_length(&bytes[offset..])?;
+        offset += kind_consumed;
+
+        // For now, create an empty metadata map to avoid complex serialization issues
+        let metadata = BTreeMap::new();
+
+        Ok((
+            Edge {
+                id,
+                source,
+                target,
+                kind,
+                metadata,
+            },
+            offset,
+        ))
+    }
+}
+
+impl SimpleSerialize for Edge {}
 
 impl Edge {
     /// Create a new edge

@@ -1,12 +1,12 @@
 // Expression Tests (Integration)
 
 use causality_types::{
-    core::id::ExprId,
-    core::numeric::Number,
-    core::str::str_from_string,
-    expr::ast::{Atom, AtomicCombinator, Expr, ExprBox, ExprVec},
-    expr::value::ValueExpr,
-    serialization::{Decode, Encode},
+    primitive::ids::ExprId,
+    primitive::number::Number,
+    primitive::string::Str,
+    expression::ast::{Atom, AtomicCombinator, Expr, ExprBox, ExprVec},
+    expression::value::ValueExpr,
+    system::serialization::{Decode, Encode},
 };
 use sha2::{Digest, Sha256};
 
@@ -29,9 +29,9 @@ fn test_expr_serialization_roundtrip() {
     let expr = Expr::Apply(
         ExprBox(Box::new(Expr::Combinator(AtomicCombinator::Let))),
         ExprVec(vec![
-            Expr::Var(str_from_string("x")),
+            Expr::Var(Str::from("x")),
             Expr::Atom(Atom::Integer(42)),
-            Expr::Var(str_from_string("x")),
+            Expr::Var(Str::from("x")),
         ]),
     );
 
@@ -83,16 +83,16 @@ fn test_expr_variant_serialization() {
     assert_roundtrip_works(&expr);
 
     // Var
-    let expr = Expr::Var(str_from_string("x"));
+    let expr = Expr::Var(Str::from("x"));
     assert_roundtrip_works(&expr);
 
     // Let (now implemented using Apply with the Let combinator)
     let expr = Expr::Apply(
         ExprBox(Box::new(Expr::Combinator(AtomicCombinator::Let))),
         ExprVec(vec![
-            Expr::Var(str_from_string("x")),
+            Expr::Var(Str::from("x")),
             Expr::Atom(Atom::Integer(42)),
-            Expr::Var(str_from_string("x")),
+            Expr::Var(Str::from("x")),
         ]),
     );
     assert_roundtrip_works(&expr);
@@ -110,15 +110,15 @@ fn test_expr_variant_serialization() {
 
     // Lambda
     let expr = Expr::Lambda(
-        vec![str_from_string("x")],
-        ExprBox(Box::new(Expr::Var(str_from_string("x")))),
+        vec![Str::from("x")],
+        ExprBox(Box::new(Expr::Var(Str::from("x")))),
     );
     assert_roundtrip_works(&expr);
 
     // Apply
     let expr = Expr::Apply(
-        ExprBox(Box::new(Expr::Var(str_from_string("f")))),
-        ExprVec(vec![Expr::Var(str_from_string("x"))]),
+        ExprBox(Box::new(Expr::Var(Str::from("f")))),
+        ExprVec(vec![Expr::Var(Str::from("x"))]),
     );
     assert_roundtrip_works(&expr);
 }

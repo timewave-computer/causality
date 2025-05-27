@@ -302,9 +302,6 @@ impl DecodeWithLength for ValueExprRef {
     Ord,
 )]
 pub enum ValueExpr {
-    /// Unit value (void/nil)
-    Unit,
-
     /// Alias for Unit to maintain compatibility
     Nil,
 
@@ -422,17 +419,16 @@ impl Encode for ValueExpr {
     fn as_ssz_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         match self {
-            ValueExpr::Unit => bytes.push(0),
-            ValueExpr::Nil => bytes.push(1),
-            ValueExpr::Bool(b) => { bytes.push(2); bytes.extend(b.as_ssz_bytes()); }
-            ValueExpr::String(s) => { bytes.push(3); bytes.extend(s.as_ssz_bytes()); }
-            ValueExpr::Number(n) => { bytes.push(4); bytes.extend(n.as_ssz_bytes()); }
-            ValueExpr::List(l) => { bytes.push(5); bytes.extend(l.as_ssz_bytes()); }
-            ValueExpr::Map(m) => { bytes.push(6); bytes.extend(m.as_ssz_bytes()); }
-            ValueExpr::Record(r) => { bytes.push(7); bytes.extend(r.as_ssz_bytes()); }
-            ValueExpr::Ref(r) => { bytes.push(8); bytes.extend(r.as_ssz_bytes()); }
+            ValueExpr::Nil => bytes.push(0),
+            ValueExpr::Bool(b) => { bytes.push(1); bytes.extend(b.as_ssz_bytes()); }
+            ValueExpr::String(s) => { bytes.push(2); bytes.extend(s.as_ssz_bytes()); }
+            ValueExpr::Number(n) => { bytes.push(3); bytes.extend(n.as_ssz_bytes()); }
+            ValueExpr::List(l) => { bytes.push(4); bytes.extend(l.as_ssz_bytes()); }
+            ValueExpr::Map(m) => { bytes.push(5); bytes.extend(m.as_ssz_bytes()); }
+            ValueExpr::Record(r) => { bytes.push(6); bytes.extend(r.as_ssz_bytes()); }
+            ValueExpr::Ref(r) => { bytes.push(7); bytes.extend(r.as_ssz_bytes()); }
             ValueExpr::Lambda{ params, body_expr_id, captured_env } => {
-                bytes.push(9);
+                bytes.push(8);
                 bytes.extend(params.as_ssz_bytes());
                 bytes.extend(body_expr_id.as_ssz_bytes());
                 bytes.extend(captured_env.as_ssz_bytes());
@@ -449,22 +445,21 @@ impl Decode for ValueExpr {
         let variant = bytes[0];
         let mut offset = 1;
         match variant {
-            0 => Ok(ValueExpr::Unit),
-            1 => Ok(ValueExpr::Nil),
-            2 => Ok(ValueExpr::Bool(bool::from_ssz_bytes(&bytes[offset..])?)),
-            3 => Ok(ValueExpr::String(Str::from_ssz_bytes(&bytes[offset..])?)),
-            4 => Ok(ValueExpr::Number(Number::from_ssz_bytes(&bytes[offset..])?)),
-            5 => Ok(ValueExpr::List(ValueExprVec::from_ssz_bytes(&bytes[offset..])?)),
-            6 => Ok(ValueExpr::Map(ValueExprMap::from_ssz_bytes(&bytes[offset..])?)),
-            7 => Ok(ValueExpr::Record(ValueExprMap::from_ssz_bytes(&bytes[offset..])?)),
-            8 => Ok(ValueExpr::Ref(ValueExprRef::from_ssz_bytes(&bytes[offset..])?)),
-            9 => {
+            0 => Ok(ValueExpr::Nil),
+            1 => Ok(ValueExpr::Bool(bool::from_ssz_bytes(&bytes[offset..])?)),
+            2 => Ok(ValueExpr::String(Str::from_ssz_bytes(&bytes[offset..])?)),
+            3 => Ok(ValueExpr::Number(Number::from_ssz_bytes(&bytes[offset..])?)),
+            4 => Ok(ValueExpr::List(ValueExprVec::from_ssz_bytes(&bytes[offset..])?)),
+            5 => Ok(ValueExpr::Map(ValueExprMap::from_ssz_bytes(&bytes[offset..])?)),
+            6 => Ok(ValueExpr::Record(ValueExprMap::from_ssz_bytes(&bytes[offset..])?)),
+            7 => Ok(ValueExpr::Ref(ValueExprRef::from_ssz_bytes(&bytes[offset..])?)),
+            8 => {
                 let params = Vec::<Str>::from_ssz_bytes(&bytes[offset..])?;
                 offset += params.as_ssz_bytes().len();
                 let body_expr_id = ExprId::from_ssz_bytes(&bytes[offset..])?;
                 offset += body_expr_id.as_ssz_bytes().len();
                 let captured_env = ValueExprMap::from_ssz_bytes(&bytes[offset..])?;
-                Ok(ValueExpr::Lambda{ params, body_expr_id, captured_env })
+                Ok(ValueExpr::Lambda { params, body_expr_id, captured_env })
             }
             _ => Err(DecodeError{message: format!("Invalid ValueExpr variant: {}", variant)}),
         }
@@ -482,37 +477,36 @@ impl DecodeWithLength for ValueExpr {
         
         let variant = bytes[0];
         match variant {
-            0 => Ok((ValueExpr::Unit, 1)),
-            1 => Ok((ValueExpr::Nil, 1)),
-            2 => {
+            0 => Ok((ValueExpr::Nil, 1)),
+            1 => {
                 let (value, consumed) = bool::from_ssz_bytes_with_length(&bytes[1..])?;
                 Ok((ValueExpr::Bool(value), 1 + consumed))
             }
-            3 => {
+            2 => {
                 let (value, consumed) = Str::from_ssz_bytes_with_length(&bytes[1..])?;
                 Ok((ValueExpr::String(value), 1 + consumed))
             }
-            4 => {
+            3 => {
                 let (value, consumed) = Number::from_ssz_bytes_with_length(&bytes[1..])?;
                 Ok((ValueExpr::Number(value), 1 + consumed))
             }
-            5 => {
+            4 => {
                 let (value, consumed) = ValueExprVec::from_ssz_bytes_with_length(&bytes[1..])?;
                 Ok((ValueExpr::List(value), 1 + consumed))
             }
-            6 => {
+            5 => {
                 let (value, consumed) = ValueExprMap::from_ssz_bytes_with_length(&bytes[1..])?;
                 Ok((ValueExpr::Map(value), 1 + consumed))
             }
-            7 => {
+            6 => {
                 let (value, consumed) = ValueExprMap::from_ssz_bytes_with_length(&bytes[1..])?;
                 Ok((ValueExpr::Record(value), 1 + consumed))
             }
-            8 => {
+            7 => {
                 let (value, consumed) = ValueExprRef::from_ssz_bytes_with_length(&bytes[1..])?;
                 Ok((ValueExpr::Ref(value), 1 + consumed))
             }
-            9 => {
+            8 => {
                 // Lambda variant
                 let mut offset = 1;
                 
@@ -703,13 +697,13 @@ mod tests {
     #[test]
     fn test_value_expr_primitive_creation() {
         // Test creating primitive ValueExpr types
-        let nil = ValueExpr::Unit;
+        let nil = ValueExpr::Nil;
         let boolean = ValueExpr::Bool(true);
         let integer = ValueExpr::Number(crate::primitive::number::Number::Integer(42));
         let string = ValueExpr::String(Str::from("test string"));
         
         // Verify type and content
-        assert!(matches!(nil, ValueExpr::Unit));
+        assert!(matches!(nil, ValueExpr::Nil));
         assert!(matches!(boolean, ValueExpr::Bool(true)));
         assert!(matches!(integer, ValueExpr::Number(_)));
         assert!(matches!(string, ValueExpr::String(_)));

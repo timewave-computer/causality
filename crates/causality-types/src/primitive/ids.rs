@@ -56,15 +56,26 @@ pub trait AsIdConverter<T: AsId> {
 
 // Define a macro to generate ID type structs to avoid repetition
 macro_rules! define_id_type {
-    ($(#[$attr:meta])* $name:ident) => {
-        $(#[$attr])*
+    ($name:ident) => {
         #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-        #[repr(C)]
         pub struct $name(pub [u8; 32]);
 
         impl $name {
             /// Create a new ID from the given byte array
             pub fn new(bytes: [u8; 32]) -> Self {
+                Self(bytes)
+            }
+            
+            /// Create a random ID for testing purposes
+            #[cfg(test)]
+            pub fn random() -> Self {
+                use sha2::{Digest, Sha256};
+                let mut hasher = Sha256::new();
+                hasher.update(b"random_id");
+                hasher.update(&std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos().to_le_bytes());
+                let result = hasher.finalize();
+                let mut bytes = [0u8; 32];
+                bytes.copy_from_slice(&result);
                 Self(bytes)
             }
         }

@@ -385,13 +385,13 @@ impl Default for CompiledTegBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitive::ids::EntityId;
+
 
     #[test]
     fn test_compiled_subgraph() {
         let mut subgraph = CompiledSubgraph::new();
-        let node_id = NodeId::new(EntityId::new([1u8; 32]));
-        let edge_id = EdgeId::new(EntityId::new([2u8; 32]));
+        let node_id = NodeId::new([1u8; 32]);
+        let edge_id = EdgeId::new([2u8; 32]);
 
         subgraph.add_node(node_id);
         subgraph.add_edge(edge_id);

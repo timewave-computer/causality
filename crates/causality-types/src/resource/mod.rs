@@ -3,7 +3,7 @@
 //! Resource definitions, conversions, state management, nullifiers,
 //! resource flows, and resource nodes.
 
-pub mod resource;
+pub mod types;
 pub mod conversion;
 pub mod state;
 pub mod nullifier;
@@ -11,7 +11,7 @@ pub mod flow;
 pub mod node;
 
 // Re-exports for convenience
-pub use resource::*;
+pub use types::*;
 pub use conversion::*;
 pub use state::*;
 pub use nullifier::*;
@@ -25,7 +25,7 @@ pub use crate::effect::{Effect, Intent, Handler, Transaction};
 #[cfg(test)]
 pub mod resource_tests;
 
-use crate::system::serialization::{SimpleSerialize, Encode, Decode, DecodeError};
+use crate::serialization::{SimpleSerialize, Encode, Decode, DecodeError};
 
 /// Type of resources in the system
 #[derive(Debug, Clone, PartialEq, Eq)]

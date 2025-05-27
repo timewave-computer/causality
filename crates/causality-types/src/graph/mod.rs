@@ -36,12 +36,11 @@ pub mod type_markers;
 // Re-exports from existing modules
 pub use error::GraphError;
 
-// Re-exports for convenience (new structure)
-pub use element::*;
-pub use subgraph::*;
-pub use registry::*;
-pub use r#trait::*;
-pub use tel::*;
-pub use execution::*;
-pub use optimization::*;
-pub use dataflow::*;
+// Re-exports for convenience (new structure) - explicit to avoid ambiguity
+pub use element::{Node, Edge as GraphEdge, TypeId};
+pub use subgraph::Subgraph;
+pub use r#trait::{AsEdge, AsNode};
+pub use tel::{EffectGraph, Edge, EdgeKind, ResourceRef};
+pub use execution::{ExecutionContext, ExecutionMode, ResourceRef as ExecutionResourceRef, ProcessDataflowInstanceState};
+pub use optimization::{OptimizationStrategy, TypedDomain};
+pub use dataflow::{ProcessDataflowDefinition, ProcessDataflowNode, ProcessDataflowEdge, DomainAwareNode, DataflowPort};

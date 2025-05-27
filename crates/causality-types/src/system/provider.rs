@@ -528,8 +528,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
+
+    #[cfg(feature = "tokio")]
     #[tokio::test]
     async fn test_memory_registry() {
         let mut registry = MemoryRegistry::<String>::new();
@@ -557,6 +558,7 @@ mod tests {
         assert!(!registry.contains("service1").await.unwrap());
     }
 
+    #[cfg(feature = "tokio")]
     #[tokio::test]
     async fn test_memory_store() {
         let mut store = MemoryStore::<String, i32>::new();

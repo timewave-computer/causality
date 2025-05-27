@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::core::resource::Resource;
+    use crate::resource::Resource;
     use crate::primitive::ids::{EntityId, DomainId, AsId};
     use crate::primitive::string::Str;
-    use crate::core::time::Timestamp;
+    use crate::primitive::time::Timestamp;
     
 
     fn create_test_resource() -> Resource {
@@ -16,7 +16,7 @@ mod tests {
             timestamp: Timestamp {
                 domain_id: DomainId::new([2u8; 32]),
                 logical: 0,
-                wall: crate::core::time::WallClock(1000000),
+                wall: crate::primitive::time::WallClock(1000000),
             },
         }
     }
@@ -41,7 +41,7 @@ mod tests {
             timestamp: Timestamp {
                 domain_id: DomainId::new([2u8; 32]),
                 logical: 0,
-                wall: crate::core::time::WallClock(1000000),
+                wall: crate::primitive::time::WallClock(1000000),
             },
         };
         
@@ -54,7 +54,7 @@ mod tests {
             timestamp: Timestamp {
                 domain_id: DomainId::new([2u8; 32]),
                 logical: 0,
-                wall: crate::core::time::WallClock(1000000),
+                wall: crate::primitive::time::WallClock(1000000),
             },
         };
         

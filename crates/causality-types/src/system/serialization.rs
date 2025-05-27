@@ -204,10 +204,10 @@ impl DecodeWithLength for Str {
 
 impl SimpleSerialize for Str {}
 
-// Boolean implementation
+// Bool
 impl Encode for bool {
     fn as_ssz_bytes(&self) -> Vec<u8> {
-        vec![*self as u8]
+        vec![if *self { 1u8 } else { 0u8 }]
     }
 }
 
@@ -222,7 +222,7 @@ impl Decode for bool {
             0 => Ok(false),
             1 => Ok(true),
             _ => Err(DecodeError {
-                message: format!("Invalid bool value: {}", bytes[0]),
+                message: format!("Invalid bool value {}", bytes[0]),
             }),
         }
     }
@@ -237,83 +237,148 @@ impl DecodeWithLength for bool {
 
 impl SimpleSerialize for bool {}
 
-// Unsigned integer implementations
-macro_rules! impl_uint {
-    ($t:ty, $size:expr) => {
-        impl Encode for $t {
-            fn as_ssz_bytes(&self) -> Vec<u8> {
-                self.to_le_bytes().to_vec()
-            }
-        }
-
-        impl Decode for $t {
-            fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-                if bytes.len() != $size {
-                    return Err(DecodeError {
-                        message: format!("Invalid {} length {}, expected {}", stringify!($t), bytes.len(), $size),
-                    });
-                }
-                let mut arr = [0u8; $size];
-                arr.copy_from_slice(bytes);
-                Ok(<$t>::from_le_bytes(arr))
-            }
-        }
-
-        impl DecodeWithLength for $t {
-            fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
-                let value = Self::from_ssz_bytes(bytes)?;
-                Ok((value, $size))
-            }
-        }
-
-        impl SimpleSerialize for $t {}
-    };
+// u8
+impl Encode for u8 {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        vec![*self]
+    }
 }
 
-impl_uint!(u8, 1);
-impl_uint!(u16, 2);
-impl_uint!(u32, 4);
-impl_uint!(u64, 8);
-impl_uint!(u128, 16);
-
-// Signed integer implementations
-macro_rules! impl_int {
-    ($t:ty, $size:expr) => {
-        impl Encode for $t {
-            fn as_ssz_bytes(&self) -> Vec<u8> {
-                self.to_le_bytes().to_vec()
-            }
+impl Decode for u8 {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        if bytes.len() != 1 {
+            return Err(DecodeError {
+                message: format!("Invalid u8 length {}, expected 1", bytes.len()),
+            });
         }
-
-        impl Decode for $t {
-            fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-                if bytes.len() != $size {
-                    return Err(DecodeError {
-                        message: format!("Invalid {} length {}, expected {}", stringify!($t), bytes.len(), $size),
-                    });
-                }
-                let mut arr = [0u8; $size];
-                arr.copy_from_slice(bytes);
-                Ok(<$t>::from_le_bytes(arr))
-            }
-        }
-
-        impl DecodeWithLength for $t {
-            fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
-                let value = Self::from_ssz_bytes(bytes)?;
-                Ok((value, $size))
-            }
-        }
-
-        impl SimpleSerialize for $t {}
-    };
+        Ok(bytes[0])
+    }
 }
 
-impl_int!(i8, 1);
-impl_int!(i16, 2);
-impl_int!(i32, 4);
-impl_int!(i64, 8);
-impl_int!(i128, 16);
+impl SimpleSerialize for u8 {}
+
+impl DecodeWithLength for u8 {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        let value = Self::from_ssz_bytes(bytes)?;
+        Ok((value, 1))
+    }
+}
+
+// u32
+impl Encode for u32 {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        self.to_le_bytes().to_vec()
+    }
+}
+
+impl Decode for u32 {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        if bytes.len() != 4 {
+            return Err(DecodeError {
+                message: format!("Invalid u32 length {}, expected 4", bytes.len()),
+            });
+        }
+        let mut array = [0u8; 4];
+        array.copy_from_slice(bytes);
+        Ok(u32::from_le_bytes(array))
+    }
+}
+
+impl SimpleSerialize for u32 {}
+
+impl DecodeWithLength for u32 {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        let value = Self::from_ssz_bytes(bytes)?;
+        Ok((value, 4))
+    }
+}
+
+// u64
+impl Encode for u64 {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        self.to_le_bytes().to_vec()
+    }
+}
+
+impl Decode for u64 {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        if bytes.len() != 8 {
+            return Err(DecodeError {
+                message: format!("Invalid u64 length {}, expected 8", bytes.len()),
+            });
+        }
+        let mut array = [0u8; 8];
+        array.copy_from_slice(bytes);
+        Ok(u64::from_le_bytes(array))
+    }
+}
+
+impl SimpleSerialize for u64 {}
+
+impl DecodeWithLength for u64 {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        let value = Self::from_ssz_bytes(bytes)?;
+        Ok((value, 8))
+    }
+}
+
+// i32
+impl Encode for i32 {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        self.to_le_bytes().to_vec()
+    }
+}
+
+impl Decode for i32 {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        if bytes.len() != 4 {
+            return Err(DecodeError {
+                message: format!("Invalid i32 length {}, expected 4", bytes.len()),
+            });
+        }
+        let mut array = [0u8; 4];
+        array.copy_from_slice(bytes);
+        Ok(i32::from_le_bytes(array))
+    }
+}
+
+impl SimpleSerialize for i32 {}
+
+impl DecodeWithLength for i32 {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        let value = Self::from_ssz_bytes(bytes)?;
+        Ok((value, 4))
+    }
+}
+
+// i64
+impl Encode for i64 {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        self.to_le_bytes().to_vec()
+    }
+}
+
+impl Decode for i64 {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        if bytes.len() != 8 {
+            return Err(DecodeError {
+                message: format!("Invalid i64 length {}, expected 8", bytes.len()),
+            });
+        }
+        let mut array = [0u8; 8];
+        array.copy_from_slice(bytes);
+        Ok(i64::from_le_bytes(array))
+    }
+}
+
+impl SimpleSerialize for i64 {}
+
+impl DecodeWithLength for i64 {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        let value = Self::from_ssz_bytes(bytes)?;
+        Ok((value, 8))
+    }
+}
 
 // Vec implementation
 impl<T: Encode> Encode for Vec<T> {
@@ -332,7 +397,7 @@ impl<T: Encode> Encode for Vec<T> {
     }
 }
 
-impl<T: Decode + Encode> Decode for Vec<T> {
+impl<T: Decode + Encode + 'static> Decode for Vec<T> {
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         if bytes.len() < 8 {
             return Err(DecodeError {
@@ -340,7 +405,7 @@ impl<T: Decode + Encode> Decode for Vec<T> {
             });
         }
         
-        let len = u64::from_ssz_bytes(&bytes[0..8])? as usize;
+        let len = <u64 as Decode>::from_ssz_bytes(&bytes[0..8])? as usize;
         let mut result = Vec::with_capacity(len);
         let mut offset = 8;
         
@@ -351,17 +416,44 @@ impl<T: Decode + Encode> Decode for Vec<T> {
                 });
             }
             
-            // This approach requires knowing how many bytes each element consumes
-            // For fixed-size types, we can use T::from_ssz_bytes directly
-            // For variable-size types, we need a different approach
+            // Use DecodeWithLength if available, otherwise fallback to manual calculation
             let remaining_bytes = &bytes[offset..];
-            let item = T::from_ssz_bytes(remaining_bytes)?;
             
-            // Calculate how many bytes this item consumed
-            let item_bytes = item.as_ssz_bytes();
-            offset += item_bytes.len();
-            
-            result.push(item);
+            // For primitive types, we can calculate the size directly
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                if remaining_bytes.len() < 4 {
+                    return Err(DecodeError {
+                        message: "Not enough bytes for u32".to_string(),
+                    });
+                }
+                let item = T::from_ssz_bytes(&remaining_bytes[..4])?;
+                offset += 4;
+                result.push(item);
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                if remaining_bytes.len() < 8 {
+                    return Err(DecodeError {
+                        message: "Not enough bytes for u64".to_string(),
+                    });
+                }
+                let item = T::from_ssz_bytes(&remaining_bytes[..8])?;
+                offset += 8;
+                result.push(item);
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<bool>() {
+                if remaining_bytes.len() < 1 {
+                    return Err(DecodeError {
+                        message: "Not enough bytes for bool".to_string(),
+                    });
+                }
+                let item = T::from_ssz_bytes(&remaining_bytes[..1])?;
+                offset += 1;
+                result.push(item);
+            } else {
+                // For other types, use the fallback method (less efficient but safe)
+                let item = T::from_ssz_bytes(remaining_bytes)?;
+                let item_bytes = item.as_ssz_bytes();
+                offset += item_bytes.len();
+                result.push(item);
+            }
         }
         
         Ok(result)
@@ -376,7 +468,7 @@ impl<T: DecodeWithLength> DecodeWithLength for Vec<T> {
             });
         }
         
-        let len = u64::from_ssz_bytes(&bytes[0..8])? as usize;
+        let len = <u64 as Decode>::from_ssz_bytes(&bytes[0..8])? as usize;
         let mut result = Vec::with_capacity(len);
         let mut offset = 8;
         
@@ -471,7 +563,7 @@ impl<T: Encode, const N: usize> Encode for [T; N] {
     }
 }
 
-impl<T: Decode + Default + Copy, const N: usize> Decode for [T; N] {
+impl<T: Decode + Default + Copy + Encode, const N: usize> Decode for [T; N] {
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         let mut result = [T::default(); N];
         let mut offset = 0;
@@ -505,7 +597,7 @@ impl<K: Encode + Ord, V: Encode> Encode for BTreeMap<K, V> {
     }
 }
 
-impl<K: Decode + Ord, V: Decode> Decode for BTreeMap<K, V> {
+impl<K: Decode + Ord + Encode, V: Decode + Encode> Decode for BTreeMap<K, V> {
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         if bytes.len() < 8 {
             return Err(DecodeError {
@@ -513,7 +605,7 @@ impl<K: Decode + Ord, V: Decode> Decode for BTreeMap<K, V> {
             });
         }
         
-        let len = u64::from_ssz_bytes(&bytes[0..8])? as usize;
+        let len = <u64 as Decode>::from_ssz_bytes(&bytes[0..8])? as usize;
         let mut result = BTreeMap::new();
         let mut offset = 8;
         
@@ -532,6 +624,57 @@ impl<K: Decode + Ord, V: Decode> Decode for BTreeMap<K, V> {
         }
         
         Ok(result)
+    }
+}
+
+impl<K: Decode + Ord + Encode, V: Decode + Encode> DecodeWithLength for BTreeMap<K, V> {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        if bytes.len() < 4 { // Length of count
+            return Err(DecodeError::new("BTreeMap (with length): Input bytes too short for count"));
+        }
+        let mut count_bytes = [0u8; 4];
+        count_bytes.copy_from_slice(&bytes[0..4]);
+        let count = u32::from_le_bytes(count_bytes) as usize;
+
+        let mut map = BTreeMap::new();
+        let mut current_offset = 4; // Start after count
+
+        for _ in 0..count {
+            // Key length
+            if bytes.len() < current_offset + 4 {
+                return Err(DecodeError::new("BTreeMap (with length): Input bytes too short for key length"));
+            }
+            let mut key_len_bytes = [0u8; 4];
+            key_len_bytes.copy_from_slice(&bytes[current_offset..current_offset + 4]);
+            let key_len = u32::from_le_bytes(key_len_bytes) as usize;
+            current_offset += 4;
+
+            // Key
+            if bytes.len() < current_offset + key_len {
+                return Err(DecodeError::new("BTreeMap (with length): Input bytes too short for key"));
+            }
+            let key = K::from_ssz_bytes(&bytes[current_offset..current_offset + key_len])?;
+            current_offset += key_len;
+
+            // Value length
+            if bytes.len() < current_offset + 4 {
+                return Err(DecodeError::new("BTreeMap (with length): Input bytes too short for value length"));
+            }
+            let mut value_len_bytes = [0u8; 4];
+            value_len_bytes.copy_from_slice(&bytes[current_offset..current_offset + 4]);
+            let value_len = u32::from_le_bytes(value_len_bytes) as usize;
+            current_offset += 4;
+
+            // Value
+            if bytes.len() < current_offset + value_len {
+                return Err(DecodeError::new("BTreeMap (with length): Input bytes too short for value"));
+            }
+            let value = V::from_ssz_bytes(&bytes[current_offset..current_offset + value_len])?;
+            current_offset += value_len;
+
+            map.insert(key, value);
+        }
+        Ok((map, current_offset))
     }
 }
 
@@ -564,7 +707,7 @@ where
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         let mut offset = 0;
         // Deserialize the number of elements
-        let len = u64::from_ssz_bytes(&bytes[offset..offset + std::mem::size_of::<u64>()])? as usize;
+        let len = <u64 as Decode>::from_ssz_bytes(&bytes[offset..offset + std::mem::size_of::<u64>()])? as usize;
         offset += std::mem::size_of::<u64>();
 
         let mut map = HashMap::with_capacity(len);
@@ -610,7 +753,7 @@ impl Decode for String {
             });
         }
         
-        let len = u64::from_ssz_bytes(&bytes[0..8])? as usize;
+        let len = <u64 as Decode>::from_ssz_bytes(&bytes[0..8])? as usize;
         
         if bytes.len() < 8 + len {
             return Err(DecodeError {
@@ -626,6 +769,32 @@ impl Decode for String {
 }
 
 impl SimpleSerialize for String {}
+
+// Tuple implementations for (A, B)
+impl<A: Encode, B: Encode> Encode for (A, B) {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.0.as_ssz_bytes());
+        bytes.extend_from_slice(&self.1.as_ssz_bytes());
+        bytes
+    }
+}
+
+impl<A: Decode + Encode, B: Decode + Encode> Decode for (A, B) {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let mut offset = 0;
+        
+        let a = A::from_ssz_bytes(&bytes[offset..])?;
+        let a_bytes = a.as_ssz_bytes();
+        offset += a_bytes.len();
+        
+        let b = B::from_ssz_bytes(&bytes[offset..])?;
+        
+        Ok((a, b))
+    }
+}
+
+impl<A: Encode + Decode + SimpleSerialize, B: Encode + Decode + SimpleSerialize> SimpleSerialize for (A, B) {}
 
 // &str implementation
 impl Encode for &str {

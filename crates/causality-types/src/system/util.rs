@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{Result, Context};
 
 use crate::system::serialization::{Decode, Encode, SimpleSerialize, DecodeError};
-use crate::system::provider::AsRegistry;
+// use crate::system::provider::AsRegistry; // Available but not currently used
 
 //-----------------------------------------------------------------------------
 // Identifiable and Resolvable Traits
@@ -460,7 +460,7 @@ pub use crate::primitive::trait_::*;
 pub use crate::primitive::time::{AsClock, AsTimestampGenerator};
 
 // Re-export transformation utilities
-pub use transform::*;
+// pub use transform::*; // Transform utilities available but not re-exported by default
 
 /// Legacy transformation module for backward compatibility
 pub mod transform {

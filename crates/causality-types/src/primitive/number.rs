@@ -35,9 +35,25 @@ impl Number {
         Number::Decimal(rational)
     }
     
-    /// Create a decimal from a string representation like "123.456"
+    /// Parse a number from a decimal string like "3.14" or a rational string like "157/50"
     pub fn from_decimal_str(s: &str) -> Result<Self, String> {
-        if let Some(dot_pos) = s.find('.') {
+        // Check if it's a rational fraction (contains '/')
+        if let Some(slash_pos) = s.find('/') {
+            let numerator_str = &s[..slash_pos];
+            let denominator_str = &s[slash_pos + 1..];
+            
+            let numerator: i64 = numerator_str.parse()
+                .map_err(|_| format!("Invalid numerator: {}", numerator_str))?;
+            let denominator: u64 = denominator_str.parse()
+                .map_err(|_| format!("Invalid denominator: {}", denominator_str))?;
+            
+            if denominator == 0 {
+                return Err("Division by zero in rational".to_string());
+            }
+            
+            Ok(Number::new_decimal(numerator, denominator))
+        } else if let Some(dot_pos) = s.find('.') {
+            // Handle decimal notation like "3.14"
             let integer_part = &s[..dot_pos];
             let fractional_part = &s[dot_pos + 1..];
             
@@ -53,6 +69,7 @@ impl Number {
             
             Ok(Number::new_decimal(numerator, denominator))
         } else {
+            // Handle pure integer
             let integer_val: i64 = s.parse()
                 .map_err(|_| format!("Invalid integer: {}", s))?;
             Ok(Number::new_integer(integer_val))

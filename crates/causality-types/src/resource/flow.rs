@@ -2,7 +2,7 @@
 
 use crate::primitive::ids::DomainId;
 use crate::primitive::string::Str;
-use crate::system::serialization::{Encode, Decode, DecodeError, SimpleSerialize};
+use crate::serialization::{Encode, Decode, DecodeError, SimpleSerialize};
 use std::collections::BTreeMap;
 
 /// ResourceFlow represents the flow of resources between components

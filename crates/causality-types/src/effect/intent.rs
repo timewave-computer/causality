@@ -394,15 +394,15 @@ impl Decode for Intent {
         }
         
         let process_dataflow_hint = if bytes[offset] == 1 {
-            offset += 1;
-            Some(ProcessDataflowInitiationHint::from_ssz_bytes(&bytes[offset..])?)
+            // offset += 1; // Not needed since we don't use offset after this
+            Some(ProcessDataflowInitiationHint::from_ssz_bytes(&bytes[offset + 1..])?)
         } else {
-            offset += 1;
+            // offset += 1; // Not needed since we don't use offset after this
             None
         };
         
         if let Some(ref hint) = process_dataflow_hint {
-            offset += hint.as_ssz_bytes().len();
+            let _ = hint.as_ssz_bytes().len(); // Consume the length but don't update offset since it's not used
         }
         
         Ok(Intent {

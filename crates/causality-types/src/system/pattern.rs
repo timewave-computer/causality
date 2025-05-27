@@ -315,13 +315,13 @@ pub mod communication {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitive::ids::EntityId;
+
 
     #[test]
     fn test_message_creation() {
-        let msg_id = MessageId::new(EntityId::new([1u8; 32]));
-        let target_domain = DomainId::new(EntityId::new([2u8; 32]));
-        let source_domain = DomainId::new(EntityId::new([3u8; 32]));
+        let msg_id = MessageId::new([1u8; 32]);
+        let target_domain = DomainId::new([2u8; 32]);
+        let source_domain = DomainId::new([3u8; 32]);
         
         let message = Message::new(
             msg_id,
@@ -342,8 +342,8 @@ mod tests {
     fn test_domain_pattern_matching() {
         use matching::*;
         
-        let target_domain = DomainId::new(EntityId::new([1u8; 32]));
-        let source_domain = DomainId::new(EntityId::new([2u8; 32]));
+        let target_domain = DomainId::new([1u8; 32]);
+        let source_domain = DomainId::new([2u8; 32]);
         
         let pattern = DomainPattern {
             target_domain_id: Some(target_domain),
@@ -351,7 +351,7 @@ mod tests {
         };
         
         let message = Message::new(
-            MessageId::new(EntityId::new([3u8; 32])),
+            MessageId::new([3u8; 32]),
             target_domain,
             Some(source_domain),
             None,
@@ -361,9 +361,9 @@ mod tests {
         assert!(pattern.matches(&message));
         
         // Test non-matching message
-        let different_target = DomainId::new(EntityId::new([4u8; 32]));
+        let different_target = DomainId::new([4u8; 32]);
         let non_matching_message = Message::new(
-            MessageId::new(EntityId::new([5u8; 32])),
+            MessageId::new([5u8; 32]),
             different_target,
             Some(source_domain),
             None,
@@ -377,7 +377,7 @@ mod tests {
     fn test_capability_permissions() {
         use capability::*;
         
-        let domain_id = DomainId::new(EntityId::new([1u8; 32]));
+        let domain_id = DomainId::new([1u8; 32]);
         let capability = Capability::new(
             domain_id,
             None,
@@ -385,7 +385,7 @@ mod tests {
         );
         
         let message = Message::new(
-            MessageId::new(EntityId::new([2u8; 32])),
+            MessageId::new([2u8; 32]),
             domain_id,
             None,
             None,
@@ -403,9 +403,9 @@ mod tests {
         use communication::*;
         
         let topic = Str::new("test_topic");
-        let publisher = DomainId::new(EntityId::new([1u8; 32]));
-        let subscriber1 = DomainId::new(EntityId::new([2u8; 32]));
-        let subscriber2 = DomainId::new(EntityId::new([3u8; 32]));
+        let publisher = DomainId::new([1u8; 32]);
+        let subscriber1 = DomainId::new([2u8; 32]);
+        let subscriber2 = DomainId::new([3u8; 32]);
         
         let mut pubsub = PubSub::new(topic, publisher);
         

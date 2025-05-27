@@ -4,14 +4,8 @@
 //! in the Causality system, enabling interoperability with OCaml as specified
 //! in the ml_work/serialization.md document.
 
-use crate::primitive::ids::{ExprId, ValueExprId, AsId};
-use crate::primitive::number::Number;
-use crate::primitive::string::Str;
-use crate::expression::ast::{Atom, AtomicCombinator, Expr, ExprBox, ExprVec};
-use crate::expression::value::{ValueExpr, ValueExprBox, ValueExprMap, ValueExprRef, ValueExprVec};
-use anyhow::{anyhow, Error, Result};
+use anyhow::{anyhow, Result};
 use lexpr::{parse as lexpr_parse, print as lexpr_print, Value as SexprValue};
-use std::collections::BTreeMap;
 
 /// Trait for types that can be converted to S-expressions
 pub trait ToSexpr {
@@ -126,15 +120,18 @@ pub fn map_sexpr(items: Vec<(String, SexprValue)>) -> SexprValue {
 
 /// Helper to extract a field from a tagged S-expression
 pub fn extract_field<'a>(sexpr: &'a SexprValue, field_name: &str) -> Result<&'a SexprValue> {
-    let elements = get_list_elements(sexpr)
-        .ok_or_else(|| anyhow!("Expected a list"))?;
+    // Handle lexpr list iteration
+    if sexpr.is_list() {
+        let mut iter = sexpr.list_iter().ok_or_else(|| anyhow!("Expected a list"))?;
         
-    for element in elements {
-        if let Some(pair) = get_list_elements(element) {
-            if pair.len() == 2 {
-                if let Some(key) = get_keyword_value(&pair[0]) {
-                    if key == field_name {
-                        return Ok(&pair[1]);
+        while let Some(element) = iter.next() {
+            if element.is_list() {
+                let mut pair_iter = element.list_iter().ok_or_else(|| anyhow!("Expected a list"))?;
+                if let (Some(key), Some(value)) = (pair_iter.next(), pair_iter.next()) {
+                    if let Some(keyword) = get_keyword_value(&key) {
+                        if keyword == field_name {
+                            return Ok(value);
+                        }
                     }
                 }
             }
@@ -145,12 +142,12 @@ pub fn extract_field<'a>(sexpr: &'a SexprValue, field_name: &str) -> Result<&'a 
 
 /// Helper to get tag name from a tagged S-expression
 pub fn get_tag(sexpr: &SexprValue) -> Result<&str> {
-    let elements = get_list_elements(sexpr)
-        .ok_or_else(|| anyhow!("Expected a list"))?;
-        
-    if !elements.is_empty() {
-        if let Some(tag) = get_symbol_value(&elements[0]) {
-            return Ok(tag);
+    if sexpr.is_list() {
+        let mut iter = sexpr.list_iter().ok_or_else(|| anyhow!("Expected a list"))?;
+        if let Some(first) = iter.next() {
+            if let Some(tag) = first.as_symbol() {
+                return Ok(tag);
+            }
         }
     }
     Err(anyhow!("S-expression is not a tagged list"))
@@ -182,7 +179,7 @@ mod tests {
     fn test_tagged_sexpr() {
         let sexpr = tagged_sexpr("person", vec![
             SexprValue::string("Alice"),
-            SexprValue::number(30),
+            SexprValue::Number(30.into()),
         ]);
         
         let expected = "(person \"Alice\" 30)";
@@ -194,7 +191,7 @@ mod tests {
     fn test_map_sexpr() {
         let map = map_sexpr(vec![
             ("name".to_string(), SexprValue::string("Alice")),
-            ("age".to_string(), SexprValue::number(30)),
+            ("age".to_string(), SexprValue::Number(30.into())),
         ]);
         
         // The map entries should be sorted by key
@@ -207,11 +204,11 @@ mod tests {
     fn test_extract_field() {
         let map = map_sexpr(vec![
             ("name".to_string(), SexprValue::string("Alice")),
-            ("age".to_string(), SexprValue::number(30)),
+            ("age".to_string(), SexprValue::Number(30.into())),
         ]);
         
         let name = extract_field(&map, "name").unwrap();
-        assert_eq!(name.as_string().unwrap(), "Alice");
+        assert_eq!(name.as_str().unwrap(), "Alice");
         
         let age = extract_field(&map, "age").unwrap();
         assert_eq!(age.as_i64().unwrap(), 30);
@@ -224,13 +221,14 @@ mod tests {
     fn test_get_tag() {
         let sexpr = tagged_sexpr("person", vec![
             SexprValue::string("Alice"),
-            SexprValue::number(30),
+            SexprValue::Number(30.into()),
         ]);
         
         let tag = get_tag(&sexpr).unwrap();
         assert_eq!(tag, "person");
         
-        let result = get_tag(&SexprValue::string("not a list"));
+        let not_a_list_sexpr = SexprValue::string("not a list");
+        let result = get_tag(&not_a_list_sexpr);
         assert!(result.is_err());
     }
 } 

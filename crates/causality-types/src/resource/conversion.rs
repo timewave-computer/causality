@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 use crate::{
-    effect::{Effect, Intent, Handler, Transaction},
+    effect::Effect,
     resource::{Resource, flow::{ResourceFlow, ResourcePattern}},
     primitive::{
         ids::{EntityId, DomainId, ExprId, HandlerId, AsId},
@@ -93,7 +93,7 @@ impl FromValueExpr for Resource {
 // Effect Conversions
 //-----------------------------------------------------------------------------
 
-impl ToValueExpr for crate::effect::effect::Effect {
+impl ToValueExpr for Effect {
     fn to_value_expr(&self) -> ValueExpr {
         let mut map = BTreeMap::new();
         map.insert(Str::from("id"), ValueExpr::String(Str::from(self.id.to_hex())));
@@ -117,7 +117,7 @@ impl ToValueExpr for crate::effect::effect::Effect {
     }
 }
 
-impl FromValueExpr for crate::effect::effect::Effect {
+impl FromValueExpr for Effect {
     fn from_value_expr(expr: &ValueExpr) -> Result<Self, ConversionError> {
         if let ValueExpr::Record(ValueExprMap(map)) = expr {
             let id = extract_entity_id_from_map(map, "id")?;
@@ -131,7 +131,7 @@ impl FromValueExpr for crate::effect::effect::Effect {
             let expression = extract_optional_expr_id_from_map(map, "expression")?;
             let timestamp = extract_timestamp_from_map(map, "timestamp")?;
             
-            Ok(crate::effect::effect::Effect {
+            Ok(Effect {
                 id,
                 name,
                 domain_id,
@@ -158,7 +158,7 @@ impl FromValueExpr for crate::effect::effect::Effect {
     }
 }
 
-impl AsResourceData for crate::effect::effect::Effect {
+impl AsResourceData for Effect {
     fn to_resource(&self, domain_id: DomainId) -> Resource {
         Resource::new(
             self.id,
@@ -177,7 +177,7 @@ impl AsResourceData for crate::effect::effect::Effect {
             });
         }
         
-        Ok(crate::effect::effect::Effect {
+        Ok(Effect {
             id: EntityId::new([0u8; 32]),
             name: Str::from("converted_effect"),
             domain_id: DomainId::new([0u8; 32]),
@@ -702,9 +702,10 @@ fn extract_timestamp(map: &BTreeMap<Str, ValueExpr>, key: &str) -> Result<Timest
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitive::ids::{EntityId, DomainId, ExprId};
-    use crate::core::time::Timestamp;
+    use crate::primitive::ids::{EntityId, DomainId, ExprId, HandlerId};
+    use crate::primitive::time::Timestamp;
     use crate::primitive::string::Str;
+    use crate::effect::Effect;
 
     #[test]
     fn test_effect_conversion_round_trip() {

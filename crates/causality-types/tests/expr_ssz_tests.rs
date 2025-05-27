@@ -1,9 +1,9 @@
 // Tests for SSZ serialization of Expr types
 
 use causality_types::{
-    core::str::Str,
-    expr::ast::{Atom, AtomicCombinator, Expr, ExprBox, ExprVec},
-    serialization::{Decode, Encode},
+    primitive::string::Str,
+    expression::ast::{Atom, AtomicCombinator, Expr, ExprBox, ExprVec},
+    system::serialization::{Decode, Encode},
 };
 
 #[test]
