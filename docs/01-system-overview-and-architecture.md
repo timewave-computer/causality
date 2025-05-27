@@ -4,26 +4,25 @@ The Causality framework represents a resource-based computational model designed
 
 ## Foundational Concepts
 
-The framework operates on several key abstractions that work together to create a coherent computational model. Resources serve as the fundamental unit of data and computation, representing anything from simple data structures to complex computational processes. Each Resource carries a unique content-addressed identifier, ensuring that identical content produces identical identifiers across the system.
+The framework operates on several key abstractions that work together to create a coherent computational model. Resources serve as the fundamental unit of data and computation. Each Resource uniquely binds its state (data, represented by a `ValueExpr` and identified by a `ValueExprId`) to the specific logic (`Expr`, identified by an `ExprId`) that governs its behavior and transformations, all under a single, content-addressed `ResourceId`.
 
 Intents express desired state changes within the system. Rather than imperative commands, Intents describe what transformation should occur, allowing the system to determine the optimal execution strategy. This declarative approach enables sophisticated optimization and reasoning about computational workflows.
 
-Effects represent the actual state changes that occur when Intents are processed. They capture both the transformation logic and the resulting state changes, providing a complete audit trail of system evolution. Effects are scoped by Handlers, which define the execution context and capabilities available during processing.
+Effects represent the actual state changes that occur when Intents are processed. They capture both the transformation logic and the resulting state changes, providing a complete audit trail of system evolution. Effects are scoped by Handlers, which define the execution context and capabilities available during processing. Importantly, core system operations and entities like Effects and Handlers are often themselves modeled as Resources, adhering to the same principles of content-addressing and verifiable logic. For complex, multi-step processes, the system can utilize `ProcessDataflowBlock`s, which are declarative Lisp S-expressions defining sequences of operations, orchestrated by Handlers.
 
 ## Core Type System
 
-The type system centers around several primary structures that encode the framework's computational model. The Resource type contains an EntityId for content addressing, a human-readable name, a DomainId indicating its execution context, a resource type string for categorization, a quantity field for quantifiable resources, and a timestamp marking its creation or last modification.
+The type system centers around the Resource as its core primitive. A Resource is a content-addressed entity that encapsulates:
+-   Its unique `id` (`EntityId`), which serves as a content-addressed identifier ensuring that Resources with identical content receive identical identifiers.
+-   A human-readable `name` (`Str`) for semantic meaning, which does not affect the content-addressed identifier.
+-   A `domain_id` (`DomainId`) that identifies the `TypedDomain` to which the Resource belongs, dictating its execution context.
+-   A `resource_type` (`Str`) that categorizes the Resource (e.g., "token", "data_object").
+-   A `quantity` (`u64`) for quantifiable resources.
+-   A `timestamp` (`Timestamp`) marking its creation or last modification, primarily for temporal ordering.
 
-```rust
-pub struct Resource {
-    pub id: EntityId,
-    pub name: Str,
-    pub domain_id: DomainId,
-    pub resource_type: Str,
-    pub quantity: u64,
-    pub timestamp: Timestamp,
-}
-```
+All concrete data and state held within Resources are represented by `ValueExpr` instances. These provide a consistent and canonical way to structure information. `ValueExpr`s are serialized using SSZ (Simple Serialize), and the cryptographic hash of this serialized form (its Merkle root) yields a `ValueExprId`, ensuring data is uniquely referenced and verifiable by its content. This system is designed to be ZK-friendly, for example, by using specific integer types and avoiding non-deterministic types like floating-point numbers.
+
+Behavior, validation rules, and transformation logic are defined by `Expr` instances (Expressions). `Expr`s are Lisp Abstract Syntax Trees (ASTs) representing executable logic. This "code-as-data" approach means logic itself can be treated as data. Like `ValueExpr`s, `Expr` ASTs are SSZ-serialized, and their Merkle root produces an `ExprId`.
 
 Intent structures describe desired transformations through input and output ResourceFlow specifications. They include priority levels for execution ordering, optional expressions for complex logic, and optimization hints to guide the execution strategy. The framework supports various typed domains, allowing Intents to specify their preferred execution environment.
 
@@ -31,38 +30,34 @@ Effects capture the complete context of a transformation, including the source a
 
 ## Content Addressing System
 
-Content addressing forms the backbone of the framework's identity system. Every entity receives an identifier derived from its content, ensuring that identical data structures produce identical identifiers regardless of when or where they are created. This property enables powerful deduplication, caching, and verification capabilities.
+Content addressing forms the backbone of the framework's identity and verifiability. Every critical entity—`Resource`, `ValueExpr`, and `Expr`—receives an identifier (`ResourceId`, `ValueExprId`, and `ExprId` respectively) that is the Merkle root of its canonical SSZ (Simple Serialize) representation. This ensures that identical content produces identical identifiers and allows for robust deduplication, caching, and verification across the system.
 
-The system uses 32-byte identifiers generated through cryptographic hashing of the entity's serialized content. EntityId, DomainId, NodeId, and other identifier types all follow this pattern, providing type safety while maintaining the underlying content-addressed property.
+To provide authenticated and verifiable storage for these SSZ-identified entities, the system employs Sparse Merkle Trees (SMTs). Each entity's SSZ Merkle root (its ID) serves as its unique key within a global SMT, which maps this key to the entity's serialized data or relevant metadata. SMTs are authenticated data structures, meaning any data stored within them comes with a cryptographic proof (a Merkle proof) of its inclusion (or non-inclusion) relative to the SMT's root hash. This is crucial for data integrity, partial state disclosure, and ZK verification, as ZK circuits can operate on compact SMT proofs and SSZ roots instead of entire data structures.
 
 Nullifiers extend the content addressing system to handle resource consumption. When a Resource is consumed, a Nullifier proves that the consumption occurred without revealing the original Resource content. This mechanism maintains system integrity, while allowing for privacy preserving operations in the future.
 
 ## Expression and Computation Model
 
-The framework includes a Lisp-based expression system for defining computational logic. Expressions can represent simple values, complex data structures, function applications, and combinator-based computations. The system supports both traditional Lisp constructs and specialized combinators optimized for resource manipulation.
+The framework includes a Lisp-based expression system for defining computational logic. `Expr` instances (Lisp ASTs, identified by their `ExprId`) define the behavior, validation rules, and transformation logic associated with Resources or system operations.
 
-Atomic combinators provide primitive operations for arithmetic, logic, data structure manipulation, and system interaction. These combinators can be composed into complex expressions that define transformation logic for Intents and Effects. The combinator approach enables both functional programming patterns and efficient execution optimization.
+A Lisp-flavored interpreter is responsible for evaluating these `Expr`s. To ensure deterministic and consistent evaluation across the system and over time, the system can use an `InterpreterId`, representing a commitment to a specific version or configuration of the interpreter (including its set of atomic operations/combinators and their semantics). The interpreter takes an `Expr` and an evaluation context (which might include a Resource's `ValueExpr` state) and produces a result, typically another `ValueExpr`.
 
-The expression system integrates with the broader framework through ExprId references, allowing complex computational logic to be stored as Resources and referenced from Intents and Effects. This approach enables code reuse, versioning, and sophisticated dependency management.
+The system favors a combinator-based approach within `Expr`s. Atomic combinators (pre-defined host functions with fixed semantics) provide primitive operations for arithmetic, logic, data structure manipulation, and system interaction. These are composed to build complex logic, promoting determinism and verifiability.
+
+The expression system integrates with the broader framework through `ExprId` references, allowing complex computational logic to be stored as Resources (or associated with them) and referenced from Intents and Effects. This approach enables code reuse, versioning, and sophisticated dependency management.
 
 ## Domain and Execution Model
 
-Typed domains provide execution contexts with specific capabilities and constraints. Verifiable domains support zero-knowledge proof generation and deterministic execution, making them suitable for privacy-preserving computations. Service domains allow external API access and non-deterministic operations, enabling integration with existing systems.
+Typed Domains provide execution contexts with specific capabilities, constraints, and trust assumptions, identified by `DomainId`s. A Resource's `primary_domain_id` indicates its native environment and dictates its fundamental execution characteristics (e.g., whether its state transitions are ZK-provable). Its `contextual_scope_domain_ids` can grant its logic visibility or interaction capabilities with other specified domains.
 
-Compute domains optimize for computational intensity and parallel execution, providing high-performance environments for data processing workloads. Each domain type offers different trade-offs between performance, verifiability, and integration capabilities.
+Two primary types of domains are:
+-   `VerifiableDomain`: Represents an environment where state transitions are expected to be ZK-provable. `Expr` logic for Resources primarily homed on a `VerifiableDomain` is designed for ZK circuits (deterministic, bounded, etc.).
+-   `ServiceDomain`: Represents an interface to an external service or a set of off-chain operations that are not directly ZK-proven (e.g., RPC calls to chain nodes, interactions with third-party APIs). A Resource homed on a `ServiceDomain` has `Expr` logic defining how to interact with that service.
+
+This distinction allows the system to clearly delineate between operations that are part of the core ZK-verified state machine and those that are interfaces to the outside world, while still modeling all interactions within the unified Resource framework.
 
 The framework routes Intents to appropriate domains based on their requirements and optimization hints. This routing enables automatic optimization while maintaining the declarative nature of Intent specification.
 
 ## Serialization and Interoperability
 
-All framework types implement Simple Serialize (SSZ) encoding, providing efficient and deterministic serialization. SSZ ensures that identical data structures produce identical serialized representations, supporting the content addressing system and enabling cross-language interoperability.
-
-The serialization system handles complex nested structures, optional fields, and variable-length data while maintaining deterministic output. This property is crucial for content addressing and enables verification of data integrity across system boundaries.
-
-## Current Implementation Status
-
-The framework currently provides complete type definitions with SSZ serialization support, a functional Lisp interpreter with combinator support, comprehensive testing utilities through the causality-toolkit crate, and content-addressed identifier generation and verification.
-
-The OCaml integration through ml_causality offers equivalent type definitions and expression handling, enabling functional programming approaches to framework usage. The Nix-based development environment ensures reproducible builds and consistent tooling across development machines.
-
-Runtime execution capabilities remain under development, with the current focus on establishing solid foundations for type safety, serialization, and expression evaluation. The architecture supports future expansion into distributed execution, advanced optimization strategies, and sophisticated domain-specific capabilities. 
+All framework types implement Simple Serialize (SSZ) encoding, providing efficient and deterministic serialization. SSZ ensures that identical data structures produce identical serialized representations, supporting the content addressing system (via Merkle roots of SSZ data) and enabling cross-language interoperability.
