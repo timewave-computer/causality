@@ -428,7 +428,7 @@ let test_end_to_end_bridge_transfer () =
   let fee = Bridge_primitives.calculate_fee ~amount:transfer_amount ~fee_basis_points:bridge_config.fee_basis_points in
   Printf.printf "   ✓ E2E setup complete: %Ld ETH transfer with %Ld ETH fee" transfer_amount fee;
   Printf.printf "   ✓ Workflow has %d nodes and %d edges" (List.length workflow.nodes) (List.length workflow.edges);
-  Printf.printf "   ✓ Intent has %d compatibility entries" (List.length intent.compatibility_metadata)
+  Printf.printf "   ✓ Intent has optimization hints: %s" (match intent.hint with | Some _ -> "Yes" | None -> "No")
 
 (*-----------------------------------------------------------------------------
  * Error Handling Tests

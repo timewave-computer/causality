@@ -203,22 +203,7 @@ let create_capability_grant ~capability_id ~grantee ~grantor ~domain ?(condition
     outputs = [];
     expression = None;
     timestamp = 0L;
-    resources = [];
-    nullifiers = [];
-    scoped_by = Bytes.of_string domain;
-    intent_id = None;
-    (* Phase 6 optimization enhancements *)
-    source_typed_domain = VerifiableDomain {
-      domain_id = Bytes.of_string domain;
-      zk_constraints = true;
-      deterministic_only = true;
-    };
-    target_typed_domain = VerifiableDomain {
-      domain_id = Bytes.of_string domain;
-      zk_constraints = true;
-      deterministic_only = true;
-    };
-    originating_dataflow_instance = None;
+    hint = None;  (* Soft preferences for optimization *)
   } in
   (grant, grant_effect, content_id)
 

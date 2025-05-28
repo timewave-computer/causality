@@ -6,18 +6,8 @@ open Ml_causality_lib_types.Types
  * Helper Functions (avoiding circular dependency)
  *-----------------------------------------------------------------------------*)
 
-(** Create optimization hint directly *)
-let create_optimization_hint_direct ~strategy_preference ~cost_weight ~time_weight ~quality_weight ~typed_domain_constraints () =
-  {
-    strategy_preference = Some strategy_preference;
-    cost_weight;
-    time_weight;
-    quality_weight;
-    typed_domain_constraints;
-  }
-
-(** Create enhanced intent directly *)
-let create_enhanced_intent_direct ~name ~domain_id ~priority ~inputs ~outputs ~optimization_hint ~compatibility_metadata ~resource_preferences ~target_typed_domain ~process_dataflow_hint () =
+(** Create intent directly *)
+let create_intent_direct ~name ~domain_id ~priority ~inputs ~outputs ~hint () =
   let intent_id = Bytes.of_string (Printf.sprintf "intent_%s_%d" name priority) in
   {
     id = intent_id;
@@ -28,11 +18,22 @@ let create_enhanced_intent_direct ~name ~domain_id ~priority ~inputs ~outputs ~o
     outputs;
     expression = None;
     timestamp = 0L;
-    optimization_hint;
-    compatibility_metadata;
-    resource_preferences;
-    target_typed_domain;
-    process_dataflow_hint;
+    hint;
+  }
+
+(** Create effect directly *)
+let create_effect_direct ~name ~domain_id ~effect_type ~inputs ~outputs ~hint () =
+  let effect_id = Bytes.of_string (Printf.sprintf "effect_%s_%s" name effect_type) in
+  {
+    id = effect_id;
+    name;
+    domain_id;
+    effect_type;
+    inputs;
+    outputs;
+    expression = None;
+    timestamp = Int64.of_float (Unix.time ());
+    hint;
   }
 
 (** Create PDB instance state directly *)
@@ -174,35 +175,10 @@ let create_bridge_transfer_workflow ~(bridge_config : Bridge_primitives.bridge_c
     };
   ] in
 
-  (* Define input/output schemas *)
-  let input_schema = BatMap.of_enum (BatList.enum [
-    ("source_account", "bytes");
-    ("target_account", "bytes");
-    ("amount", "int64");
-    ("bridge_config", "bridge_config");
-  ]) in
-
-  let output_schema = BatMap.of_enum (BatList.enum [
-    ("transfer_id", "bytes");
-    ("status", "transfer_status");
-    ("final_amount", "int64");
-    ("fee_paid", "int64");
-  ]) in
-
-  let state_schema = BatMap.of_enum (BatList.enum [
-    ("current_node", "bytes");
-    ("transfer_metadata", "bridge_transfer_metadata");
-    ("locked_amount", "int64");
-    ("proof_data", "bytes");
-  ]) in
-
   (* Create the ProcessDataflowBlock definition *)
   {
     definition_id = workflow_id;
     name = Printf.sprintf "BridgeTransferWorkflow_%s" bridge_config.name;
-    input_schema;
-    output_schema;
-    state_schema;
     nodes = [validate_node; lock_tokens_node; relay_message_node; verify_proof_node; mint_tokens_node; complete_transfer_node];
     edges;
     default_typed_domain = VerifiableDomain {
@@ -210,6 +186,9 @@ let create_bridge_transfer_workflow ~(bridge_config : Bridge_primitives.bridge_c
       zk_constraints = true;
       deterministic_only = true;
     };
+    input_schema_gen = None;
+    output_schema_gen = None;
+    state_schema_gen = None;
   }
 
 (*-----------------------------------------------------------------------------
@@ -219,82 +198,9 @@ let create_bridge_transfer_workflow ~(bridge_config : Bridge_primitives.bridge_c
 (** Create an optimized bridge transfer intent *)
 let create_optimized_bridge_transfer_intent ~(bridge_config : Bridge_primitives.bridge_config) ~source_account ~target_account ~amount ~domain_id () =
 
-  (* Create effect compatibility metadata *)
-  let compatibility_metadata = [
-    {
-      effect_type = "token_lock";
-      source_typed_domain = VerifiableDomain {
-        domain_id = bridge_config.source_domain;
-        zk_constraints = true;
-        deterministic_only = true;
-      };
-      target_typed_domain = VerifiableDomain {
-        domain_id = bridge_config.source_domain;
-        zk_constraints = true;
-        deterministic_only = true;
-      };
-      compatibility_score = 1.0;
-      transfer_overhead = 0L;
-    };
-    {
-      effect_type = "cross_domain_message";
-      source_typed_domain = VerifiableDomain {
-        domain_id = bridge_config.source_domain;
-        zk_constraints = true;
-        deterministic_only = true;
-      };
-      target_typed_domain = ServiceDomain {
-        domain_id = Bytes.of_string "messaging_layer";
-        external_apis = ["bridge_relay"];
-        non_deterministic_allowed = true;
-      };
-      compatibility_score = 0.8;
-      transfer_overhead = 100L; (* Some overhead for cross-domain messaging *)
-    };
-    {
-      effect_type = "token_mint";
-      source_typed_domain = ServiceDomain {
-        domain_id = Bytes.of_string "messaging_layer";
-        external_apis = ["bridge_relay"];
-        non_deterministic_allowed = true;
-      };
-      target_typed_domain = VerifiableDomain {
-        domain_id = bridge_config.target_domain;
-        zk_constraints = true;
-        deterministic_only = true;
-      };
-      compatibility_score = 0.9;
-      transfer_overhead = 50L;
-    };
-  ] in
-
-  (* Create resource preferences *)
-  let resource_preferences = [
-    {
-      resource_type = "token_balance";
-      preferred_typed_domain = VerifiableDomain {
-        domain_id = bridge_config.source_domain;
-        zk_constraints = true;
-        deterministic_only = true;
-      };
-      preference_weight = 1.0;
-      cost_multiplier = 1.0;
-    };
-    {
-      resource_type = "bridge_transfer";
-      preferred_typed_domain = VerifiableDomain {
-        domain_id = bridge_config.source_domain;
-        zk_constraints = true;
-        deterministic_only = true;
-      };
-      preference_weight = 0.8;
-      cost_multiplier = 1.2;
-    };
-  ] in
-
   (* Create ProcessDataflowBlock initiation hint *)
   let workflow = create_bridge_transfer_workflow ~bridge_config () in
-  let dataflow_hint = {
+  let _dataflow_hint = {
     df_def_id = workflow.definition_id;
     initial_params = VStruct (BatMap.of_enum (BatList.enum [
       ("source_account", VString (Bytes.to_string source_account));
@@ -313,7 +219,7 @@ let create_optimized_bridge_transfer_intent ~(bridge_config : Bridge_primitives.
   let fee = Int64.div (Int64.mul amount (Int64.of_int bridge_config.fee_basis_points)) 10000L in
 
   (* Create the optimized intent *)
-  create_enhanced_intent_direct
+  create_intent_direct
     ~name:"OptimizedBridgeTransfer"
     ~domain_id
     ~priority:5
@@ -327,15 +233,7 @@ let create_optimized_bridge_transfer_intent ~(bridge_config : Bridge_primitives.
       quantity = amount;
       domain_id = bridge_config.target_domain;
     }]
-    ~optimization_hint:None
-    ~compatibility_metadata
-    ~resource_preferences
-    ~target_typed_domain:(Some (VerifiableDomain {
-      domain_id = bridge_config.target_domain;
-      zk_constraints = true;
-      deterministic_only = true;
-    }))
-    ~process_dataflow_hint:(Some dataflow_hint)
+    ~hint:None  (* Soft preferences for optimization *)
     ()
 
 (*-----------------------------------------------------------------------------
@@ -441,7 +339,7 @@ let execute_bridge_transfer_example () =
   let fee = Int64.div (Int64.mul transfer_amount (Int64.of_int bridge_config.fee_basis_points)) 10000L in
   Printf.printf "  - Fee: %Ld ETH\n" fee;
   Printf.printf "  - Workflow nodes: %d\n" (List.length workflow.nodes);
-  Printf.printf "  - Optimization hints: %d\n" (List.length optimized_intent.compatibility_metadata);
+  Printf.printf "  - Optimization enabled: %s\n" (match optimized_intent.hint with | Some _ -> "Yes" | None -> "No");
 
   (* Return the complete workflow setup *)
   (workflow, optimized_intent, instance_state) 

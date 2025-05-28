@@ -62,9 +62,7 @@ type intent = {
   outputs: resource_flow list;
   expression: expr_id option;
   timestamp: timestamp;
-  optimization_hint: expr_id option;
-  target_typed_domain: typed_domain option;
-  process_dataflow_hint: process_dataflow_initiation_hint option;
+  hint: expr_id option;  (* Soft preferences for optimization *)
 }
 
 (* Expression AST types *)
@@ -285,13 +283,7 @@ let cross_domain_transfer source_domain target_domain resource_id amount =
     outputs = [{ resource_type = "token"; quantity = amount; domain_id = target_domain }];
     expression = Some (serialize_expr transfer_validation_expr);
     timestamp = current_timestamp ();
-    optimization_hint = None;
-    target_typed_domain = Some (ServiceDomain { 
-      domain_id = target_domain; 
-      external_apis = ["bridge-api"]; 
-      non_deterministic_allowed = true 
-    });
-    process_dataflow_hint = None;
+    hint = None;  (* Optional optimization hints *)
   } in
   submit_intent transfer_intent
 ```
@@ -369,4 +361,4 @@ The project supports various build configurations:
 - **sexplib0**: S-expression support
 - **base**: Jane Street's alternative standard library
 
-This OCaml implementation provides a complete toolkit for working with the Causality Resource Model, enabling developers to build Resource-based applications using functional programming paradigms while maintaining full compatibility with the Rust ecosystem. 
+This OCaml implementation provides a complete toolkit for working with the Causality Resource Model, enabling developers to build Resource-based applications using functional programming paradigms while maintaining full compatibility with the Rust ecosystem.

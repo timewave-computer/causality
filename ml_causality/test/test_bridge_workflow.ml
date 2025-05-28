@@ -153,27 +153,12 @@ let test_optimized_intent ~(bridge_config : Bridge_primitives.bridge_config) () 
   Printf.printf "   Priority: %d\n" optimized_intent.priority;
   Printf.printf "   Inputs: %d\n" (List.length optimized_intent.inputs);
   Printf.printf "   Outputs: %d\n" (List.length optimized_intent.outputs);
-  Printf.printf "   Compatibility metadata: %d entries\n" (List.length optimized_intent.compatibility_metadata);
-  Printf.printf "   Resource preferences: %d entries\n" (List.length optimized_intent.resource_preferences);
   
   (* Print optimization details *)
   Printf.printf "   Optimization Features:\n";
-  (match optimized_intent.optimization_hint with
-   | Some hint_id -> Printf.printf "     - Optimization hint: %s\n" (Bytes.to_string hint_id)
-   | None -> Printf.printf "     - No optimization hint\n");
+  Printf.printf "   Optimization hint: %s\n" (match optimized_intent.hint with | Some _ -> "Yes" | None -> "No");
   
-  (match optimized_intent.target_typed_domain with
-   | Some (VerifiableDomain {domain_id; _}) -> 
-     Printf.printf "     - Target domain: %s (Verifiable)\n" (Bytes.to_string domain_id)
-   | Some (ServiceDomain {domain_id; _}) -> 
-     Printf.printf "     - Target domain: %s (Service)\n" (Bytes.to_string domain_id)
-   | Some (ComputeDomain {domain_id; _}) -> 
-     Printf.printf "     - Target domain: %s (Compute)\n" (Bytes.to_string domain_id)
-   | None -> Printf.printf "     - No target domain specified\n");
-  
-  (match optimized_intent.process_dataflow_hint with
-   | Some hint -> Printf.printf "     - ProcessDataflow hint: %s\n" (Bytes.to_string hint.df_def_id)
-   | None -> Printf.printf "     - No ProcessDataflow hint\n");
+  Printf.printf "     - Simplified Intent structure with hint system\n";
   
   optimized_intent
 

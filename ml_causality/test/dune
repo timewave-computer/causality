@@ -17,8 +17,8 @@
  (libraries ml_causality_lib_types))
 
 (executable
- (name test_phase6_enhancements)
- (modules test_phase6_enhancements)
+ (name test_legacy_optimization)
+ (modules test_legacy_optimization)
  (libraries ml_causality_lib_types ml_causality_lib_dsl ml_causality_lib_capability_system sexplib0)
  (flags (:standard -w -30)))
 

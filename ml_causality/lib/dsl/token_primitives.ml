@@ -88,12 +88,6 @@ let create_token_transfer_effect ~token_id ~from_account ~to_account ~amount ~do
   let transfer_id = Bytes.of_string (Printf.sprintf "transfer_%s_%s_%Ld" 
     (Bytes.to_string from_account) (Bytes.to_string to_account) amount) in
 
-  let typed_domain = VerifiableDomain {
-    domain_id;
-    zk_constraints = true;
-    deterministic_only = true;
-  } in
-
   {
     id = transfer_id;
     name = "TokenTransfer";
@@ -111,25 +105,13 @@ let create_token_transfer_effect ~token_id ~from_account ~to_account ~amount ~do
     }];
     expression = Some (Bytes.of_string "token_transfer_logic");
     timestamp = 0L;
-    resources = [];
-    nullifiers = [];
-    scoped_by = token_id;
-    intent_id = None;
-    source_typed_domain = typed_domain;
-    target_typed_domain = typed_domain;
-    originating_dataflow_instance = None;
+    hint = None;  (* Soft preferences for optimization *)
   }
 
 (** Create lock tokens effect *)
 let create_lock_tokens_effect ~token_id ~account_id ~amount ~domain_id () =
   let lock_id = Bytes.of_string (Printf.sprintf "lock_%s_%s_%Ld" 
     (Bytes.to_string token_id) (Bytes.to_string account_id) amount) in
-
-  let typed_domain = VerifiableDomain {
-    domain_id;
-    zk_constraints = true;
-    deterministic_only = true;
-  } in
 
   {
     id = lock_id;
@@ -148,25 +130,13 @@ let create_lock_tokens_effect ~token_id ~account_id ~amount ~domain_id () =
     }];
     expression = Some (Bytes.of_string "token_lock_logic");
     timestamp = 0L;
-    resources = [];
-    nullifiers = [];
-    scoped_by = token_id;
-    intent_id = None;
-    source_typed_domain = typed_domain;
-    target_typed_domain = typed_domain;
-    originating_dataflow_instance = None;
+    hint = None;  (* Soft preferences for optimization *)
   }
 
 (** Create unlock tokens effect *)
 let create_unlock_tokens_effect ~token_id ~account_id ~amount ~domain_id () =
   let unlock_id = Bytes.of_string (Printf.sprintf "unlock_%s_%s_%Ld" 
     (Bytes.to_string token_id) (Bytes.to_string account_id) amount) in
-
-  let typed_domain = VerifiableDomain {
-    domain_id;
-    zk_constraints = true;
-    deterministic_only = true;
-  } in
 
   {
     id = unlock_id;
@@ -185,25 +155,13 @@ let create_unlock_tokens_effect ~token_id ~account_id ~amount ~domain_id () =
     }];
     expression = Some (Bytes.of_string "token_unlock_logic");
     timestamp = 0L;
-    resources = [];
-    nullifiers = [];
-    scoped_by = token_id;
-    intent_id = None;
-    source_typed_domain = typed_domain;
-    target_typed_domain = typed_domain;
-    originating_dataflow_instance = None;
+    hint = None;  (* Soft preferences for optimization *)
   }
 
 (** Create mint tokens effect *)
 let create_mint_tokens_effect ~token_id ~account_id ~amount ~domain_id () =
   let mint_id = Bytes.of_string (Printf.sprintf "mint_%s_%s_%Ld" 
     (Bytes.to_string token_id) (Bytes.to_string account_id) amount) in
-
-  let typed_domain = VerifiableDomain {
-    domain_id;
-    zk_constraints = true;
-    deterministic_only = true;
-  } in
 
   {
     id = mint_id;
@@ -218,25 +176,13 @@ let create_mint_tokens_effect ~token_id ~account_id ~amount ~domain_id () =
     }];
     expression = Some (Bytes.of_string "token_mint_logic");
     timestamp = 0L;
-    resources = [];
-    nullifiers = [];
-    scoped_by = token_id;
-    intent_id = None;
-    source_typed_domain = typed_domain;
-    target_typed_domain = typed_domain;
-    originating_dataflow_instance = None;
+    hint = None;  (* Soft preferences for optimization *)
   }
 
 (** Create burn tokens effect *)
 let create_burn_tokens_effect ~token_id ~account_id ~amount ~domain_id () =
   let burn_id = Bytes.of_string (Printf.sprintf "burn_%s_%s_%Ld" 
     (Bytes.to_string token_id) (Bytes.to_string account_id) amount) in
-
-  let typed_domain = VerifiableDomain {
-    domain_id;
-    zk_constraints = true;
-    deterministic_only = true;
-  } in
 
   {
     id = burn_id;
@@ -251,13 +197,7 @@ let create_burn_tokens_effect ~token_id ~account_id ~amount ~domain_id () =
     outputs = [];
     expression = Some (Bytes.of_string "token_burn_logic");
     timestamp = 0L;
-    resources = [];
-    nullifiers = [];
-    scoped_by = token_id;
-    intent_id = None;
-    source_typed_domain = typed_domain;
-    target_typed_domain = typed_domain;
-    originating_dataflow_instance = None;
+    hint = None;  (* Soft preferences for optimization *)
   }
 
 (*-----------------------------------------------------------------------------

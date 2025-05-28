@@ -293,145 +293,19 @@ let resource_from_sexp (sexp : Sexplib0.Sexp.t) : resource =
     timestamp = Int64.of_string timestamp_str;
   }
 
-(* Phase 6 Enhancement: TypedDomain serialization *)
-let typed_domain_to_sexp (td : typed_domain) : Sexplib0.Sexp.t =
-  match td with
-  | VerifiableDomain { domain_id; zk_constraints; deterministic_only } ->
-      Sexplib0.Sexp.List [Sexplib0.Sexp.Atom "VerifiableDomain";
-            Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":domain-id"; sexp_of_bytes domain_id];
-            Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":zk-constraints"; Sexplib0.Sexp.Atom (string_of_bool zk_constraints)];
-            Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":deterministic-only"; Sexplib0.Sexp.Atom (string_of_bool deterministic_only)];
-           ]
-  | ServiceDomain { domain_id; external_apis; non_deterministic_allowed } ->
-      Sexplib0.Sexp.List [Sexplib0.Sexp.Atom "ServiceDomain";
-            Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":domain-id"; sexp_of_bytes domain_id];
-            Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":external-apis"; Sexplib0.Sexp.List (List.map (fun api -> Sexplib0.Sexp.Atom api) external_apis)];
-            Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":non-deterministic-allowed"; Sexplib0.Sexp.Atom (string_of_bool non_deterministic_allowed)];
-           ]
-  | ComputeDomain { domain_id; compute_intensive; parallel_execution } ->
-      Sexplib0.Sexp.List [Sexplib0.Sexp.Atom "ComputeDomain";
-            Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":domain-id"; sexp_of_bytes domain_id];
-            Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":compute-intensive"; Sexplib0.Sexp.Atom (string_of_bool compute_intensive)];
-            Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":parallel-execution"; Sexplib0.Sexp.Atom (string_of_bool parallel_execution)];
-           ]
-
-let typed_domain_from_sexp (sexp : Sexplib0.Sexp.t) : typed_domain =
-  match sexp with
-  | Sexplib0.Sexp.List (Sexplib0.Sexp.Atom "VerifiableDomain" :: fields) ->
-      let domain_id_sexp = require_field ":domain-id" fields in
-      let zk_constraints_str = expect_atom (require_field ":zk-constraints" fields) in
-      let deterministic_only_str = expect_atom (require_field ":deterministic-only" fields) in
-      VerifiableDomain {
-        domain_id = bytes_from_sexp domain_id_sexp;
-        zk_constraints = bool_of_string zk_constraints_str;
-        deterministic_only = bool_of_string deterministic_only_str;
-      }
-  | Sexplib0.Sexp.List (Sexplib0.Sexp.Atom "ServiceDomain" :: fields) ->
-      let domain_id_sexp = require_field ":domain-id" fields in
-      let external_apis_sexp = require_field ":external-apis" fields in
-      let non_deterministic_allowed_str = expect_atom (require_field ":non-deterministic-allowed" fields) in
-      ServiceDomain {
-        domain_id = bytes_from_sexp domain_id_sexp;
-        external_apis = List.map expect_atom (expect_list external_apis_sexp);
-        non_deterministic_allowed = bool_of_string non_deterministic_allowed_str;
-      }
-  | Sexplib0.Sexp.List (Sexplib0.Sexp.Atom "ComputeDomain" :: fields) ->
-      let domain_id_sexp = require_field ":domain-id" fields in
-      let compute_intensive_str = expect_atom (require_field ":compute-intensive" fields) in
-      let parallel_execution_str = expect_atom (require_field ":parallel-execution" fields) in
-      ComputeDomain {
-        domain_id = bytes_from_sexp domain_id_sexp;
-        compute_intensive = bool_of_string compute_intensive_str;
-        parallel_execution = bool_of_string parallel_execution_str;
-      }
-  | _ -> failwith ("Invalid TypedDomain: " ^ Sexplib0.Sexp.to_string sexp)
-
-(* Phase 6 Enhancement: Effect compatibility serialization *)
-let effect_compatibility_to_sexp (ec : effect_compatibility) : Sexplib0.Sexp.t =
-  Sexplib0.Sexp.List [Sexplib0.Sexp.Atom "effect-compatibility";
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":effect-type"; Sexplib0.Sexp.Atom ec.effect_type];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":source-typed-domain"; typed_domain_to_sexp ec.source_typed_domain];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":target-typed-domain"; typed_domain_to_sexp ec.target_typed_domain];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":compatibility-score"; Sexplib0.Sexp.Atom (string_of_float ec.compatibility_score)];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":transfer-overhead"; Sexplib0.Sexp.Atom (Int64.to_string ec.transfer_overhead)];
-       ]
-
-let effect_compatibility_from_sexp (sexp : Sexplib0.Sexp.t) : effect_compatibility =
-  let tagged = expect_tag "effect-compatibility" sexp in
-  let fields = expect_list tagged in
-  let effect_type = expect_atom (require_field ":effect-type" fields) in
-  let source_typed_domain_sexp = require_field ":source-typed-domain" fields in
-  let target_typed_domain_sexp = require_field ":target-typed-domain" fields in
-  let compatibility_score_str = expect_atom (require_field ":compatibility-score" fields) in
-  let transfer_overhead_str = expect_atom (require_field ":transfer-overhead" fields) in
-  {
-    effect_type;
-    source_typed_domain = typed_domain_from_sexp source_typed_domain_sexp;
-    target_typed_domain = typed_domain_from_sexp target_typed_domain_sexp;
-    compatibility_score = float_of_string compatibility_score_str;
-    transfer_overhead = Int64.of_string transfer_overhead_str;
-  }
-
-(* Phase 6 Enhancement: Resource preference serialization *)
-let resource_preference_to_sexp (rp : resource_preference) : Sexplib0.Sexp.t =
-  Sexplib0.Sexp.List [Sexplib0.Sexp.Atom "resource-preference";
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":resource-type"; Sexplib0.Sexp.Atom rp.resource_type];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":preferred-typed-domain"; typed_domain_to_sexp rp.preferred_typed_domain];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":preference-weight"; Sexplib0.Sexp.Atom (string_of_float rp.preference_weight)];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":cost-multiplier"; Sexplib0.Sexp.Atom (string_of_float rp.cost_multiplier)];
-       ]
-
-let resource_preference_from_sexp (sexp : Sexplib0.Sexp.t) : resource_preference =
-  let tagged = expect_tag "resource-preference" sexp in
-  let fields = expect_list tagged in
-  let resource_type = expect_atom (require_field ":resource-type" fields) in
-  let preferred_typed_domain_sexp = require_field ":preferred-typed-domain" fields in
-  let preference_weight_str = expect_atom (require_field ":preference-weight" fields) in
-  let cost_multiplier_str = expect_atom (require_field ":cost-multiplier" fields) in
-  {
-    resource_type;
-    preferred_typed_domain = typed_domain_from_sexp preferred_typed_domain_sexp;
-    preference_weight = float_of_string preference_weight_str;
-    cost_multiplier = float_of_string cost_multiplier_str;
-  }
-
-(* Phase 6 Enhancement: ProcessDataflowBlock initiation hint serialization *)
-let process_dataflow_initiation_hint_to_sexp (hint : process_dataflow_initiation_hint) : Sexplib0.Sexp.t =
-  Sexplib0.Sexp.List [Sexplib0.Sexp.Atom "process-dataflow-initiation-hint";
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":df-def-id"; sexp_of_bytes hint.df_def_id];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":initial-params"; value_expr_to_sexp hint.initial_params];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":target-typed-domain"; option_to_sexp typed_domain_to_sexp hint.target_typed_domain];
-       ]
-
-let process_dataflow_initiation_hint_from_sexp (sexp : Sexplib0.Sexp.t) : process_dataflow_initiation_hint =
-  let tagged = expect_tag "process-dataflow-initiation-hint" sexp in
-  let fields = expect_list tagged in
-  let df_def_id_sexp = require_field ":df-def-id" fields in
-  let initial_params_sexp = require_field ":initial-params" fields in
-  let target_typed_domain_sexp = require_field ":target-typed-domain" fields in
-  {
-    df_def_id = bytes_from_sexp df_def_id_sexp;
-    initial_params = value_expr_from_sexp initial_params_sexp;
-    target_typed_domain = option_from_sexp typed_domain_from_sexp target_typed_domain_sexp;
-  }
-
 (* Fixed version using explicit field access *)
 let intent_to_sexp (intent_record : intent) =
+  let { id; name; domain_id; priority; inputs; outputs; expression; timestamp; hint } = intent_record in
   Sexplib0.Sexp.List [Sexplib0.Sexp.Atom "intent";
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":id"; sexp_of_bytes intent_record.id];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":name"; Sexplib0.Sexp.Atom intent_record.name];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":domain-id"; sexp_of_bytes intent_record.domain_id];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":priority"; Sexplib0.Sexp.Atom (string_of_int intent_record.priority)];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":inputs"; Sexplib0.Sexp.List (List.map resource_flow_to_sexp intent_record.inputs)];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":outputs"; Sexplib0.Sexp.List (List.map resource_flow_to_sexp intent_record.outputs)];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":expression"; option_to_sexp sexp_of_bytes intent_record.expression];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":timestamp"; Sexplib0.Sexp.Atom (Int64.to_string intent_record.timestamp)];
-        (* Phase 6 optimization enhancements *)
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":optimization-hint"; option_to_sexp sexp_of_bytes intent_record.optimization_hint];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":compatibility-metadata"; Sexplib0.Sexp.List (List.map effect_compatibility_to_sexp intent_record.compatibility_metadata)];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":resource-preferences"; Sexplib0.Sexp.List (List.map resource_preference_to_sexp intent_record.resource_preferences)];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":target-typed-domain"; option_to_sexp typed_domain_to_sexp intent_record.target_typed_domain];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":process-dataflow-hint"; option_to_sexp process_dataflow_initiation_hint_to_sexp intent_record.process_dataflow_hint];
+        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":id"; sexp_of_bytes id];
+        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":name"; Sexplib0.Sexp.Atom name];
+        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":domain-id"; sexp_of_bytes domain_id];
+        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":priority"; Sexplib0.Sexp.Atom (string_of_int priority)];
+        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":inputs"; Sexplib0.Sexp.List (List.map resource_flow_to_sexp inputs)];
+        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":outputs"; Sexplib0.Sexp.List (List.map resource_flow_to_sexp outputs)];
+        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":expression"; option_to_sexp sexp_of_bytes expression];
+        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":timestamp"; Sexplib0.Sexp.Atom (Int64.to_string timestamp)];
+        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":hint"; option_to_sexp sexp_of_bytes hint];
        ]
 
 let intent_from_sexp sexp =
@@ -445,12 +319,7 @@ let intent_from_sexp sexp =
   let outputs_sexp = require_field ":outputs" fields in
   let expression_sexp = require_field ":expression" fields in
   let timestamp_str = expect_atom (require_field ":timestamp" fields) in
-  (* Phase 6 optimization enhancements - use optional field lookup *)
-  let optimization_hint_sexp = try Some (require_field ":optimization-hint" fields) with _ -> None in
-  let compatibility_metadata_sexp = try Some (require_field ":compatibility-metadata" fields) with _ -> None in
-  let resource_preferences_sexp = try Some (require_field ":resource-preferences" fields) with _ -> None in
-  let target_typed_domain_sexp = try Some (require_field ":target-typed-domain" fields) with _ -> None in
-  let process_dataflow_hint_sexp = try Some (require_field ":process-dataflow-hint" fields) with _ -> None in
+  let hint_sexp = try Some (require_field ":hint" fields) with _ -> None in
   { id = bytes_from_sexp id_sexp;
     name;
     domain_id = bytes_from_sexp domain_id_sexp;
@@ -459,26 +328,13 @@ let intent_from_sexp sexp =
     outputs = List.map resource_flow_from_sexp (expect_list outputs_sexp);
     expression = option_from_sexp bytes_from_sexp expression_sexp;
     timestamp = Int64.of_string timestamp_str;
-    (* Phase 6 optimization enhancements *)
-    optimization_hint = (match optimization_hint_sexp with 
+    hint = (match hint_sexp with 
       | Some sexp -> option_from_sexp bytes_from_sexp sexp 
-      | None -> None);
-    compatibility_metadata = (match compatibility_metadata_sexp with 
-      | Some sexp -> List.map effect_compatibility_from_sexp (expect_list sexp) 
-      | None -> []);
-    resource_preferences = (match resource_preferences_sexp with 
-      | Some sexp -> List.map resource_preference_from_sexp (expect_list sexp) 
-      | None -> []);
-    target_typed_domain = (match target_typed_domain_sexp with 
-      | Some sexp -> option_from_sexp typed_domain_from_sexp sexp 
-      | None -> None);
-    process_dataflow_hint = (match process_dataflow_hint_sexp with 
-      | Some sexp -> option_from_sexp process_dataflow_initiation_hint_from_sexp sexp 
       | None -> None);
   }
 
 let effect_to_sexp (effect_record : effect) =
-  let { id; name; domain_id; effect_type; inputs; outputs; expression; timestamp; resources; nullifiers; scoped_by; intent_id; source_typed_domain; target_typed_domain; originating_dataflow_instance } = effect_record in
+  let { id; name; domain_id; effect_type; inputs; outputs; expression; timestamp; hint } = effect_record in
   Sexplib0.Sexp.List [Sexplib0.Sexp.Atom "effect";
         Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":id"; sexp_of_bytes id];
         Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":name"; Sexplib0.Sexp.Atom name];
@@ -488,14 +344,7 @@ let effect_to_sexp (effect_record : effect) =
         Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":outputs"; Sexplib0.Sexp.List (List.map resource_flow_to_sexp outputs)];
         Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":expression"; option_to_sexp sexp_of_bytes expression];
         Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":timestamp"; Sexplib0.Sexp.Atom (Int64.to_string timestamp)];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":resources"; Sexplib0.Sexp.List (List.map resource_flow_to_sexp resources)];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":nullifiers"; Sexplib0.Sexp.List (List.map resource_flow_to_sexp nullifiers)];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":scoped-by"; sexp_of_bytes scoped_by];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":intent-id"; option_to_sexp sexp_of_bytes intent_id];
-        (* Phase 6 optimization enhancements *)
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":source-typed-domain"; typed_domain_to_sexp source_typed_domain];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":target-typed-domain"; typed_domain_to_sexp target_typed_domain];
-        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":originating-dataflow-instance"; option_to_sexp sexp_of_bytes originating_dataflow_instance];
+        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":hint"; option_to_sexp sexp_of_bytes hint];
        ]
 
 let effect_from_sexp sexp =
@@ -509,14 +358,7 @@ let effect_from_sexp sexp =
   let outputs_sexp = require_field ":outputs" fields in
   let expression_sexp = require_field ":expression" fields in
   let timestamp_str = expect_atom (require_field ":timestamp" fields) in
-  let resources_sexp = require_field ":resources" fields in
-  let nullifiers_sexp = require_field ":nullifiers" fields in
-  let scoped_by_sexp = require_field ":scoped-by" fields in
-  let intent_id_sexp = require_field ":intent-id" fields in
-  (* Phase 6 optimization enhancements - use optional field lookup *)
-  let source_typed_domain_sexp = try Some (require_field ":source-typed-domain" fields) with _ -> None in
-  let target_typed_domain_sexp = try Some (require_field ":target-typed-domain" fields) with _ -> None in
-  let originating_dataflow_instance_sexp = try Some (require_field ":originating-dataflow-instance" fields) with _ -> None in
+  let hint_sexp = try Some (require_field ":hint" fields) with _ -> None in
   { id = bytes_from_sexp id_sexp;
     name;
     domain_id = bytes_from_sexp domain_id_sexp;
@@ -525,23 +367,12 @@ let effect_from_sexp sexp =
     outputs = List.map resource_flow_from_sexp (expect_list outputs_sexp);
     expression = option_from_sexp bytes_from_sexp expression_sexp;
     timestamp = Int64.of_string timestamp_str;
-    resources = List.map resource_flow_from_sexp (expect_list resources_sexp);
-    nullifiers = List.map resource_flow_from_sexp (expect_list nullifiers_sexp);
-    scoped_by = bytes_from_sexp scoped_by_sexp;
-    intent_id = option_from_sexp bytes_from_sexp intent_id_sexp;
-    (* Phase 6 optimization enhancements *)
-    source_typed_domain = (match source_typed_domain_sexp with 
-      | Some sexp -> typed_domain_from_sexp sexp 
-      | None -> VerifiableDomain { domain_id = Bytes.of_string "default"; zk_constraints = true; deterministic_only = true });
-    target_typed_domain = (match target_typed_domain_sexp with 
-      | Some sexp -> typed_domain_from_sexp sexp 
-      | None -> VerifiableDomain { domain_id = Bytes.of_string "default"; zk_constraints = true; deterministic_only = true });
-    originating_dataflow_instance = (match originating_dataflow_instance_sexp with 
+    hint = (match hint_sexp with 
       | Some sexp -> option_from_sexp bytes_from_sexp sexp 
       | None -> None);
   }
 
-let handler_to_sexp { id; name; domain_id; handles_type; priority; expression; timestamp } =
+let handler_to_sexp { id; name; domain_id; handles_type; priority; expression; timestamp; hint } =
   Sexplib0.Sexp.List [Sexplib0.Sexp.Atom "handler";
         Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":id"; sexp_of_bytes id];
         Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":name"; Sexplib0.Sexp.Atom name];
@@ -550,6 +381,7 @@ let handler_to_sexp { id; name; domain_id; handles_type; priority; expression; t
         Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":priority"; Sexplib0.Sexp.Atom (string_of_int priority)];
         Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":expression"; option_to_sexp sexp_of_bytes expression];
         Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":timestamp"; Sexplib0.Sexp.Atom (Int64.to_string timestamp)];
+        Sexplib0.Sexp.List [Sexplib0.Sexp.Atom ":hint"; option_to_sexp sexp_of_bytes hint];
        ]
 
 let handler_from_sexp sexp =
@@ -562,6 +394,7 @@ let handler_from_sexp sexp =
   let priority_str = expect_atom (require_field ":priority" fields) in
   let expression_sexp = require_field ":expression" fields in
   let timestamp_str = expect_atom (require_field ":timestamp" fields) in
+  let hint_sexp = try Some (require_field ":hint" fields) with _ -> None in
   { id = bytes_from_sexp id_sexp;
     name;
     domain_id = bytes_from_sexp domain_id_sexp;
@@ -569,6 +402,9 @@ let handler_from_sexp sexp =
     priority = int_of_string priority_str;
     expression = option_from_sexp bytes_from_sexp expression_sexp;
     timestamp = Int64.of_string timestamp_str;
+    hint = (match hint_sexp with 
+      | Some sexp -> option_from_sexp bytes_from_sexp sexp 
+      | None -> None);
   }
 
 let transaction_to_sexp (transaction_record : transaction) =

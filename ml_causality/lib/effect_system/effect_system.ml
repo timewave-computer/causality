@@ -428,22 +428,7 @@ let create_effect ~effect_type ~params ?static_validation_logic ?dynamic_logic (
     outputs = [];
     expression;
     timestamp = timestamp_gen ();
-    resources = [];
-    nullifiers = [];
-    scoped_by = Bytes.of_string "default";
-    intent_id = None;
-    (* Phase 6 optimization enhancements *)
-    source_typed_domain = VerifiableDomain {
-      domain_id = Bytes.of_string "default";
-      zk_constraints = true;
-      deterministic_only = true;
-    };
-    target_typed_domain = VerifiableDomain {
-      domain_id = Bytes.of_string "default";
-      zk_constraints = true;
-      deterministic_only = true;
-    };
-    originating_dataflow_instance = None;
+    hint = None;  (* Soft preferences for optimization *)
   }
 
 (*-----------------------------------------------------------------------------

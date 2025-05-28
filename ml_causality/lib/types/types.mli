@@ -196,16 +196,30 @@ and pdb_edge = {
   transition_type: str_t;
 }
 
-(** ProcessDataflowBlock definition structure *)
+(** Type schema representation matching Rust's TypeExpr *)
+and type_schema = 
+  | Unit
+  | Bool
+  | Integer
+  | Number
+  | String
+  | List of type_schema
+  | Optional of type_schema
+  | Map of type_schema * type_schema
+  | Record of (str_t * type_schema) list
+  | Union of type_schema list
+  | Any
+
+(** ProcessDataflowBlock definition structure with automatic schema generation *)
 and process_dataflow_definition = {
   definition_id: expr_id;
   name: str_t;
-  input_schema: (str_t, str_t) BatMap.t;  (* field_name -> type_name *)
-  output_schema: (str_t, str_t) BatMap.t;
-  state_schema: (str_t, str_t) BatMap.t;
   nodes: pdb_node list;
   edges: pdb_edge list;
   default_typed_domain: typed_domain;
+  input_schema_gen: type_schema option;
+  output_schema_gen: type_schema option;
+  state_schema_gen: type_schema option;
 }
 
 (** ProcessDataflowBlock instance state *)
@@ -231,33 +245,21 @@ and process_dataflow_initiation_hint = {
 }
 
 (*-----------------------------------------------------------------------------
-  Optimization Types (Phase 6 Enhancement)
+  Schema Generation Types (for automatic ProcessDataflow schemas)
 -----------------------------------------------------------------------------*)
 
-(** Effect compatibility specification for optimization *)
-and effect_compatibility = {
-  effect_type: str_t;
-  source_typed_domain: typed_domain;
-  target_typed_domain: typed_domain;
-  compatibility_score: float;
-  transfer_overhead: int64;
+(** Schema generator for automatic type inference *)
+type 'a schema_generator = {
+  generate_schema: unit -> type_schema;
+  schema_name: str_t;
 }
 
-(** Resource preference specification for optimization *)
-and resource_preference = {
-  resource_type: str_t;
-  preferred_typed_domain: typed_domain;
-  preference_weight: float;
-  cost_multiplier: float;
-}
-
-(** Optimization hint for strategy selection *)
-and optimization_hint = {
-  strategy_preference: str_t option;
-  cost_weight: float;
-  time_weight: float;
-  quality_weight: float;
-  typed_domain_constraints: typed_domain list;
+(** Typed ProcessDataflow with parametric types *)
+type ('input, 'output, 'state) typed_process_dataflow = {
+  definition: process_dataflow_definition;
+  input_generator: 'input schema_generator;
+  output_generator: 'output schema_generator;
+  state_generator: 'state schema_generator;
 }
 
 (*-----------------------------------------------------------------------------
@@ -304,12 +306,7 @@ and intent = {
   outputs: resource_flow list;
   expression: expr_id option; 
   timestamp: timestamp;
-  (* Phase 6 optimization enhancements *)
-  optimization_hint: expr_id option;
-  compatibility_metadata: effect_compatibility list;
-  resource_preferences: resource_preference list;
-  target_typed_domain: typed_domain option;
-  process_dataflow_hint: process_dataflow_initiation_hint option;
+  hint: expr_id option;  (* Soft preferences for optimization *)
 }
 
 (** Represents a computational effect in the causality system. Corresponds to Rust's `Effect`. *)
@@ -322,14 +319,7 @@ and effect = {
   outputs: resource_flow list;
   expression: expr_id option; 
   timestamp: timestamp; 
-  resources: resource_flow list; 
-  nullifiers: resource_flow list; 
-  scoped_by: handler_id; 
-  intent_id: expr_id option;
-  (* Phase 6 optimization enhancements *)
-  source_typed_domain: typed_domain;
-  target_typed_domain: typed_domain;
-  originating_dataflow_instance: entity_id option;
+  hint: expr_id option;  (* Soft preferences for optimization *)
 }
 
 (** Represents logic for processing effects or intents. Corresponds to Rust's `Handler`. *)
@@ -341,6 +331,7 @@ and handler = {
   priority: int; 
   expression: expr_id option;
   timestamp: timestamp;
+  hint: expr_id option;  (* Soft preferences for optimization *)
 }
 
 (** Represents a collection of effects and intents, forming an atomic unit of change. Corresponds to Rust's `Transaction`. *)

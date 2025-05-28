@@ -97,18 +97,6 @@ let create_initiate_transfer_effect ~bridge_config ~source_account ~target_accou
     (Bytes.to_string source_account) amount) in
   let fee = calculate_fee ~amount ~fee_basis_points:bridge_config.fee_basis_points in
   
-  let source_domain = VerifiableDomain {
-    domain_id = bridge_config.source_domain;
-    zk_constraints = true;
-    deterministic_only = true;
-  } in
-
-  let target_domain = VerifiableDomain {
-    domain_id = bridge_config.target_domain;
-    zk_constraints = true;
-    deterministic_only = true;
-  } in
-
   {
     id = transfer_id;
     name = "InitiateTransfer";
@@ -126,25 +114,13 @@ let create_initiate_transfer_effect ~bridge_config ~source_account ~target_accou
     }];
     expression = Some (Bytes.of_string "bridge_initiate_transfer_logic");
     timestamp = 0L;
-    resources = [];
-    nullifiers = [];
-    scoped_by = bridge_config.bridge_id;
-    intent_id = None;
-    source_typed_domain = source_domain;
-    target_typed_domain = target_domain;
-    originating_dataflow_instance = None;
+    hint = None;  (* Soft preferences for optimization *)
   }
 
 (** Create complete transfer effect *)
 let create_complete_transfer_effect ~bridge_config ~transfer_id ~domain_id () =
   let complete_id = Bytes.of_string (Printf.sprintf "complete_%s" 
     (Bytes.to_string transfer_id)) in
-
-  let target_domain = VerifiableDomain {
-    domain_id = bridge_config.target_domain;
-    zk_constraints = true;
-    deterministic_only = true;
-  } in
 
   {
     id = complete_id;
@@ -163,25 +139,13 @@ let create_complete_transfer_effect ~bridge_config ~transfer_id ~domain_id () =
     }];
     expression = Some (Bytes.of_string "bridge_complete_transfer_logic");
     timestamp = 0L;
-    resources = [];
-    nullifiers = [];
-    scoped_by = bridge_config.bridge_id;
-    intent_id = None;
-    source_typed_domain = target_domain;
-    target_typed_domain = target_domain;
-    originating_dataflow_instance = None;
+    hint = None;  (* Soft preferences for optimization *)
   }
 
 (** Create rollback transfer effect *)
 let create_rollback_transfer_effect ~bridge_config ~transfer_id ~domain_id () =
   let rollback_id = Bytes.of_string (Printf.sprintf "rollback_%s" 
     (Bytes.to_string transfer_id)) in
-
-  let source_domain = VerifiableDomain {
-    domain_id = bridge_config.source_domain;
-    zk_constraints = true;
-    deterministic_only = true;
-  } in
 
   {
     id = rollback_id;
@@ -200,11 +164,5 @@ let create_rollback_transfer_effect ~bridge_config ~transfer_id ~domain_id () =
     }];
     expression = Some (Bytes.of_string "bridge_rollback_transfer_logic");
     timestamp = 0L;
-    resources = [];
-    nullifiers = [];
-    scoped_by = bridge_config.bridge_id;
-    intent_id = None;
-    source_typed_domain = source_domain;
-    target_typed_domain = source_domain;
-    originating_dataflow_instance = None;
+    hint = None;  (* Soft preferences for optimization *)
   } 

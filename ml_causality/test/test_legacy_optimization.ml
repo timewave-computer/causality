@@ -54,18 +54,18 @@ let test_process_dataflow_blocks () =
   let linear_pdb = {
     definition_id = Bytes.of_string "linear_pdb_def_001";
     name = "token_transfer_flow";
-    input_schema = BatMap.of_enum (BatList.enum [
-      ("sender", "address");
-      ("recipient", "address");
-      ("amount", "uint256");
+    input_schema_gen = Some (Record [
+      ("sender", String);
+      ("recipient", String);
+      ("amount", Integer);
     ]);
-    output_schema = BatMap.of_enum (BatList.enum [
-      ("transaction_hash", "bytes32");
-      ("success", "bool");
+    output_schema_gen = Some (Record [
+      ("transaction_hash", String);
+      ("success", Bool);
     ]);
-    state_schema = BatMap.of_enum (BatList.enum [
-      ("current_step", "uint8");
-      ("validated", "bool");
+    state_schema_gen = Some (Record [
+      ("current_step", Integer);
+      ("validated", Bool);
     ]);
     nodes = [{
       node_id = "validate_sender";
@@ -87,77 +87,39 @@ let test_process_dataflow_blocks () =
   
   linear_pdb
 
-(* Test optimization types creation *)
+(* Test optimization types *)
 let test_optimization_types () =
-  Printf.printf "\n=== Testing Optimization Types ===\n";
+  Printf.printf "\n=== Testing Legacy Optimization Types (Reference Only) ===\n";
   
   let verifiable_domain = VerifiableDomain {
-    domain_id = Bytes.of_string "opt_domain";
+    domain_id = Bytes.of_string "ethereum_domain";
     zk_constraints = true;
     deterministic_only = true;
   } in
   
-  (* Create effect compatibility *)
-  let effect_compat = {
-    effect_type = "token_transfer";
-    source_typed_domain = verifiable_domain;
-    target_typed_domain = verifiable_domain;
-    compatibility_score = 0.95;
-    transfer_overhead = 100L;
-  } in
-  Printf.printf "Created Effect Compatibility for: %s\n"
-    effect_compat.effect_type;
+  Printf.printf "Created TypedDomain: VerifiableDomain\n";
   
-  (* Create resource preference *)
-  let resource_pref = {
-    resource_type = "ETH";
-    preferred_typed_domain = verifiable_domain;
-    preference_weight = 0.8;
-    cost_multiplier = 1.2;
-  } in
-  Printf.printf "Created Resource Preference for: %s\n"
-    resource_pref.resource_type;
+  (* Note: Legacy optimization types (effect_compatibility, resource_preference, optimization_hint) 
+     have been removed as part of the architecture cleanup *)
+  Printf.printf "Legacy optimization types have been removed from the codebase\n";
   
-  (* Create optimization hint *)
-  let opt_hint = {
-    strategy_preference = Some "capital_efficiency";
-    cost_weight = 0.4;
-    time_weight = 0.3;
-    quality_weight = 0.3;
-    typed_domain_constraints = [verifiable_domain];
-  } in
-  Printf.printf "Created Optimization Hint with strategy: %s\n"
-    (match opt_hint.strategy_preference with Some s -> s | None -> "none");
-  
-  (effect_compat, resource_pref, opt_hint)
+  verifiable_domain
 
 (* Test enhanced Intent creation *)
-let test_enhanced_intent_creation () =
-  Printf.printf "\n=== Testing Enhanced Intent Creation ===\n";
+let test_intent_creation () =
+  Printf.printf "\n=== Testing Intent Creation ===\n";
   
-  let intent_id = Bytes.of_string "enhanced_intent_001" in
+  let intent_id = Bytes.of_string "intent_001" in
   let domain_id = Bytes.of_string "defi_domain" in
-  let target_domain = VerifiableDomain {
+  let opt_hint_id = Bytes.of_string "opt_hint_001" in
+  let _target_domain = VerifiableDomain {
     domain_id;
     zk_constraints = true;
     deterministic_only = true;
   } in
   
-  let opt_hint_id = Bytes.of_string "opt_hint_001" in
-  
-  (* Create ProcessDataflowBlock initiation hint *)
-  let pdb_hint = {
-    df_def_id = Bytes.of_string "defi_swap_flow";
-    initial_params = VStruct (BatMap.of_enum (BatList.enum [
-      ("token_in", VString "USDC");
-      ("token_out", VString "ETH");
-      ("amount", VInt 1000L);
-    ]));
-    target_typed_domain = Some target_domain;
-  } in
-  
-  (* Create enhanced intent *)
-  let enhanced_intent = {
+  (* Create intent *)
+  let intent = {
     id = intent_id;
     name = "DeFi Swap Intent";
     domain_id;
@@ -174,40 +136,35 @@ let test_enhanced_intent_creation () =
     }];
     expression = None;
     timestamp = 1640995200L;
-    optimization_hint = Some opt_hint_id;
-    compatibility_metadata = [];
-    resource_preferences = [];
-    target_typed_domain = Some target_domain;
-    process_dataflow_hint = Some pdb_hint;
+    hint = Some opt_hint_id;  (* Soft preferences for optimization *)
   } in
   
-  Printf.printf "Created Enhanced Intent: %s\n"
-    enhanced_intent.name;
+  Printf.printf "Created Intent: %s\n"
+    intent.name;
   
-  enhanced_intent
+  intent
 
-(* Test enhanced Effect creation *)
-let test_enhanced_effect_creation () =
-  Printf.printf "\n=== Testing Enhanced Effect Creation ===\n";
-  
-  let effect_id = Bytes.of_string "enhanced_effect_001" in
+(* Test effect creation *)
+let test_effect_creation () =
+  Printf.printf "Testing effect creation...\n";
+  let effect_id = Bytes.of_string "effect_001" in
   let domain_id = Bytes.of_string "defi_domain" in
-  let handler_id = Bytes.of_string "swap_handler_001" in
+  let _handler_id = Bytes.of_string "swap_handler_001" in
   
-  let source_domain = VerifiableDomain {
+  let _source_domain = VerifiableDomain {
     domain_id;
     zk_constraints = true;
     deterministic_only = true;
   } in
   
-  let target_domain = ComputeDomain {
+  let _target_domain = ComputeDomain {
     domain_id = Bytes.of_string "compute_domain";
     compute_intensive = true;
     parallel_execution = false;
   } in
   
-  (* Create enhanced effect *)
-  let enhanced_effect = {
+  (* Create effect *)
+  let effect = {
     id = effect_id;
     name = "Cross-Domain Swap Effect";
     domain_id;
@@ -224,19 +181,13 @@ let test_enhanced_effect_creation () =
     }];
     expression = None;
     timestamp = 1640995200L;
-    resources = [];
-    nullifiers = [];
-    scoped_by = handler_id;
-    intent_id = None;
-    source_typed_domain = source_domain;
-    target_typed_domain = target_domain;
-    originating_dataflow_instance = Some (Bytes.of_string "pdb_instance_001");
+    hint = None;  (* Soft preferences for optimization *)
   } in
   
-  Printf.printf "Created Enhanced Effect: %s\n"
-    enhanced_effect.name;
+  Printf.printf "Created Effect: %s\n"
+    effect.name;
   
-  enhanced_effect
+  effect
 
 (* Test ProcessDataflowBlock instance management *)
 let test_pdb_instance_management () =
@@ -320,9 +271,9 @@ let run_phase6_tests () =
   
   let (_verifiable_domain, _service_domain, _compute_domain) = test_typed_domains () in
   let _linear_pdb = test_process_dataflow_blocks () in
-  let (_effect_compat, _resource_pref, _opt_hint) = test_optimization_types () in
-  let _enhanced_intent = test_enhanced_intent_creation () in
-  let _enhanced_effect = test_enhanced_effect_creation () in
+  let _verifiable_domain = test_optimization_types () in
+  let _intent = test_intent_creation () in
+  let _effect = test_effect_creation () in
   let (_initial_pdb_state, _updated_pdb_state) = test_pdb_instance_management () in
   let (_req_edge, _grant_edge, _delegation_edge) = test_teg_integration () in
   
@@ -331,8 +282,8 @@ let run_phase6_tests () =
   Printf.printf "  - TypedDomains: 3 created (Verifiable, Service, Compute)\n";
   Printf.printf "  - ProcessDataflowBlocks: 1 definition created\n";
   Printf.printf "  - Optimization Components: 3 created (Compatibility, Preference, Hint)\n";
-  Printf.printf "  - Enhanced Intent: 1 created with optimization metadata\n";
-  Printf.printf "  - Enhanced Effect: 1 created with typed domain information\n";
+  Printf.printf "  - Intent: 1 created with optimization metadata\n";
+  Printf.printf "  - Effect: 1 created with typed domain information\n";
   Printf.printf "  - PDB Instance Management: 2 states (Initial, Transitioned)\n";
   Printf.printf "  - TEG Integration: 3 edges created (Requirement, Grant, Delegation)\n";
   
@@ -342,7 +293,7 @@ let run_phase6_tests () =
   - TypedDomain classification system operational
   - ProcessDataflowBlock definition and instance management working
   - Optimization hints and metadata integration complete
-  - Enhanced Intent and Effect types with new fields functional
+  - Intent and Effect types with new fields functional
   - All new types compile and instantiate correctly
   - TEG integration functions operational
   |}

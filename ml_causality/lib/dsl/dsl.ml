@@ -560,46 +560,11 @@ let conditional_process_dataflow ~name ~condition_node ~true_branch ~false_branc
     ~default_typed_domain
 
 (*-----------------------------------------------------------------------------
-  Optimization DSL Functions (Phase 6 Enhancement)
+  Enhanced Intent and Effect Creation
 -----------------------------------------------------------------------------*)
 
-(** Create an optimization hint expression *)
-let optimization_hint_expr ~strategy_preference ~cost_weight ~time_weight ~quality_weight ~typed_domain_constraints =
-  EConst (VStruct (BatMap.of_enum (BatList.enum [
-    ("strategy_preference", match strategy_preference with
-      | Some pref -> VString pref
-      | None -> VNil);
-    ("cost_weight", VInt (Int64.of_float (cost_weight *. 100.0))); (* Store as int percentage *)
-    ("time_weight", VInt (Int64.of_float (time_weight *. 100.0)));
-    ("quality_weight", VInt (Int64.of_float (quality_weight *. 100.0)));
-    ("typed_domain_constraints", VList typed_domain_constraints);
-  ])))
-
-(** Create an effect compatibility specification *)
-let effect_compatibility_expr ~effect_type ~source_typed_domain ~target_typed_domain ~compatibility_score ~transfer_overhead =
-  EConst (VStruct (BatMap.of_enum (BatList.enum [
-    ("effect_type", VString effect_type);
-    ("source_typed_domain", source_typed_domain);
-    ("target_typed_domain", target_typed_domain);
-    ("compatibility_score", VInt (Int64.of_float (compatibility_score *. 100.0)));
-    ("transfer_overhead", VInt transfer_overhead);
-  ])))
-
-(** Create a resource preference specification *)
-let resource_preference_expr ~resource_type ~preferred_typed_domain ~preference_weight ~cost_multiplier =
-  EConst (VStruct (BatMap.of_enum (BatList.enum [
-    ("resource_type", VString resource_type);
-    ("preferred_typed_domain", preferred_typed_domain);
-    ("preference_weight", VInt (Int64.of_float (preference_weight *. 100.0)));
-    ("cost_multiplier", VInt (Int64.of_float (cost_multiplier *. 100.0)));
-  ])))
-
-(*-----------------------------------------------------------------------------
-  Enhanced Intent and Effect Creation (Phase 6)
------------------------------------------------------------------------------*)
-
-(** Create an enhanced Intent with optimization metadata *)
-let create_enhanced_intent ~id ~name ~domain_id ~priority ~inputs ~outputs ?expression ?optimization_hint ?compatibility_metadata ?resource_preferences ?target_typed_domain ?process_dataflow_hint ~timestamp () =
+(** Create an Intent with optimization hints *)
+let create_intent ~id ~name ~domain_id ~priority ~inputs ~outputs ?expression ?hint ~timestamp () =
   {
     id;
     name;
@@ -609,15 +574,11 @@ let create_enhanced_intent ~id ~name ~domain_id ~priority ~inputs ~outputs ?expr
     outputs;
     expression;
     timestamp;
-    optimization_hint;
-    compatibility_metadata = (match compatibility_metadata with Some c -> c | None -> []);
-    resource_preferences = (match resource_preferences with Some r -> r | None -> []);
-    target_typed_domain;
-    process_dataflow_hint;
+    hint;
   }
 
-(** Create an enhanced Effect with typed domain information *)
-let create_enhanced_effect ~id ~name ~domain_id ~effect_type ~inputs ~outputs ?expression ~timestamp ~resources ~nullifiers ~scoped_by ?intent_id ~source_typed_domain ~target_typed_domain ?originating_dataflow_instance () =
+(** Create an Effect with optimization hints *)
+let create_effect ~id ~name ~domain_id ~effect_type ~inputs ~outputs ?expression ~timestamp ?hint () =
   {
     id;
     name;
@@ -627,13 +588,7 @@ let create_enhanced_effect ~id ~name ~domain_id ~effect_type ~inputs ~outputs ?e
     outputs;
     expression;
     timestamp;
-    resources;
-    nullifiers;
-    scoped_by;
-    intent_id;
-    source_typed_domain;
-    target_typed_domain;
-    originating_dataflow_instance;
+    hint;
   }
 
 (*-----------------------------------------------------------------------------
