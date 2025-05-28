@@ -4,7 +4,7 @@
 //! favoring simpler execution paths and current domain efficiency.
 
 use super::super::optimization::{OptimizationStrategy, OptimizationContext};
-use crate::optimization::evaluation::{ConfigurationValue, EvaluationConfig, EvaluationMetrics, StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
+use crate::optimization::evaluation::{EvaluationConfig, EvaluationMetrics, StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
 use anyhow::Result;
 use causality_types::primitive::{
     ids::{EntityId, DomainId, ExprId, AsIdConverter},
@@ -31,6 +31,12 @@ pub struct PriorityBasedStrategy {
     
     /// Whether to prefer current domain for efficiency
     prefer_current_domain: bool,
+}
+
+impl Default for PriorityBasedStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PriorityBasedStrategy {
@@ -95,7 +101,7 @@ impl PriorityBasedStrategy {
         let transfer_bonus = 1.0 / (1.0 + plan.resource_transfers.len() as f64);
         score += transfer_bonus * 0.1;
         
-        score.max(0.0).min(1.0)
+        score.clamp(0.0, 1.0)
     }
 }
 
@@ -126,7 +132,10 @@ impl OptimizationStrategy for PriorityBasedStrategy {
         for domain in domains_to_try {
             let plan = ResolutionPlan {
                 plan_id: EntityId::new(rand::random()), // Placeholder for actual plan ID generation
-                intent_bundles: context.pending_intents.iter().map(|id| id.to_id()).collect(),
+                intent_bundles: context.pending_intents.iter().map(|id| {
+                    let expr_id: ExprId = id.to_id();
+                    expr_id
+                }).collect(),
                 effect_sequence: Vec::new(), // Placeholder
                 dataflow_steps: Vec::new(), // Keep simple for priority-based approach
                 resource_transfers: Vec::new(),

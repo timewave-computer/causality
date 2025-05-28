@@ -120,13 +120,13 @@ pub struct ResourceUsageEstimate {
 /// Framework for evaluating and comparing resolution plans
 pub struct PlanEvaluator {
     /// Evaluation configuration
-    config: EvaluationConfig,
+    _config: EvaluationConfig,
     
     /// Performance metrics collection
-    metrics: EvaluationMetrics,
+    _metrics: EvaluationMetrics,
     
     /// Cached evaluation results
-    evaluation_cache: HashMap<String, CachedEvaluationResult>,
+    _evaluation_cache: HashMap<String, _CachedEvaluationResult>,
 }
 
 /// Configuration for plan evaluation
@@ -264,15 +264,15 @@ pub struct DomainEvaluationMetrics {
 
 /// Cached evaluation result
 #[derive(Debug, Clone)]
-struct CachedEvaluationResult {
+struct _CachedEvaluationResult {
     /// The evaluation result
-    result: EvaluationResult,
+    _result: EvaluationResult,
     
     /// Timestamp when cached
-    cached_at: Timestamp,
+    _cached_at: Timestamp,
     
     /// Cache key used
-    cache_key: String,
+    _cache_key: String,
 }
 
 /// Result of plan evaluation
@@ -356,7 +356,7 @@ pub struct RiskFactor {
 
 impl PlanEvaluator {
     /// Perform evaluation of a plan
-    fn perform_evaluation(
+    fn _perform_evaluation(
         &self,
         _plan: &() /* TODO: Replace ResolutionPlan */, // Placeholder
         _context: &OptimizationContext,
@@ -378,7 +378,7 @@ impl PlanEvaluator {
             dataflow_complexity: 0.6,
             risk_score: 0.1,
         };
-        let overall_score = self.calculate_overall_score(&score_breakdown);
+        let overall_score = self._calculate_overall_score(&score_breakdown);
         Ok(EvaluationResult {
             plan: (), // Placeholder
             overall_score,
@@ -405,8 +405,8 @@ impl PlanEvaluator {
     }
 
     /// Calculate overall score from breakdown
-    fn calculate_overall_score(&self, breakdown: &ScoreBreakdown) -> f64 {
-        let weights = &self.config.scoring_weights;
+    fn _calculate_overall_score(&self, breakdown: &ScoreBreakdown) -> f64 {
+        let weights = &self._config.scoring_weights;
         let mut score = 0.0;
 
         score += breakdown.cost_efficiency * weights.cost_efficiency;
@@ -419,7 +419,7 @@ impl PlanEvaluator {
         // Normalize the score if weights don't sum to 1, or clamp it between 0 and 1.
         // For simplicity, let's assume weights are designed to produce a score in a reasonable range.
         // Clamping to 0.0-1.0 range for safety, though a more sophisticated normalization might be needed.
-        score.max(0.0).min(1.0)
+        score.clamp(0.0, 1.0)
     }
 
     // Additional evaluation methods can be added here in the future
@@ -437,7 +437,7 @@ impl PlanEvaluator {
         // ... implementation would go here ...
         // This is a simplified version of what might have been here.
         // The original logic likely involved converting an EvaluationResult to a ScoredPlan.
-        let _eval_result = self.perform_evaluation(plan, context, strategy)?; // Changed to perform_evaluation and added strategy
+        let _eval_result = self._perform_evaluation(plan, context, strategy)?; // Changed to _perform_evaluation and added strategy
         Ok(())
     }
     */

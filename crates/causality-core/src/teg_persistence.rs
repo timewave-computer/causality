@@ -618,8 +618,8 @@ mod tests {
             None,
         ).unwrap();
         
-        // Just verify we can create the manager
-        assert!(true);
+        // TODO: Implement actual persistence logic
+        // For now, this is a placeholder that always succeeds
     }
 
     #[test]

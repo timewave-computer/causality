@@ -17,7 +17,7 @@ use causality_types::{
         str::Str,
         numeric::Number,
     },
-    effects_core::{ConversionError, HandlerError},
+    effect::{ConversionError, HandlerError},
     expr::{
         value::{ValueExpr, ValueExprMap},
         TypeExpr,
@@ -191,7 +191,7 @@ impl SchemaRegistry {
         // For the SchemaRegistry, this is a simple match on the auto_mock_strategy field
         match self.auto_mock_strategy {
             AutoMockStrategy::SucceedWithDefaultSchemaValue => match schema {
-                TypeExpr::Unit => Ok(ValueExpr::Unit),
+                TypeExpr::Unit => Ok(ValueExpr::Nil),
                 TypeExpr::Bool => Ok(ValueExpr::Bool(false)),
                 TypeExpr::Integer => Ok(ValueExpr::Number(Number::Integer(0))),
                 TypeExpr::Number => Ok(ValueExpr::Number(Number::Integer(0))),
@@ -322,7 +322,7 @@ impl SimulationMockManager {
         // choose a default based on strategy
         match *self.auto_mock_strategy.read().unwrap() {
             AutoMockStrategy::SucceedWithDefaultSchemaValue => match schema {
-                TypeExpr::Unit => Ok(ValueExpr::Unit),
+                TypeExpr::Unit => Ok(ValueExpr::Nil),
                 TypeExpr::Bool => Ok(ValueExpr::Bool(false)),
                 TypeExpr::Integer => Ok(ValueExpr::Number(Number::Integer(0))),
                 TypeExpr::Number => Ok(ValueExpr::Number(Number::Integer(0))),

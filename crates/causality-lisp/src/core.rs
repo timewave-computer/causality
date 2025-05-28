@@ -455,7 +455,7 @@ impl Evaluator for Interpreter {
             }
             Expr::Combinator(combinator) => {
                 // Return the combinator as a result
-                Ok(ExprResult::Combinator(combinator.clone()))
+                Ok(ExprResult::Combinator(*combinator))
             }
             Expr::Dynamic(_step_limit, _inner_expr) => {
                 // Dynamic evaluation is not yet implemented

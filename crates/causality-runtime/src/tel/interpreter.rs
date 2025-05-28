@@ -7,10 +7,11 @@ use thiserror::Error;
 use sha2::Digest;
 
 use causality_types::{
-    core::{
-        id::{ResourceId, HandlerId, ValueExprId, ExprId, DomainId, SubgraphId},
-        str::Str as CausalityStr,
+    primitive::{
+        ids::{ResourceId, HandlerId, ValueExprId, ExprId, DomainId, SubgraphId},
+        string::Str as CausalityStr,
     },
+    effect::handler::Handler,
     expr::{
         ast::{Expr as TypesExpr, AtomicCombinator},
     },
@@ -38,17 +39,27 @@ use causality_lisp::{
 #[derive(Debug, Clone, Default)]
 pub struct CompiledTeg {
     pub expressions: std::collections::BTreeMap<ExprId, TypesExpr>,
-    pub handlers: std::collections::BTreeMap<HandlerId, ()>, // Placeholder for handler data
+    pub handlers: std::collections::BTreeMap<HandlerId, Handler>,
     pub subgraphs: std::collections::BTreeMap<SubgraphId, CompilerCompiledSubgraph>,
 }
 
 pub type CompilerCompiledSubgraph = (); // Placeholder
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct LispContextConfig {
     pub host_function_profile: Option<CausalityStr>,
     pub initial_bindings: std::collections::BTreeMap<CausalityStr, ValueExpr>,
-    pub additional_host_functions: BTreeMap<CausalityStr, ()>, // Placeholder for function definitions
+    pub additional_host_functions: BTreeMap<CausalityStr, Arc<dyn Fn(Vec<ValueExpr>) -> Result<ValueExpr, ExprError> + Send + Sync>>,
+}
+
+impl std::fmt::Debug for LispContextConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LispContextConfig")
+            .field("host_function_profile", &self.host_function_profile)
+            .field("initial_bindings", &self.initial_bindings)
+            .field("additional_host_functions", &format!("<{} functions>", self.additional_host_functions.len()))
+            .finish()
+    }
 }
 
 pub type LispEvaluationError = LispEvaluationErrorLocal; // Use our local type
@@ -723,10 +734,14 @@ fn convert_lisp_result_to_value_expr(
 ) -> Result<ValueExpr, CausalityHandlerError> {
     match result {
         causality_types::expr::result::ExprResult::Value(v) => Ok(v), // ValueExpr is directly usable
-        causality_types::expr::ast::Atom::Nil => Ok(ValueExpr::Nil),
-        causality_types::expr::ast::Atom::String(s) => Ok(ValueExpr::String(s.clone())),
-        causality_types::expr::ast::Atom::Integer(n) => Ok(ValueExpr::Number(causality_types::expression::value::Number::new_integer(n))),
-        causality_types::expr::ast::Atom::Boolean(b) => Ok(ValueExpr::Bool(b)),
+        causality_types::expr::result::ExprResult::Atom(atom) => {
+            match atom {
+                causality_types::expr::ast::Atom::Nil => Ok(ValueExpr::Nil),
+                causality_types::expr::ast::Atom::String(s) => Ok(ValueExpr::String(s)),
+                causality_types::expr::ast::Atom::Integer(n) => Ok(ValueExpr::Number(causality_types::expression::value::Number::new_integer(n))),
+                causality_types::expr::ast::Atom::Boolean(b) => Ok(ValueExpr::Bool(b)),
+            }
+        },
         causality_types::expr::result::ExprResult::Bool(b) => Ok(ValueExpr::Bool(b)),
         causality_types::expr::result::ExprResult::Unit => Ok(ValueExpr::Nil),
         causality_types::expr::result::ExprResult::Resource(r_id) => {
@@ -746,7 +761,7 @@ fn convert_lisp_result_to_value_expr(
 fn atom_to_value_expr(atom: &causality_types::expr::ast::Atom) -> ValueExpr {
     match atom {
         causality_types::expr::ast::Atom::Nil => ValueExpr::Nil,
-        causality_types::expr::ast::Atom::String(s) => ValueExpr::String(s.clone()),
+        causality_types::expr::ast::Atom::String(s) => ValueExpr::String(*s),
         causality_types::expr::ast::Atom::Integer(i) => ValueExpr::Number(causality_types::expression::value::Number::new_integer(*i)),
         causality_types::expr::ast::Atom::Boolean(b) => ValueExpr::Bool(*b),
     }

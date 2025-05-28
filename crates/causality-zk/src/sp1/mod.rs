@@ -6,8 +6,6 @@
 // It provides simplified implementations for the SP1 environment that doesn't
 // support async/await or other features available in the host environment.
 
-#![cfg(feature = "sp1")]
-
 pub mod circuit_stub;
 pub mod format;
 pub mod sync;

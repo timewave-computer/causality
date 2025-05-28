@@ -9,7 +9,7 @@ use crate::coprocessor::traits::ZkCoprocessorApi;
 use crate::coprocessor::types::{
     CoprocessorApiError, Proof, ProofRequestId, ProofStatus, PublicInputs,
 };
-use causality_types::trace::ExecutionTrace;
+use causality_types::effect::trace::ExecutionTrace;
 
 /// Defines the behavior of a mocked ZK Coprocessor operation.
 #[derive(Clone)] // Clone needed if behaviors are set by value and stored.

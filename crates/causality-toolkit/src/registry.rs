@@ -6,12 +6,13 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use causality_types::effects_core::{Effect, EffectInput, EffectOutput};
-use causality_types::expr::TypeExpr;
+use causality_types::effect::core::{Effect, EffectInput, EffectOutput};
+use causality_types::expression::r#type::TypeExpr;
 use anyhow::{anyhow, Result};
 
 // Debug-friendly wrapper for effect handlers
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 struct HandlerInfo {
     name: String,
     type_info: String,

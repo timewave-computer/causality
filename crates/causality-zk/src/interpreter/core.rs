@@ -323,14 +323,14 @@ fn log_step_usage(_limit: u32, _used: u32) {
 /// compatible with the ZK guest environment.
 pub async fn validate_constraints(
     expr_ids: &[ExprId],
-    ctx: &(impl ExprContextual + causality_types::provider::context::StaticExprContext),
+    ctx: &(impl ExprContextual + causality_types::system::provider::StaticExprContext),
 ) -> Result<Vec<bool>, crate::core::Error> {
     // Create validation results for each ExprId
     let mut expressions = Vec::with_capacity(expr_ids.len());
 
     for expr_id in expr_ids {
         // Look up the expression by its ID in the context
-        let expr = causality_types::provider::context::StaticExprContext::get_expr(
+        let expr = causality_types::system::provider::StaticExprContext::get_expr(
             ctx, expr_id,
         )
         .ok_or_else(|| {

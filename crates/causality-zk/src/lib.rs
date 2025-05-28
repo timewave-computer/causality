@@ -75,7 +75,7 @@ pub use crate::core::Error;
 // Model type
 pub use crate::runtime::core::ZkEffect;
 pub use crate::runtime::core::ZkResource;
-pub use causality_types::state::ResourceState;
+pub use causality_types::resource::state::ResourceState;
 
 // Compiler integration
 pub use crate::compiler::generate_circuit_id;
@@ -111,7 +111,7 @@ pub use crate::interpreter::core::validate_constraints;
 // Re-export the minimal interpreter and validator for direct use
 pub use causality_lisp::core::ExprContextual;
 pub use causality_lisp::Interpreter;
-pub use causality_types::provider::context::AsExprContext;
+pub use causality_types::system::provider::AsExprContext;
 
 // Make ssz available for consistency
 pub use ssz;

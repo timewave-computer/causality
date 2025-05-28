@@ -4,16 +4,14 @@
 //! parameter generation, and step decision-making across TypedDomains.
 
 use super::super::optimization::{OptimizationStrategy, OptimizationContext};
-use crate::optimization::evaluation::{ConfigurationValue, EvaluationConfig, EvaluationMetrics, StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
+use crate::optimization::evaluation::{StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
 use anyhow::Result;
 use causality_types::{
     core::{
-        id::{EntityId, AsId},
+        id::{EntityId},
         str::Str,
-        str::Str as CausalityStr,
         time::Timestamp,
     },
-    expr::value::ValueExpr,
     graph::{
         optimization::{
             ResolutionPlan, ScoredPlan, TypedDomain, DataflowOrchestrationStep,
@@ -35,7 +33,13 @@ pub struct ProcessDataflowOrchestrationStrategy {
     max_dataflow_steps: usize,
     
     /// Prefer parallel vs sequential execution
-    prefer_parallel_execution: bool,
+    _prefer_parallel_execution: bool,
+}
+
+impl Default for ProcessDataflowOrchestrationStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ProcessDataflowOrchestrationStrategy {
@@ -64,7 +68,7 @@ impl ProcessDataflowOrchestrationStrategy {
                 last_updated: Timestamp::now(),
             },
             max_dataflow_steps: 8,
-            prefer_parallel_execution: true,
+            _prefer_parallel_execution: true,
         }
     }
     
@@ -73,31 +77,35 @@ impl ProcessDataflowOrchestrationStrategy {
         let mut steps = Vec::new();
         
         // Look for available ProcessDataflowDefinitions
-        for (df_id, _df_def) in &context.available_dataflow_definitions {
+        for _df_def in context.dataflow_definitions.values() {
             if steps.len() >= 10 { // Use a reasonable default limit
                 break;
             }
             
             // Create an initiation step
-            steps.push(DataflowOrchestrationStep::InitiateDataflow {
-                df_def_id: *df_id,
-                params: ValueExpr::String(
-                    CausalityStr::from(format!("initiate_dataflow_{}", df_id.to_hex()))
-                ),
+            steps.push(DataflowOrchestrationStep {
+                step_id: EntityId::default(), // TODO: Replace with proper unique ID generation
+                step_type: Str::from("InitiateDataflow"),
+                required_resources: Vec::new(),
+                produced_resources: Vec::new(),
+                dependencies: Vec::new(),
+                estimated_duration_ms: 0, // Added field
             });
         }
         
         // Add advancement steps for active instances
-        for (instance_id, _instance_state) in &context.active_dataflow_instances {
+        for _instance_state in context.dataflow_instances.values() {
             if steps.len() >= 10 { // Use a reasonable default limit
                 break;
             }
             
-            steps.push(DataflowOrchestrationStep::AdvanceDataflow {
-                df_instance_id: *instance_id,
-                action_params: ValueExpr::String(
-                    CausalityStr::from(format!("advance_instance_{}", instance_id.to_hex()))
-                ),
+            steps.push(DataflowOrchestrationStep {
+                step_id: EntityId::default(), // TODO: Replace with proper unique ID generation
+                step_type: Str::from("AdvanceDataflow"),
+                required_resources: Vec::new(),
+                produced_resources: Vec::new(),
+                dependencies: Vec::new(),
+                estimated_duration_ms: 0, // Added field
             });
         }
         
@@ -109,10 +117,10 @@ impl ProcessDataflowOrchestrationStrategy {
         let mut score = 0.0;
         
         // Base score from dataflow utilization
-        let dataflow_utilization = if context.available_dataflow_definitions.is_empty() {
+        let dataflow_utilization = if context.dataflow_definitions.is_empty() {
             1.0 // No dataflows available, so not using them is optimal
         } else {
-            plan.dataflow_steps.len() as f64 / context.available_dataflow_definitions.len() as f64
+            plan.dataflow_steps.len() as f64 / context.dataflow_definitions.len() as f64
         };
         
         score += dataflow_utilization * 0.4;
@@ -139,7 +147,7 @@ impl ProcessDataflowOrchestrationStrategy {
         let resource_efficiency = 1.0 / (1.0 + plan.resource_transfers.len() as f64 * 0.1);
         score += resource_efficiency * 0.1;
         
-        score.max(0.0).min(1.0)
+        score.clamp(0.0, 1.0)
     }
 }
 

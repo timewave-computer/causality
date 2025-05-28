@@ -8,9 +8,11 @@
 use async_trait::async_trait;
 // use causality_effects_macros::register_handler;
 use causality_types::{
-    core::str::Str,
-    expr::{value::ValueExpr, TypeExpr, expr_type::{TypeExprBox, TypeExprMap}},
-    effects_core::{EffectInput, EffectOutput, Effect, EffectHandler, HandlerError, ConversionError},
+    primitive::string::Str,
+    expression::{value::ValueExpr, r#type::{TypeExpr, TypeExprBox, TypeExprMap}},
+    effect::{
+        core::{EffectInput, EffectOutput, Effect, EffectHandler, ConversionError, HandlerError},
+    },
 };
 use causality_core::utils::expr::{value_expr_as_string, value_expr_as_map};
 use log;
@@ -132,7 +134,8 @@ impl EffectHandler for LogMessageHandler {
             "warn" => log::warn!(target: log_context, "{}", input.message),
             "debug" => log::debug!(target: log_context, "{}", input.message),
             "trace" => log::trace!(target: log_context, "{}", input.message),
-            "info" | _ => log::info!(target: log_context, "{}", input.message), // Default to info
+            "info" => log::info!(target: log_context, "{}", input.message),
+            _ => log::info!(target: log_context, "{}", input.message), // Default to info
         }
         Ok(LogMessageEffectOutput)
     }

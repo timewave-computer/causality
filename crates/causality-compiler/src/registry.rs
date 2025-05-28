@@ -52,7 +52,6 @@ pub enum RegistryError {
 //-----------------------------------------------------------------------------
 
 /// Error codes and messages for registry operations
-
 pub mod registry_errors {
     pub const PROGRAM_NOT_FOUND: u32 = 5101;
     pub const CIRCUIT_NOT_FOUND: u32 = 5102;
@@ -290,7 +289,7 @@ impl ProgramRegistry {
                 // Clear all programs and circuits by clearing all keys with the domain prefix
                 // For now, we'll just return success as SMT doesn't expose bulk operations
                 // In a full implementation, we'd iterate through all keys and remove them
-                ()
+                
             }
         }
         Ok(())

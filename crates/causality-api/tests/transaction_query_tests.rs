@@ -57,7 +57,7 @@ mod neutron_tests {
         let client = neutron_client_init(TEST_NEUTRON_URL).await;
 
         // Simple check that client was created
-        assert_eq!(client.chain_id(), "neutron-1");
+        assert_eq!(client.chain_id_str(), "neutron-1");
     }
 
     // Additional tests for Neutron queries would go here, but they're removed for simplicity

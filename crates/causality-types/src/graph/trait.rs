@@ -91,6 +91,15 @@ impl std::error::Error for GraphError {}
 pub type GraphResult<T> = Result<T, GraphError>;
 
 //-----------------------------------------------------------------------------
+// TEL Traits (from tel/traits.rs)
+//-----------------------------------------------------------------------------
+
+/// Trait for TEL components that have an associated DomainId.
+pub trait HasDomainId {
+    fn domain_id(&self) -> DomainId;
+}
+
+//-----------------------------------------------------------------------------
 // Test
 //-----------------------------------------------------------------------------
 
@@ -168,13 +177,4 @@ mod tests {
         //     !<NodeListNonHead as AsContainsNodeType<UnrelatedNode>>::is_present()
         // );
     }
-}
-
-//-----------------------------------------------------------------------------
-// TEL Traits (from tel/traits.rs)
-//-----------------------------------------------------------------------------
-
-/// Trait for TEL components that have an associated DomainId.
-pub trait HasDomainId {
-    fn domain_id(&self) -> DomainId;
 }

@@ -13,12 +13,12 @@ Effects represent the actual state changes that occur when Intents are processed
 ## Core Type System
 
 The type system centers around the Resource as its core primitive. A Resource is a content-addressed entity that encapsulates:
--   Its unique `id` (`EntityId`), which serves as a content-addressed identifier ensuring that Resources with identical content receive identical identifiers.
--   A human-readable `name` (`Str`) for semantic meaning, which does not affect the content-addressed identifier.
--   A `domain_id` (`DomainId`) that identifies the `TypedDomain` to which the Resource belongs, dictating its execution context.
--   A `resource_type` (`Str`) that categorizes the Resource (e.g., "token", "data_object").
--   A `quantity` (`u64`) for quantifiable resources.
--   A `timestamp` (`Timestamp`) marking its creation or last modification, primarily for temporal ordering.
+- Its unique `id` (`EntityId`), which serves as a content-addressed identifier ensuring that Resources with identical content receive identical identifiers.
+- A human-readable `name` (`Str`) for semantic meaning, which does not affect the content-addressed identifier.
+- A `domain_id` (`DomainId`) that identifies the `TypedDomain` to which the Resource belongs, dictating its execution context.
+- A `resource_type` (`Str`) that categorizes the Resource (e.g., "token", "data_object").
+- A `quantity` (`u64`) for quantifiable resources.
+- A `timestamp` (`Timestamp`) marking its creation or last modification, primarily for temporal ordering.
 
 All concrete data and state held within Resources are represented by `ValueExpr` instances. These provide a consistent and canonical way to structure information. `ValueExpr`s are serialized using SSZ (Simple Serialize), and the cryptographic hash of this serialized form (its Merkle root) yields a `ValueExprId`, ensuring data is uniquely referenced and verifiable by its content. This system is designed to be ZK-friendly, for example, by using specific integer types and avoiding non-deterministic types like floating-point numbers.
 
@@ -51,8 +51,8 @@ The expression system integrates with the broader framework through `ExprId` ref
 Typed Domains provide execution contexts with specific capabilities, constraints, and trust assumptions, identified by `DomainId`s. A Resource's `primary_domain_id` indicates its native environment and dictates its fundamental execution characteristics (e.g., whether its state transitions are ZK-provable). Its `contextual_scope_domain_ids` can grant its logic visibility or interaction capabilities with other specified domains.
 
 Two primary types of domains are:
--   `VerifiableDomain`: Represents an environment where state transitions are expected to be ZK-provable. `Expr` logic for Resources primarily homed on a `VerifiableDomain` is designed for ZK circuits (deterministic, bounded, etc.).
--   `ServiceDomain`: Represents an interface to an external service or a set of off-chain operations that are not directly ZK-proven (e.g., RPC calls to chain nodes, interactions with third-party APIs). A Resource homed on a `ServiceDomain` has `Expr` logic defining how to interact with that service.
+1. `VerifiableDomain`: Represents an environment where state transitions are expected to be ZK-provable. `Expr` logic for Resources primarily homed on a `VerifiableDomain` is designed for ZK circuits (deterministic, bounded, etc.).
+2. `ServiceDomain`: Represents an interface to an external service or a set of off-chain operations that are not directly ZK-proven (e.g., RPC calls to chain nodes, interactions with third-party APIs). A Resource homed on a `ServiceDomain` has `Expr` logic defining how to interact with that service.
 
 This distinction allows the system to clearly delineate between operations that are part of the core ZK-verified state machine and those that are interfaces to the outside world, while still modeling all interactions within the unified Resource framework.
 

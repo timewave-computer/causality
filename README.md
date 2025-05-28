@@ -37,14 +37,14 @@ Both OCaml and Rust DSLs produce the same canonical `Expr` AST, which is SSZ-ser
 
 ## Crates
 
-- **`causality-types`**: Core data structures, traits, and type definitions for Resources, expressions, and IDs
-- **`causality-lisp`**: Lisp interpreter for evaluating Resource logic and expressions
-- **`causality-runtime`**: Executes Resource interactions and manages the evaluation context
-- **`causality-simulation`**: Simulation engine with schema-aware mocking for testing
-- **`causality-zk`**: Zero-Knowledge proof generation and verification using execution traces
-- **`causality-api`**: Traits for external system integration (ZK coprocessors, blockchain connectors)
-- **`causality-compiler`**: *(Future)* Compiles Resource definitions and validates cross-domain logic
-- **`causality-toolkit`**: Standard library of reusable Resources, effects, and Lisp utilities for Rust development
+- `causality-types`: Core data structures, traits, and type definitions for Resources, expressions, and IDs
+- `causality-lisp`: Lisp interpreter for evaluating Resource logic and expressions
+- `causality-runtime`: Executes Resource interactions and manages the evaluation context
+- `causality-simulation`: Simulation engine with schema-aware mocking for testing
+- `causality-zk`: Zero-Knowledge proof generation and verification using execution traces
+- `causality-api`: Traits for external system integration (ZK coprocessors, blockchain connectors)
+- `causality-compiler`: *(Future)* Compiles Resource definitions and validates cross-domain logic
+- `causality-toolkit`: Standard library of reusable Resources, effects, and Lisp utilities for Rust development
 
 ## Environment & Build
 

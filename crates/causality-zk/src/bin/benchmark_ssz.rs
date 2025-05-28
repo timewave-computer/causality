@@ -3,14 +3,14 @@
 //! This binary provides benchmarks for SSZ serialization in ZK proofs,
 //! comparing it with the previous ssz-based implementation.
 
+use std::time::Instant;
 use causality_types::anyhow::Result;
 use causality_types::{
-    core::id::{DomainId, EntityId, AsId},
-    expr::value::ValueExpr,
-    core::{Resource, str::Str, time::Timestamp, numeric::Number},
+    primitive::{ids::{DomainId, EntityId}, string::Str, time::Timestamp, number::Number},
+    expression::value::ValueExpr,
+    resource::types::Resource,
 };
 use causality_zk::witness::WitnessGenerator;
-use std::time::Instant;
 
 fn main() -> Result<()> {
     println!("SSZ Serialization Benchmark for ZK Proof Generation");

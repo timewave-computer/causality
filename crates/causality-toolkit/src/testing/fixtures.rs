@@ -4,17 +4,16 @@
 //! for use in testing Causality Resource Model applications.
 
 use causality_types::{
-    core::{
-        id::{DomainId, EntityId, ResourceId, HandlerId, EffectId},
-        domain::Domain,
-        str::Str,
-        time::Timestamp,
-        resource::ResourceFlow,
-        numeric::Number,
+    primitive::{
+        DomainId, EntityId, ResourceId, HandlerId, EffectId,
+        Str,
+        Timestamp,
+        Number,
     },
-    resource::Resource,
-    tel::{Effect, Handler, Intent},
-    expr::value::{ValueExpr, ValueExprVec, ValueExprMap},
+    effect::domain::Domain,
+    resource::{Resource, ResourceFlow},
+    effect::{Effect, Handler, Intent},
+    expression::value::{ValueExpr, ValueExprVec, ValueExprMap},
 };
 use std::collections::BTreeMap;
 

@@ -31,7 +31,7 @@ pub struct SP1FutureSupport; // Placeholder for future SP1 support
 
 // Forward Circuit exports from the appropriate implementation
 #[cfg(feature = "host")]
-pub use self::host_runtime::*;
+// pub use self::host_runtime::*; // Unused import - commented out
 
 // Host runtime is a mock implementation for testing on the host
 #[cfg(feature = "host")]

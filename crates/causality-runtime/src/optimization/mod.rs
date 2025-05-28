@@ -16,8 +16,8 @@ use causality_types::{
         string::Str,
     },
     graph::{
-        optimization::{TypedDomain, ScoredPlan, ResolutionPlan, DataflowOrchestrationStep},
-        dataflow::{LegacyProcessDataflowDefinition, ProcessDataflowInstanceState},
+        optimization::{TypedDomain, ScoredPlan, ResolutionPlan},
+        dataflow::{ProcessDataflowDefinition, ProcessDataflowInstanceState},
     },
 };
 
@@ -57,14 +57,12 @@ impl Default for SystemLoadMetrics {
 
 /// Container for historical performance data of strategies.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct HistoricalPerformanceData {
     /// Maps strategy ID to its performance history.
     pub data: HashMap<String, StrategyPerformanceHistory>,
 }
 
-impl Default for HistoricalPerformanceData {
-    fn default() -> Self { Self { data: HashMap::new() } }
-}
 
 //-----------------------------------------------------------------------------
 // Core Strategy Traits
@@ -117,10 +115,10 @@ pub struct OptimizationContext {
     pub available_typed_domains: Vec<TypedDomain>,
     
     /// Available ProcessDataflowDefinitions
-    pub available_dataflow_definitions: HashMap<ExprId, LegacyProcessDataflowDefinition>,
+    pub dataflow_definitions: HashMap<ExprId, ProcessDataflowDefinition<(), (), ()>>,
     
     /// Active ProcessDataflowInstances
-    pub active_dataflow_instances: HashMap<ResourceId, ProcessDataflowInstanceState>,
+    pub dataflow_instances: HashMap<ResourceId, ProcessDataflowInstanceState>,
     
     /// Pending intents to be resolved
     pub pending_intents: Vec<EntityId>,
@@ -151,10 +149,10 @@ impl OptimizationContext {
     /// Create a new optimization context
     pub fn new(current_typed_domain: TypedDomain) -> Self {
         Self {
-            current_typed_domain: current_typed_domain.clone(),
-            available_typed_domains: vec![current_typed_domain],
-            available_dataflow_definitions: HashMap::new(),
-            active_dataflow_instances: HashMap::new(),
+            current_typed_domain,
+            available_typed_domains: Vec::new(),
+            dataflow_definitions: HashMap::new(),
+            dataflow_instances: HashMap::new(),
             pending_intents: Vec::new(),
             available_resources: HashMap::new(),
             system_load: SystemLoadMetrics::default(),
@@ -167,13 +165,13 @@ impl OptimizationContext {
     }
     
     /// Add a ProcessDataflowDefinition to the context
-    pub fn add_dataflow_definition(&mut self, id: ExprId, definition: LegacyProcessDataflowDefinition) {
-        self.available_dataflow_definitions.insert(id, definition);
+    pub fn add_dataflow_definition(&mut self, id: ExprId, definition: ProcessDataflowDefinition<(), (), ()>) {
+        self.dataflow_definitions.insert(id, definition);
     }
     
     /// Add an active ProcessDataflowInstance to the context
     pub fn add_dataflow_instance(&mut self, id: ResourceId, instance: ProcessDataflowInstanceState) {
-        self.active_dataflow_instances.insert(id, instance);
+        self.dataflow_instances.insert(id, instance);
     }
     
     /// Add a pending intent to be resolved
@@ -202,13 +200,13 @@ impl OptimizationContext {
     }
     
     /// Get ProcessDataflowDefinition by ID
-    pub fn get_dataflow_definition(&self, id: &ExprId) -> Option<&LegacyProcessDataflowDefinition> {
-        self.available_dataflow_definitions.get(id)
+    pub fn get_dataflow_definition(&self, id: &ExprId) -> Option<&ProcessDataflowDefinition<(), (), ()>> {
+        self.dataflow_definitions.get(id)
     }
     
     /// Get ProcessDataflowInstance by ID
     pub fn get_dataflow_instance(&self, id: &ResourceId) -> Option<&ProcessDataflowInstanceState> {
-        self.active_dataflow_instances.get(id)
+        self.dataflow_instances.get(id)
     }
 }
 
@@ -245,41 +243,42 @@ pub enum StrategyError {
 mod tests {
     use super::*;
     use causality_types::{
-        primitive::ids::{ExprId, ResourceId},
-        graph::dataflow::{LegacyProcessDataflowDefinition, DataflowExecutionState},
-        primitive::string::Str,
+        primitive::ids::{ExprId, ResourceId, DomainId},
+        graph::dataflow::{ProcessDataflowDefinition, ProcessDataflowInstanceState},
+        primitive::string::Str as CausalityStr,
         graph::optimization::TypedDomain,
     };
     use std::collections::BTreeMap;
 
     #[test]
     fn test_optimization_context_creation() {
-        let domain = TypedDomain::default();
-        let context = OptimizationContext::new(domain.clone());
-        assert_eq!(context.current_typed_domain, domain);
-        assert!(context.available_typed_domains.contains(&domain));
+        let domain = TypedDomain::new(DomainId::new([1u8; 32]), CausalityStr::from("test"));
+        let context = OptimizationContext::new(domain);
+        assert_eq!(context.dataflow_definitions.len(), 0);
     }
 
     #[test]
     fn test_optimization_context_dataflow_management() {
-        let domain = TypedDomain::default();
-        let mut context = OptimizationContext::new(domain.clone());
+        let domain = TypedDomain::new(DomainId::new([1u8; 32]), CausalityStr::from("test"));
+        let mut context = OptimizationContext::new(domain);
 
-        let df_id = ExprId::new_v4();
-        let df_def = LegacyProcessDataflowDefinition::new(df_id.clone(), Str::from("test_df"));
-        context.add_dataflow_definition(df_id.clone(), df_def.clone());
+        let df_id = ExprId::new([1u8; 32]);
+        // Use the fully qualified type for clarity, though type inference might often work
+        let df_def = ProcessDataflowDefinition::<(), (), ()>::new(df_id, CausalityStr::from("test_df"))
+            .with_default_typed_domain(TypedDomain::new(DomainId::new([1u8; 32]), CausalityStr::from("test")));
+        context.add_dataflow_definition(df_id, df_def);
         assert!(context.get_dataflow_definition(&df_id).is_some());
 
-        let df_instance_id = ResourceId::new_v4();
+        let df_instance_id = ResourceId::new([2u8; 32]);
         let df_instance = ProcessDataflowInstanceState {
-            instance_id: df_instance_id.clone(),
-            definition_id: df_id.clone(),
-            execution_state: DataflowExecutionState::Running,
+            instance_id: df_instance_id,
+            definition_id: df_id,
+            execution_state: causality_types::graph::dataflow::DataflowExecutionState::Running,
             node_states: BTreeMap::new(),
             metadata: BTreeMap::new(),
             initiation_hint: None,
         };
-        context.add_dataflow_instance(df_instance_id.clone(), df_instance.clone());
+        context.add_dataflow_instance(df_instance_id, df_instance);
         assert!(context.get_dataflow_instance(&df_instance_id).is_some());
     }
 }

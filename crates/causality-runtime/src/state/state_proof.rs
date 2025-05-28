@@ -7,9 +7,10 @@
 use anyhow::{anyhow, Result};
 use sha2::Digest;
 use causality_types::{
-    core::{Resource, id::{ResourceId, ValueExprId, AsId}},
-    expr::value::ValueExpr,
-    serialization::{MerkleProof, MerkleTree, SimpleSerialize, Encode, Decode, DecodeError},
+    expression::value::ValueExpr,
+    primitive::ids::{ResourceId, ValueExprId, AsId},
+    resource::types::Resource,
+    system::serialization::{MerkleProof, MerkleTree, SimpleSerialize, Encode, Decode, DecodeError},
 };
 use std::collections::HashMap;
 
@@ -212,7 +213,8 @@ impl StateProofGenerator {
         let resources_tree = self.resources_tree.as_ref()
             .ok_or_else(|| anyhow!("Resources tree not built"))?;
         
-        let proof = resources_tree.generate_proof(*index)?;
+        let proof = resources_tree.proof(*index)
+            .ok_or_else(|| anyhow!("Failed to generate proof for resource at index {}", index))?;
         
         Ok(ResourceProof {
             resource_id: *resource_id,
@@ -228,7 +230,8 @@ impl StateProofGenerator {
         let values_tree = self.values_tree.as_ref()
             .ok_or_else(|| anyhow!("Values tree not built"))?;
         
-        let proof = values_tree.generate_proof(*index)?;
+        let proof = values_tree.proof(*index)
+            .ok_or_else(|| anyhow!("Failed to generate proof for value at index {}", index))?;
         
         Ok(ValueProof {
             value_id: *value_id,
@@ -354,17 +357,18 @@ impl ValueProof {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_types::expr::value::ValueExprMap;
-    use causality_types::core::id::{AsId, DomainId, EntityId};
-    use causality_types::core::number::Number;
-    use causality_types::expr::value::ValueExpr;
+    use causality_core::extension_traits::ValueExprExt;
+    use causality_types::{
+        expression::value::{ValueExpr, ValueExprMap},
+        primitive::{ids::{AsId, DomainId, EntityId}, string::Str, number::Number},
+    };
     use std::collections::BTreeMap;
     
     /// Helper function to create a test resource
     fn create_test_resource(id: u8) -> Resource {
         let mut bytes = [0u8; 32];
-        for i in 0..32 {
-            bytes[i] = i as u8 + id;
+        for (i, byte) in bytes.iter_mut().enumerate() {
+            *byte = (i as u8).wrapping_add(id);
         }
         
         Resource::new(

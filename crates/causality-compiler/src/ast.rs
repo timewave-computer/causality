@@ -71,7 +71,6 @@ pub mod ast_errors {
 //-----------------------------------------------------------------------------
 
 /// Interface for AST management operations
-
 pub trait AstManagement {
     /// Create a new AST entry
     fn create_ast(

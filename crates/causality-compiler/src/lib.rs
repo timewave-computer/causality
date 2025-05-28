@@ -56,7 +56,7 @@ pub use teg_parser::ParsedTegProgram;
 pub use ingest::{ingest_parsed_teg, CompiledSubgraph};
 
 // Main compilation function (to be developed)
-use std::path::PathBuf;
+use std::path::Path;
 use causality_types::expr::ast::{Atom, AtomicCombinator, Expr};
 use causality_types::ExprId;
 use std::collections::HashMap;
@@ -68,7 +68,7 @@ use std::collections::HashMap;
 /// 2. Ingest and link all components (Lisp, handlers, subgraphs, effects, edges).
 /// 3. Perform validation and optimization (TODO).
 /// 4. Produce a `CompiledTeg` structure.
-pub fn compile_teg_definition(file_path: &PathBuf, program_name_override: Option<String>) -> Result<crate::ingest::CompiledTeg> {
+pub fn compile_teg_definition(file_path: &Path, program_name_override: Option<String>) -> Result<crate::ingest::CompiledTeg> {
     // Parse the TEG definition file into an AST
     let parsed = parse_teg_definition_file(file_path)?;
     

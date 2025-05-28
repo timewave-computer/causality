@@ -4,18 +4,15 @@
 //! supporting custom scoring, filtering, and domain compatibility logic.
 
 use super::super::optimization::{OptimizationStrategy, OptimizationContext};
-use crate::config::TypedDomainConfig;
-use crate::optimization::evaluation::{ConfigurationValue, EvaluationConfig, EvaluationMetrics, StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
+use crate::optimization::evaluation::{StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
 use anyhow::Result;
 use causality_types::AsIdConverter;
 use causality_types::{
     core::{
         id::{EntityId, ExprId},
         str::Str,
-        str::Str as CausalityStr,
         time::Timestamp,
     },
-    expr::value::ValueExpr,
     graph::{
         optimization::{
             ResolutionPlan, ScoredPlan, TypedDomain, DataflowOrchestrationStep,
@@ -43,6 +40,12 @@ pub struct ExpressionBasedStrategy {
     
     /// Default scoring weights when expressions are not provided
     default_weights: HashMap<String, f64>,
+}
+
+impl Default for ExpressionBasedStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ExpressionBasedStrategy {
@@ -121,8 +124,8 @@ impl ExpressionBasedStrategy {
         // Time efficiency component
         let time_efficiency = if plan.estimated_time_ms > 0 {
             // Prefer faster execution, normalize to 0-1 range
-            let normalized_time = (10000.0 - plan.estimated_time_ms as f64).max(0.0) / 10000.0;
-            normalized_time
+            
+            (10000.0 - plan.estimated_time_ms as f64).max(0.0) / 10000.0
         } else {
             0.5
         };
@@ -160,7 +163,7 @@ impl ExpressionBasedStrategy {
         };
         score += dataflow_complexity * self.default_weights.get("dataflow_complexity").copied().unwrap_or(0.1);
         
-        score.max(0.0).min(1.0)
+        score.clamp(0.0, 1.0)
     }
     
     /// Check if plan passes filter expression
@@ -190,7 +193,10 @@ impl ExpressionBasedStrategy {
             // Basic plan
             let basic_plan = ResolutionPlan {
                 plan_id: EntityId::new(rand::random()),
-                intent_bundles: context.pending_intents.iter().map(|id| id.to_id()).collect(),
+                intent_bundles: context.pending_intents.iter().map(|id| {
+                    let expr_id: ExprId = id.to_id();
+                    expr_id
+                }).collect(),
                 effect_sequence: vec![],
                 dataflow_steps: vec![],
                 resource_transfers: vec![],
@@ -202,11 +208,14 @@ impl ExpressionBasedStrategy {
             plans.push(basic_plan);
             
             // ProcessDataflow-enhanced plan if dataflows are available
-            if !context.available_dataflow_definitions.is_empty() {
+            if !context.dataflow_definitions.is_empty() {
                 let dataflow_steps = self.generate_smart_dataflow_steps(context, domain);
                 let dataflow_plan = ResolutionPlan {
                     plan_id: EntityId::new(rand::random()),
-                    intent_bundles: context.pending_intents.iter().map(|id| id.to_id()).collect(),
+                    intent_bundles: context.pending_intents.iter().map(|id| {
+                        let expr_id: ExprId = id.to_id();
+                        expr_id
+                    }).collect(),
                     effect_sequence: vec![],
                     dataflow_steps,
                     resource_transfers: vec![],
@@ -227,7 +236,7 @@ impl ExpressionBasedStrategy {
         let mut steps = Vec::new();
         
         // Prioritize dataflows that match the target domain characteristics
-        let mut sorted_dataflows: Vec<_> = context.available_dataflow_definitions.iter().collect();
+        let mut sorted_dataflows: Vec<_> = context.dataflow_definitions.iter().collect();
         sorted_dataflows.sort_by_key(|(_, _def)| {
             // In a real implementation, we'd check the dataflow definition's domain preferences
             // For now, use a simple heuristic
@@ -251,7 +260,7 @@ impl ExpressionBasedStrategy {
         }
         
         // Add advancement steps for active instances
-        for (_instance_id, _instance_state) in &context.active_dataflow_instances {
+        for _instance_state in context.dataflow_instances.values() {
             if steps.len() >= 10 { // Use a reasonable default limit
                 break;
             }
@@ -285,7 +294,7 @@ impl ExpressionBasedStrategy {
     /// Estimate cost for dataflow execution
     fn estimate_dataflow_cost(&self, domain: &TypedDomain, context: &OptimizationContext) -> u64 {
         let base_cost = self.estimate_basic_cost(domain, context);
-        let dataflow_overhead = context.available_dataflow_definitions.len() as u64 * 200;
+        let dataflow_overhead = context.dataflow_definitions.len() as u64 * 200;
         base_cost + dataflow_overhead
     }
     
@@ -305,7 +314,7 @@ impl ExpressionBasedStrategy {
     /// Estimate time for dataflow execution
     fn estimate_dataflow_time(&self, domain: &TypedDomain, context: &OptimizationContext) -> u64 {
         let base_time = self.estimate_basic_time(domain, context);
-        let dataflow_overhead = context.available_dataflow_definitions.len() as u64 * 500;
+        let dataflow_overhead = context.dataflow_definitions.len() as u64 * 500;
         base_time + dataflow_overhead
     }
 }

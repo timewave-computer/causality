@@ -1,39 +1,40 @@
 //! Tests for optimization strategy implementations
 
 use super::*;
-use crate::optimization::{OptimizationStrategy, OptimizationContext};
+use crate::optimization::OptimizationStrategy;
 use causality_types::{
-    core::id::{DomainId, ExprId},
-    tel::optimization::TypedDomain,
+    graph::optimization::TypedDomain,
+    primitive::ids::{DomainId, ExprId},
+    primitive::string::Str,
 };
 
 #[test]
 fn test_capital_efficiency_strategy_creation() {
     let strategy = CapitalEfficiencyStrategy::new();
     assert_eq!(strategy.strategy_id(), "capital_efficiency");
-    assert!(strategy.supports_typed_domain(&TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]))));
+    assert!(strategy.supports_typed_domain(&TypedDomain::new(DomainId::new([1u8; 32]), Str::from("verifiable"))));
 }
 
 #[test]
 fn test_priority_based_strategy_creation() {
     let strategy = PriorityBasedStrategy::new();
     assert_eq!(strategy.strategy_id(), "priority_based");
-    assert!(strategy.supports_typed_domain(&TypedDomain::ServiceDomain(DomainId::new([1u8; 32]))));
+    assert!(strategy.supports_typed_domain(&TypedDomain::new(DomainId::new([1u8; 32]), Str::from("service"))));
 }
 
 #[test]
 fn test_dataflow_orchestration_strategy_creation() {
     let strategy = ProcessDataflowOrchestrationStrategy::new();
     assert_eq!(strategy.strategy_id(), "dataflow_orchestration");
-    assert!(strategy.supports_typed_domain(&TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]))));
+    assert!(strategy.supports_typed_domain(&TypedDomain::new(DomainId::new([1u8; 32]), Str::from("verifiable"))));
 }
 
 #[test]
 fn test_expression_based_strategy_creation() {
     let strategy = ExpressionBasedStrategy::new();
     assert_eq!(strategy.strategy_id(), "expression_based");
-    assert!(strategy.supports_typed_domain(&TypedDomain::VerifiableDomain(DomainId::new([1u8; 32]))));
-    assert!(strategy.supports_typed_domain(&TypedDomain::ServiceDomain(DomainId::new([1u8; 32]))));
+    assert!(strategy.supports_typed_domain(&TypedDomain::new(DomainId::new([1u8; 32]), Str::from("verifiable"))));
+    assert!(strategy.supports_typed_domain(&TypedDomain::new(DomainId::new([1u8; 32]), Str::from("service"))));
 }
 
 #[test]

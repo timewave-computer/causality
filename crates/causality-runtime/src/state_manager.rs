@@ -20,7 +20,7 @@ use causality_types::{
     serialization::Encode,
 };
 use causality_core::extension_traits::ValueExprExt; // For .id() on ValueExpr
-use causality_types::system::util::get_current_time_ms;
+
 use sha2::{Digest, Sha256};
 
 use crate::state::state_proof::{StateProofGenerator, ResourceProof, ValueProof};
@@ -129,9 +129,9 @@ impl AsExprContext for DefaultStateManager {
             // Extract field from resource based on field name
             match field {
                 "id" => Ok(Some(ValueExpr::String(causality_types::core::str::Str::from(format!("{:?}", resource.id))))),
-                "name" => Ok(Some(ValueExpr::String(resource.name.clone()))),
+                "name" => Ok(Some(ValueExpr::String(resource.name))),
                 "domain_id" => Ok(Some(ValueExpr::String(causality_types::core::str::Str::from(format!("{:?}", resource.domain_id))))),
-                "resource_type" => Ok(Some(ValueExpr::String(resource.resource_type.clone()))),
+                "resource_type" => Ok(Some(ValueExpr::String(resource.resource_type))),
                 "quantity" => Ok(Some(ValueExpr::Number(causality_types::core::number::Number::Integer(resource.quantity as i64)))),
                 "timestamp" => Ok(Some(ValueExpr::Number(causality_types::core::number::Number::Integer(resource.timestamp.as_millis() as i64)))),
                 // "ephemeral" field was removed from Resource type

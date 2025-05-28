@@ -1,23 +1,17 @@
-//! Simulation Effects
+//! Simulation-specific effect implementations
 //!
-//! Defines constants and helpers for simulation-specific TEL effects,
-//! including breakpoints and control mechanisms.
-
-//-----------------------------------------------------------------------------
-// Imports
-//-----------------------------------------------------------------------------
+//! This module provides effect implementations that are specifically designed
+//! for use in simulation environments, including logging, state tracking,
+//! and simulation control effects.
 
 use causality_types::{
-    core::{
-        id::{EntityId, DomainId, IntentId, NodeId, ExprId, HandlerId, AsId},
-        str::Str,
-        time::Timestamp,
-        resource::ResourceFlow,
-        Effect,
+    primitive::{
+        ids::{EntityId, DomainId, NodeId, IntentId, AsId},
+        string::Str,
     },
-    tel::optimization::TypedDomain,
-    ValueExpr,
-    expr::value::ValueExprMap,
+    effect::types::Effect,
+    resource::flow::ResourceFlow,
+    expression::value::{ValueExpr, ValueExprMap},
 };
 use rand;
 use std::collections::BTreeMap;
@@ -58,29 +52,16 @@ pub fn create_breakpoint_effect_payload(label: Str, id: Str) -> ValueExpr {
 pub fn create_breakpoint_effect(
     node_id: NodeId,
     domain_id: DomainId,
-    intent_id: IntentId,
+    _intent_id: IntentId,
     _label: String,
     _id: String,
 ) -> Effect {
-    Effect {
-        id: EntityId::new(node_id.inner()),
-        name: Str::from("simulation_breakpoint"),
+    Effect::new(
+        EntityId::new(node_id.inner()),
+        Str::from("simulation_breakpoint"),
         domain_id,
-        effect_type: Str::from(SIM_BREAKPOINT_EFFECT_TYPE),
-        inputs: vec![],
-        outputs: vec![],
-        expression: None,
-        timestamp: Timestamp::now(),
-        resources: vec![],
-        nullifiers: vec![],
-        scoped_by: HandlerId::null(),
-        intent_id: Some(ExprId::new(intent_id.inner())),
-        source_typed_domain: TypedDomain::default(),
-        target_typed_domain: TypedDomain::default(),
-        cost_model: None,
-        resource_usage_estimate: None,
-        originating_dataflow_instance: None,
-    }
+        Str::from(SIM_BREAKPOINT_EFFECT_TYPE),
+    )
 }
 
 //-----------------------------------------------------------------------------
@@ -96,29 +77,16 @@ pub const SIM_CONTROL_EFFECT_TYPE: &str = "simulation_control_v1";
 pub fn create_control_effect(
     node_id: NodeId,
     domain_id: DomainId,
-    intent_id: IntentId,
+    _intent_id: IntentId,
     _action: String,
     _params: Option<ValueExpr>,
 ) -> Effect {
-    Effect {
-        id: EntityId::new(node_id.inner()),
-        name: Str::from("simulation_control"),
+    Effect::new(
+        EntityId::new(<NodeId as AsId>::inner(&node_id)),
+        Str::from("simulation_control"),
         domain_id,
-        effect_type: Str::from(SIM_CONTROL_EFFECT_TYPE),
-        inputs: vec![],
-        outputs: vec![],
-        expression: None,
-        timestamp: Timestamp::now(),
-        resources: vec![],
-        nullifiers: vec![],
-        scoped_by: HandlerId::null(),
-        intent_id: Some(ExprId::new(intent_id.inner())),
-        source_typed_domain: TypedDomain::default(),
-        target_typed_domain: TypedDomain::default(),
-        cost_model: None,
-        resource_usage_estimate: None,
-        originating_dataflow_instance: None,
-    }
+        Str::from(SIM_CONTROL_EFFECT_TYPE),
+    )
 }
 
 //-----------------------------------------------------------------------------
@@ -133,31 +101,18 @@ pub const RESOURCE_CREATE_EFFECT_TYPE: &str = "resource_create_v1";
 pub fn create_resource_creation_effect(
     node_id: NodeId,
     domain_id: DomainId,
-    intent_id: IntentId,
+    _intent_id: IntentId,
     resource_type: String,
     _initial_data: ValueExpr,
 ) -> Effect {
-    Effect {
-        id: EntityId::new(node_id.inner()),
-        name: Str::from("resource_creation"),
+    Effect::new(
+        EntityId::new(node_id.inner()),
+        Str::from("resource_creation"),
         domain_id,
-        effect_type: Str::from(RESOURCE_CREATE_EFFECT_TYPE),
-        inputs: vec![],
-        outputs: vec![
-            ResourceFlow::new(Str::from(resource_type), 1, domain_id)
-        ],
-        expression: None,
-        timestamp: Timestamp::now(),
-        resources: vec![],
-        nullifiers: vec![],
-        scoped_by: HandlerId::null(),
-        intent_id: Some(ExprId::new(intent_id.inner())),
-        source_typed_domain: TypedDomain::default(),
-        target_typed_domain: TypedDomain::default(),
-        cost_model: None,
-        resource_usage_estimate: None,
-        originating_dataflow_instance: None,
-    }
+        Str::from(RESOURCE_CREATE_EFFECT_TYPE),
+    ).with_outputs(vec![
+        ResourceFlow::new(Str::from(resource_type), 1, domain_id)
+    ])
 }
 
 //-----------------------------------------------------------------------------
@@ -216,25 +171,12 @@ pub fn create_simulation_control_effect(
     );
     payload_map.insert(Str::from(SIM_CONTROL_PARAMS_KEY), params);
 
-    Effect {
-        id: causality_types::primitive::ids::EntityId::new(effect_id.inner()),
-        name: Str::from(SIM_CONTROL_EFFECT_TYPE),
-        domain_id: DomainId::null(),
-        effect_type: Str::from(SIM_CONTROL_EFFECT_TYPE),
-        inputs: Vec::new(),
-        outputs: Vec::new(),
-        expression: None,
-        timestamp: causality_types::core::time::Timestamp::now(),
-        resources: Vec::new(),
-        nullifiers: Vec::new(),
-        scoped_by: causality_types::primitive::ids::HandlerId::null(),
-        intent_id: Some(ExprId::new(rand::random())),
-        source_typed_domain: TypedDomain::default(),
-        target_typed_domain: TypedDomain::default(),
-        cost_model: None,
-        resource_usage_estimate: None,
-        originating_dataflow_instance: None,
-    }
+    Effect::new(
+        EntityId::new(effect_id.inner()),
+        Str::from(SIM_CONTROL_EFFECT_TYPE),
+        AsId::null(),
+        Str::from(SIM_CONTROL_EFFECT_TYPE),
+    )
 }
 
 /// Creates the content for a simulation output marker resource.
@@ -269,25 +211,12 @@ pub fn create_simulation_output_marker_content(
 /// Create a simulation output marker effect with the given content.
 /// This effect is typically handled by the simulation engine to record outputs.
 pub fn create_simulation_output_marker_effect(_content: ValueExpr) -> Effect {
-    Effect {
-        id: causality_types::primitive::ids::EntityId::new(rand::random()),
-        name: Str::from(SIM_OUTPUT_MARKER_EFFECT_TYPE),
-        domain_id: DomainId::null(),
-        effect_type: Str::from(SIM_OUTPUT_MARKER_EFFECT_TYPE),
-        inputs: vec![],
-        outputs: vec![],
-        expression: None,
-        timestamp: causality_types::core::time::Timestamp::now(),
-        resources: vec![],
-        nullifiers: vec![],
-        scoped_by: causality_types::primitive::ids::HandlerId::null(),
-        intent_id: Some(ExprId::new(rand::random())),
-        source_typed_domain: TypedDomain::default(),
-        target_typed_domain: TypedDomain::default(),
-        cost_model: None,
-        resource_usage_estimate: None,
-        originating_dataflow_instance: None,
-    }
+    Effect::new(
+        EntityId::new(rand::random()),
+        Str::from(SIM_OUTPUT_MARKER_EFFECT_TYPE),
+        AsId::null(),
+        Str::from(SIM_OUTPUT_MARKER_EFFECT_TYPE),
+    )
 }
 
 /// Creates the payload for a `SIM_CONTROL_EFFECT_TYPE` effect.
@@ -319,13 +248,18 @@ pub enum SimulationEffectType {
 }
 
 impl SimulationEffectType {
-    /// Convert to string representation
-    pub fn to_string(&self) -> String {
+    // Removed to_string method - use Display trait instead
+}
+
+impl std::fmt::Display for SimulationEffectType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SimulationEffectType::Breakpoint => {
-                SIM_BREAKPOINT_EFFECT_TYPE.to_string()
+                write!(f, "{}", SIM_BREAKPOINT_EFFECT_TYPE)
             }
-            SimulationEffectType::SimControl => SIM_CONTROL_EFFECT_TYPE.to_string(),
+            SimulationEffectType::SimControl => {
+                write!(f, "{}", SIM_CONTROL_EFFECT_TYPE)
+            }
         }
     }
 }

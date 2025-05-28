@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 /// Main optimization configuration for the runtime
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct OptimizationConfig {
     /// Strategy selection configuration
     pub strategy_selection: StrategySelectionConfig,
@@ -248,18 +249,6 @@ pub struct MetricsExportConfig {
     pub custom_headers: BTreeMap<String, String>,
 }
 
-impl Default for OptimizationConfig {
-    fn default() -> Self {
-        Self {
-            strategy_selection: StrategySelectionConfig::default(),
-            typed_domain_overrides: BTreeMap::new(),
-            evaluation_limits: EvaluationLimitsConfig::default(),
-            strategy_preferences: StrategyPreferencesConfig::default(),
-            pdb_orchestration: PdbOrchestrationConfig::default(),
-            performance_monitoring: PerformanceMonitoringConfig::default(),
-        }
-    }
-}
 
 impl Default for StrategySelectionConfig {
     fn default() -> Self {
@@ -508,7 +497,6 @@ impl OptimizationConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use causality_types::core::id::DomainId;
 
     #[test]
@@ -522,11 +510,11 @@ mod tests {
         let config = OptimizationConfig::default();
         let domain_id = DomainId::new([1u8; 32]);
         
-        let verifiable_config = config.get_typed_domain_config(&TypedDomain::VerifiableDomain(domain_id));
+        let verifiable_config = config.get_typed_domain_config(&TypedDomain::new(domain_id, "verifiable".into()));
         assert!(verifiable_config.enable_zk_optimizations);
         assert!(!verifiable_config.enable_service_optimizations);
         
-        let service_config = config.get_typed_domain_config(&TypedDomain::ServiceDomain(domain_id));
+        let service_config = config.get_typed_domain_config(&TypedDomain::new(domain_id, "service".into()));
         assert!(!service_config.enable_zk_optimizations);
         assert!(service_config.enable_service_optimizations);
     }
@@ -562,4 +550,4 @@ mod tests {
         assert_eq!(config1.strategy_preferences.cost_vs_speed_preference, 0.8);
         assert_eq!(config1.pdb_orchestration.max_nesting_depth, 10);
     }
-} 
+}

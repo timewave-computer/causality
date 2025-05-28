@@ -322,7 +322,7 @@ mod tests {
         for i in 0..15 {
             let entry = LogEntry::new(
                 LogLevel::Info,
-                &format!("Message {}", i),
+                format!("Message {}", i),
                 logger.default_domain(),
                 logger.current_timestamp(),
             );

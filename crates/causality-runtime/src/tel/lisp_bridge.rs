@@ -63,10 +63,9 @@ pub fn lisp_value_to_value_expr(
         LispValue::Bool(b) => Ok(ValueExpr::Bool(b)),
         LispValue::Unit => Ok(ValueExpr::Nil),
         // Other ExprResult variants are not directly convertible to a single ValueExpr
-        _ => Err(BridgeError::UnsupportedLispType(format!(
-            "LispValue variant {:?} not supported for direct conversion to ValueExpr.",
-            lisp_value
-        ))),
+        _ => Err(LispError::ExecutionError { 
+            message: format!("LispValue variant {:?} not supported for direct conversion to ValueExpr.", lisp_value).into()
+        }),
     }
 }
 

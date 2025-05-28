@@ -1,7 +1,7 @@
 //! Tests for core toolkit functionality
 
 use causality_toolkit::core::*;
-use causality_types::primitive::ids::{ResourceId, EntityId};
+use causality_types::primitive::ids::ResourceId;
 
 #[test]
 fn test_typed_resource_creation() {

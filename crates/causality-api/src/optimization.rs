@@ -481,7 +481,7 @@ impl StrategyManagementApi {
     
     /// Register a new strategy
     pub fn register_strategy(&mut self, strategy_info: StrategyInfo) -> Result<()> {
-        self.strategies.insert(strategy_info.strategy_id.clone(), strategy_info);
+        self.strategies.insert(strategy_info.strategy_id, strategy_info);
         Ok(())
     }
     

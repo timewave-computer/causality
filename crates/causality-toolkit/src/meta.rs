@@ -5,9 +5,11 @@
 //! validation of types that can be used by other effects in the system.
 
 use causality_types::{
-    effects_core::{Effect, EffectInput, EffectOutput, ConversionError},
-    expr::{value::ValueExpr, TypeExpr, TypeExprId},
-    core::str::Str,
+    effect::{
+        core::{Effect, EffectInput, EffectOutput, ConversionError},
+    },
+    expression::{value::ValueExpr, r#type::TypeExpr},
+    primitive::{ids::TypeExprId, string::Str},
 };
 use crate::AsTypeSchema;
 use anyhow::Result;

@@ -10,15 +10,15 @@
 //-----------------------------------------------------------------------------
 
 extern crate alloc;
-use crate::core::{CircuitId, Error};
-use alloc::vec::Vec;
+use alloc::{vec::Vec, string::String};
 use causality_types::{
-    core::id::{ExprId, GraphId, SubgraphId},
-    serialization::{Encode, Decode, SimpleSerialize},
+    primitive::ids::{ExprId, GraphId, SubgraphId, CircuitId},
+    system::serialization::{Encode, SimpleSerialize},
+    anyhow::Result,
 };
 use crate::models::CircuitData;
 use crate::witness::WitnessData;
-use causality_types::anyhow::Result;
+use sha2::{Digest, Sha256};
 
 //-----------------------------------------------------------------------------
 // Circuit Type
@@ -56,12 +56,11 @@ impl Encode for Circuit {
 
 impl Circuit {
     /// Generate a deterministic CircuitId from circuit contents
-    pub fn generate_id(&self) -> Result<CircuitId, Error> {
+    pub fn generate_id(&self) -> Result<CircuitId, CircuitError> {
         // Use ssz for deterministic serialization
         let serialized = self.as_ssz_bytes();
 
         // Generate a SHA-256 hash of the serialized circuit
-        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(&serialized);
         let hash_result = hasher.finalize();
@@ -79,7 +78,7 @@ impl Circuit {
         graph_id: GraphId,
         subgraph_ids: Vec<SubgraphId>,
         expr_ids: Vec<ExprId>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, CircuitError> {
         // Create circuit with placeholder ID
         let mut circuit = Self {
             id: CircuitId([0u8; 32]),
@@ -101,7 +100,6 @@ impl Circuit {
 //-----------------------------------------------------------------------------
 
 /// Specification for a circuit to be built
-
 pub struct CircuitSpec {
     /// Graph ID this circuit will verify
     pub graph_id: GraphId,
@@ -126,7 +124,7 @@ impl CircuitBuilder {
     }
 
     /// Build the circuit according to the specification
-    pub fn build(self) -> Result<Circuit, Error> {
+    pub fn build(self) -> Result<Circuit, CircuitError> {
         Circuit::new(
             self.spec.graph_id,
             self.spec.subgraph_ids,
@@ -136,7 +134,7 @@ impl CircuitBuilder {
 }
 
 /// Build a circuit from a specification
-pub fn build_circuit(spec: CircuitSpec) -> Result<Circuit, Error> {
+pub fn build_circuit(spec: CircuitSpec) -> Result<Circuit, CircuitError> {
     CircuitBuilder::new(spec).build()
 }
 
@@ -150,9 +148,9 @@ pub fn build_circuit(spec: CircuitSpec) -> Result<Circuit, Error> {
 /// This function is a bridge to the core::run_circuit implementation.
 /// It handles circuit execution and witness validation.
 #[cfg(not(feature = "host"))]
-pub fn run_circuit<T: Decode + Encode>(
-    circuit_data: &CircuitData,
-    witness_data: &WitnessData,
+pub fn run_circuit<T: Encode>(
+    _circuit_data: &CircuitData,
+    _witness_data: &WitnessData,
 ) -> Result<T, String> {
     // For now, return a placeholder error
     Err("Circuit execution not yet implemented".to_string())
@@ -164,7 +162,6 @@ pub fn run_circuit<T: Decode + Encode>(
 //-----------------------------------------------------------------------------
 
 /// Target platforms for circuit compilation
-
 #[cfg(feature = "host")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CircuitTarget {
@@ -195,7 +192,7 @@ pub mod expr_compiler {
     use super::*;
 
     /// Compile an expression to a Rust TokenStream
-    pub fn compile_expr(expr_id: ExprId) -> Result<String, Error> {
+    pub fn compile_expr(expr_id: ExprId) -> Result<String, CircuitError> {
         // This is a placeholder for the actual expression compiler
         // A real implementation would use the approach described in
         // docs/expression_compilation.md
@@ -218,7 +215,7 @@ pub mod expr_compiler {
     }
 
     /// Generate a dispatch function for multiple expressions
-    pub fn generate_dispatch(expr_ids: &[ExprId]) -> Result<String, Error> {
+    pub fn generate_dispatch(expr_ids: &[ExprId]) -> Result<String, CircuitError> {
         // Generate function for each expression ID
         let mut functions = String::new();
         for expr_id in expr_ids {
@@ -256,4 +253,31 @@ pub mod expr_compiler {
 
         Ok(functions)
     }
+}
+
+/// Generate a ZK proof for the given circuit and witness data
+pub fn generate_proof(
+    _circuit_data: &CircuitData,
+    _witness_data: &WitnessData,
+) -> Result<ProofData> {
+    // Implementation of generate_proof function
+    unimplemented!()
+}
+
+/// Error type for circuit operations
+pub type CircuitError = String;
+
+/// Public inputs for the circuit
+#[derive(Debug, Clone)]
+pub struct PublicInputs {
+    pub merkle_root: [u8; 32],
+    pub input_states: std::collections::HashMap<causality_types::primitive::ids::ResourceId, causality_types::resource::state::ResourceState>,
+    pub output_states: std::collections::HashMap<causality_types::primitive::ids::ResourceId, causality_types::resource::state::ResourceState>,
+}
+
+/// Proof data with public inputs
+#[derive(Debug, Clone)]
+pub struct ProofData {
+    pub proof: Vec<u8>,
+    pub public_inputs: PublicInputs,
 }

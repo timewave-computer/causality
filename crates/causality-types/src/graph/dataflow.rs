@@ -160,9 +160,6 @@ impl<T: TypeSchema> TypeSchema for Option<T> {
     }
 }
 
-/// Legacy non-generic version for compatibility
-pub type LegacyProcessDataflowDefinition = ProcessDataflowDefinition<(), (), ()>;
-
 /// A node in a process dataflow
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProcessDataflowNode {

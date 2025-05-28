@@ -33,6 +33,7 @@ pub type GenerationResult<T> = Result<T, anyhow::Error>;
 //-----------------------------------------------------------------------------
 
 #[derive(Debug, Default)]
+#[allow(dead_code)]
 struct DomainInfo {
     nodes: Vec<NodeId>,
     edges: Vec<EdgeId>,
@@ -155,6 +156,7 @@ pub fn get_node_domain(
 }
 
 // Detects cycles in the TEG graph representation.
+#[allow(dead_code)]
 fn tel_graph_has_cycles(edges: &HashMap<EdgeId, (NodeId, NodeId, String)>) -> bool {
     let mut adj: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
     let mut all_nodes: HashSet<NodeId> = HashSet::new();
@@ -176,6 +178,7 @@ fn tel_graph_has_cycles(edges: &HashMap<EdgeId, (NodeId, NodeId, String)>) -> bo
     false
 }
 
+#[allow(dead_code)]
 fn dfs_cycle_check(
     node_id: &NodeId,
     adj: &HashMap<NodeId, Vec<NodeId>>,

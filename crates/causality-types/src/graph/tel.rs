@@ -311,8 +311,14 @@ impl DecodeWithLength for EdgeKind {
 
 impl SimpleSerialize for EdgeKind {}
 
+impl Default for EdgeKind {
+    fn default() -> Self {
+        EdgeKind::Custom(Str::from("default"))
+    }
+}
+
 /// An edge in the effect graph
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Edge {
     /// Unique identifier for this edge
     pub id: EdgeId,

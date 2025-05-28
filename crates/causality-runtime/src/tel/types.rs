@@ -14,7 +14,7 @@ use causality_types::{
         AsContainsEdgeType, AsContainsNodeType, AsEdgeTypesList, AsNodeTypesList,
     },
     resource::Resource,
-    graph::element::Edge,
+    graph::Edge, // Corrected: This should be graph::Edge (which is tel::Edge)
     core::{Effect, Handler},
 };
 use frunk::{HCons, HNil};
@@ -245,8 +245,32 @@ impl AsContainsNodeType<Handler> for TelNodeTypes {
 //-----------------------------------------------------------------------------
 
 // Define HList for TEL Edge Types as a newtype
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TelEdgeTypes(pub HCons<Edge, HNil>);
+
+impl Default for TelEdgeTypes {
+    fn default() -> Self {
+        use causality_types::{
+            primitive::ids::{EdgeId, NodeId},
+            graph::tel::{Edge, EdgeKind},
+            primitive::string::Str,
+        };
+        
+        // Create a default Edge for the HList
+        let default_edge = Edge::new(
+            EdgeId::new([0u8; 32]),
+            NodeId::new([0u8; 32]),
+            NodeId::new([0u8; 32]),
+            EdgeKind::Custom(Str::from("default"))
+        );
+        
+        Self(HCons {
+            head: default_edge,
+            tail: HNil,
+        })
+    }
+}
+
 impl AsEdgeTypesList for TelEdgeTypes {}
 
 // Implement AsContainsEdgeType for specific types within TelEdgeTypes

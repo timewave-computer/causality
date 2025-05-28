@@ -1,9 +1,9 @@
 //! Tests for meta effects
 
-use causality_toolkit::meta::*;
+use causality_toolkit::{DeclareTypeEffect, DeclareTypeEffectInput, DeclareTypeEffectOutput};
 use causality_toolkit::AsTypeSchema;
-use causality_types::effects_core::Effect;
-use causality_types::expr::TypeExpr;
+use causality_types::effect::core::{Effect, EffectInput, EffectOutput};
+use causality_types::expression::{value::ValueExpr, r#type::TypeExpr};
 
 #[test]
 fn test_declare_type_effect_creation() {
@@ -50,7 +50,7 @@ fn test_declare_type_effect_with_complex_schema() {
 #[test]
 fn test_declare_type_effect_input_output() {
     // Test that we can create input and output types
-    let input = DeclareTypeEffectInput;
+    let _input = DeclareTypeEffectInput;
     let output = DeclareTypeEffectOutput;
     
     // Verify schemas
@@ -61,13 +61,10 @@ fn test_declare_type_effect_input_output() {
     assert_eq!(output_schema, TypeExpr::Unit);
     
     // Test conversion methods
-    use causality_types::expr::value::ValueExpr;
-    use causality_types::effects_core::{EffectInput, EffectOutput};
-    
-    let input_result = DeclareTypeEffectInput::from_value_expr(ValueExpr::Unit);
+    let input_result = DeclareTypeEffectInput::from_value_expr(ValueExpr::Nil);
     assert!(input_result.is_ok());
     
     let output_result = output.to_value_expr();
     assert!(output_result.is_ok());
-    assert_eq!(output_result.unwrap(), ValueExpr::Unit);
+    assert_eq!(output_result.unwrap(), ValueExpr::Nil);
 } 

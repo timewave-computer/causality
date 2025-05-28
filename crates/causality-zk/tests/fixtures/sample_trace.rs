@@ -5,8 +5,8 @@
 
 // Import required types
 use causality_types::primitive::ids::{EffectId, ResourceId};
-use causality_types::state::ResourceState;
-use causality_types::trace::{ExecutionTrace, EffectDetail};
+use causality_types::resource::state::ResourceState;
+use causality_types::effect::trace::{ExecutionTrace, EffectDetail};
 use std::collections::BTreeMap;
 
 //-----------------------------------------------------------------------------

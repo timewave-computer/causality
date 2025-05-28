@@ -50,7 +50,7 @@ pub use core::WitnessRegistry;
 // Essential Types
 //-----------------------------------------------------------------------------
 
-pub use causality_types::trace::ExecutionTrace;
+pub use causality_types::effect::trace::ExecutionTrace;
 
 pub use generator::WitnessGenerator;
 pub use ssz_input::{SszCircuitInput, SszInputMetadata, SszInputType};

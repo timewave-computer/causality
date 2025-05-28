@@ -9,14 +9,13 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use causality_types::{
-    core::{
-        id::{
-            DomainId, EffectId, IntentId, NodeId, NullifierId, ResourceId, EntityId, ExprId, AsId,
+    primitive::{
+        ids::{
+            DomainId, EffectId, IntentId, NodeId, NullifierId, ResourceId, EntityId,
         },
-        str::Str,
-        Effect,
+        string::Str,
     },
-    expr::value::AsValueExpr,
+    effect::types::Effect,
 };
 
 //-----------------------------------------------------------------------------
@@ -24,7 +23,7 @@ use causality_types::{
 //-----------------------------------------------------------------------------
 
 /// A marker trait for toolkit effects. Defines basic properties of a toolkit-specific effect type.
-pub trait ToolkitEffect: Send + Sync + AsValueExpr + Debug + 'static {
+pub trait ToolkitEffect: Send + Sync + Debug + 'static {
     /// Provides a string representation of the effect's type, e.g., "token.create".
     fn effect_type_str(&self) -> Str;
 
@@ -55,7 +54,7 @@ pub trait ToTelEffect: ToolkitEffect + ToolkitTelEffectData {
         &self,
         node_id: NodeId,
         domain_id: DomainId,
-        intent_id: IntentId,
+        _intent_id: IntentId,
     ) -> Effect {
         Effect {
             id: EntityId::new(node_id.0),
@@ -63,24 +62,16 @@ pub trait ToTelEffect: ToolkitEffect + ToolkitTelEffectData {
             domain_id,
             effect_type: self.effect_type_str(),
             inputs: self.input_resources().into_iter().map(|_id| {
-                use causality_types::core::resource::ResourceFlow;
+                use causality_types::resource::flow::ResourceFlow;
                 ResourceFlow::new(Str::from("toolkit_resource"), 1, domain_id)
             }).collect(),
             outputs: self.output_resources().into_iter().map(|_id| {
-                use causality_types::core::resource::ResourceFlow;
+                use causality_types::resource::flow::ResourceFlow;
                 ResourceFlow::new(Str::from("toolkit_resource"), 1, domain_id)
             }).collect(),
             expression: None,
-            timestamp: causality_types::core::time::Timestamp::now(),
-            resources: Vec::new(),
-            nullifiers: Vec::new(),
-            scoped_by: causality_types::primitive::ids::HandlerId::new([0u8; 32]),
-            intent_id: Some(ExprId::new(intent_id.0)),
-            source_typed_domain: causality_types::tel::optimization::TypedDomain::default(),
-            target_typed_domain: causality_types::tel::optimization::TypedDomain::default(),
-            cost_model: None,
-            resource_usage_estimate: None,
-            originating_dataflow_instance: None,
+            timestamp: causality_types::primitive::time::Timestamp::now(),
+            hint: None,
         }
     }
 }
@@ -271,6 +262,12 @@ pub mod testing {
             Self {}
         }
     }
+
+    impl Default for RecordingHandler {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -278,7 +275,7 @@ pub mod testing {
 //-----------------------------------------------------------------------------
 
 /// Trait for handlers that can handle a specific effect type
-pub trait Handles<E: causality_types::effects_core::Effect>: Send + Sync {
+pub trait Handles<E: causality_types::effect::core::Effect>: Send + Sync {
     /// Handle a specific effect with this handler
     fn handle(&self, effect: &E) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }

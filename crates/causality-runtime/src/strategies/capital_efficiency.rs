@@ -4,12 +4,12 @@
 //! domain-specific cost multipliers and ProcessDataflowBlock complexity.
 
 use super::super::optimization::{OptimizationStrategy, OptimizationContext};
-use crate::optimization::evaluation::{ConfigurationValue, EvaluationConfig, EvaluationMetrics, StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
+use crate::optimization::evaluation::{StrategyConfiguration, StrategyMetrics, ResourceUsageEstimate};
 use anyhow::Result;
 use causality_types::{
-    core::{
-        id::{EntityId, DomainId, ExprId},
-        str::Str,
+    primitive::{
+        ids::{EntityId, DomainId, AsIdConverter},
+        string::Str,
         time::Timestamp,
     },
     graph::{
@@ -33,6 +33,12 @@ pub struct CapitalEfficiencyStrategy {
     
     /// Minimum acceptable efficiency threshold
     min_efficiency_threshold: f64,
+}
+
+impl Default for CapitalEfficiencyStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CapitalEfficiencyStrategy {
@@ -101,9 +107,9 @@ impl CapitalEfficiencyStrategy {
         
         // Apply ProcessDataflowBlock complexity penalty
         let dataflow_penalty = plan.dataflow_steps.len() as f64 * 0.05;
-        let final_efficiency = (efficiency - dataflow_penalty).max(0.0);
         
-        final_efficiency
+        
+        (efficiency - dataflow_penalty).max(0.0)
     }
 
     /// Estimate cost for a specific domain
@@ -148,7 +154,7 @@ impl OptimizationStrategy for CapitalEfficiencyStrategy {
             // Create a basic resolution plan for this domain
             let plan = ResolutionPlan {
                 plan_id: EntityId::new(rand::random()),
-                intent_bundles: context.pending_intents.iter().map(|id| id.to_id::<ExprId>()).collect(),
+                intent_bundles: context.pending_intents.iter().map(|id| id.to_id()).collect(),
                 effect_sequence: vec![], // Would be populated by actual planning logic
                 dataflow_steps: vec![], // Minimal dataflow for efficiency
                 resource_transfers: vec![],

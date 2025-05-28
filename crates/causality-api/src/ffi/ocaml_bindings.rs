@@ -8,11 +8,9 @@ use std::os::raw::{c_char, c_uchar};
 use std::slice;
 
 use causality_types::{
-    expr::value::ValueExpr,
     resource::Resource,
-    tel::{
-        Handler, Effect, Intent, Edge, EdgeKind, EffectGraph,
-    },
+    Handler, Effect, Intent, Edge,
+    expression::value::ValueExpr,
 };
 
 use super::ocaml_adapter;

@@ -13,22 +13,14 @@ use causality_types::{
     tel::{
         EffectGraph, Edge, EdgeKind, ResourceRef,
     },
-    effect::{
-        types::Effect,
-        intent::Intent,
-        handler::Handler,
-    },
+    effect::types::Effect,
     expr::{value::ValueExpr, result::ExprError, ValueExprMap, ValueExprVec},
-    graph::{
-        execution::GraphExecutionContext,
-        optimization::TypedDomain,
-    },
+    graph::execution::GraphExecutionContext,
     resource::flow::ResourceFlow,
     primitive::time::Timestamp,
 };
 
 use causality_core::utils::expr::{value_expr_as_list, value_expr_as_record, value_expr_as_string, value_expr_as_bool, value_expr_as_int};
-use causality_core::id_from_hex;
 
 use crate::{
     tel::{
@@ -73,18 +65,6 @@ fn create_unique_edge_id() -> EdgeId {
     EdgeId::new(bytes)
 }
 
-// Helper trait for hex conversion
-trait FromHex: Sized {
-    fn from_hex(s: &str) -> Result<Self, &'static str>;
-}
-
-// Implement FromHex for all ID types
-impl<T: AsId> FromHex for T {
-    fn from_hex(s: &str) -> Result<Self, &'static str> {
-        id_from_hex(s)
-    }
-}
-
 #[derive(Debug)]
 pub struct IntentProcessor {
     lisp_service: Arc<LispInterpreterService>,
@@ -94,9 +74,9 @@ pub struct IntentProcessor {
 fn create_handler_details_record(handler: &causality_types::core::Handler) -> ValueExpr {
     let mut record_map = BTreeMap::new();
     record_map.insert(CausalityStr::from_static_str(":id"), ValueExpr::String(CausalityStr::from(handler.id.to_hex())));
-    record_map.insert(CausalityStr::from_static_str(":name"), ValueExpr::String(handler.name.clone()));
+    record_map.insert(CausalityStr::from_static_str(":name"), ValueExpr::String(handler.name));
     record_map.insert(CausalityStr::from_static_str(":domain_id"), ValueExpr::String(CausalityStr::from(handler.domain_id.to_hex())));
-    record_map.insert(CausalityStr::from_static_str(":handles_type"), ValueExpr::String(handler.handles_type.clone()));
+    record_map.insert(CausalityStr::from_static_str(":handles_type"), ValueExpr::String(handler.handles_type));
     record_map.insert(CausalityStr::from_static_str(":priority"), ValueExpr::Number(causality_types::expression::value::Number::new_integer(handler.priority as i64)));
     if let Some(ref expr_id) = handler.expression {
         record_map.insert(CausalityStr::from_static_str(":expression_id"), ValueExpr::String(CausalityStr::from(expr_id.to_hex())));
@@ -335,9 +315,7 @@ impl IntentProcessor {
                                                 .and_then(value_expr_as_string)
                                                 .and_then(|s| <ExprId as AsId>::from_hex(s.as_str()).ok());
                                             
-                                            let scoped_handler_id = effect_fields.get(&CausalityStr::from_static_str(":scoped_handler"))
-                                                .and_then(value_expr_as_string)
-                                                .and_then(|s| <HandlerId as AsId>::from_hex(s.as_str()).ok());
+                                            let _scoped_handler_id = effect_fields.get(&CausalityStr::from_static_str("scoped_handler_id"));
 
                                             let mut constraints_vec = Vec::new();
                                             if let Some(constraints_list_val) = effect_fields.get(&CausalityStr::from_static_str(":constraints")) {
@@ -565,7 +543,7 @@ impl IntentProcessor {
                         // Create a TEL Intent from our resource Intent
 
                         // Map the existing intent (resource type) to the unified Intent type
-                        let tel_intent = causality_types::effect::intent::Intent {
+                        let _tel_intent = causality_types::effect::intent::Intent {
                             id: intent.id,
                             name: intent.name,
                             domain_id: intent_domain,

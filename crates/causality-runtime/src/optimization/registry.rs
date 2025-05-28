@@ -6,11 +6,7 @@
 use super::{OptimizationStrategy, OptimizationContext, StrategyError};
 use anyhow::Result;
 use std::collections::HashMap;
-use causality_types::{
-    graph::optimization::{TypedDomain, ResolutionPlan, ScoredPlan},
-    // core::str::Str, // Unused import
-    // core::time::Timestamp, // Unused import
-};
+use causality_types::graph::optimization::TypedDomain;
 
 use crate::optimization::evaluation::{EvaluationConfig, EvaluationMetrics};
 
@@ -275,12 +271,12 @@ impl Default for DefaultStrategyRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::optimization::evaluation::{EvaluationConfig, EvaluationMetrics, ConfigurationValue};
+    use crate::optimization::evaluation::{EvaluationConfig, EvaluationMetrics};
     use causality_types::core::id::DomainId;
     use causality_types::core::str::Str;
     use std::collections::HashMap;
     use crate::optimization::OptimizationContext; // Added OptimizationContext import
-    use causality_types::graph::optimization::{ScoredPlan, ResolutionPlan, DataflowOrchestrationStep}; // Added for explicit types
+    use causality_types::graph::optimization::{ScoredPlan, ResolutionPlan}; // Added for explicit types
 
     // Mock strategy for testing
     #[derive(Clone, Debug)] // Added Debug
@@ -352,7 +348,6 @@ mod tests {
             successful_evaluations: 8,
             failed_evaluations: 2,
             avg_evaluation_time_ms: 50.0,
-            // avg_plan_score: 0.75, // Field does not exist on EvaluationMetrics
             cache_hit_rate: 0.5,
             domain_performance: HashMap::new(),
             last_updated: causality_types::core::time::Timestamp::now(),
@@ -372,7 +367,6 @@ mod tests {
         let metrics = all_metrics.get("mock_strategy").unwrap();
         assert_eq!(metrics.total_evaluations, 10);
         assert_eq!(metrics.successful_evaluations, 8);
-        // assert_eq!(metrics.avg_plan_score, 0.75); // Field does not exist
     }
 
     #[test]
@@ -383,7 +377,6 @@ mod tests {
             max_evaluation_time_ms: 1000,
             max_concurrent_evaluations: 1,
             enable_caching: false,
-            // strategy_id: "mock_strategy".to_string(), // Field does not exist
             cache_expiration_ms: 0, 
             scoring_weights: Default::default(),
             domain_parameters: Default::default(),
@@ -407,10 +400,9 @@ mod tests {
         assert_eq!(retrieved_strategy.strategy_id(), "mock_strategy");
         assert_eq!(config_before_update.max_evaluation_time_ms, 1000);
 
-        let mut new_eval_config = EvaluationConfig {
+        let new_eval_config = EvaluationConfig {
             max_evaluation_time_ms: 2000,
             enable_caching: true,
-            // strategy_id: "mock_strategy_updated".to_string(), // Field does not exist, and ID shouldn't change via config
             max_concurrent_evaluations: initial_eval_config.max_concurrent_evaluations,
             cache_expiration_ms: initial_eval_config.cache_expiration_ms,
             scoring_weights: initial_eval_config.scoring_weights.clone(),

@@ -10,10 +10,11 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use causality_types::{
-    core::id::TypeExprId,
-    core::str::Str,
-    expr::{TypeExpr, TypeExprMap, TypeExprBox, ValueExpr},
-    effects_core::{Effect, EffectInput, EffectOutput, ConversionError},
+    expression::{r#type::{TypeExpr, TypeExprMap, TypeExprBox}, value::ValueExpr},
+    primitive::{string::Str, ids::TypeExprId},
+    effect::{
+        core::{Effect, EffectInput, EffectOutput, ConversionError},
+    },
 };
 
 use crate::core::CloneableEffectBox;
@@ -223,6 +224,12 @@ impl fmt::Debug for SequenceEffect {
     }
 }
 
+impl Default for SequenceEffect {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SequenceEffect {
     /// Create a new sequence effect
     pub fn new() -> Self {
@@ -298,6 +305,7 @@ impl causality_types::expr::AsSchema for SequenceEffect {
 //-----------------------------------------------------------------------------
 
 /// Effect for conditionally repeating an effect
+#[allow(dead_code)]
 pub struct WhileEffect {
     /// Condition function - not cloneable so must be manually managed
     condition_fn: Arc<Mutex<dyn Fn() -> bool + Send + Sync>>,

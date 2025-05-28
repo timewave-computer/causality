@@ -9,15 +9,14 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use causality_types::core::{
-    AsErrorContext, ContextualError, ErrorCategory, ErrorMetadata,
+use causality_types::primitive::error::{
+    AsErrorContext, ContextualError, ErrorMetadata, ErrorCategory,
 };
-// Removed unused import: causality_types::utils::SszDuration
 
 use super::generator::ProofGenerator;
 use super::monitor::{CoprocessorMonitor, HealthStatus};
 use super::types::{CoprocessorId, Proof, ProofRequest, ProofRequestId, ProofStatus};
-use crate::coprocessor::types::ProofRequestParams; // Added for ProofRequestParams
+use crate::coprocessor::types::ProofRequestParams;
 
 //-----------------------------------------------------------------------------
 // Constants and Bound

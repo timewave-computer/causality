@@ -281,6 +281,7 @@ async fn analyze_trace(
 }
 
 /// View execution trace
+#[allow(dead_code)]
 pub async fn view_trace(trace_id: &str) -> anyhow::Result<()> {
     println!("Viewing execution trace: {}", trace_id);
     
@@ -389,6 +390,7 @@ pub async fn view_trace(trace_id: &str) -> anyhow::Result<()> {
 }
 
 /// Analyze execution trace for performance insights
+#[allow(dead_code)]
 pub async fn analyze_trace_performance(trace_id: &str) -> anyhow::Result<()> {
     println!("Analyzing execution trace: {}", trace_id);
     

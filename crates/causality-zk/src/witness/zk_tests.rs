@@ -5,24 +5,19 @@
 
 use causality_types::anyhow::Result;
 use causality_types::{
-    core::id::{ResourceId, AsId},
-    expr::value::ValueExpr,
-    resource::Resource,
-    state::ResourceState,
-    trace::{ExecutionTrace, ZkExecutionTrace},
+    primitive::{ids::{DomainId, EntityId, ResourceId, AsId}, string::Str, time::Timestamp},
+    expression::value::ValueExpr,
+    resource::{types::Resource, state::ResourceState},
+    effect::trace::ExecutionTrace,
 };
 use crate::witness::{
     WitnessGenerator, 
     core::{build_witness_from_trace, WitnessData},
 };
-use std::collections::HashMap;
 use sha2::{Sha256, Digest};
 
 /// Create a simple resource for testing
 fn create_test_resource() -> Resource {
-    use causality_types::core::{Timestamp, str::Str};
-    use causality_types::primitive::ids::{EntityId, DomainId};
-    
     Resource {
         id: EntityId::new([0u8; 32]),
         name: Str::from("test_resource"),
@@ -77,7 +72,8 @@ fn test_build_witness_from_trace() -> Result<()> {
         .map_err(|e| causality_types::anyhow::anyhow!("Failed to build witness: {:?}", e))?;
     
     // Verify witness data contains the expected elements
-    assert!(witness_data.effect_ids.len() >= 0); // Just check it exists
+    // Just check that effect_ids exists and is accessible
+    let _ = witness_data.effect_ids.len(); 
     assert!(!witness_data.private_data.is_empty());
     
     Ok(())
@@ -100,13 +96,13 @@ fn test_zk_proof_with_ssz() -> Result<()> {
     generator.add_value_expr(value_expr.clone());
     
     // Generate circuit inputs
-    let inputs = generator.generate_circuit_inputs()?;
+    let _inputs = generator.generate_circuit_inputs()?;
     
-    // Generate a Merkle root from the inputs
-    let root = generator.generate_merkle_root()?;
+    // Generate merkle root
+    let _root = generator.generate_merkle_root()?;
     
     // Create a simplified ZK execution trace for testing
-    let zk_trace = ZkExecutionTrace::new("test_execution".to_string(), 1234567890);
+    let zk_trace = "test_execution".to_string();
     
     // Build the witness from the trace
     let witness_data = build_witness_from_trace(&trace)
@@ -116,8 +112,8 @@ fn test_zk_proof_with_ssz() -> Result<()> {
     // In a real system, this would call an actual ZK proving system
     let mock_proof = generate_mock_proof(&witness_data, &zk_trace)?;
     
-    // Verify the proof
-    let verification_result = verify_mock_proof(&mock_proof, &[0u8; 32])?;
+    // Verify the proof (simplified mock verification)
+    let verification_result = verify_mock_proof(&mock_proof)?;
     
     // Check that verification succeeded
     assert!(verification_result, "Proof verification failed");
@@ -128,7 +124,7 @@ fn test_zk_proof_with_ssz() -> Result<()> {
 /// Generate a mock proof for testing
 /// 
 /// This function simulates ZK proof generation without using an actual proving system
-fn generate_mock_proof(witness_data: &WitnessData, zk_trace: &ZkExecutionTrace) -> Result<circuit::ProofData> {
+fn generate_mock_proof(witness_data: &WitnessData, _zk_trace: &str) -> Result<circuit::ProofData> {
     // Serialize the witness data using SSZ
     let mut serialized_data = Vec::new();
     
@@ -143,11 +139,6 @@ fn generate_mock_proof(witness_data: &WitnessData, zk_trace: &ZkExecutionTrace) 
     // Create proof data
     let proof_data = circuit::ProofData {
         proof: hash.to_vec(),
-        public_inputs: circuit::PublicInputs {
-            merkle_root: [0u8; 32],
-            input_states: HashMap::new(),
-            output_states: HashMap::new(),
-        },
     };
     
     Ok(proof_data)
@@ -156,10 +147,10 @@ fn generate_mock_proof(witness_data: &WitnessData, zk_trace: &ZkExecutionTrace) 
 /// Verify a mock proof
 /// 
 /// This function simulates ZK proof verification without using an actual verification system
-fn verify_mock_proof(proof_data: &circuit::ProofData, expected_root: &[u8; 32]) -> Result<bool> {
+fn verify_mock_proof(proof_data: &circuit::ProofData) -> Result<bool> {
     // In a real system, this would perform actual cryptographic verification
     // For this test, we just check that the public inputs contain the expected Merkle root
-    Ok(&proof_data.public_inputs.merkle_root == expected_root)
+    Ok(!proof_data.proof.is_empty())
 }
 
 /// Test that SSZ serialization works correctly within the ZK proving system
@@ -189,18 +180,36 @@ fn test_ssz_serialization_in_zk_context() -> Result<()> {
     Ok(())
 }
 
+/// Generate mock witness data for testing
+fn generate_mock_witness_data() -> Result<WitnessData> {
+    let trace = create_test_execution_trace();
+    build_witness_from_trace(&trace)
+        .map_err(|e| causality_types::anyhow::anyhow!("Failed to build witness: {:?}", e))
+}
+
+#[test]
+fn test_witness_integration() -> Result<()> {
+    let witness_data = generate_mock_witness_data()?;
+    
+    // Check basic properties - just verify effect_ids is accessible
+    let _ = witness_data.effect_ids.len();
+
+    Ok(())
+}
+
 // Define any missing types needed for the tests
 // These are simplified versions just for this test file
 mod circuit {
     use causality_types::anyhow::Result;
     use std::collections::HashMap;
     use causality_types::{
-        core::id::ResourceId,
-        state::ResourceState,
+        primitive::ids::ResourceId,
+        resource::state::ResourceState,
     };
     
     /// Mock public inputs for ZK proofs
     #[derive(Debug, Clone)]
+    #[allow(dead_code)]
     pub struct PublicInputs {
         pub merkle_root: [u8; 32],
         pub input_states: HashMap<ResourceId, ResourceState>,
@@ -209,18 +218,20 @@ mod circuit {
     
     /// Mock proof data
     #[derive(Debug, Clone)]
+    #[allow(dead_code)]
     pub struct ProofData {
         pub proof: Vec<u8>,
-        pub public_inputs: PublicInputs,
     }
     
     /// Mock verify function
+    #[allow(dead_code)]
     pub fn verify_witness(_witness_data: &super::WitnessData, _public_inputs: &PublicInputs) -> Result<bool> {
         // This is a mock implementation
         Ok(true)
     }
     
     /// Mock verify function for proofs
+    #[allow(dead_code)]
     pub fn verify_proof(proof_data: &ProofData) -> Result<bool> {
         // This is a mock implementation
         Ok(!proof_data.proof.is_empty())

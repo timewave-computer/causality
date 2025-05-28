@@ -324,7 +324,6 @@ impl std::error::Error for Error {}
 //-----------------------------------------------------------------------------
 
 /// Serialize a value using ssz and return the serialized bytes
-
 pub fn serialize<T: Encode>(value: &T) -> Result<Vec<u8>, Error> {
     Ok(value.as_ssz_bytes())
 }
@@ -362,12 +361,13 @@ pub fn verify_hash<T: Encode>(
 //-----------------------------------------------------------------------------
 
 /// Run the circuit with the provided witnesses
-
 ///
-/// This is the shared implementation used by both the WASM witness generator
-/// and the RISC-V circuit. It processes witness data and produces a result.
+/// # Arguments
+/// * `circuit_data` - Serialized circuit information
+/// * `witness_data` - Witness data for the circuit
 ///
-/// See docs/expression_compilation.md for the approach to expression verification.
+/// # Returns
+/// Result containing the circuit output or an error
 pub fn run_circuit<T: Decode + Encode>(
     input_data: &[u8],
 ) -> Result<Vec<u8>, Error> {

@@ -512,7 +512,7 @@ impl ZkCombinatorInterpreter {
 
 pub async fn validate_constraints(
     expr_ids: &[ExprId],
-    ctx: &(impl ExprContextual + causality_types::provider::context::StaticExprContext),
+    ctx: &(impl ExprContextual + causality_types::system::provider::StaticExprContext),
 ) -> Result<Vec<bool>, crate::core::Error> {
     let mut results = Vec::with_capacity(expr_ids.len());
     
@@ -537,7 +537,7 @@ pub async fn validate_constraints(
             }
             causality_types::expr::ast::Expr::Apply(func, args) => {
                 // Validate function application constraints
-                validate_apply_constraint(&func, &args, ctx).await?
+                validate_apply_constraint(func, args, ctx).await?
             }
             causality_types::expr::ast::Expr::Lambda(_, _) => {
                 // Lambda expressions are valid constraints
@@ -562,7 +562,7 @@ pub async fn validate_constraints(
 async fn validate_apply_constraint(
     func: &causality_types::expr::ast::ExprBox,
     args: &causality_types::expr::ast::ExprVec,
-    ctx: &(impl ExprContextual + causality_types::provider::context::StaticExprContext),
+    ctx: &(impl ExprContextual + causality_types::system::provider::StaticExprContext),
 ) -> Result<bool, crate::core::Error> {
     use causality_types::expr::ast::Expr;
     
@@ -581,7 +581,7 @@ async fn validate_apply_constraint(
 async fn validate_combinator_constraint(
     combinator: &causality_types::expr::ast::AtomicCombinator,
     args: &causality_types::expr::ast::ExprVec,
-    _ctx: &(impl ExprContextual + causality_types::provider::context::StaticExprContext),
+    _ctx: &(impl ExprContextual + causality_types::system::provider::StaticExprContext),
 ) -> Result<bool, crate::core::Error> {
     use causality_types::expr::ast::AtomicCombinator;
     

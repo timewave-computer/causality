@@ -447,8 +447,8 @@ mod tests {
         let smt = Arc::new(Mutex::new(TegMultiDomainSmt::new(backend)));
         let _verifier = TegDevelopmentVerifier::new(smt);
         
-        // Just verify we can create the verifier
-        assert!(true);
+        // TODO: Implement actual ZKP generation logic
+        // For now, this is a placeholder that always succeeds
     }
 
     #[test]

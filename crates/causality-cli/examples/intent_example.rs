@@ -51,20 +51,18 @@ fn create_test_intent() -> Intent {
     let input_flow = ResourceFlow::new(Str::from("test_input_resource"), 1, domain_id);
     let output_flow = ResourceFlow::new(Str::from("test_output_resource"), 1, domain_id);
     
+    let intent_id = EntityId::null(); // Use null ID for example
+
     Intent {
-        id: EntityId::null(), // Use null ID for example
-        name: Str::from("Test Intent"),
-        domain_id: DomainId::null(), // Use null domain for example
-        priority: 5,
+        id: intent_id,
+        name: Str::from("transfer_tokens"),
+        domain_id,
+        priority: 100,
         inputs: vec![input_flow],
         outputs: vec![output_flow],
-        expression: Some(ExprId::from([5u8; 32])), // Keep the expression from original
+        expression: Some(ExprId::from([5u8; 32])),
         timestamp: Timestamp::now(),
-        optimization_hint: None,
-        compatibility_metadata: Vec::new(),
-        resource_preferences: Vec::new(),
-        target_typed_domain: None,
-        process_dataflow_hint: None,
+        hint: Some(ExprId::new([1u8; 32])),
     }
 }
 

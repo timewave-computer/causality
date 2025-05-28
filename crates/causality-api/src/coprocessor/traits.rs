@@ -4,7 +4,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 // Use the canonical ExecutionTrace from causality_types.
-use causality_types::trace::ExecutionTrace;
+use causality_types::effect::trace::ExecutionTrace;
 
 pub use crate::coprocessor::types::{
     CoprocessorApiError, Proof, ProofRequestId, ProofStatus, PublicInputs,

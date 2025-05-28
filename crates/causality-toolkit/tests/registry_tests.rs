@@ -1,10 +1,8 @@
 //! Tests for effect registry
 
-use causality_toolkit::registry::*;
-use causality_toolkit::AsTypeSchema;
-use causality_types::effects_core::{Effect, EffectInput, EffectOutput, ConversionError};
-use causality_types::expr::{TypeExpr, value::ValueExpr};
-use std::any::Any;
+use causality_toolkit::{Handles, SimpleEffectHandler, EffectRegistry, EffectAny};
+use causality_types::effect::core::{Effect, EffectInput, EffectOutput, ConversionError};
+use causality_types::expression::{r#type::TypeExpr, value::ValueExpr};
 
 #[test]
 fn test_registry_creation() {
@@ -37,6 +35,7 @@ fn test_registry_unhandled_effect() {
 
 // Test effect
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct TestEffect {
     value: i32,
 }
@@ -63,7 +62,7 @@ impl EffectOutput for TestEffectOutput {
     }
     
     fn to_value_expr(&self) -> Result<ValueExpr, ConversionError> {
-        Ok(ValueExpr::Unit)
+        Ok(ValueExpr::Nil)
     }
 }
 
@@ -101,5 +100,7 @@ impl Effect for UnhandledEffect {
     
     const EFFECT_TYPE: &'static str = "test.UnhandledEffect";
 }
+
+// Registry integration tests
 
  

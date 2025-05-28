@@ -1,23 +1,10 @@
-//! WASM interface for Valence Coprocessor
-//!
-//! This module contains code specific to the WASM runtime target.
-//! It implements the interface functions for the Valence Coprocessor registry.
-//!
-//! See the architecture described in docs/valence-coprocessor-interaction.md
+// WebAssembly Deployment Support
+//
+// This module provides functionality for deploying ZK circuits to WebAssembly runtime.
 
 #![cfg(feature = "host")]
 
-use causality_types::primitive::ids::ExprId;
-use causality_types::core::serialization::from_slice;
-use causality_types::expr::ast::Expr as TypesExpr;
-
-use crate::core::Error;
-use crate::interpreter::core::validate_constraints;
-use crate::witness::context_provider::{WitnessContextProvider, ZkEvalContext};
-use crate::witness::{ExecutionTrace, WitnessData};
-
-use causality_lisp::api::ExprContextual;
-use causality_lisp::expr::Expr as LispExpr;
+// All imports removed as they were unused
 
 //-----------------------------------------------------------------------------
 // WASM Interface Function

@@ -528,7 +528,8 @@ where
 
 #[cfg(test)]
 mod tests {
-
+    #[cfg(feature = "tokio")]
+    use super::{MemoryRegistry, MemoryStore, AsRegistry, AsMutableKeyValueStore, AsKeyValueStore};
 
     #[cfg(feature = "tokio")]
     #[tokio::test]

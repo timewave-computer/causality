@@ -739,10 +739,8 @@ mod tests {
         // Verify list content
         if let ValueExpr::List(items) = list {
             assert_eq!(items.len(), 3);
-            if let ValueExpr::Number(n) = &items[0] {
-                if let crate::primitive::number::Number::Integer(i) = n {
-                    assert_eq!(*i, 1);
-                }
+            if let ValueExpr::Number(crate::primitive::number::Number::Integer(i)) = &items[0] {
+                assert_eq!(*i, 1);
             }
         } else {
             panic!("Expected List variant");
@@ -771,7 +769,7 @@ mod tests {
     fn test_value_expr_ref_and_lambda() {
         // Create a ValueExprRef
         let ref_id = crate::primitive::ids::ValueExprId::random();
-        let ref_expr = ValueExpr::Ref(ValueExprRef::Value(ref_id.clone()));
+        let ref_expr = ValueExpr::Ref(ValueExprRef::Value(ref_id));
         
         // Create a Lambda
         let params = vec![Str::from("x"), Str::from("y")];
@@ -781,7 +779,7 @@ mod tests {
         
         let lambda = ValueExpr::Lambda {
             params: params.clone(),
-            body_expr_id: body_expr_id.clone(),
+            body_expr_id,
             captured_env: captured_env.clone().into(),
         };
         

@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use causality_types::core::{
-    AsErrorContext, ContextualError, ErrorCategory, ErrorMetadata,
+use causality_types::primitive::error::{
+    AsErrorContext, ContextualError, ErrorMetadata, ErrorCategory,
 };
 
 //-----------------------------------------------------------------------------

@@ -136,12 +136,10 @@
       (effect initiate-transfer-in-A 
         :type "control.StartTransfer"
         ;; Properties for this specific invocation
-        :properties {
-          :from-account "account-A123" 
-          :to-account "account-B456" 
-          :amount 100 
-          :token "USD"
-          }
+        :properties (:from-account "account-A123" 
+                     :to-account "account-B456" 
+                     :amount 100 
+                     :token "USD")
       )
       (effect send-debit-request-to-B
         :type "communication.SendMessage"
@@ -151,7 +149,7 @@
       )
       (effect await-credit-advice-from-B
         :type "control.WaitForMessage"
-        :properties {:expected-message-type "credit-advice-CrossDomain"}
+        :properties (:expected-message-type "credit-advice-CrossDomain")
       )
       (effect finalize-debit-in-A
         :type "ledger.FinalizeDebit"
@@ -205,7 +203,7 @@
     (:effects
       (effect receive-debit-request-in-B
         :type "communication.ReceiveMessage"
-        :properties {:expected-message-type "debit-request-CrossDomain"}
+        :properties (:expected-message-type "debit-request-CrossDomain")
       )
       (effect process-debit-and-send-advice
         :type "control.ProcessAndRespond" 

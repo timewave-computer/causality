@@ -89,7 +89,6 @@ impl CircuitTemplate {
 //-----------------------------------------------------------------------------
 
 /// Generate a CircuitId from a graph and its subgraphs
-
 pub fn generate_circuit_id(
     graph_id: &GraphId,
     subgraph_ids: &[SubgraphId],
@@ -142,7 +141,6 @@ impl Encode for CircuitIdInput {
 //-----------------------------------------------------------------------------
 
 /// Register a circuit with the compiler registry
-
 #[cfg(feature = "host")]
 pub async fn register_circuit(circuit: &Circuit) -> Result<(), Error> {
     // This is a placeholder for the actual implementation

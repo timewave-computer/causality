@@ -15,11 +15,17 @@ pub mod registry;
 pub mod testing;
 
 // Re-export core functionality
-pub use core::*;
+pub use core::{
+    ToolkitEffect, ToolkitTelEffectData, ToTelEffect, DefaultAsResourceConvertible,
+    ResourceState, TypedResource, ConsumedResource, CloneableEffectBox, EffectExpr,
+};
 pub use effects::*;
 pub use meta::*;
-pub use control_flow::*;
-pub use registry::*;
+pub use control_flow::{
+    ControlFlowInput, ControlFlowOutput, IfEffect, SequenceEffect, WhileEffect,
+    HandleableEffect,
+};
+pub use registry::{EffectRegistry, EffectAny, SimpleEffectHandler, Handles};
 
 // Re-export testing utilities when testing feature is enabled
 #[cfg(feature = "testing")]
@@ -30,7 +36,8 @@ pub use testing::{
 };
 
 // Import necessary types for trait definitions
-use causality_types::expr::{TypeExpr, TypeExprId};
+use causality_types::expression::r#type::TypeExpr;
+use causality_types::primitive::ids::TypeExprId;
 use sha2::{Digest, Sha256};
 
 /// Trait for types that can provide a schema representation

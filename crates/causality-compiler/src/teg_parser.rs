@@ -349,6 +349,7 @@ fn expr_to_id(expr: &Expr) -> ExprId {
 
 // Type aliases for compatibility
 type ProgramId = EntityId;
+#[allow(dead_code)]
 type SubgraphId = EntityId;
 type TypesNodeId = NodeId;
 type Node = causality_types::core::Resource; // Using Resource as a node type

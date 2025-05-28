@@ -1,13 +1,13 @@
 //! Tests for control flow effects
 
-use causality_toolkit::control_flow::*;
-use causality_toolkit::AsTypeSchema;
-use causality_types::effects_core::Effect;
+use causality_toolkit::{IfEffect, SequenceEffect, WhileEffect, AsTypeSchema, ControlFlowInput, ControlFlowOutput, HandleableEffect};
+use causality_toolkit::control_flow::SimpleEffectHandler;
+use causality_types::effect::core::Effect;
 
 #[test]
 fn test_if_effect_creation() {
     let effect = IfEffect::new(true, DummyEffect);
-    assert_eq!(effect.condition, true);
+    assert!(effect.condition);
     assert_eq!(effect.effect_type_name(), "control_flow.IfEffect");
     assert_eq!(IfEffect::EFFECT_TYPE, "control_flow.IfEffect");
 }
@@ -16,7 +16,7 @@ fn test_if_effect_creation() {
 fn test_if_effect_with_else() {
     let effect = IfEffect::new(false, DummyEffect)
         .with_else(DummyEffect);
-    assert_eq!(effect.condition, false);
+    assert!(!effect.condition);
     assert!(effect.else_effect.is_some());
 }
 
@@ -77,8 +77,8 @@ impl Effect for DummyEffect {
 }
 
 impl AsTypeSchema for DummyEffect {
-    fn type_schema(&self) -> causality_types::expr::TypeExpr {
-        causality_types::expr::TypeExpr::Unit
+    fn type_schema(&self) -> causality_types::expression::r#type::TypeExpr {
+        causality_types::expression::r#type::TypeExpr::Unit
     }
     
     fn effect_type_name(&self) -> &'static str {

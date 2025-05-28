@@ -68,7 +68,7 @@ impl Encode for StoredProof {
 }
 
 impl Decode for StoredProof {
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
+    fn from_ssz_bytes(_bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
         // Simplified implementation
         Err(causality_types::serialization::DecodeError::new("StoredProof deserialization not implemented"))
     }

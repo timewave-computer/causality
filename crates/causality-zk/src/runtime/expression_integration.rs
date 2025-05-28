@@ -45,7 +45,7 @@ impl Encode for StaticExpressionResult {
 }
 
 impl Decode for StaticExpressionResult {
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
+    fn from_ssz_bytes(_bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
         Err(causality_types::serialization::DecodeError::new("StaticExpressionResult deserialization not implemented"))
     }
 }
@@ -74,7 +74,7 @@ impl Encode for IntegratedExpressionResults {
 }
 
 impl Decode for IntegratedExpressionResults {
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
+    fn from_ssz_bytes(_bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
         Err(causality_types::serialization::DecodeError::new("IntegratedExpressionResults deserialization not implemented"))
     }
 }
@@ -122,7 +122,7 @@ impl Encode for VerificationStatus {
 }
 
 impl Decode for VerificationStatus {
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
+    fn from_ssz_bytes(_bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
         Err(causality_types::serialization::DecodeError::new("VerificationStatus deserialization not implemented"))
     }
 }

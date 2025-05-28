@@ -6,12 +6,12 @@
 
 use async_trait::async_trait;
 use crate::serialization::{Encode, Decode, SimpleSerialize, DecodeError};
-use causality_types::core::contextual_error::ContextualError;
-use causality_types::core::error::ErrorCategory;
-use causality_types::core::error_context::{AsErrorContext, ErrorMetadata};
-use causality_types::core::logger::LogLevel;
-use causality_types::core::mock_logger::MockLogger;
-use causality_types::core::AsLogger;
+use causality_types::primitive::error::ContextualError;
+use causality_types::primitive::error::ErrorCategory;
+use causality_types::primitive::error::{AsErrorContext, ErrorMetadata};
+use causality_types::primitive::logging::LogLevel;
+use causality_types::primitive::mock_logger::MockLogger;
+use causality_types::primitive::logging::AsLogger;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 

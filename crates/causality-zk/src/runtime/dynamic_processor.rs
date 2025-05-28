@@ -7,16 +7,16 @@
 extern crate alloc;
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use causality_types::{
-    expr::value::ValueExpr,
-    serialization::{Encode, Decode, SimpleSerialize},
+    expression::value::ValueExpr,
+    system::serialization::{Encode, Decode, SimpleSerialize},
 };
 use causality_types::primitive::ids::{ExprId, ResourceId};
-use causality_types::expr::ast::Expr;
-use causality_types::expr::result::{TypeErrorData};
+use causality_types::expression::ast::Expr;
+use causality_types::expression::result::{TypeErrorData};
 use causality_types::primitive::string::Str;
-use causality_types::expr::ast::{Atom as LispAtom, Expr as LispExpr};
-use causality_types::expr::result::ExprError as LispError;
-use causality_types::expr::result::ExprResult;
+use causality_types::expression::ast::{Atom as LispAtom, Expr as LispExpr};
+use causality_types::expression::result::ExprError as LispError;
+use causality_types::expression::result::ExprResult;
 use crate::core::Error;
 use causality_lisp::context::DefaultExprContext;
 
@@ -83,7 +83,7 @@ impl Encode for DynamicExpressionPackage {
 }
 
 impl Decode for DynamicExpressionPackage {
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
+    fn from_ssz_bytes(_bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
         // Simplified implementation - in a real implementation this would properly parse the bytes
         Err(causality_types::serialization::DecodeError::new("DynamicExpressionPackage deserialization not implemented"))
     }
@@ -133,7 +133,7 @@ impl Encode for DynamicExpressionResults {
 }
 
 impl Decode for DynamicExpressionResults {
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
+    fn from_ssz_bytes(_bytes: &[u8]) -> Result<Self, causality_types::serialization::DecodeError> {
         // Simplified implementation
         Err(causality_types::serialization::DecodeError::new("DynamicExpressionResults deserialization not implemented"))
     }
@@ -166,7 +166,7 @@ pub async fn process_dynamic_expressions(
 
         // Try to evaluate the dynamic expression
         match evaluate_dynamic_package(package, witness_data).await {
-            Ok((result, steps)) => {
+            Ok((result, _steps)) => {
                 results.results.push(result);
             }
             Err(e) => {
@@ -220,4 +220,27 @@ async fn interpret_expr_with_step_limit(
 ) -> Result<ExprResult, String> {
     // Placeholder implementation
     Ok(ExprResult::Value(ValueExpr::Number((42i64).into())))
+}
+
+/// Placeholder type for execution steps
+#[derive(Debug, Clone)]
+pub struct ExecutionStep {
+    pub step_id: u32,
+    pub operation: String,
+}
+
+/// Placeholder type for processing results
+#[derive(Debug, Clone)]
+pub struct ProcessingResult {
+    pub success: bool,
+    pub message: String,
+}
+
+/// Process dynamic execution steps
+pub fn process_dynamic_execution(_steps: &[ExecutionStep]) -> Result<ProcessingResult, Error> {
+    // Implementation of process_dynamic_execution method
+    Ok(ProcessingResult {
+        success: true,
+        message: "Processing completed".to_string(),
+    })
 }

@@ -8,11 +8,11 @@
 
 use anyhow::Result; // This Result is from anyhow, used in AsExprContext impl
 use async_trait::async_trait;
-use std::collections::BTreeMap; // For Map conversion
+ // For Map conversion
 
 use causality_lisp::core::ExprContextual as LispCoreExprContextual; // Alias to avoid clash
 // Aliases for lisp interpreter's value and error types
-use causality_types::expr::value::ValueExpr as LispValue; // Updated path
+// LispValue is the same as ValueExpr in the new type system
 
 use causality_types::{
     core::{
@@ -21,7 +21,7 @@ use causality_types::{
     },
     expr::{
         ast::Expr as TypesExpr, 
-        value::{ValueExpr, ValueExprMap, ValueExprVec, Number}, // Added ValueExpr for proper import
+        value::ValueExpr, // Added ValueExpr for proper import
         result::{ExprResult as TypesExprResult, ExprError as TypesExprError, TypeErrorData},
     },
     system::provider::{AsExprContext as TypesAsExprContext, TelContextInterface as TypesTelContextInterface}, // New path
@@ -40,10 +40,8 @@ use causality_core::id_to_hex; // Import function directly
 
 #[derive(Debug, thiserror::Error)]
 pub enum LispBridgeError {
-    #[error("Unsupported Lisp value for conversion: {0:?}")]
-    UnsupportedLispValue(LispValue), 
-    #[error("Unsupported Types value for conversion: {0:?}")]
-    UnsupportedTypesValue(ValueExpr), 
+    #[error("Unsupported value for conversion: {0:?}")]
+    UnsupportedValue(ValueExpr), 
     #[error("Recursive conversion error: {0}")]
     RecursiveConversion(String),
 }
@@ -52,88 +50,14 @@ pub enum LispBridgeError {
 // Public Conversion Functions
 //-----------------------------------------------------------------------------
 
-pub fn from_lisp_value(lisp_val: LispValue) -> Result<ValueExpr, LispBridgeError> {
-    match lisp_val {
-        LispValue::Nil => Ok(ValueExpr::Nil),
-        LispValue::Unit => Ok(ValueExpr::Nil),
-        LispValue::Bool(b) => Ok(ValueExpr::Bool(b)),
-        LispValue::String(s) => Ok(ValueExpr::String(s)), // Str is Copy
-        LispValue::Number(n) => match n {
-            Number::Integer(i) => Ok(ValueExpr::Number(Number::Integer(i))),
-            _ => Err(LispBridgeError::UnsupportedLispValue(LispValue::Number(n))), // Only integers supported from Lisp
-        },
-        LispValue::List(l_list) => {
-            let mut t_vec = Vec::new();
-            for item in l_list.0.iter() { // Iterate over Vec inside ValueExprVec
-                t_vec.push(from_lisp_value(item.clone())?);
-            }
-            Ok(ValueExpr::List(ValueExprVec(t_vec)))
-        }
-        LispValue::Map(l_map) => {
-            let mut t_map_data = BTreeMap::new();
-            for (k, v) in l_map.0.iter() { // Iterate over BTreeMap inside ValueExprMap
-                t_map_data.insert(*k, from_lisp_value(v.clone())?);
-            }
-            Ok(ValueExpr::Map(ValueExprMap(t_map_data)))
-        }
-        LispValue::Record(l_rec) => {
-            let mut t_map_data = BTreeMap::new();
-            for (k, v) in l_rec.0.iter() { // Iterate over BTreeMap inside ValueExprMap
-                t_map_data.insert(*k, from_lisp_value(v.clone())?);
-            }
-            Ok(ValueExpr::Record(ValueExprMap(t_map_data)))
-        }
-        LispValue::Ref(id) => Ok(ValueExpr::Ref(id)),
-        LispValue::Lambda { params, body_expr_id, captured_env } => Ok(ValueExpr::Lambda {
-            params,
-            body_expr_id,
-            captured_env,
-        }),
-        // Explicitly catch other variants if LispValue could diverge, though it's ValueExpr now
-        // _ => Err(LispBridgeError::UnsupportedLispValue(lisp_val)), 
-    }
+pub fn from_lisp_value(lisp_val: ValueExpr) -> Result<ValueExpr, LispBridgeError> {
+    // Since LispValue is now the same as ValueExpr, this is just a pass-through
+    Ok(lisp_val)
 }
 
-pub fn to_lisp_value(types_val: ValueExpr) -> Result<LispValue, LispBridgeError> {
-    match types_val {
-        ValueExpr::Nil => Ok(LispValue::Unit),
-        // ValueExpr::Unit doesn't exist, this case is handled by Nil
-        ValueExpr::Bool(b) => Ok(LispValue::Bool(b)),
-        ValueExpr::String(s) => Ok(LispValue::String(s)), // Str is Copy
-        ValueExpr::Number(n) => match n {
-            Number::Integer(i) => Ok(LispValue::Number(Number::Integer(i))),
-            _ => Err(LispBridgeError::UnsupportedTypesValue(ValueExpr::Number(n))), // Only integers supported to Lisp
-        },
-        ValueExpr::List(t_list) => {
-            let mut l_list_vec = Vec::new();
-            for item in t_list.0.iter() { // Iterate over Vec inside ValueExprVec
-                l_list_vec.push(to_lisp_value(item.clone()).map_err(|e| LispBridgeError::RecursiveConversion(format!("{:?}", e)))?);
-            }
-            Ok(LispValue::List(ValueExprVec(l_list_vec)))
-        }
-        ValueExpr::Map(t_map) => {
-            let mut l_map_data = BTreeMap::new();
-            for (k, v) in t_map.0.iter() { // Iterate over BTreeMap inside ValueExprMap
-                l_map_data.insert(*k, to_lisp_value(v.clone()).map_err(|e| LispBridgeError::RecursiveConversion(format!("{:?}", e)))?);
-            }
-            Ok(LispValue::Map(ValueExprMap(l_map_data)))
-        }
-        ValueExpr::Record(rec_val) => {
-            let mut l_map_data = BTreeMap::new();
-            for (k, v) in rec_val.0.iter() { // Iterate over BTreeMap inside ValueExprMap
-                l_map_data.insert(*k, to_lisp_value(v.clone()).map_err(|e| LispBridgeError::RecursiveConversion(format!("{:?}", e)))?);
-            }
-            Ok(LispValue::Record(ValueExprMap(l_map_data)))
-        }
-        ValueExpr::Ref(id) => Ok(LispValue::Ref(id)),
-        ValueExpr::Lambda { params, body_expr_id, captured_env } => Ok(LispValue::Lambda {
-            params,
-            body_expr_id,
-            captured_env,
-        }),
-        // All ValueExpr variants are covered.
-        // The previous catch-all with ResourceId, ExprId etc. was based on an outdated ValueExpr.
-    }
+pub fn to_lisp_value(types_val: ValueExpr) -> Result<ValueExpr, LispBridgeError> {
+    // Since LispValue is now the same as ValueExpr, this is just a pass-through
+    Ok(types_val)
 }
 
 //-----------------------------------------------------------------------------

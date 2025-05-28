@@ -159,7 +159,7 @@ impl AsResourceData for Effect {
             domain_id,
             Str::from("effect"),
             1,
-            self.timestamp.clone(),
+            self.timestamp,
         )
     }
     
@@ -256,7 +256,7 @@ impl AsResourceData for Intent {
             domain_id,
             Str::from("intent"),
             1,
-            self.timestamp.clone(),
+            self.timestamp,
         )
     }
     
@@ -283,9 +283,9 @@ impl ToValueExpr for Handler {
         // The 'type' field is important for distinguishing this ValueExpr from others
         btree_map.insert(Str::from("type"), ValueExpr::String(Str::from("handler")));
         btree_map.insert(Str::from("id"), ValueExpr::String(Str::from(self.id.to_hex())));
-        btree_map.insert(Str::from("name"), ValueExpr::String(self.name.clone()));
+        btree_map.insert(Str::from("name"), ValueExpr::String(self.name));
         btree_map.insert(Str::from("domain_id"), ValueExpr::String(Str::from(self.domain_id.to_hex())));
-        btree_map.insert(Str::from("handles_type"), ValueExpr::String(self.handles_type.clone()));
+        btree_map.insert(Str::from("handles_type"), ValueExpr::String(self.handles_type));
         btree_map.insert(Str::from("priority"), ValueExpr::Number(Number::new_integer(self.priority as i64)));
         
         if let Some(expr_id) = self.expression {
@@ -327,7 +327,7 @@ impl AsResourceData for Handler {
             domain_id,
             Str::from("handler"),
             1,
-            self.timestamp.clone(),
+            self.timestamp,
         )
     }
     
@@ -411,7 +411,7 @@ impl AsResourceData for Transaction {
             domain_id,
             Str::from("transaction"),
             1,
-            self.timestamp.clone(),
+            self.timestamp,
         )
     }
     

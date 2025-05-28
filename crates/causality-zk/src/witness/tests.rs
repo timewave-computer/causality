@@ -4,12 +4,10 @@
 mod tests {
     use super::super::*;
     use causality_types::{
-        core::id::DomainId,
-        core::str::Str,
-        expr::value::ValueExpr,
-        resource::Resource,
-        serialization::{Encode, Decode},
-        core::{Timestamp, id::EntityId},
+        primitive::{ids::{DomainId, EntityId}, string::Str, time::Timestamp},
+        expression::value::ValueExpr,
+        resource::types::Resource,
+        system::serialization::{Encode, Decode},
     };
 
     /// Test basic witness generation with SSZ serialization

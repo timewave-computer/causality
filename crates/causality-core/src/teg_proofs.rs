@@ -259,7 +259,7 @@ mod tests {
         let smt = Arc::new(Mutex::new(TegMultiDomainSmt::new(backend)));
         let _generator = TegProofGenerator::new(smt);
         
-        // Just verify we can create the generator
-        assert!(true);
+        // TODO: Implement actual proof generation logic
+        // For now, this is a placeholder that always succeeds
     }
 } 

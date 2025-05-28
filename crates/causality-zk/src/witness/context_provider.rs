@@ -34,7 +34,7 @@ fn resource_id_from_str(hex_str: &str) -> Result<ResourceId, String> {
 use causality_types::primitive::string::Str;
 use causality_types::expr::ast::{Expr, Atom};
 use causality_types::expr::value::ValueExpr;
-use causality_types::provider::context::AsExprContext;
+use causality_types::system::provider::AsExprContext;
 use causality_lisp::core::ExprContextual;
 use causality_types::expr::result::ExprError;
 use causality_types::expr::result::ExprResult;
@@ -53,7 +53,7 @@ use causality_types::anyhow::{
 use std::collections::BTreeMap; // Added for BTreeMap
 // use tokio::runtime::Runtime; // This was causing an error, remove if not used here
 
-use causality_types::trace::ExecutionTrace;
+use causality_types::effect::trace::ExecutionTrace;
 
 //-----------------------------------------------------------------------------
 // Conversion Helpers
@@ -256,7 +256,7 @@ impl ZkContextProvider for WitnessContextProvider {
     fn is_resource_available(&self, id: &ResourceId) -> Result<bool, ZkError> {
         match self.deserialized_trace.final_resource_states.get(id) {
             Some(state) => {
-                Ok(*state == causality_types::state::ResourceState::Available)
+                Ok(*state == causality_types::resource::state::ResourceState::Available)
             }
             None => Ok(false), // If not in final states, assume not available or consumed
         }
@@ -327,7 +327,7 @@ impl<'a> ZkEvalContext<'a> {
 }
 
 // Downcasting not needed in ZK environment
-impl<'a> causality_types::provider::context::AsExprContext for ZkEvalContext<'a> {
+impl<'a> causality_types::system::provider::AsExprContext for ZkEvalContext<'a> {
     fn get_resource_field(
         &self,
         id: &ResourceId,
@@ -361,7 +361,7 @@ impl<'a> causality_types::provider::context::AsExprContext for ZkEvalContext<'a>
     }
 }
 
-impl<'a> causality_types::provider::context::StaticExprContext
+impl<'a> causality_types::system::provider::StaticExprContext
     for ZkEvalContext<'a>
 {
     fn get_static_symbol(&self, _name: &Str) -> Option<ExprResult> {
@@ -454,7 +454,7 @@ impl ExprContextual for OwnedZkEvalContext {
     }
 }
 
-impl causality_types::provider::context::StaticExprContext for OwnedZkEvalContext {
+impl causality_types::system::provider::StaticExprContext for OwnedZkEvalContext {
     fn get_static_symbol(&self, name: &Str) -> Option<ExprResult> {
         self.ctx.get_static_symbol(name)
     }

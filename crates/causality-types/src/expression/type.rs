@@ -406,7 +406,7 @@ impl Decode for TypeExpr {
 impl SimpleSerialize for TypeExpr {}
 
 //-----------------------------------------------------------------------------
-// Standard Type Definitions (from standard_types.rs)
+// Standard Type Definitions
 //-----------------------------------------------------------------------------
 
 /// Returns the canonical `TypeExpr` for a "TypeBehaviorDefinition" resource.

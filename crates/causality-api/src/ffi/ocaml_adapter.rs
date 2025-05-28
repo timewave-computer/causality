@@ -5,15 +5,12 @@
 
 use anyhow::{anyhow, Result};
 use causality_types::{
-    expr::value::ValueExpr,
     resource::Resource,
-    tel::{
-        Handler, Effect, Intent, Edge, EdgeKind, EffectGraph,
-    },
+    Handler, Effect, Intent, Edge,
+    expression::value::ValueExpr,
     serialization::{
         Encode, Decode, SimpleSerialize,
         serialize_for_ffi, deserialize_from_ffi,
-        serialize_to_hex, deserialize_from_hex
     }
 };
 

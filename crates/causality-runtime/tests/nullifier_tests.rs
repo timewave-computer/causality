@@ -6,7 +6,6 @@ use causality_runtime::nullifier::NullifierRegistry;
 use causality_types::{
     core::id::{ResourceId, TransactionId, AsId},
 };
-use tokio;
 
 //-----------------------------------------------------------------------------
 // Basic Nullifier Operation

@@ -1,26 +1,26 @@
-// Purpose: Implements the core logic for executing a Temporal Effect Language (TEL) graph.
+//! TEL Graph Execution Engine
+//!
+//! Responsible for executing effect graphs with optimization strategies.
 
 use std::sync::Arc;
-use anyhow::Result; 
-use uuid::Uuid;
+use anyhow::Result;
+use rand::Rng;
 
-use causality_types::{ // Consolidate imports from causality_types
-    primitive::{
-        ids::{EntityId, ExprId, ResourceId, NodeId, AsId, DomainId, EffectId, EdgeId},
-        string::Str as CausalityStr,
-    },
+use causality_types::{
+    primitive::{ids::{AsId, EntityId, NodeId, DomainId, ResourceId, ExprId}, string::Str as CausalityStr},
     effect::handler::Handler,
     graph::{
-        tel::EffectGraph, 
+        tel::EffectGraph,
         execution::GraphExecutionContext,
-        optimization::TypedDomain,
         dataflow::{ProcessDataflowDefinition, ProcessDataflowNode as DataflowNode},
+        optimization::TypedDomain,
     },
     expression::value::ValueExpr,
 };
 
-use crate::tel::interpreter::Interpreter as LispInterpreterService;
-use causality_core::id_from_hex; // Import functions directly
+use crate::tel::interpreter::{Interpreter as LispInterpreterService};
+
+use log;
 
 // Define the missing HandlerResult enum
 #[derive(Debug)]
@@ -31,58 +31,38 @@ enum HandlerResult {
     Defer,
 }
 
-// Helper function to create a unique EdgeId
-#[allow(dead_code)]
-fn create_unique_edge_id() -> EdgeId {
-    let mut bytes = [0u8; 32];
-    let uuid = Uuid::new_v4();
-    let uuid_bytes = uuid.as_bytes();
-    bytes[0..16].copy_from_slice(uuid_bytes);
-    EdgeId::new(bytes)
-}
-
-// Helper trait for hex conversion
-#[allow(dead_code)]
-trait FromHex: Sized {
-    fn from_hex(s: &str) -> Result<Self, &'static str>;
-}
-
-// Implement FromHex for all ID types
-impl<T: AsId> FromHex for T {
-    fn from_hex(s: &str) -> Result<Self, &'static str> {
-        id_from_hex(s)
-    }
-}
-
 // Helper struct to return resolved handler information
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ResolvedHandler<'a> {
     handler_id: EntityId,
     handler_dynamic_expr_id: ExprId,
     _handler_ref: &'a Handler, 
 }
 
-// Add conversion helper functions at the top of the file
+// Helper Functions
+//-----------------------------------------------------------------------------
 
-// Helper function to convert from EntityId to NodeId  
+#[allow(dead_code)]
 fn effect_id_to_node_id(effect_id: &EntityId) -> NodeId {
     NodeId::new(effect_id.inner()) // Convert EntityId to NodeId using unified API
 }
 
+// Placeholder for unique ID generation - replace with actual implementation
 #[allow(dead_code)]
-fn node_id_to_effect_id(node_id: &NodeId) -> EffectId {
-    EffectId(node_id.0) // Both are wrappers around [u8; 32]
-}
-
 fn create_unique_domain_id() -> DomainId {
-    DomainId::new(rand::random())
+    DomainId::new(rand::thread_rng().gen::<[u8; 32]>()) 
 }
 
+#[allow(dead_code)]
 fn create_unique_resource_id() -> ResourceId {
-    ResourceId::new(rand::random())
+    ResourceId::new(rand::thread_rng().gen::<[u8; 32]>()) 
 }
+
+//-----------------------------------------------------------------------------
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct EffectGraphExecutor {
     lisp_service: Arc<LispInterpreterService>,
 }
@@ -106,7 +86,7 @@ impl EffectGraphExecutor {
     }
 
     /// Determine the domain for a dataflow node
-    fn determine_node_domain(
+    fn _determine_node_domain(
         &self,
         node: &DataflowNode,
         _df_definition: &ProcessDataflowDefinition,
@@ -114,18 +94,18 @@ impl EffectGraphExecutor {
         // In a real implementation, this would analyze the node's action template
         // to determine which domain it should execute in
         // For now, return a default based on node characteristics
-        let node_id_str = node.id.to_string();
+        let node_id_str = node.node_id.to_string();
         if node_id_str.contains("verify") || node_id_str.contains("proof") {
-            Some(TypedDomain::VerifiableDomain(create_unique_domain_id()))
+            Some(TypedDomain::new(create_unique_domain_id(), CausalityStr::from("verifiable")))
         } else if node_id_str.contains("service") || node_id_str.contains("api") {
-            Some(TypedDomain::ServiceDomain(create_unique_domain_id()))
+            Some(TypedDomain::new(create_unique_domain_id(), CausalityStr::from("service")))
         } else {
             None // Use current domain
         }
     }
 
     /// Estimate cross-domain transfer cost
-    fn estimate_cross_domain_cost(&self, from_domain: &TypedDomain, to_domain: &TypedDomain) -> u64 {
+    fn _estimate_cross_domain_cost(&self, from_domain: &TypedDomain, to_domain: &TypedDomain) -> u64 {
         match (from_domain.domain_type.as_str(), to_domain.domain_type.as_str()) {
             ("VerifiableDomain", "ServiceDomain") => 1000,
             ("ServiceDomain", "VerifiableDomain") => 1500,
@@ -134,7 +114,7 @@ impl EffectGraphExecutor {
     }
     
     /// Estimate cross-domain transfer time
-    fn estimate_cross_domain_time(&self, from_domain: &TypedDomain, to_domain: &TypedDomain) -> u64 {
+    fn _estimate_cross_domain_time(&self, from_domain: &TypedDomain, to_domain: &TypedDomain) -> u64 {
         match (from_domain.domain_type.as_str(), to_domain.domain_type.as_str()) {
             ("VerifiableDomain", "ServiceDomain") => 2000,
             ("ServiceDomain", "VerifiableDomain") => 3000,
@@ -143,7 +123,7 @@ impl EffectGraphExecutor {
     }
     
     /// Determine transfer type for cross-domain operations
-    fn determine_transfer_type(&self, from_domain: &TypedDomain, to_domain: &TypedDomain) -> TransferType {
+    fn _determine_transfer_type(&self, from_domain: &TypedDomain, to_domain: &TypedDomain) -> TransferType {
         match (from_domain.domain_type.as_str(), to_domain.domain_type.as_str()) {
             ("VerifiableDomain", "ServiceDomain") => TransferType::ZkToService,
             ("ServiceDomain", "VerifiableDomain") => TransferType::ServiceToZk,
@@ -152,7 +132,7 @@ impl EffectGraphExecutor {
     }
     
     /// Calculate flow complexity score
-    fn calculate_flow_complexity(
+    fn _calculate_flow_complexity(
         &self,
         input_count: usize,
         output_count: usize,
@@ -167,7 +147,7 @@ impl EffectGraphExecutor {
     }
     
     /// Estimate total flow time
-    fn estimate_total_flow_time(&self, analysis: &ResourceFlowAnalysis) -> u64 {
+    fn _estimate_total_flow_time(&self, analysis: &ResourceFlowAnalysis) -> u64 {
         let base_time = (analysis.input_resources.len() + analysis.output_resources.len()) as u64 * 10;
         let cross_domain_time: u64 = analysis.cross_domain_transfers.iter()
             .map(|transfer| transfer.estimated_time)
@@ -177,7 +157,7 @@ impl EffectGraphExecutor {
     }
     
     /// Identify potential bottlenecks in resource flow
-    fn identify_flow_bottlenecks(
+    fn _identify_flow_bottlenecks(
         &self,
         analysis: &ResourceFlowAnalysis,
         _df_definition: &ProcessDataflowDefinition,
@@ -212,10 +192,10 @@ impl EffectGraphExecutor {
 
 /// Execution checkpoint for rollback capability
 #[derive(Debug, Clone)]
-struct ExecutionCheckpoint {
-    graph_snapshot: EffectGraph,
-    context_snapshot: GraphExecutionContext,
-    timestamp: std::time::SystemTime,
+struct _ExecutionCheckpoint {
+    graph_state: EffectGraph, // Example field
+    context_state: GraphExecutionContext, // Example field
+    timestamp: u64, // Example field
 }
 
 /// Resource flow analysis result
@@ -293,3 +273,4 @@ pub enum TransferType {
     ServiceToZk,
     ZkToService,
 }
+

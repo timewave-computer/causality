@@ -397,6 +397,35 @@ impl DecodeWithLength for i64 {
     }
 }
 
+// u128
+impl Encode for u128 {
+    fn as_ssz_bytes(&self) -> Vec<u8> {
+        self.to_le_bytes().to_vec()
+    }
+}
+
+impl Decode for u128 {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        if bytes.len() != 16 {
+            return Err(DecodeError {
+                message: format!("Invalid u128 length {}, expected 16", bytes.len()),
+            });
+        }
+        let mut array = [0u8; 16];
+        array.copy_from_slice(bytes);
+        Ok(u128::from_le_bytes(array))
+    }
+}
+
+impl SimpleSerialize for u128 {}
+
+impl DecodeWithLength for u128 {
+    fn from_ssz_bytes_with_length(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        let value = Self::from_ssz_bytes(bytes)?;
+        Ok((value, 16))
+    }
+}
+
 // Vec implementation
 impl<T: Encode> Encode for Vec<T> {
     fn as_ssz_bytes(&self) -> Vec<u8> {
@@ -454,6 +483,15 @@ impl<T: Decode + Encode + 'static> Decode for Vec<T> {
                 }
                 let item = T::from_ssz_bytes(&remaining_bytes[..8])?;
                 offset += 8;
+                result.push(item);
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+                if remaining_bytes.len() < 16 {
+                    return Err(DecodeError {
+                        message: "Not enough bytes for u128".to_string(),
+                    });
+                }
+                let item = T::from_ssz_bytes(&remaining_bytes[..16])?;
+                offset += 16;
                 result.push(item);
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<bool>() {
                 if remaining_bytes.is_empty() {

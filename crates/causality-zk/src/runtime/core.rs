@@ -33,6 +33,7 @@ pub fn process_execution_trace(
 }
 
 /// Validate that an execution trace is suitable for ZK processing
+#[allow(dead_code)]
 fn validate_trace(trace: &ExecutionTrace) -> Result<(), Error> {
     // Check for minimum required data
     if trace.executed_effects.is_empty() {

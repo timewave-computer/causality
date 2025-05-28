@@ -76,7 +76,7 @@ mod tests {
         let smt = Arc::new(Mutex::new(TegMultiDomainSmt::new(backend)));
         let _writer = TegDirectWriter::new(smt);
         
-        // Just verify we can create the writer
-        assert!(true);
+        // TODO: Implement actual direct write logic
+        // For now, this is a placeholder that always succeeds
     }
 } 

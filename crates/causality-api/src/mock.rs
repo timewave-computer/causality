@@ -591,7 +591,6 @@ impl IntentSubmission for MockIntentRegistry {
 //-----------------------------------------------------------------------------
 
 /// Builder for mock clients
-
 pub struct MockClientBuilder<S, TxIn, TxOut, QIn, QOut>
 where
     S: MockState,
@@ -723,5 +722,4 @@ where
 //-----------------------------------------------------------------------------
 
 /// Simple type aliases for intent handler registry
-
 pub type IntentRegistry = HashMap<IntentId, Intent>;

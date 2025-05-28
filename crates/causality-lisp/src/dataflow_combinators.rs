@@ -5,7 +5,7 @@
 
 use causality_types::{
     core::{
-        id::{ExprId, ResourceId, DomainId, AsId, HandlerId},
+        id::{ExprId, ResourceId, DomainId, AsId},
         str::Str,
         time::Timestamp,
         Effect,
@@ -148,7 +148,7 @@ pub async fn instantiate_effect_from_node(
     // Create a new Effect based on the node template and parameters
     let effect_type = params_map.get(&Str::from("effect_type"))
         .and_then(|v| match v {
-            ValueExpr::String(s) => Some(s.clone()),
+            ValueExpr::String(s) => Some(*s),
             _ => None
         })
         .unwrap_or_else(|| Str::from("default_effect_type"));
@@ -194,7 +194,7 @@ pub async fn emit_effect_on_domain(
     // Extract effect details
     let effect_type = effect_map.get(&Str::from("effect_type"))
         .and_then(|v| match v {
-            ValueExpr::String(s) => Some(s.clone()),
+            ValueExpr::String(s) => Some(*s),
             _ => None
         })
         .ok_or_else(|| ExprError::ExecutionError {

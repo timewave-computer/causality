@@ -78,7 +78,7 @@ where
 }
 
 /// Run all witness generation benchmarks
-pub fn run_all_benchmarks(iterations: usize) -> Result<Vec<BenchmarkResult>> {
+pub fn run_all_benchmarks(_iterations: usize) -> Result<Vec<BenchmarkResult>> {
     let results = Vec::new();
     
     // Add benchmark results as they are implemented
