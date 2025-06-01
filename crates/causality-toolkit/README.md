@@ -201,7 +201,7 @@ token_transfer_workflow.execute(&handler_registry).await?;
 
 ## Integration with Core Crates
 
-### causality-types Integration
+### causality-core Integration
 
 - Uses all core Resource Model types
 - Implements effect traits from `effects_core`

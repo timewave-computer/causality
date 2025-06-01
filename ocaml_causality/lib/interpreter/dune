@@ -1,0 +1,5 @@
+(library
+ (name ocaml_causality_interpreter)
+ (libraries ocaml_causality_core ocaml_causality_lang ocaml_causality_effects ocaml_causality_capability_system)
+ (wrapped true)
+ (modules interpreter)) 

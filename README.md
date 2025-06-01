@@ -37,7 +37,7 @@ Both OCaml and Rust DSLs produce the same canonical `Expr` AST, which is SSZ-ser
 
 ## Crates
 
-- `causality-types`: Core data structures, traits, and type definitions for Resources, expressions, and IDs
+- `causality-core`: Core data structures, traits, and type definitions for Resources, expressions, and IDs
 - `causality-lisp`: Lisp interpreter for evaluating Resource logic and expressions
 - `causality-runtime`: Executes Resource interactions and manages the evaluation context
 - `causality-simulation`: Simulation engine with schema-aware mocking for testing

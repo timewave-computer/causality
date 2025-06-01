@@ -10,7 +10,7 @@ use causality_types::{
     core::str::Str,
     core::numeric::Number, // Added for Number::Integer, Number::BigInt
     expr::result::ExprError,
-    expr::{ast::Expr, result::ExprResult, value::ValueExpr},
+    expr::{effect::Expr, result::ExprResult, value::ValueExpr},
     system::provider::AsExprContext,
     // resource::Resource, // For AsExprContext methods
 };
@@ -257,10 +257,10 @@ impl<'a, C: ExprContextual + Send + Sync + ?Sized> LambdaBindingContext<'a, C> {
                 match v {
                     ExprResult::Value(val) => Some((k, val)),
                     ExprResult::Atom(atom) => match atom {
-                        causality_types::expr::ast::Atom::Nil => Some((k, ValueExpr::Nil)),
-                        causality_types::expr::ast::Atom::Boolean(b) => Some((k, ValueExpr::Bool(b))),
-                        causality_types::expr::ast::Atom::String(s) => Some((k, ValueExpr::String(s))),
-                        causality_types::expr::ast::Atom::Integer(i) => Some((k, ValueExpr::Number(Number::Integer(i)))),
+                        causality_types::expr::effect::Atom::Nil => Some((k, ValueExpr::Nil)),
+                        causality_types::expr::effect::Atom::Boolean(b) => Some((k, ValueExpr::Bool(b))),
+                        causality_types::expr::effect::Atom::String(s) => Some((k, ValueExpr::String(s))),
+                        causality_types::expr::effect::Atom::Integer(i) => Some((k, ValueExpr::Number(Number::Integer(i)))),
                         // Atom does not have BigInt or Float variants
                     },
                     ExprResult::Bool(b) => Some((k, ValueExpr::Bool(b))),
@@ -376,7 +376,7 @@ pub fn is_numeric(result: &ExprResult) -> bool {
     match result {
         ExprResult::Value(value) => matches!(value, ValueExpr::Number(_)),
         ExprResult::Atom(atom) => {
-            matches!(atom, causality_types::expr::ast::Atom::Integer(_))
+            matches!(atom, causality_types::expr::effect::Atom::Integer(_))
         }
         _ => false,
     }
@@ -466,3 +466,8 @@ impl Evaluator for Interpreter {
         }
     }
 }
+
+//! Placeholder for the new Lisp compiler and Register Machine Machine generation logic.
+//!
+//! The old interpreter code previously in this file has been removed as part of
+//! the refactoring towards a linear resource language and register machine execution model.

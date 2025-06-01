@@ -1,107 +1,176 @@
-# Causality Toolkit and Development Utilities
+# Causality Toolkit and Rust DSL
 
-The causality-toolkit crate provides essential developer utilities and testing infrastructure for building applications on the Causality framework. This toolkit offers core trait extensions, effect system utilities, and comprehensive testing tools that simplify the development and validation of Resource-based applications while maintaining the type safety and deterministic properties that define the Causality ecosystem.
+The causality-toolkit crate provides Rust implementations of the three-layer architecture, offering type-safe abstractions for register machine operations (Layer 0), row type manipulations (Layer 1), and effect handling with intent resolution (Layer 2). The toolkit serves as a bridge between the formal specification and practical Rust development, providing ergonomic APIs while maintaining the linearity guarantees and handler/interpreter separation fundamental to the design.
 
-The toolkit serves as a bridge between the low-level framework types and higher-level application development patterns. It provides abstractions that make common development tasks more ergonomic while preserving the mathematical properties and verification capabilities that make the Causality framework suitable for critical resource management applications.
+## Architectural Alignment
 
-## Core Effect System Extensions
+The toolkit maps directly to the three-layer architecture, providing Rust-specific implementations that leverage the language's ownership system to enforce linearity at compile time. This alignment ensures that code written with the toolkit maintains the same guarantees as the formal specification while benefiting from Rust's performance and safety features.
 
-The toolkit provides a comprehensive effect system that extends the basic framework types with developer-friendly abstractions. These extensions enable more natural expression of application logic while maintaining compatibility with the underlying TEL expression system and content addressing infrastructure.
+### Layer 0: Register Machine Abstractions
 
-The ToolkitEffect trait serves as the foundation for application-specific effect types, providing the interface necessary for integration with the broader framework while enabling type-safe effect composition and validation. This trait ensures that custom effects can be properly serialized, identified, and executed within the framework's deterministic execution model.
+At the foundation, the toolkit provides types and traits for the 9-instruction Layer 0 register machine. Each instruction is represented as an enum variant, enabling pattern matching and exhaustive handling. The `RegisterMachine` trait defines the interface for executing instructions, managing register state (which holds Layer 0 `Value`s or `ResourceId`s), and enforcing linear consumption semantics.
 
 ```rust
-pub trait ToolkitEffect: Send + Sync + AsValueExpr + Debug + 'static {
-    fn effect_type_str(&self) -> Str;
-    fn effect_logic_id(&self) -> EffectId;
-    fn as_any(&self) -> &dyn Any;
+pub enum Instruction {
+    // Core Computation & Resource Management
+    Move { src: RegisterId, dst: RegisterId },
+    Apply { func_reg: RegisterId, arg_reg: RegisterId, out_reg: RegisterId }, // func_reg holds a function (or its ID), arg_reg an argument, out_reg the result.
+    Alloc { val_reg: RegisterId, out_reg: RegisterId }, // Takes Value from val_reg, creates a new Resource, places its ResourceId in out_reg.
+    Consume { resource_id_reg: RegisterId, val_out_reg: RegisterId }, // Takes ResourceId from resource_id_reg, consumes it, places its Value in val_out_reg.
+    Match { sum_reg: RegisterId, left_val_reg: RegisterId, right_val_reg: RegisterId, 
+            left_branch_label: Label, right_branch_label: Label }, // Deconstructs Sum type in sum_reg.
+
+    // Conditional Logic
+    Select { cond_reg: RegisterId, true_val_reg: RegisterId, false_val_reg: RegisterId, out_reg: RegisterId },
+
+    // Witness Boundary & Constraints
+    Witness { out_reg: RegisterId }, // Introduces an external witness value.
+    Check { constraint: ConstraintExpr }, // ConstraintExpr involves register values or constants.
+
+    // Layer 2 Interaction
+    Perform { effect_id_reg: RegisterId, out_reg: RegisterId }, // effect_id_reg holds the SSZ-based content hash (EffectId) of the Layer 2 Effect to perform.
 }
 ```
 
-Effect data traits provide the interface for extracting resource flow information from custom effects, enabling the framework to understand the resource dependencies and outputs of application-specific operations. This information supports automatic dependency resolution and enables the framework to optimize execution order and resource allocation.
+The register machine implementation leverages Rust's move semantics to enforce linearity. When a value is moved from one register to another, the source register becomes invalid, preventing double-use. This compile-time enforcement eliminates entire classes of runtime errors that could violate resource linearity.
 
-The ToTelEffect trait enables conversion from high-level toolkit effects to the low-level TEL Effect types used by the framework's execution engine. This conversion process maintains the semantic meaning of effects while translating them into the standardized format required for deterministic execution and verification.
+### Layer 1: Row Type System
 
-## Resource State Management
+The toolkit implements compile-time row type operations using Rust's powerful type system. Row types are represented as phantom types that exist only at compile time, ensuring zero runtime overhead for capability tracking and row operations. This approach provides the flexibility of row polymorphism while maintaining Rust's performance characteristics.
 
-The toolkit provides sophisticated resource state management capabilities that enable type-safe tracking of resource lifecycles throughout application execution. These capabilities prevent common errors such as double-spending or use-after-consumption while providing compile-time guarantees about resource availability and usage patterns.
+The RowOps trait defines the core operations of projection and restriction, which transform row types at compile time. Capability extraction is modeled as a linear operation that consumes the capability from the resource's type, returning both the extracted capability and an updated resource type that no longer contains that capability. This compile-time tracking ensures that capabilities cannot be used multiple times or accessed after extraction.
 
-TypedResource provides a type-safe wrapper around resource identifiers that tracks both the resource type and its current lifecycle state. This wrapper enables the type system to prevent invalid operations on resources while providing natural access to resource properties and operations.
+### Layer 2: Effect System and Handlers
+
+The effect system implementation maintains strict separation between pure handler transformations and stateful interpreter execution. Handlers are represented as pure functions that transform one effect type to another, enabling composition through simple function composition. This design avoids the complexity of monad transformers while providing the same compositional benefits.
+
+The Handler trait defines the transformation interface, while the Interpreter trait manages stateful execution. This separation enables different optimization strategies: handlers can be composed and optimized at compile time, while interpreters can be swapped out for different execution strategies without changing the effect definitions or handler logic.
+
+## Layer 1 Lisp Primitives as a Rust DSL
+
+The toolkit aims to provide ergonomic Rust APIs for constructing Layer 1 Causality Lisp programs, represented as `Expr` ASTs. These `Expr` forms, built using the 11 core Layer 1 Lisp primitives, are then compiled by the framework into sequences of Layer 0 register machine instructions. The Rust DSL leverages the type system and trait mechanisms to offer a natural programming interface while preserving the formal properties of the underlying system.
+
+The 11 Layer 1 Lisp primitives are:
+
+1.  **`lambda (params...) body...`**: Defines a function. 
+    *   *Rust DSL Example*: Macros or builder functions like `lambda!( (x: LispValue, y: LispValue) -> add(x, y) )` could generate an `Expr::Lambda`.
+2.  **`app func args...`**: Applies a function to arguments.
+    *   *Rust DSL Example*: `app!(my_func, arg1, arg2)` generating `Expr::App`.
+3.  **`let (bindings...) body...`**: Local bindings.
+    *   *Rust DSL Example*: `let_!( (x = val1), (y = val2) ; body_expr )` generating `Expr::Let`.
+4.  **`if cond then-expr else-expr`**: Conditional execution.
+    *   *Rust DSL Example*: `if_!(condition_expr, then_branch_expr, else_branch_expr)` generating `Expr::If`.
+5.  **`quote datum`**: Prevents evaluation, returns datum literally (e.g., a symbol or list structure).
+    *   *Rust DSL Example*: `quote!( (a b c) )` generating `Expr::Quote`.
+6.  **`cons head tail`**: Constructs a pair (list cell).
+    *   *Rust DSL Example*: `cons!(head_expr, tail_expr)` generating an `Expr::PrimOp` for `Cons`.
+7.  **`car pair`**: Gets the head of a pair.
+    *   *Rust DSL Example*: `car!(pair_expr)` generating an `Expr::PrimOp` for `Car`.
+8.  **`cdr pair`**: Gets the tail of a pair.
+    *   *Rust DSL Example*: `cdr!(pair_expr)` generating an `Expr::PrimOp` for `Cdr`.
+9.  **`nil? obj`** (or `null?`): Checks if an object is the empty list or a designated nil value.
+    *   *Rust DSL Example*: `is_nil!(obj_expr)` generating an `Expr::PrimOp` for `IsNil`.
+10. **`eq? obj1 obj2`**: Checks for equality of basic Lisp values or identity of pairs/symbols.
+    *   *Rust DSL Example*: `eq_!(obj1_expr, obj2_expr)` generating an `Expr::PrimOp` for `Eq`.
+11. **`primitive-op op args...`**: A general form for built-in operations. This is where many fundamental operations reside, including:
+    *   **Basic Arithmetic**: `+`, `-`, `*`, `/` on appropriate `LispValue` types (e.g., integers).
+    *   **Type Predicates**: `integer?`, `symbol?`, `pair?`.
+    *   **Resource Operations (Layer 1 view)**: These would be specific `primitive-op`s that manipulate `LispValue`s representing resources or resource locators. Examples:
+        *   `create-resource type initial-value`: Creates a new resource.
+        *   `read-resource-field resource-locator field-name`: Reads a field from a resource.
+        *   `update-resource-field resource-locator field-name new-value`: Updates a resource field.
+        *   `consume-resource resource-locator`: Marks a resource as consumed (from Layer 1's perspective, interacting with Layer 0's `consume` instruction).
+    *   *Rust DSL Example*: `prim_op!( "add", arg1, arg2 )` or more specific helpers like `lisp_add!(arg1, arg2)`.
+
+This DSL approach allows developers to write type-safe Rust code that generates these Layer 1 `Expr` structures, which are then processed by the Causality Lisp compiler. The compiler is responsible for type checking at the Lisp level, enforcing linearity for resource-related operations, and ultimately generating the efficient Layer 0 register machine code.
+
+## Linear Type Safety in Rust
+
+The toolkit leverages Rust's ownership system as a foundation for implementing linearity qualifiers. Linear resources are wrapped in types that cannot be cloned or copied, enforcing single-use through the borrow checker. This approach provides compile-time guarantees without runtime overhead.
 
 ```rust
-pub struct TypedResource<T, S: Copy = ResourceState> {
-    pub id: ResourceId,
-    _type: PhantomData<T>,
-    _state: PhantomData<S>,
+#[must_use]
+pub struct LinearResource<T> {
+    value: Option<T>,
+}
+
+impl<T> LinearResource<T> {
+    pub fn consume(mut self) -> T {
+        self.value.take().expect("Resource already consumed")
+    }
 }
 ```
 
-Resource state tracking includes active resources that are available for consumption, consumed resources that have been used and cannot be reused, and created resources that have been generated but not yet committed to the system state. This state tracking enables sophisticated resource management patterns while preventing the logical errors that can arise in complex resource transformation workflows.
+Linearity qualifiers are implemented as marker traits that constrain how values can be used. Linear types must be consumed exactly once, affine types can be dropped without use, relevant types must be used at least once, and unrestricted types can be freely copied. These qualifiers are enforced at compile time through Rust's trait system.
 
-ConsumedResource provides a type-safe representation of resources that have been consumed and cannot be used again. This type enables the generation of nullifiers that prove resource consumption while preventing accidental reuse of consumed resources in subsequent operations.
+The Object type generalizes resources with configurable linearity, enabling different usage patterns while maintaining safety. Resources are simply linear objects, providing a unified type system that scales from simple linear resources to complex objects with custom linearity semantics.
 
-## Effect Expression Composition
+## Effect Definition Macros
 
-The toolkit includes a composable effect expression system that enables developers to build complex workflows from simple effect primitives. This composition system maintains the deterministic properties required by the framework while providing natural abstractions for expressing multi-step resource transformations.
+The toolkit provides declarative macros for defining effects with pre/post conditions and optimization hints. These macros generate the boilerplate code needed to implement the Effect trait while ensuring that all required methods are properly implemented.
 
-EffectExpr provides algebraic composition of effects through pure effects that perform no operations, single effects that encapsulate individual operations, and sequence effects that combine multiple operations into ordered workflows. This algebraic approach enables powerful composition patterns while maintaining the mathematical properties necessary for verification and optimization.
+Effect definitions include parameter specifications, precondition expressions that must hold before execution, postcondition expressions that must hold after execution, and optimization hints that guide runtime execution. The macro expansion generates type-safe code that integrates with the broader effect system while maintaining the ability to verify conditions at runtime.
 
-```rust
-pub enum EffectExpr {
-    Pure,
-    Single(CloneableEffectBox),
-    Sequence(Vec<EffectExpr>),
-}
-```
+The generated code includes methods for extracting the effect tag, evaluating pre and post conditions against the current state, and providing hints to the optimization system. This approach ensures consistency across effect definitions while reducing boilerplate and potential for errors.
 
-Effect sequencing enables the construction of complex workflows where the outputs of earlier effects become the inputs of later effects. The sequencing system automatically handles resource flow dependencies while maintaining the isolation and determinism required for reliable execution.
+## Intent Construction DSL
 
-The composition system supports both linear workflows where effects execute in strict sequence and more complex patterns where effects can be parallelized or conditionally executed based on runtime conditions. These patterns enable sophisticated resource management applications while maintaining the verification properties that ensure correctness.
+The toolkit provides a fluent API for constructing intents that reads naturally while maintaining type safety. The IntentBuilder pattern enables incremental construction of intents, with each method call adding resources, constraints, effects, or hints to the building intent.
 
-## Testing Framework Infrastructure
+This builder pattern ensures that intents are well-formed before construction completes. Resources must be properly typed, constraints must be valid expressions, effects must implement the Effect trait, and hints must be recognized by the optimization system. The type system catches many potential errors at compile time, while the builder validates semantic constraints.
 
-The toolkit provides comprehensive testing infrastructure that enables thorough validation of Causality applications while maintaining the deterministic properties required for reliable testing. This infrastructure includes test configuration management, fixture generation, and specialized testing utilities for resource-based applications.
+The fluent interface makes intent construction readable and maintainable. Developers can clearly see what resources are being committed, what constraints must be satisfied, what effects will be executed, and what optimization strategies are preferred. This clarity is essential for understanding and debugging complex resource transformations.
 
-Test configuration provides consistent setup and teardown procedures for test environments, ensuring that tests execute in isolated environments with predictable initial conditions. The configuration system supports both simple default setups for basic testing and sophisticated custom configurations for complex testing scenarios.
+## Row Type Operations at Compile Time
 
-```rust
-pub struct TestConfig {
-    pub debug_logging: bool,
-    pub timeout_secs: u64,
-    pub deterministic: bool,
-}
-```
+The toolkit implements row types using Rust's type system to perform all operations at compile time. This approach provides the flexibility of row polymorphism without runtime overhead, as all row operations are resolved during compilation.
 
-Deterministic testing capabilities ensure that tests produce consistent results across different execution environments and timing conditions. This determinism is essential for reliable continuous integration and enables confident validation of application behavior under various conditions.
+Row types are represented as phantom types that carry field information in their type parameters. Type-level lists represent field collections, enabling compile-time manipulation through type-level programming. Projection and restriction operations transform these type-level representations, producing new row types with modified field sets.
 
-Test fixture generation provides utilities for creating realistic test data that exercises application logic under controlled conditions. These fixtures include resource generation, intent creation, effect construction, and handler setup utilities that enable comprehensive testing of application components.
+Capability extraction leverages this system to track which capabilities are available on resources. When a capability is extracted, the type system updates the resource type to reflect the removal. This compile-time tracking prevents attempts to extract the same capability twice or to use capabilities that have already been consumed.
 
-## Development Utilities and Helpers
+## Testing Framework Integration
 
-The toolkit includes various development utilities that simplify common tasks in Causality application development. These utilities handle routine operations such as identifier generation, serialization, and type conversion while maintaining the safety and correctness properties required by the framework.
+The toolkit provides comprehensive testing utilities that align with the three-layer architecture, enabling thorough validation of applications at each layer. These utilities integrate with Rust's built-in testing framework while providing specialized assertions and property-based testing capabilities.
 
-Identifier generation utilities provide convenient methods for creating content-addressed identifiers for various framework entities. These utilities ensure that identifiers are generated correctly and consistently while hiding the complexity of the underlying cryptographic operations.
+Register machine tests verify instruction execution correctness, linear consumption semantics, and computational cost calculations. These low-level tests ensure that the foundational execution layer behaves correctly under all conditions.
 
-Serialization helpers provide convenient interfaces for converting between different data representations while maintaining compatibility with the framework's SSZ serialization format. These helpers enable easy integration with external systems while preserving the deterministic properties required for content addressing.
+Type system tests validate row operations, capability extraction, and linearity enforcement. These tests verify that compile-time guarantees are properly maintained and that type-level operations produce correct results.
 
-Type conversion utilities enable safe conversion between different representations of framework types, supporting integration patterns where applications need to work with multiple type systems or external interfaces. These conversions maintain type safety while providing the flexibility needed for real-world applications.
+Effect system tests examine handler composition, interpreter execution, and intent resolution. These high-level tests ensure that the declarative programming model works correctly and that optimizations preserve semantic correctness.
 
-## Integration with Core Framework
+Property-based testing with quickcheck validates system invariants across randomly generated inputs. Properties like resource conservation, causal consistency, and effect determinism are verified across thousands of test cases, catching edge cases that might be missed by example-based tests.
 
-The toolkit maintains close integration with the core framework types and capabilities while providing higher-level abstractions that simplify application development. This integration ensures that toolkit-based applications can take full advantage of framework capabilities such as content addressing, deterministic execution, and verification.
+## Temporal Effect Graph Construction
 
-Content addressing integration ensures that toolkit-generated entities receive proper content-addressed identifiers that enable deduplication, verification, and efficient storage. The toolkit handles the details of content addressing while providing natural interfaces for application developers.
+The toolkit provides builder APIs for constructing Temporal Effect Graphs from Rust code. These builders enable declarative specification of effect relationships while ensuring that the resulting graph is causally consistent and resource-safe.
 
-TEL expression integration enables toolkit effects and operations to be expressed as TEL expressions when necessary, supporting advanced use cases such as zero-knowledge proof generation and formal verification. This integration maintains the mathematical properties of TEL while providing more convenient development interfaces.
+The TEGBuilder accumulates effect nodes and causal edges, validating consistency as the graph is constructed. Effect nodes can be added with their pre and post conditions, while edges establish resource flow and causal dependencies between effects. The builder validates that all resource flows are linear and that the graph contains no cycles.
 
-Domain system integration enables toolkit applications to take advantage of typed domains and specialized execution environments. The toolkit provides abstractions that simplify domain targeting while ensuring that applications execute in appropriate environments for their computational requirements.
+The NodeBuilder pattern enables fluent construction of effect chains, where each effect depends on the previous one. This pattern is particularly useful for modeling sequential workflows where effects must execute in a specific order. The type system ensures that dependencies are properly established and that resource flows are correctly connected.
 
-## Performance and Optimization
+## Integration with Zero-Knowledge Proofs
 
-The toolkit includes various performance optimizations that enable efficient execution of resource-based applications while maintaining the correctness and verification properties required by the framework. These optimizations include efficient data structures, lazy evaluation patterns, and caching mechanisms.
+The toolkit provides utilities for compiling effects to zero-knowledge circuits, leveraging the minimal 9-instruction Layer 0 set to generate efficient proofs. The `ZKCompilable` trait defines the interface for effects that can be compiled to circuits, including circuit generation and witness schema specification.
 
-Efficient data structures minimize memory usage and computational overhead while maintaining the immutability and determinism required for reliable execution. These structures support large-scale applications while preserving the mathematical properties that enable verification and optimization.
+Circuit compilation focuses on minimizing in-circuit computation by leveraging content-addressed optimization. Instead of proving complex effect execution, circuits verify that pre-computed effect hashes (derived from their SSZ serialization) exist in merkle trees of valid effects. This approach dramatically reduces circuit size while maintaining security.
 
-Lazy evaluation patterns enable efficient handling of complex resource transformation workflows by deferring computation until results are actually needed. This approach reduces unnecessary computation while maintaining the deterministic execution order required for reliable results.
+The witness schema specification defines what inputs are private versus public, enabling selective disclosure while maintaining proof validity. This schema-driven approach ensures that privacy requirements are met while providing the necessary public inputs for verification.
 
-Caching mechanisms enable reuse of computed results and intermediate values while maintaining the purity and determinism required by the framework. These mechanisms improve performance for applications with repeated computations while ensuring that cached results remain valid and consistent.
+## Performance Optimizations
+
+The toolkit includes several optimizations that improve performance while maintaining correctness. These optimizations leverage Rust's zero-cost abstractions and the framework's architectural properties to eliminate unnecessary work.
+
+Content-addressed caching stores verified effects by their hash, avoiding repeated verification of the same effect logic. When an effect is encountered, the cache is checked first; if the effect has been previously verified, the cached result is used. This optimization is particularly effective for applications with repeated effect patterns.
+
+Lazy resource loading defers expensive resource loading operations until the resource is actually needed. This approach reduces memory usage and improves startup time for applications with large resource sets. The lazy loading is transparent to application code, maintaining the same API while improving performance.
+
+## Future Enhancements
+
+The toolkit roadmap includes several planned enhancements that will expand its capabilities while maintaining backward compatibility. Procedural macros will enable derive-based implementations of common traits, reducing boilerplate for effect and handler definitions. Async handler support will enable non-blocking execution for I/O-bound effects, improving throughput for network-intensive applications.
+
+WASM compilation support will enable the toolkit to run in browser environments, opening up new deployment options for Causality applications. Formal verification integration will connect the toolkit to theorem provers, enabling mathematical verification of effect properties and system invariants.
+
+Performance profiling infrastructure will provide detailed insights into application behavior, helping developers identify bottlenecks and optimization opportunities. This instrumentation will integrate with existing Rust profiling tools while providing Causality-specific metrics.
+
+The Causality Toolkit provides a complete Rust implementation of the three-layer architecture, enabling type-safe development of resource management applications while maintaining the formal properties and guarantees of the Causality framework. By leveraging Rust's type system and ownership model, the toolkit provides compile-time safety guarantees that would require runtime checks in other languages, resulting in both safer and more performant applications.

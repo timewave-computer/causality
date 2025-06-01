@@ -228,7 +228,7 @@ RUN nix develop --command cargo test --package causality-e2e-tests
 
 The e2e tests depend on:
 
-- **causality-types**: Core type definitions
+- **causality-core**: Core type definitions
 - **causality-core**: Core functionality
 - **causality-compiler**: TEG compilation
 - **causality-lisp**: Lisp expression evaluation

@@ -1,5 +1,0 @@
-(dirs bin lib ppx test)
-
-(alias
- (name default)
- (deps (alias_rec bin/all) (alias_rec lib/all) (alias_rec test/all))) 

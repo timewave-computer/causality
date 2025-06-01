@@ -1,5 +1,0 @@
-(library
- (name ml_causality_lib_content_addressing)
- (public_name ml_causality.lib.content_addressing)
- (modules Content_addressing)
- (libraries digestif ml_causality.lib.types)) 

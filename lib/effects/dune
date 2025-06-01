@@ -1,0 +1,5 @@
+(library
+ (name ocaml_causality_effects)
+ (libraries
+  ocaml_causality_core
+  ocaml_causality_lang)) 

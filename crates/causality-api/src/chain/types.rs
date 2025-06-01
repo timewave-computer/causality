@@ -106,11 +106,6 @@ impl TransactionStatus {
             _ => None,
         }
     }
-
-    /// Shortcut property for backward compatibility
-    pub fn confirmed(&self) -> bool {
-        self.is_confirmed()
-    }
 }
 
 //-----------------------------------------------------------------------------

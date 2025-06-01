@@ -1,6 +1,0 @@
-(library
- (name ml_causality_lib_types)
- (public_name ml_causality.lib.types)
- (modules types sexpr)
- (libraries sexplib0 digestif batteries)
- (flags (:standard -w -30-27))) 

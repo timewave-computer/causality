@@ -39,9 +39,6 @@ enum Command {
     /// Simulation operations
     Simulate(SimulateCommands),
 
-    /// Debugging tools
-    Debug(DebugCommands),
-
     /// Blockchain intent operations
     Intent(IntentCommand),
 
@@ -69,9 +66,6 @@ async fn main() -> std::io::Result<()> {
         }
         Command::Simulate(cmd) => {
             handle_simulate_command(cmd.command, error_handler.clone()).await
-        }
-        Command::Debug(cmd) => {
-            handle_debug_command(cmd.command, error_handler.clone()).await
         }
         Command::Zk(cmd) => cmd.execute(error_handler.clone()).await,
         Command::Intent(cmd) => {

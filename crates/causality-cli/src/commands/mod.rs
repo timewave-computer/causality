@@ -13,7 +13,6 @@ pub mod intent;
 pub mod zk;
 
 // New command module
-pub mod debug;
 pub mod project;
 pub mod simulate;
 
@@ -27,6 +26,5 @@ pub use intent::IntentCommand;
 pub use zk::ZkCommands;
 
 // Re-export new commands
-pub use debug::{handle_debug_command, DebugCommands};
 pub use project::{handle_project_command, ProjectCommands};
 pub use simulate::{handle_simulate_command, SimulateCommands};

@@ -1,222 +1,415 @@
-# Resource Model and Core Types
+# Causality: Resource Model and Core Types
 
-The Resource model forms the conceptual foundation of the Causality framework, providing a unified abstraction for representing data, computational processes, and system state. This model treats all entities within the system as Resources that can be created, transformed, and consumed through well-defined operations. At its core, a Resource binds its state (data) and the logic governing its behavior under a single, verifiable, content-addressed identifier.
+This document details the core types and resource model of the Causality system, providing a unified abstraction for representing data, computational processes, and system state. It focuses on how entities are defined, structured using generalized row types, and managed throughout their lifecycle, emphasizing the linear, verifiable nature of operations.
 
-## Resource Structure and Properties
+The type system is organized according to the three-Layer Architecture:
+- **Layer 0 (Register Machine)**: Defines fundamental machine-level values and base types.
+- **Layer 1 (Linear Lambda Calculus)**: Introduces structured types, resources, objects, linearity qualifiers, row types, Lisp data values, and the Lisp Abstract Syntax Tree (AST).
+- **Layer 2 (Effect Algebra & Domain Logic)**: Defines types for effects, handlers, intents, and constraints.
 
-Resources in the Causality framework encapsulate both data and metadata necessary for content addressing and system operation. Each Resource contains an `EntityId` that serves as its content-addressed identifier, ensuring that Resources with identical content receive identical identifiers regardless of their creation context. The `Resource` structure also includes fields for a human-readable name, domain association, type, quantity, and timestamp.
+## 1. Entity Identification (`EntityId`, `ResourceId`, `ValueExprId`, `ExprId`, `RowTypeId`, `HandlerId`)
 
-The core structure of a Resource is as follows:
+Fundamental to the Causality system is **content-addressing**. All significant entities—resources, data values, executable expressions, type schemas, intents, effects, transactions, and handlers—are identified by a unique, deterministic identifier derived from their canonical serialization. This ensures that identical content always yields the same ID, enabling system-wide consistency, deduplication, caching, and verifiable references.
+
+*   **`EntityId`**: The base type for content-addressed identifiers across the system. It is derived from the SSZ serialization of the entity's core data (often the Merkle root for complex structures).
+*   **Specific IDs**: Specialized type aliases for `EntityId` are used for clarity, indicating the type of entity being referenced (e.g., `ResourceId` for a `Resource`, `ValueExprId` for a `ValueExpr`, `ExprId` for an `Expr`, `RowTypeId` for a `RowType`, `HandlerId` for a `Handler`).
+
+## 2. Linearity Qualifiers (Layer 1)
+
+Applied at Layer 1, linearity qualifiers control the usage patterns of `Object` instances and other typed data. The system supports four levels of linearity:
+
+```rust
+pub enum Linearity {
+    /// Must be used exactly once.
+    Linear,
+    /// May be used at most once (can be dropped).
+    Affine,
+    /// Must be used at least once (can be copied).
+    Relevant,
+    /// May be used any number of times (can be dropped and copied).
+    Unrestricted,
+}
+```
+
+These four linearity qualifiers represent the complete set of possibilities when considering resource usage along two orthogonal axes: whether a resource can be dropped without being used (weakening) and whether it can be copied or used multiple times (contraction).
+
+| Linearity Qualifier | Weakening (Can Drop?) | Contraction (Can Copy?) | Typical Use Case |
+|---|:---:|:---:|---|
+| `Linear` | No | No | Unique resources, critical state | 
+| `Affine` | Yes | No | Optional unique resources | 
+| `Relevant` | No | Yes | Read-only references needed for an operation | 
+| `Unrestricted` | Yes | Yes | Configuration data, freely copyable values | 
+
+This 2×2 matrix captures fundamental resource usage patterns:
+
+- **Linear**: Must be used exactly once.
+- **Affine**: May be used at most once.
+- **Relevant**: Must be used at least once if part of a computation path that is taken.
+- **Unrestricted**: May be used any number of times.
+
+These qualifiers are primarily enforced by the Layer 1 type system and are crucial for ensuring resource safety and enabling formal verification.
+
+## 3. `Resource` and `Object`: Core Linear Entities (Layer 1)
+
+### 3.1 `Resource`: The Strictly Linear Entity
+
+The `Resource` is the fundamental immutable, linear entity in the Causality framework. It represents a single, unique digital asset or state that is consumed exactly once during a state transformation. Resources encapsulate data and metadata, linking their state and behavior under a content-addressed `EntityId` (`ResourceId`).
 
 ```rust
 pub struct Resource {
     /// Unique identifier for this resource (using EntityId for unified identification)
-    pub id: EntityId,
-    
+    pub id: ResourceId,
+
     /// Human-readable name or description
     pub name: Str,
-    
+
     /// Domain this resource belongs to
     pub domain_id: DomainId,
-    
-    /// Resource type identifier (e.g., "token", "compute_credits", "bandwidth")
+
+    /// Resource type identifier (e.g., "token", "compute_credits", "bandwidth"). This often implicitly refers to associated RowType definitions.
     pub resource_type: Str,
-    
-    /// Current quantity/amount of this resource
+
+    /// Current quantity/amount of this resource (for quantifiable assets)
     pub quantity: u64,
-    
+
     /// When this resource was created or last updated
     pub timestamp: Timestamp,
+
+    /// A Product row type instance defining associated permissions or attributes (used for capability patterns).
+    pub permissions: Value, // This Value should be a Value::Product conforming to a RowType
+
+    /// A Sum row type instance representing the current state in a state machine.
+    pub state: Value, // This Value should be a Value::Sum conforming to a RowType
+
+    /// A Product row type instance holding the intrinsic data of the resource.
+    pub data: Value, // This Value should be a Value::Product conforming to a RowType
+
+    /// Cryptographic proof of its origin and transformation history.
+    pub causal_chain: CausalProof,
+
+    /// Optional: if this resource also represents a computational budget.
+    pub compute_budget: Option<u64>,
 }
 ```
 
-- `id`: `EntityId`: The unique, content-addressed identifier of the Resource. It uses `EntityId` for unified identification across different types of entities in the system.
-- `name`: `Str`: A human-readable name or description for the Resource. This provides semantic meaning without affecting the content-addressed identifier.
-- `domain_id`: `DomainId`: Identifies the `TypedDomain` to which the Resource belongs or is primarily associated. This dictates its execution context and available capabilities.
-- `resource_type`: `Str`: A string identifier that categorizes the Resource (e.g., "token", "data_object", "compute_credits"). This allows for type-based operations and filtering.
-- `quantity`: `u64`: Represents the current amount or quantity of this Resource, applicable for quantifiable assets.
-- `timestamp`: `Timestamp`: Marks when the Resource was created or last updated. While important for temporal ordering and versioning, it typically does not affect the content-addressed `id`.
+*   **`id` (`ResourceId`)**: The unique, content-addressed identifier of this specific `Resource` instance, derived from its SSZ serialization.
+*   **`name` (`Str`)**: A human-readable identifier (does not affect `id`).
+*   **`domain_id` (`DomainId`)**: Associates the resource with a specific `TypedDomain` for context and capabilities.
+*   **`resource_type` (`Str`)**: Categorizes the resource, often linking to `RowType` schemas.
+*   **`quantity` (`u64`)**: For quantifiable resources.
+*   **`timestamp` (`Timestamp`)**: Creation/update time.
+*   **`permissions` (`Value` - Product Type)**: A `Value::Product` instance whose structure (defined by a `RowType`) can be used to implement permission/capability patterns.
+*   **`state` (`Value` - Sum Type)**: A `Value::Sum` instance representing lifecycle state, structured by a `RowType` for state machines.
+*   **`data` (`Value` - Product Type)**: A `Value::Product` instance holding the resource's core data, structured by a `RowType`.
+*   **`causal_chain` (`CausalProof`)**: Tracks provenance and transformation history.
+*   **`compute_budget` (`Option<u64>`)**: For resources representing computation.
 
-This structure ensures that a Resource is a well-defined unit, linking its identity and core properties. The `name`, `resource_type`, `quantity`, and `timestamp` fields provide essential metadata, while `domain_id` establishes its operational context.
+Upon creation, a `Resource` resides in a unique register. Transformations consume the original and produce new `Resource` instances in new registers.
 
-## Value Expressions
+### 3.2 `Object`: Generalized Resource with Configurable Linearity
 
-Value Expressions (`ValueExpr`) instances represent all concrete data and state within the Causality framework. They are designed to be SSZ-serialized, allowing their content-addressed identifiers (`ValueExprId`) to be derived from their Merkle roots. This ensures data integrity and verifiability.
-
-The `ValueExpr` enum defines the various types of values that can be represented:
+Objects generalize resources with configurable linearity, enabling more flexible resource patterns:
 
 ```rust
-pub enum ValueExpr {
-    /// Represents a unit or void type.
+pub struct Object<T> {
+    /// The encapsulated data
+    pub data: T,
+    
+    /// Linearity qualifier controlling usage patterns
+    pub linearity: Linearity,
+    
+    /// Set of capabilities associated with this object
+    pub capabilities: Set<Capability>,
+}
+```
+
+Type relationships illustrate how `Object` generalizes other concepts:
+- A `Resource` can be seen as an `Object` with `Linear` linearity, specific data fields, and capabilities.
+- A `Capability` itself can be modeled as an `Object` (often `Linear` or `Affine`) whose data field describes the permission.
+- A `Message` or freely copyable data could be an `Object` with `Unrestricted` linearity.
+
+## 4. Layer 0 Machine Values (`Value`)
+
+Layer 0 defines the most fundamental values that the register machine operates on. These are simple, unboxed types directly manipulated by the 9 core machine instructions. All higher-level data structures are ultimately compiled down to these representations for execution.
+
+```rust
+// Represents the types of values the Layer 0 machine can handle.
+pub enum Value {
     Unit,
-    /// An alias for `Unit`, often used to represent null or empty values.
-    Nil,
-    /// A boolean true/false value.
     Bool(bool),
-    /// A UTF-8 string, typically with a fixed-size representation for SSZ compatibility (e.g., `Str`).
-    String(Str),
-    /// A numeric value. The `Number` type can represent various forms like integers, fixed-point numbers, or ratios.
-    Number(Number),
-    /// An ordered list of `ValueExpr` instances.
-    List(ValueExprVec), // Wrapper for Vec<ValueExpr>
-    /// A key-value map where keys are `Str` and values are `ValueExpr`.
-    Map(ValueExprMap),  // Wrapper for BTreeMap<Str, ValueExpr>
-    /// A structured record with named fields, essentially a `ValueExprMap` used with specific semantics.
-    Record(ValueExprMap),
-    /// A reference to another `ValueExpr` or `Expr`, typically via its content-addressed ID.
-    Ref(ValueExprRef),
-    /// A lambda closure, capturing parameters, the body expression's ID, and its captured environment.
-    Lambda {
-        params: Vec<Str>,
-        body_expr_id: ExprId,
-        captured_env: ValueExprMap,
-    },
+    Int(i64),      // Or a platform-specific integer type
+    Symbol(Str),   // For symbolic atoms
+
+    // Machine-level identifiers
+    RegisterId(u32), // Identifies a machine register
+    ResourceId(u64), // Identifies a heap-allocated resource
+    Label(Str),      // Identifies a code location for jumps (e.g., in `match`)
+    EffectTag(Str),  // Opaque tag representing a type of effect for `perform`
+
+    // Basic structural forms at Layer 0
+    Product(Box<Value>, Box<Value>), // Layer 0's way to pair two values
+    Sum(SumVariant),                 // Layer 0's way to represent a choice (e.g., Inl(Box<Value>), Inr(Box<Value>))
+}
+
+pub enum SumVariant {
+    Inl(Box<Value>),
+    Inr(Box<Value>),
 }
 ```
 
-- `Nil`: Represent empty or null-like values.
-- `Bool(bool)`: Standard boolean.
-- `String(Str)`: Textual data. `Str` is a specialized string type for efficient SSZ.
-- `Number(Number)`: Encapsulates various numeric types (e.g., integers, fixed-point). The specific `Number` type (e.g., `crate::primitive::number::Number`) provides the actual representation.
-- `List(ValueExprVec)`: Ordered collections.
-- `Map(ValueExprMap)`, `Record(ValueExprMap)`: Key-value stores. `Record` implies a more structured, schema-like usage.
-- `Ref(ValueExprRef)`: Enables linking to other content-addressed data or expressions.
-- `Lambda`: Represents first-class functions, crucial for the Lisp evaluation model.
+- **Base Types**: `Unit`, `Bool`, `Int`, `Symbol` are the primitive data types.
+- **Machine-Level Identifiers**: `RegisterId`, `ResourceId`, `Label`, `EffectTag` are used by the machine for its internal operations.
+- **Structural Forms**: `Product` and `Sum` represent the simplest forms of data aggregation and choice, directly corresponding to the SMCC with coproducts structure of Layer 0.
 
-These types form the building blocks for all data manipulated and stored by the system.
+These Layer 0 values are distinct from the richer `LispValue` types used at Layer 1 for programming convenience.
 
-## Executable Expressions (`Expr`)
+## 5. Layer 1 Lisp Data Values (`LispValue`)
 
-`Expr` (Expression) instances define the executable logic, behavior, validation rules, and transformations within the Causality framework. They are represented as Lisp Abstract Syntax Trees (ASTs). This "code-as-data" approach allows logic itself to be treated as data, serialized using SSZ, and content-addressed via an `ExprId` (the Merkle root of the SSZ-serialized AST).
-
-The `Expr` enum outlines the structure of these executable expressions:
+Layer 1 introduces a richer set of data values, `LispValue`, suitable for programming in Causality Lisp. These values are what programmers typically manipulate and are used as constants within Layer 1 `Expr` ASTs. They build upon Layer 0 values but include more complex structures.
 
 ```rust
+pub enum LispValue {
+    Unit,
+    Bool(bool),
+    Int(i64),
+    String(Str),      // UTF-8 String
+    Symbol(Str),
+    List(Vec<LispValue>), // Ordered list
+    Map(std::collections::HashMap<Str, LispValue>), // Key-value map
+    Record(std::collections::HashMap<Str, LispValue>), // Structured record with named fields
+    
+    ResourceId(u64),  // Reference to a Layer 0 resource
+    ExprId(u64),      // Reference to a persisted Expr AST
+    // Other EntityId variants can also be represented if needed.
+
+    // Note: Lambdas/closures are part of the Expr AST, not typically direct LispValues themselves,
+    // unless representing a first-class function value after closure conversion.
+}
+```
+- `LispValue` includes common data types like strings, lists, and maps, providing a more convenient programming model than raw Layer 0 values.
+- `Record` provides a way to represent structured data with named fields, often conforming to `RowType` schemas at compile time.
+- References like `ResourceId` and `ExprId` allow Lisp programs to refer to other significant entities.
+
+## 6. Layer 1 Lisp AST (`Expr`)
+
+`Expr` instances define the executable logic of Causality Lisp programs as Abstract Syntax Trees (ASTs). These ASTs are processed by the Layer 1 compiler and type checker. `Expr`s are SSZ-serializable and can be content-addressed by an `ExprId`.
+
+The structure of `Expr` directly reflects the 11 core primitives of the Layer 1 Linear Lambda Calculus, along with general programming constructs:
+
+```rust
+// Represents a parameter in a lambda or let binding.
+pub struct Param { pub name: Str, pub type_annot: Option<Str> }
+
 pub enum Expr {
-    /// Atomic value (e.g., number, string, boolean, nil). `Atom` is a type that wraps these primitives.
-    Atom(Atom),
-    /// Constant `ValueExpr`. Useful for embedding literal data directly within an expression tree.
-    Const(ValueExpr),
-    /// Variable reference, identified by a `Str` (string name).
-    Var(Str),
-    /// Lambda abstraction (anonymous function).
-    /// Takes a vector of parameter names (`Vec<Str>`) and a boxed expression (`ExprBox`) for the body.
-    Lambda(Vec<Str>, ExprBox),
-    /// Function application.
-    /// Applies a function (an `ExprBox`) to a list of arguments (an `ExprVec`).
-    Apply(ExprBox, ExprVec), // ExprBox is Box<Expr>, ExprVec is Vec<Expr>
-    /// An atomic, predefined combinator or primitive operation (e.g., arithmetic, list operations).
-    Combinator(AtomicCombinator),
-    /// Dynamic expression for step-bounded evaluation, often used in ZK coprocessor contexts.
-    /// Takes a step bound (`u32`) and a boxed expression (`ExprBox`) to evaluate.
-    Dynamic(u32, ExprBox),
+    // Core Values & Variables
+    Const(LispValue),         // Constant LispValue
+    Var(Str),                 // Variable reference by name
+
+    // General Programming Constructs
+    Let(Str, Option<Str>, Box<Expr>, Box<Expr>), // let name: type = val_expr in body_expr
+
+    // Layer 1 Primitives (Linear Lambda Calculus)
+    UnitVal,                                 // The 'unit' primitive value
+    LetUnit(Box<Expr>, Box<Expr>),           // 'letunit' u = e1 in e2 (e1 must be unit)
+    Tensor(Box<Expr>, Box<Expr>),            // 'tensor e1 e2'
+    LetTensor(Box<Expr>, Str, Str, Box<Expr>), // 'lettensor (x,y) = e_pair in e_body'
+    Inl(Box<Expr>),                          // 'inl e'
+    Inr(Box<Expr>),                          // 'inr e'
+    Case(Box<Expr>,                         // 'case e_sum of inl x => e_left | inr y => e_right'
+         Str, Box<Expr>,                  // x, e_left
+         Str, Box<Expr>),                 // y, e_right
+    Lambda(Vec<Param>, Box<Expr>),           // 'lambda (p1:t1, ...) => body'
+    Apply(Box<Expr>, Vec<Expr>),             // 'apply fn_expr arg_exprs'
+    Alloc(Box<Expr>),                        // 'alloc e' (allocates the value of e as a resource)
+    Consume(Box<Expr>),                      // 'consume e' (consumes the resource e)
 }
 ```
 
-- `Atom(Atom)`: Basic literal values.
-- `Const(ValueExpr)`: Embeds a `ValueExpr` directly as a constant in the AST.
-- `Var(Str)`: Represents a named variable to be looked up in the current evaluation environment.
-- `Lambda(Vec<Str>, ExprBox)`: Defines an anonymous function. `ExprBox` is a wrapper for `Box<Expr>`, representing the function's body.
-- `Apply(ExprBox, ExprVec)`: Represents the application of a function to arguments. `ExprVec` is a wrapper for `Vec<Expr>`.
-- `Combinator(AtomicCombinator)`: Core, non-decomposable operations provided by the runtime.
-- `Dynamic(u32, ExprBox)`: Allows for expressions whose evaluation is bounded by a certain number of computational steps, relevant for gas-constrained or verifiable computation environments.
+- The `Expr` enum provides direct syntactic forms for each of the 11 Layer 1 primitives.
+- `Let` provides local bindings.
+- `Const` allows embedding `LispValue`s directly into the code.
+- This AST is type-checked against Layer 1 types (including linearity and row types) and then compiled down to Layer 0 register machine instructions.
 
-These expression types form a Lisp-like language, enabling the definition of complex logic that can be associated with Resources and evaluated in various `TypedDomain` contexts.
+## 7. Generalized Row Types: Schemas for Structure and Validation (`RowType`) (Layer 1)
 
-## Intent Model and Transformation Logic
+Generalized `RowType`s are a **compile-time-only** mechanism for defining the structure of data and validating their conformity. They are not runtime values but content-addressed schemas (`RowTypeId`).
 
-Intents represent desired state transformations within the system, expressing what should happen rather than how it should be accomplished. This declarative approach enables the framework to optimize execution strategies while maintaining clear separation between specification and implementation.
+Two kinds of `RowType`s exist conceptually:
 
-The Intent structure captures transformation requirements through input and output ResourceFlow specifications. These flows describe the types and quantities of Resources required for the transformation and the expected outputs. The framework uses this information for validation, optimization, and resource allocation.
+1.  **Product Row Types**: Define named fields with types (for records like `Resource.data`, `Resource.permissions`).
+2.  **Sum Row Types**: Define tagged variants with types (for unions like `Resource.state`, effect signatures).
 
-Being fundamental to system operations, `Intent` instances are SSZ (SimpleSerialize) encoded for content addressing, network transmission, and persistent storage. As composite data structures, often containing variable-length fields such as lists of `ResourceFlow` and optional `ExprId`s, their deserialization from a byte stream requires careful management of byte consumption to ensure each component is correctly parsed.
+`RowType`s support compile-time operations (Projection, Restriction, Merge, Diff) used by the type checker and compiler to manipulate and reason about structured data without runtime cost.
+
+## 8. Constraint Language (Layer 2)
+
+Constraints express logical conditions that must hold during program execution:
+
+```rust
+pub enum Constraint {
+    /// Truth values
+    True,
+    False,
+    
+    /// Logical connectives
+    And(Box<Constraint>, Box<Constraint>),
+    Or(Box<Constraint>, Box<Constraint>),
+    Not(Box<Constraint>),
+    
+    /// Capability and ownership checks
+    HasCapability(Symbol),
+    IsOwner(ResourceId),
+    
+    /// Type predicates
+    Satisfies(TypeExpr, Predicate),
+    
+    /// Effect membership
+    EffectIn(Effect, Set<Effect>),
+}
+```
+
+## 8. Hint Language (Layer 2)
+
+Hints are structured optimization directives that guide runtime execution without affecting correctness:
+
+```rust
+pub enum Hint {
+    /// Batch effects with matching selector
+    BatchWith(Selector),
+    
+    /// Optimize for specific metrics
+    Minimize(Metric),
+    Maximize(Metric),
+    
+    /// Domain preferences
+    PreferDomain(DomainId),  // Soft preference
+    RequireDomain(DomainId), // Hard requirement
+    
+    /// Timing preferences
+    Deadline(Timestamp),
+    
+    /// Hint combinations
+    HintAll(Vec<Hint>),  // Conjunction
+    HintAny(Vec<Hint>),  // Disjunction
+}
+
+pub enum Selector {
+    SameType,       // Effects with same type tag
+    SameTarget,     // Effects with same target address
+    Custom(ExprId), // User-defined selection predicate
+}
+
+pub enum Metric {
+    Price,
+    Latency,
+}
+```
+
+## 9. Effect Model (Layer 2)
+
+Effects are tagged operations with structured metadata. They define *what* should happen, not *how*:
+
+```rust
+pub struct Effect<T> {
+    /// Unique effect type identifier
+    pub tag: Symbol,
+    
+    /// Effect parameters
+    pub params: T,
+    
+    /// Precondition that must hold before execution
+    pub pre: Constraint,
+    
+    /// Postcondition that will hold after execution
+    pub post: Constraint,
+    
+    /// Optimization hints
+    pub hints: Vec<Hint>,
+}
+```
+
+Effects are processed through a two-stage system:
+1. **Pure handlers** transform effects (effect-to-effect transformations)
+2. **Stateful interpreter** executes the transformed effects
+
+## 10. Handler Model (Layer 2)
+
+Handlers are pure functions that transform effects. They form an effect algebra where composition is just function composition:
+
+```rust
+/// Handler type: pure effect-to-effect transformation
+pub type Handler<E1, E2> = fn(E1) -> E2;
+
+/// Handler composition is function composition
+pub fn compose<E1, E2, E3>(h2: Handler<E2, E3>, h1: Handler<E1, E2>) -> Handler<E1, E3> {
+    |e1| h2(h1(e1))
+}
+
+/// Identity handler
+pub fn id<E>() -> Handler<E, E> {
+    |e| e
+}
+```
+
+This avoids the traditional monad transformer composition problem—no lifting, no transformer stacks, just plain function composition.
+
+## 11. Intent Model (Layer 2)
+
+Intents represent desired state transformations declaratively:
 
 ```rust
 pub struct Intent {
-    pub id: EntityId,
-    pub name: Str,
-    pub domain_id: DomainId,
-    pub priority: u32,
-    pub inputs: Vec<ResourceFlow>,
-    pub outputs: Vec<ResourceFlow>,
-    pub expression: Option<ExprId>,
-    pub timestamp: Timestamp,
-    pub hint: Option<ExprId>, // Optimization guidance or preferences
+    /// Resources to be consumed
+    pub resources: Vec<Resource>,
+    
+    /// Constraint that must be satisfied
+    pub constraint: Constraint,
+    
+    /// Effects to be performed
+    pub effects: Vec<Effect<dyn Any>>,
+    
+    /// Optimization hints
+    pub hints: Vec<Hint>,
 }
 ```
 
-Priority levels enable ordering of Intent execution when multiple Intents compete for resources or execution capacity. The optional expression field allows complex transformation logic to be specified through the framework's Lisp-based expression system.
+## 12. Transaction Model
 
-Optimization hints provide guidance to the execution engine about preferred strategies or constraints. These hints can influence domain selection, resource allocation, and execution ordering without mandating specific implementation approaches.
-
-## Effect Model and State Changes
-
-Effects represent the actual state changes that occur when Intents are processed. They capture both the transformation logic and the resulting system state modifications, providing a complete record of system evolution.
-
-The Effect structure includes comprehensive information about the transformation context, including source and target domains, the Handler responsible for execution, and detailed resource flows. This information enables auditing, debugging, and system analysis.
-
-Similarly, `Effect` instances are SSZ-encoded to ensure verifiability and facilitate their use across system boundaries. Given their comprehensive and often variable-length structure (e.g., lists of resources, optional expression IDs), their deserialization mechanisms are designed to meticulously track the number of bytes consumed for each field, ensuring robust and accurate parsing from SSZ byte streams.
-
-```rust
-pub struct Effect {
-    pub id: EntityId,
-    pub name: Str,
-    pub domain_id: DomainId,
-    pub effect_type: Str,
-    pub inputs: Vec<ResourceFlow>,
-    pub outputs: Vec<ResourceFlow>,
-    pub expression: Option<ExprId>,
-    pub timestamp: Timestamp,  // Effect specification creation
-    pub hint: Option<ExprId>,  // Target handler, cost, performance, etc.
-}
-```
-
-Nullifiers within Effects prove that specific Resources were consumed during the transformation. This mechanism enables privacy-preserving resource management by proving consumption without revealing the consumed Resource content.
-
-Cost models and resource usage estimates support optimization and resource planning. These fields enable the framework to make informed decisions about execution strategies and resource allocation.
-
-## Transaction Model: Resolving Intents and Effects
-
-The `Transaction` is a pivotal entity in the Causality framework, representing an immutable record of how specific `Intent`s are resolved by a set of `Effect`s. It acts as the atomic unit of commitment that bundles together desired outcomes (Intents) with the concrete actions (Effects) that achieve them, thereby formalizing the consumption of resources and the resulting state changes.
+A `Transaction` is an atomic, immutable record of intent execution:
 
 ```rust
 pub struct Transaction {
     /// Unique identifier for this transaction
     pub id: EntityId,
-    
+
     /// Human-readable name or description
     pub name: Str,
-    
+
     /// Domain this transaction belongs to
     pub domain_id: DomainId,
-    
-    /// All effects included in this transaction
+
+    /// All effects included in this transaction (by EntityId)
     pub effects: Vec<EntityId>,
-    
-    /// All intents satisfied by this transaction
+
+    /// All intents satisfied by this transaction (by EntityId)
     pub intents: Vec<EntityId>,
-    
-    /// Aggregated resources consumed by all effects (derived from linked Intents)
+
+    /// Aggregated resources consumed by all effects
     pub inputs: Vec<ResourceFlow>,
-    
+
     /// Aggregated resources produced by all effects
     pub outputs: Vec<ResourceFlow>,
-    
+
     /// When this transaction was created or executed
     pub timestamp: Timestamp,
 }
 ```
 
-Key aspects of the `Transaction` model:
+Transaction semantics ensure atomicity: either all effects complete successfully or none are applied.
 
--   **Atomic Commitment**: A `Transaction` encapsulates a complete set of operations that are applied atomically. Either all `Effect`s within the transaction succeed, and the corresponding `Intent`s are considered satisfied, or the transaction fails.
--   **Intent-Effect Linkage**: The `intents: Vec<EntityId>` and `effects: Vec<EntityId>` fields are crucial. They establish the explicit, many-to-many relationship between the goals declared by users or other systems (`Intent`s) and the concrete actions taken by the framework (`Effect`s). This directly supports scenarios like "coincidence of wants," where multiple `Intent`s can be fulfilled by a coordinated set of `Effect`s within a single `Transaction`.
--   **Resource Accounting**: The `inputs` and `outputs` fields provide an aggregated view of the resources consumed and produced by the `Effect`s within the transaction. These are typically derived from the resource commitments specified in the linked `Intent`s and the actual outcomes of the `Effect`s.
--   **Immutability and Auditability**: Once recorded, a `Transaction` provides an immutable historical record of what was intended, what actions were taken, and what resources were involved, which is essential for auditing, verification, and debugging.
+## 13. Resource Flow
 
-## Resource Flow and Transformation Patterns
-
-ResourceFlow structures describe the movement of Resources through the system during transformations. They specify resource types, quantities, and domain contexts, enabling precise specification of transformation requirements and outputs.
+`ResourceFlow` structures describe resource movement through transformations:
 
 ```rust
 pub struct ResourceFlow {
@@ -226,72 +419,19 @@ pub struct ResourceFlow {
 }
 ```
 
-Resource flows enable the framework to validate that Intents have sufficient inputs and that Effects produce the expected outputs. This validation occurs at both the type level and the quantity level, ensuring system consistency.
+## 14. Serialization and Content Addressing (`SSZ`, `SMT`)
 
-The domain context within resource flows enables cross-domain transformations, where Resources move between different execution environments. This capability supports complex workflows that span multiple computational contexts.
+All core types implement SSZ for deterministic serialization. The hash (Merkle root) of the SSZ data is the `EntityId`. These IDs are keys in SMTs, providing authenticated storage and verifiable proofs of inclusion/exclusion.
 
-## Handler Model and Execution Context
+## 15. Type Safety and Validation
 
-Handlers define the execution context and capabilities available during Effect processing. They encapsulate the logic necessary to transform Intents into Effects, providing the bridge between declarative specifications and actual computation.
+The type system, linear types, and `RowType`s enforce valid resource operations statically. The combination of:
+- Linearity qualifiers (preventing misuse)
+- Row types (ensuring structural correctness)
+- Constraints (expressing logical requirements)
+- Pure handlers (composable transformations)
+- Stateful interpreter (controlled execution)
 
-```rust
-pub struct Handler {
-    pub id: HandlerId,
-    pub name: Str,
-    pub domain_id: DomainId,
-    pub handler_type: Str,
-    pub priority: u32,
-    pub expression: Option<ExprId>,
-    pub timestamp: Timestamp,
-}
-```
+provides a comprehensive framework for safe, verifiable resource management.
 
-Handler types enable specialization for different kinds of transformations. Some handlers might focus on data transformation, others on external service integration, and still others on complex computational workflows.
-
-Priority levels among handlers enable conflict resolution when multiple handlers could process the same Intent. The framework can select the most appropriate handler based on priority, capabilities, and current system state.
-
-## Transaction Model and Atomicity
-
-Transactions group multiple Effects into atomic units, ensuring that either all Effects in a transaction succeed or none do. This mechanism provides consistency guarantees for complex multi-step operations.
-
-```rust
-pub struct Transaction {
-    pub id: EntityId,
-    pub name: Str,
-    pub domain_id: DomainId,
-    pub effects: Vec<EntityId>,
-    pub timestamp: Timestamp,
-}
-```
-
-Transaction boundaries ensure system consistency and allow for sophisticated error handling and recovery strategies.
-
-## Serialization and Content Addressing
-
-All core types, including `Resource`, `ValueExpr`, and `Expr`, implement Simple Serialize (SSZ) encoding. SSZ ensures deterministic and efficient serialization, a critical property for a content-addressed system. The canonical SSZ representation of an entity is hashed (typically producing a Merkle root if the structure is complex) to generate its unique content-addressed identifier: `ResourceId`, `ValueExprId`, or `ExprId`.
-
-This content addressing mechanism ensures that identical data or logic will always produce the identical identifier, regardless of when or where it is created. This enables powerful system-wide deduplication, caching, and verification capabilities.
-
-To provide authenticated and verifiable storage for these SSZ-identified entities, the system employs Sparse Merkle Trees (SMTs). Each entity's content-addressed ID serves as its unique key within a global or domain-specific SMT. The SMT maps this ID to the entity's full SSZ-serialized data (or a commitment to it). SMTs are authenticated data structures, meaning they provide cryptographic proof (a Merkle proof) of an entity's inclusion, exclusion, or current state relative to the SMT's root hash. This is vital for data integrity, partial state disclosure in ZK proofs, and overall system verifiability.
-
-## Integration with Expression System
-
-The core types integrate seamlessly with the framework's Lisp-based expression system primarily through `ExprId` references. As seen in the `Resource` struct (`static_expr`) and various model definitions like `Intent` and `Handler`, complex transformation logic, validation rules, or behavioral definitions can be stored as `Expr` instances (identified by their `ExprId`) and referenced where needed.
-
-This integration enables code reuse, versioning (as changing logic changes the `ExprId`), and sophisticated dependency management. Expressions can be treated as first-class entities, enabling meta-programming and dynamic system behavior. The evaluation of these expressions is performed by a Lisp interpreter, and for critical operations, the system may commit to a specific `InterpreterId` for system-wide consistency.
-
-## Type Safety and Validation
-
-The framework's type system provides compile-time and runtime validation of Resource operations. Type constraints ensure that only valid transformations can be specified and executed, reducing the likelihood of runtime errors.
-
-Trait implementations provide common interfaces for Resource manipulation, enabling generic algorithms while maintaining type safety. The `AsResource` trait, for example, enables uniform handling of Resource-like entities regardless of their specific implementation.
-
-```rust
-pub trait AsResource {
-    fn resource_type(&self) -> &Str;
-    fn quantity(&self) -> u64;
-    fn matches_pattern(&self, pattern: &ResourcePattern) -> bool;
-}
-```
-
-Pattern matching capabilities enable sophisticated Resource selection and filtering operations. ResourcePattern structures can specify constraints on resource types, domains, quantities, and other properties.
+This comprehensive set of core types, organized by layers and validated by the type system, forms the foundation for the Causality framework's linear, verifiable resource management.

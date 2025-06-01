@@ -4,7 +4,7 @@ Unified Lisp interpreter for evaluating Resource logic in the Causality framewor
 
 ## Overview
 
-The `causality-lisp` crate provides a deterministic, asynchronous Lisp interpreter that serves as the execution engine for all Lisp expressions in the Causality system. It evaluates `Expr` ASTs (defined in `causality-types`) that represent the logic associated with Resources, including:
+The `causality-lisp` crate provides a deterministic, asynchronous Lisp interpreter that serves as the execution engine for all Lisp expressions in the Causality system. It evaluates `Expr` ASTs (defined in `causality-core`) that represent the logic associated with Resources, including:
 
 - Resource `static_expr` validation logic
 - Handler Resource `dynamic_expr` for orchestrating ProcessDataflowBlocks
@@ -158,7 +158,7 @@ Different execution contexts provide different capabilities:
 ### Basic Evaluation
 ```rust
 use causality_lisp::{Interpreter, Evaluator};
-use causality_types::expr::ast::Expr;
+use causality_types::expr::effect::Expr;
 
 async fn evaluate_expression(expr: &Expr, ctx: &dyn ExprContextual) -> Result<ExprResult, ExprError> {
     let interpreter = Interpreter::new();
@@ -200,7 +200,7 @@ let result = interpreter.evaluate_expr(&handler_dynamic_expr, &dataflow_context)
 
 ## Integration Points
 
-### With `causality-types`
+### With `causality-core`
 - Consumes `Expr` AST definitions
 - Produces `ExprResult` and `ValueExpr` outputs
 - Uses content-addressed identifiers (`ExprId`, `ValueExprId`)

@@ -1,220 +1,214 @@
-# Causality Core
+# Causality Types
 
-Core business logic and implementation utilities for the Causality Resource Model framework. This crate provides concrete implementations, utility functions, and infrastructure components that support the type definitions in `causality-types`.
+Core type definitions and trait interfaces for the Causality Resource Model framework. This crate contains **only type definitions and trait interfaces** with zero implementation code, serving as the foundation for the entire Causality system.
 
 ## Overview
 
-The `causality-core` crate serves as the implementation layer for the Causality system, providing:
+The Causality system is built around the **Resource** primitive - content-addressed entities that uniquely bind their state (data) to the specific logic that governs their behavior and transformations. This crate defines the fundamental types that enable deterministic and verifiable computation across the system.
 
-- **Content Addressing**: Utilities for SSZ-based content addressing and hashing
-- **Sparse Merkle Trees (SMT)**: Implementation of authenticated data structures
-- **Graph Management**: TEG (Temporal Effect Graph) state management and analysis
-- **S-Expression Utilities**: Lisp integration and FFI support
-- **Domain Management**: Domain configuration and boundary handling
-- **Tracing and Debugging**: Execution tracing and analysis tools
-- **ZK Integration**: Zero-knowledge proof utilities and state root management
+## Design Principles
 
-All implementations maintain consistency with the Resource Model's content-addressed, SSZ-serialized architecture.
+1. **Types Only**: Contains only type definitions and trait interfaces with zero implementation code
+2. **Content-Addressed**: All critical entities are identified by the Merkle root of their SSZ-serialized form
+3. **SSZ Serialization**: Exclusively uses SSZ (Simple Serialize) for deterministic, ZK-compatible serialization
+4. **Resource-Centric**: Everything is modeled as or relates to Resources with verifiable state and logic
+5. **Domain-Aware**: Supports typed domains (VerifiableDomain, ServiceDomain) for different execution contexts
+6. **Immutable**: All state objects are immutable and content-addressed
+7. **Single-Use**: Resources can only be consumed exactly once (enforced through nullifiers)
 
-## Core Components
+## Core Architecture
 
-### Content Addressing
+### Resources (`Resource`)
 
-Utilities for creating and managing content-addressed identifiers:
+Resources are the fundamental building blocks of the system. Each Resource comprises:
 
-```rust
-use causality_core::content_addressing::{ContentAddressable, content_id_from_bytes};
+- **`id` (`ResourceId`)**: Content-addressed identifier (Merkle root of SSZ-serialized Resource)
+- **`value` (`ValueExprId`)**: Points to a `ValueExpr` representing the Resource's state/data
+- **`static_expr` (`Option<ExprId>`)**: Optional logic for off-chain validation and static constraints
+- **`primary_domain_id` (`DomainId`)**: Primary domain determining execution characteristics
+- **`contextual_scope_domain_ids` (`Vec<DomainId>`)**: Additional domains the Resource can interact with
+- **`ephemeral` (bool)**: Whether the Resource is temporary or persistent
 
-let data = b"resource data";
-let content_id = content_id_from_bytes(data);
-let resource_id = resource.content_id();
-```
+For specialized Resources (Effects, Handlers), their behavioral logic is typically embedded within their `value` field as `ExprId` references.
+
+### Value Expressions (`ValueExpr`)
+
+All concrete data and state within Resources are represented by `ValueExpr` instances:
+
+- **`Unit`**: Represents nil or empty value
+- **`Bool(bool)`**: Boolean values
+- **`String(Str)`**: Textual data using specialized `Str` type
+- **`Number(Number)`**: Numeric data (primarily `Integer(i64)` for determinism)
+- **`List(ValueExprVec)`**: Ordered sequences of `ValueExpr`s
+- **`Map(ValueExprMap)`**: Key-value stores with `Str` keys
+- **`Record(ValueExprMap)`**: Struct-like maps for structured data
+- **`Ref(ValueExprRef)`**: References to other `ValueExprId`s or `ExprId`s
+- **`Lambda`**: First-class function values with captured environments
+
+All `ValueExpr` instances are SSZ-serialized and identified by their `ValueExprId` (Merkle root).
+
+### Expressions (`Expr`)
+
+Behavior, validation rules, and transformation logic are defined by `Expr` ASTs:
+
+- **`Atom(atom::Atom)`**: Literal atomic values
+- **`Const(ValueExpr)`**: Embedded constant values
+- **`Var(Str)`**: Named variables resolved in evaluation context
+- **`Lambda(Vec<Str>, Box<Expr>)`**: Anonymous functions
+- **`Apply(Box<Expr>, Vec<Expr>)`**: Function applications
+- **`Combinator(AtomicCombinator)`**: Predefined atomic operations
+- **`Dynamic(u32, Box<Expr>)`**: Step-bounded evaluation for ZK circuits
+
+`Expr` ASTs are SSZ-serialized and identified by their `ExprId` (Merkle root).
+
+### Typed Domains
+
+The system supports different execution environments through typed domains:
+
+- **`VerifiableDomain`**: Environments where state transitions are ZK-provable
+- **`ServiceDomain`**: Interfaces to external services (RPC, API integrations)
+  - `RpcServiceDomain`: For blockchain RPC calls
+  - `ApiIntegrationDomain`: For third-party API interactions
+
+Resources' `primary_domain_id` determines their execution context and available operations.
+
+### Effects and Handlers
+
+System operations are modeled as Resources:
+
+- **Effects**: Represent intents to perform operations, structured as Resources with operational logic in their `value` field
+- **Handlers**: Implement behavior for specific Effect kinds, also structured as Resources with logic in their `value` field
+- **Intents**: Commitments to transform resources with satisfaction constraints
+
+### Process Dataflow Blocks
+
+Complex multi-step, multi-domain processes can be defined declaratively:
+
+- **`ProcessDataflowBlock`**: Lisp S-expression structures defining workflow sequences
+- **`ProcessLayer`**: Stages of execution within dataflows
+- **`EffectNode`**: Individual effects within process layers
+- **`ProcessEdge`**: Connections between effects with gating conditions
+
+## Expression System
+
+### Atomic Combinators
+
+The system provides predefined combinators for Resource logic:
+
+**Control Flow**: `if`, `and`, `or`, `not`
+**Arithmetic**: `add`, `sub`, `mul`, `div` (with symbolic aliases `+`, `-`, `*`, `/`)
+**Comparison**: `eq`, `gt`, `lt`, `gte`, `lte`
+**Data Access**: `get-field`, `get-context-value`, `nth`, `len`
+**Construction**: `list`, `record`, `make-map`, `cons`
+**Type Predicates**: `is-string?`, `is-integer?`, `is-list?`
+**String Operations**: `string-concat`, `string-to-upper`
+
+### Evaluation Strategies
+
+- **Off-Chain First**: Static logic (`static_expr`) executed by off-chain runtime
+- **ZK Coprocessor**: Dynamic evaluation and proof verification for ZK-critical operations
+- **Ahead-of-Time Compilation**: Future optimization for performance-critical evaluations
+
+## Serialization and Storage
+
+### SSZ Integration
+
+All types use SSZ (Simple Serialize) for:
+- Deterministic serialization
+- Content-addressed identification via Merkle roots
+- ZK-circuit compatibility
+- Verifiable storage in Sparse Merkle Trees (SMTs)
 
 ### Sparse Merkle Trees (SMT)
 
-Authenticated data structures for verifiable storage:
+Content-addressed entities are stored in SMTs providing:
+- Cryptographic proofs of existence/non-existence
+- Data integrity guarantees
+- Partial state disclosure for privacy
+- Proof-carrying data capabilities
+
+## Type System Features
+
+### Content-Addressed IDs
+
+Core identifier types all derive from SSZ Merkle roots:
+- `ResourceId`, `ValueExprId`, `ExprId`, `TypeExprId`
+- `EffectId`, `HandlerId`, `IntentId`, `TransactionId`
+- `DomainId`, `CapabilityId`, `MessageId`
+
+### Conversion Traits
+
+Unified type system with conversion traits:
+- `AsResource`, `AsEffect`, `AsHandler`, `AsIntent`
+- `ToValueExpr`, `FromValueExpr`
+- `AsIdentifiable`, `HasDomainId`
+
+### Error Handling
+
+Comprehensive error types:
+- `ResourceError`, `EffectHandlingError`
+- `ConversionError`, `HandlerError`
+- `ErrorCategory` for classification
+
+## Module Organization
+
+### Core (`core/`)
+- `id.rs`: Content-addressed identifier types
+- `resource.rs`: Resource type definition
+- `effect.rs`: Effect type definition
+- `handler.rs`: Handler type definition
+- `intent.rs`: Intent type definition
+- `transaction.rs`: Transaction type definition
+- `traits.rs`: Core trait definitions
+- `error.rs`: Error type definitions
+
+### Expression System (`expr/`)
+- `ast.rs`: Expression AST definitions
+- `value.rs`: Value expression types
+- `expr_type.rs`: Type expression system
+- `result.rs`: Evaluation result types
+
+### Graph System (`graph/`)
+- Temporal Effect Graph (TEG) types
+- Subgraph definitions
+- Edge and node abstractions
+
+### Provider Interfaces (`provider/`)
+- `context.rs`: Execution context traits
+- `registry.rs`: Registry interface traits
+- `messenger.rs`: Message passing interfaces
+
+### Patterns (`pattern/`)
+- `message.rs`: Message pattern types
+- Common interaction patterns
+
+## Integration with Other Crates
+
+This crate serves as the foundation for:
+
+- **`causality-lisp`**: Implements the Lisp interpreter for `Expr` evaluation
+- **`causality-runtime`**: Provides execution environments and host functions
+- **`causality-simulation`**: Simulates Resource interactions and TEG execution
+- **`causality-compiler`**: Compiles high-level definitions to TEG structures
+
+## ZK Compatibility
+
+All types are designed for Zero-Knowledge proof systems:
+- Deterministic SSZ serialization
+- No floating-point numbers
+- Bounded dynamic evaluation
+- Content-addressed verification
+- SMT-based authenticated storage
+
+## Usage
+
+This crate is imported by all other Causality crates to access core type definitions. It provides the minimal set of types needed for the Resource Model while maintaining compatibility with both `std` and `no_std` environments.
 
 ```rust
-use causality_core::smt::{SparseMerkleTree, SmtProof};
-
-let mut smt = SparseMerkleTree::new();
-smt.insert(key, value)?;
-
-let proof = smt.generate_proof(&key)?;
-let verified = proof.verify(&root, &key, &value)?;
-```
-
-#### SMT Collections
-
-```rust
-use causality_core::smt_collections::{SmtMap, SmtSet};
-
-let mut smt_map = SmtMap::new();
-smt_map.insert("key", "value")?;
-
-let mut smt_set = SmtSet::new();
-smt_set.insert("element")?;
-```
-
-### TEG State Management
-
-Temporal Effect Graph state tracking and management:
-
-```rust
-use causality_core::teg_state_root::{TegStateRoot, StateTransition};
-
-let mut state_root = TegStateRoot::new();
-let transition = StateTransition::new(effect_id, old_state, new_state);
-state_root.apply_transition(transition)?;
-
-let root_hash = state_root.get_root_hash();
-```
-
-#### TEG Persistence
-
-```rust
-use causality_core::teg_persistence::{TegPersistence, PersistenceConfig};
-
-let config = PersistenceConfig {
-    storage_path: "teg_data".to_string(),
-    compression_enabled: true,
-    backup_enabled: true,
+use causality_types::{
+    Resource, ValueExpr, Expr, ResourceId, 
+    AsResource, ToValueExpr, FromValueExpr
 };
-
-let persistence = TegPersistence::new(config)?;
-persistence.store_teg_state(&teg_state).await?;
 ```
 
-### Graph Analysis
-
-Analysis tools for TEG structures:
-
-```rust
-use causality_core::graph_analysis::tel_graph_has_cycles;
-use causality_core::graph_registry::{NodeRegistry, EdgeRegistry};
-
-let has_cycles = tel_graph_has_cycles(&teg)?;
-
-let mut node_registry = NodeRegistry::new();
-let mut edge_registry = EdgeRegistry::new();
-node_registry.register_node(node_id, node_data)?;
-```
-
-### S-Expression Integration
-
-Lisp integration and FFI support:
-
-```rust
-use causality_core::sexpr_utils::{parse_sexpr, sexpr_to_value_expr};
-use causality_core::sexpr_ffi::{sexpr_to_ocaml, sexpr_from_ocaml};
-
-let sexpr = parse_sexpr("(+ 1 2 3)")?;
-let value_expr = sexpr_to_value_expr(&sexpr)?;
-
-let ocaml_data = sexpr_to_ocaml(&sexpr)?;
-```
-
-### Domain Management
-
-Domain configuration and boundary handling:
-
-```rust
-use causality_core::domain::{DomainManager, DomainConfig, DomainBoundary};
-
-let domain_config = DomainConfig {
-    domain_id: domain_id,
-    domain_type: DomainType::Verifiable,
-    capabilities: vec!["resource.create", "resource.transfer"],
-    constraints: domain_constraints,
-};
-
-let mut domain_manager = DomainManager::new();
-domain_manager.register_domain(domain_config)?;
-```
-
-### Utility Functions
-
-#### Expression Utilities
-
-```rust
-use causality_core::utils::expr::{
-    compute_expr_hash, value_expr_as_string, create_value_expr_list
-};
-
-let expr_hash = compute_expr_hash(&expr);
-let string_value = value_expr_as_string(&value_expr)?;
-```
-
-#### Resource Utilities
-
-```rust
-use causality_core::utils::{compute_resource_hash, create_resource, resource_id};
-
-let resource = create_resource(value_expr, static_expr, domain_id)?;
-let resource_hash = compute_resource_hash(&resource);
-```
-
-### ZK Integration
-
-Zero-knowledge proof utilities and integration:
-
-```rust
-use causality_core::teg_zkp::{ZkProofGenerator, ZkCircuit};
-
-let proof_generator = ZkProofGenerator::new(circuit_config);
-let proof = proof_generator.generate_state_transition_proof(
-    &old_state,
-    &new_state,
-    &transition_witness
-)?;
-```
-
-### Tracing and Debugging
-
-Execution tracing and analysis:
-
-```rust
-use causality_core::tracing::{init_tracing, TraceConfig};
-use causality_core::trace_utils::{TraceCollector, ExecutionTrace};
-
-let trace_config = TraceConfig {
-    level: "debug".to_string(),
-    output_format: "json".to_string(),
-};
-init_tracing(trace_config)?;
-
-let mut trace_collector = TraceCollector::new();
-trace_collector.start_trace("resource_validation")?;
-```
-
-## Feature Flags
-
-- **default**: Standard core features with getrandom and std
-- **std**: Standard library support
-- **getrandom**: Random number generation
-- **benchmarks**: Performance benchmarking utilities
-
-## Module Structure
-
-```
-src/
-├── lib.rs                    # Main library interface and re-exports
-├── content_addressing.rs     # Content addressing utilities
-├── smt.rs                    # Sparse Merkle Tree implementation
-├── smt_collections.rs        # SMT-based collections
-├── teg_state_root.rs         # TEG state root management
-├── teg_persistence.rs        # TEG persistence layer
-├── teg_deployment.rs         # TEG deployment utilities
-├── teg_zkp.rs               # ZK proof integration
-├── graph_registry.rs        # Graph node and edge management
-├── graph_analysis.rs        # Graph analysis tools
-├── domain.rs                # Domain management
-├── sexpr_utils.rs           # S-expression utilities
-├── sexpr_ffi.rs             # FFI integration
-├── tracing.rs               # Tracing configuration
-└── utils/                   # Utility modules
-    ├── core.rs              # Core utilities
-    └── serialization.rs     # Serialization utilities
-```
-
-This crate forms the implementation backbone of the Causality system, providing the concrete functionality needed to build verifiable, deterministic Resource-based applications. 
+The types defined here enable the construction of verifiable, deterministic systems where all state and behavior is explicitly modeled through Resources and their associated logic.

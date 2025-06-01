@@ -1,232 +1,119 @@
 # Causality Compiler
 
-Compilation and optimization tools for the Causality Resource Model framework. This crate transforms Resource definitions, ProcessDataflowBlocks, and Lisp expressions into optimized, content-addressed artifacts for runtime execution.
+Compilation and transformation tools for the Causality Linear Resource Language. This crate is responsible for parsing Causality Lisp code, type checking with linear resource semantics and row types, and compiling to the Register Machine Intermediate Representation (IR).
 
 ## Overview
 
-The `causality-compiler` crate provides compilation capabilities for the Causality system, including:
+The `causality-compiler` crate provides the core compilation pipeline for the new Causality Linear Resource Language, including:
 
-- **Resource Type Compilation**: Transform Resource definitions into optimized runtime representations
-- **ProcessDataflowBlock Compilation**: Compile complex dataflow orchestrations into executable artifacts
-- **Expression Optimization**: Optimize Lisp expressions for efficient evaluation
-- **Content-Addressed Artifacts**: Generate deterministic, content-addressed compilation outputs
-- **Multi-Stage Compilation**: Support for incremental and dependency-aware compilation
+- **Lisp Parsing**: Converting S-expression syntax into a structured Abstract Syntax Tree (AST).
+- **Type Checking**: Static analysis to ensure type correctness, linear resource safety, and compliance with row type constraints.
+- **Machine Representation Generation**: Compiling the typed AST into Register Machine Langauge.
+- **Macro Expansion**: Compile-time transformation of Lisp expressions.
+- **ZK Circuit Generation**: (Future) Generating zero-knowledge circuits from the Register Machine IR.
 
-All compilation outputs maintain consistency with the Resource Model's SSZ-serialized, content-addressed architecture.
+The compiler ensures that programs adhere to the principles of the linear resource model and are suitable for deterministic execution on the Register Machine.
 
 ## Core Components
 
-### Resource Type Compiler
+### Parser
 
-Compiles Resource type definitions into optimized runtime representations:
+Parses Causality Lisp source code into an Abstract Syntax Tree (AST).
 
 ```rust
-use causality_compiler::resource::{ResourceTypeCompiler, CompilationConfig};
+use causality_compiler::parser::parse_program_str;
 
-let compiler = ResourceTypeCompiler::new();
-let config = CompilationConfig {
-    optimization_level: OptimizationLevel::Release,
-    target_domain: domain_id,
-    enable_zk_compatibility: true,
-};
-
-let compiled_resource = compiler.compile_resource_type(
-    &resource_definition,
-    &config
-)?;
+let source_code = "(defprogram my-program ...)";
+let ast = parse_program_str(source_code)?;
+// AST represents the parsed Lisp code
 ```
 
-### ProcessDataflowBlock Compiler
+### Type Checker
 
-Compiles dataflow orchestrations into executable artifacts:
+Performs static analysis, including type inference, type checking, and verification of linear resource constraints and row type operations.
 
 ```rust
-use causality_compiler::dataflow::{DataflowCompiler, DataflowArtifact};
+use causality_compiler::type_checker::{TypeChecker, TypeCheckResult};
+use causality_types::expr::effect::Expr; // Assuming new AST type
 
-let compiler = DataflowCompiler::new();
-let artifact = compiler.compile_dataflow_block(
-    &dataflow_definition,
-    &compilation_context
-)?;
-
-let optimized_artifact = compiler.optimize_dataflow(&artifact)?;
+let type_checker = TypeChecker::new();
+let typed_ast = type_checker.check_program(&ast)?;
+// typed_ast contains type annotations and verified linear resource flows
 ```
 
-### Expression Compiler
+### Machine Language Generator
 
-Optimizes Lisp expressions for runtime evaluation:
+Compiles the typed AST into the Register Machine Intermediate Representation (IR).
 
 ```rust
-use causality_compiler::expr::{ExpressionCompiler, OptimizationPass};
+use causality_compiler::machine_generator::{IrGenerator, RegisterMachineIR};
+use causality_types::expr::effect::Expr; // Assuming typed AST type
 
-let compiler = ExpressionCompiler::new();
-let optimized_expr = compiler.compile_expression(
-    &lisp_expr,
-    &[OptimizationPass::ConstantFolding, OptimizationPass::DeadCodeElimination]
-)?;
-
-let expr_id = optimized_expr.content_id();
+let machine_generator = IrGenerator::new();
+let register_machine = machine_generator.generate_machine(&typed_ast)?;
+// register_machine is a sequence of Register Machine instructions
 ```
 
-### Content-Addressed Compilation
+### Macro Expansion
 
-All compilation outputs are content-addressed for deterministic builds:
+Handles compile-time macro expansion as a transformation of expression resources.
 
 ```rust
-use causality_compiler::artifacts::{CompilationArtifact, ArtifactId};
+use causality_compiler::macro_expansion::MacroExpander;
+use causality_types::expr::effect::Expr; // Assuming AST type
 
-let artifact = CompilationArtifact::new(compiled_data);
-let artifact_id = artifact.content_id(); // Deterministic based on content
+let expander = MacroExpander::new();
+let expanded_ast = expander.expand(&initial_ast)?;
+// expanded_ast has macros replaced with their definitions
+```
 
-// Store artifact with content-addressed ID
-artifact_store.store(artifact_id, artifact)?;
+### ZK Compiler (Future)
+
+Responsible for generating zero-knowledge circuits from the Register Machine IR.
+
+```rust
+// This component is planned for a future phase.
+// It will take Register Machine and produce ZK circuits
+// suitable for proof generation.
+// use causality_compiler::zk::ZkCompiler;
+// let zk_circuit = ZkCompiler::compile_to_zk(&register_machine)?;
 ```
 
 ## Compilation Pipeline
 
-### Multi-Stage Compilation
+The compilation process is structured as a pipeline:
 
-The compiler supports incremental compilation with dependency tracking:
+1.  **Parsing**: Source code -> AST.
+2.  **Macro Expansion**: AST -> Expanded AST.
+3.  **Type Checking**: Expanded AST -> Typed AST (with linear resource flow analysis and row type resolution).
+4.  **Machine Representation Generation**: Typed AST -> Register Machine IR.
+5.  **Optimization**: Register Machine Langauge -> Optimized Register Machine Langauge (various passes).
+6.  **ZK Compilation (Future)**: Optimized Machine Langauge -> ZK Circuits.
 
-```rust
-use causality_compiler::pipeline::{CompilationPipeline, Stage};
+## Content-Addressed Artifacts
 
-let pipeline = CompilationPipeline::new()
-    .add_stage(Stage::Parse)
-    .add_stage(Stage::TypeCheck)
-    .add_stage(Stage::Optimize)
-    .add_stage(Stage::CodeGen);
-
-let result = pipeline.compile(&source_files)?;
-```
-
-### Dependency Resolution
-
-Automatic dependency resolution for Resource and dataflow definitions:
-
-```rust
-use causality_compiler::deps::{DependencyResolver, DependencyGraph};
-
-let resolver = DependencyResolver::new();
-let dep_graph = resolver.resolve_dependencies(&project_sources)?;
-
-// Compile in dependency order
-for component in dep_graph.topological_order() {
-    compiler.compile_component(component)?;
-}
-```
-
-### Optimization Passes
-
-Multiple optimization passes for different compilation targets:
-
-```rust
-use causality_compiler::optimization::{OptimizationPass, PassManager};
-
-let pass_manager = PassManager::new()
-    .add_pass(OptimizationPass::ConstantFolding)
-    .add_pass(OptimizationPass::DeadCodeElimination)
-    .add_pass(OptimizationPass::ExpressionSimplification)
-    .add_pass(OptimizationPass::ZkOptimization);
-
-let optimized = pass_manager.run_passes(&compilation_unit)?;
-```
-
-## Compilation Targets
-
-### Runtime Target
-
-Compile for efficient runtime execution:
-
-```rust
-use causality_compiler::targets::RuntimeTarget;
-
-let target = RuntimeTarget::new();
-let runtime_artifact = target.compile(&resource_definition)?;
-
-// Optimized for fast evaluation
-assert!(runtime_artifact.is_optimized_for_runtime());
-```
-
-### ZK Target
-
-Compile for zero-knowledge proof generation:
-
-```rust
-use causality_compiler::targets::ZkTarget;
-
-let target = ZkTarget::new();
-let zk_artifact = target.compile(&resource_definition)?;
-
-// Optimized for ZK circuit generation
-assert!(zk_artifact.is_zk_compatible());
-```
-
-### Cross-Domain Target
-
-Compile for cross-domain operations:
-
-```rust
-use causality_compiler::targets::CrossDomainTarget;
-
-let target = CrossDomainTarget::new(source_domain, target_domain);
-let cross_domain_artifact = target.compile(&dataflow_block)?;
-```
+Compilation outputs (like the Register Machine IR) will be content-addressed to ensure deterministic builds and enable caching.
 
 ## Configuration
 
-Compiler configuration options:
+(Configuration details will be added as the implementation progresses)
 
 ```toml
+# Example placeholder structure
 [compiler]
-optimization_level = "release"
-target_architecture = "wasm32"
-enable_debug_info = false
-parallel_compilation = true
+# settings for the parser, type checker, Machine language generation, etc.
 
 [compiler.optimization]
-constant_folding = true
-dead_code_elimination = true
-expression_simplification = true
-zk_optimization = true
+# settings for optimization passes
 
-[compiler.targets]
-default_target = "runtime"
-zk_target_enabled = true
-cross_domain_enabled = true
-
-[compiler.cache]
-enabled = true
-cache_dir = ".causality/cache"
-max_cache_size = "1GB"
+[compiler.zk]
+# settings for ZK compilation
 ```
 
 ## Error Handling
 
-Comprehensive compilation error reporting:
-
-```rust
-use causality_compiler::error::{CompilationError, ErrorContext};
-
-match compiler.compile(&source) {
-    Ok(artifact) => println!("Compilation successful"),
-    Err(CompilationError::ParseError { location, message }) => {
-        eprintln!("Parse error at {}: {}", location, message);
-    }
-    Err(CompilationError::TypeCheckError { expr_id, expected, actual }) => {
-        eprintln!("Type error in {}: expected {}, got {}", expr_id, expected, actual);
-    }
-    Err(CompilationError::OptimizationError { pass, reason }) => {
-        eprintln!("Optimization error in {}: {}", pass, reason);
-    }
-}
-```
+Comprehensive error reporting for parsing, type checking, and compilation errors.
 
 ## Feature Flags
 
-- **default**: Standard compilation features
-- **optimization**: Advanced optimization passes
-- **zk-target**: ZK proof compilation target
-- **cross-domain**: Cross-domain compilation support
-- **parallel**: Parallel compilation support
-- **cache**: Compilation caching
+(Feature flags will be defined as specific components are implemented)

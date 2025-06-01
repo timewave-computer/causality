@@ -1,0 +1,6 @@
+(library
+ (name ocaml_causality_lang)
+ (libraries ocaml_causality_core batteries digestif)
+ (wrapped true)
+ (modules ast expr value builders combinators lisp_ast ppx_registry token_primitives sexpr_support bridge_primitives dsl_compiler lisp_evaluator)
+ (modules_without_implementation expr value))

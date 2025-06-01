@@ -1,8 +1,0 @@
-(library
- (name ssz_bridge)
- (public_name ml_causality.ssz_bridge)
- (libraries digestif)
- (modules ssz_bridge rust_ffi tel_serialization)
- (foreign_stubs
-  (language c)
-  (names rust_ffi_stubs))) 

@@ -1,0 +1,23 @@
+opam-version: "2.0"
+name: "ocaml_causality"
+version: "0.1.0"
+synopsis: "Reorganized OCaml Causality Framework"
+description: "Clean, reorganized implementation of the Causality framework in OCaml"
+maintainer: "Timewave"
+author: "Sam Hart"
+license: "Apache-2.0"
+depends: [
+  "ocaml" {>= "5.0.0"}
+  "dune" {>= "3.0"}
+  "batteries"
+  "digestif"
+  "hex"
+  "yojson"
+  "ppx_deriving_yojson"
+  "ctypes"
+  "ctypes-foreign"
+]
+build: [
+  ["dune" "subst"] {pinned}
+  ["dune" "build" "-p" name "-j" jobs]
+]
