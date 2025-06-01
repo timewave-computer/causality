@@ -4,6 +4,7 @@
 //! using fixed-size hashes while maintaining human-readable names for development.
 
 use std::fmt;
+use ssz::{Encode, Decode, DecodeError};
 
 //-----------------------------------------------------------------------------
 // Symbol Type
@@ -27,7 +28,7 @@ pub struct Symbol {
 impl Symbol {
     /// Create a new symbol from a string
     pub fn new(name: &str) -> Self {
-        use crate::{Blake3Hasher, Hasher};
+        use valence_coprocessor::{Hasher, Blake3Hasher};
         let hash = Blake3Hasher::hash(name.as_bytes());
         
         Self {
@@ -65,6 +66,23 @@ impl Symbol {
     #[cfg(feature = "std")]
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
+    }
+
+    /// Get the human-readable name if available
+    #[cfg(not(feature = "std"))]
+    pub fn name(&self) -> Option<&str> {
+        None
+    }
+
+    /// Get the human-readable name if available, consuming the symbol
+    #[cfg(feature = "std")]
+    pub fn into_name(self) -> Option<String> {
+        self.name
+    }
+
+    #[cfg(not(feature = "std"))]
+    pub fn into_name(self) -> Option<String> {
+        None
     }
     
     /// Get a string representation of the symbol
@@ -185,6 +203,54 @@ impl fmt::Display for Symbol {
 impl From<&str> for Symbol {
     fn from(s: &str) -> Self {
         Self::new(s)
+    }
+}
+
+//-----------------------------------------------------------------------------
+// SSZ Implementation
+//-----------------------------------------------------------------------------
+
+impl Encode for Symbol {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn ssz_fixed_len() -> usize {
+        32 // Only the hash is serialized
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        32
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.hash);
+    }
+}
+
+impl Decode for Symbol {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn ssz_fixed_len() -> usize {
+        32
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        if bytes.len() != 32 {
+            return Err(DecodeError::InvalidByteLength {
+                len: bytes.len(),
+                expected: 32,
+            });
+        }
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(bytes);
+        Ok(Symbol {
+            hash,
+            #[cfg(feature = "std")]
+            name: None, // Name is not part of SSZ representation
+        })
     }
 }
 

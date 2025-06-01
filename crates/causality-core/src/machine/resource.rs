@@ -6,11 +6,11 @@
 use super::value::MachineValue;
 use crate::lambda::TypeInner;
 use crate::system::error::MachineError;
-use crate::{Hash, Blake3Hasher, Hasher};
+use crate::{Blake3Hasher, Hasher};
+use std::collections::BTreeMap;
 
-/// Resource identifier (content-addressed)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ResourceId(pub Hash);
+// Re-export ResourceId for easier access
+pub use crate::system::content_addressing::ResourceId;
 
 /// Linear resource stored in the resource heap
 #[derive(Debug, Clone)]
@@ -25,29 +25,18 @@ pub struct Resource {
     pub consumed: bool,
 }
 
-impl ResourceId {
-    /// Create a new resource ID from a hash
-    pub fn new(hash: Hash) -> Self {
-        ResourceId(hash)
-    }
-    
-    /// Get the inner hash
-    pub fn hash(&self) -> &Hash {
-        &self.0
-    }
-}
-
 /// Resource heap operations
 #[derive(Debug, Clone)]
 pub struct ResourceHeap {
-    resources: std::collections::HashMap<ResourceId, Resource>,
+    /// Map from resource IDs to resources
+    resources: BTreeMap<ResourceId, Resource>,
 }
 
 impl ResourceHeap {
     /// Create a new empty resource heap
     pub fn new() -> Self {
         Self {
-            resources: std::collections::HashMap::new(),
+            resources: BTreeMap::new(),
         }
     }
     
@@ -59,7 +48,7 @@ impl ResourceHeap {
         data.extend_from_slice(format!("{:?}", resource_type).as_bytes());
         
         let hash = Blake3Hasher::hash(&data);
-        let id = ResourceId::new(hash);
+        let id = ResourceId::from_bytes(hash.into());
         
         self.resources.insert(id, Resource {
             value,

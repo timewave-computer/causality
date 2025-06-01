@@ -38,8 +38,6 @@ hashbrown = "0.15.2"
 # Optional serialization support for ZK compatibility only
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
-
-# SSZ Serialization
 ethereum_ssz = { workspace = true }
 ethereum_ssz_derive = { workspace = true }
 
@@ -69,7 +67,10 @@ tokio = { workspace = true, optional = true }
 
 # Sparse Merkle Tree implementation
 valence-coprocessor = { version = "0.1.13", git = "https://github.com/timewave-computer/valence-coprocessor.git", tag = "v0.1.13", default-features = false, features = ["std"] }
+blake3 = "1.8.2"
 
 [dev-dependencies]
 # Required for async tests
 tokio = { workspace = true, features = ["macros", "rt"] }
+ethereum_ssz = { workspace = true }
+ethereum_ssz_derive = { workspace = true }

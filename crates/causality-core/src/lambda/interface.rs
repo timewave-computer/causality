@@ -15,7 +15,7 @@ pub struct CompilationContext {
     next_register: u32,
     
     /// Variable to register mapping
-    var_registers: std::collections::HashMap<String, RegisterId>,
+    var_registers: std::collections::BTreeMap<String, RegisterId>,
     
     /// Generated instructions
     instructions: Vec<Instruction>,
@@ -26,7 +26,7 @@ impl CompilationContext {
     pub fn new() -> Self {
         Self {
             next_register: 0,
-            var_registers: std::collections::HashMap::new(),
+            var_registers: std::collections::BTreeMap::new(),
             instructions: Vec::new(),
         }
     }

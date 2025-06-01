@@ -14,7 +14,7 @@ use super::{
 };
 use crate::lambda::{TypeInner, BaseType, Symbol};
 use crate::system::error::ReductionError;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 //-----------------------------------------------------------------------------
 // Reduction Engine
@@ -29,7 +29,7 @@ pub struct ReductionEngine {
     program: Vec<Instruction>,
     
     /// Label map for jumps
-    labels: HashMap<Label, usize>,
+    labels: BTreeMap<Label, usize>,
     
     /// Maximum number of reduction steps (for termination)
     max_steps: usize,
@@ -54,7 +54,7 @@ impl ReductionEngine {
     /// Create a new reduction engine
     pub fn new(program: Vec<Instruction>, max_steps: usize) -> Self {
         // Build label map for efficient jumps
-        let mut labels = HashMap::new();
+        let mut labels = BTreeMap::new();
         for (index, instruction) in program.iter().enumerate() {
             if let Instruction::LabelMarker(label) = instruction {
                 if labels.insert(label.clone(), index).is_some() {
@@ -112,7 +112,7 @@ impl ReductionEngine {
             return Err(ReductionError::ProgramCounterOutOfBounds);
         }
         
-        let instruction = self.program.get(self.state.pc).ok_or(ReductionError::PCOutOfBounds)?;
+        let instruction = self.program.get(self.state.pc).ok_or(ReductionError::ProgramCounterOutOfBounds)?;
 
         self.state.jumped = false; // Reset jumped flag for the current instruction
 
@@ -769,6 +769,7 @@ mod tests {
     #[test]
     fn test_builtin_functions() {
         let _state = MachineState::new();
-        // ... existing code ...
+        // Test builtin function calls would go here
+        // This is a placeholder for when we implement more builtins
     }
 } 

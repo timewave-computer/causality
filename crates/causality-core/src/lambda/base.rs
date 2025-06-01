@@ -78,6 +78,9 @@ pub enum TypeInner {
     
     /// Linear function type (τ₁ ⊸ τ₂)
     LinearFunction(Box<TypeInner>, Box<TypeInner>),
+    
+    /// Record type with row polymorphism
+    Record(crate::lambda::row::RecordType),
 }
 
 // Manual SSZ implementation for TypeInner
@@ -94,6 +97,7 @@ impl Encode for TypeInner {
             TypeInner::LinearFunction(left, right) => {
                 left.ssz_bytes_len() + right.ssz_bytes_len()
             }
+            TypeInner::Record(record) => record.ssz_bytes_len(),
         }
     }
 
@@ -119,6 +123,10 @@ impl Encode for TypeInner {
                 encode_enum_variant(3, buf);
                 left.ssz_append(buf);
                 right.ssz_append(buf);
+            }
+            TypeInner::Record(record) => {
+                encode_enum_variant(4, buf);
+                record.ssz_append(buf);
             }
         }
     }
@@ -153,6 +161,10 @@ impl Decode for TypeInner {
                 let (left, remaining) = TypeInner::decode_with_remainder(data)?;
                 let (right, _) = TypeInner::decode_with_remainder(remaining)?;
                 Ok(TypeInner::LinearFunction(Box::new(left), Box::new(right)))
+            }
+            4 => {
+                let record = crate::lambda::row::RecordType::from_ssz_bytes(data)?;
+                Ok(TypeInner::Record(record))
             }
             _ => Err(DecodeError::BytesInvalid(
                 format!("Invalid TypeInner variant: {}", variant).into()
@@ -193,6 +205,11 @@ impl DecodeWithRemainder for TypeInner {
                 };
                 
                 Ok((result, remaining))
+            }
+            4 => {
+                let record = crate::lambda::row::RecordType::from_ssz_bytes(data)?;
+                let record_len = record.ssz_bytes_len();
+                Ok((TypeInner::Record(record), &data[record_len..]))
             }
             _ => Err(DecodeError::BytesInvalid(
                 format!("Invalid TypeInner variant: {}", variant).into()
@@ -289,6 +306,11 @@ pub enum Value {
         tag: u8,
         value: Box<Value>,
     },
+    
+    /// Record value (extensible record)
+    Record {
+        fields: std::collections::BTreeMap<String, Value>,
+    },
 }
 
 // Manual SSZ implementation for Value
@@ -305,6 +327,11 @@ impl Encode for Value {
             Value::Symbol(s) => s.ssz_bytes_len(),
             Value::Product(left, right) => left.ssz_bytes_len() + right.ssz_bytes_len(),
             Value::Sum { tag: _, value } => 1 + value.ssz_bytes_len(),
+            Value::Record { fields } => {
+                4 + fields.iter().map(|(key, value)| {
+                    4 + key.len() + value.ssz_bytes_len()
+                }).sum::<usize>()
+            }
         }
     }
 
@@ -334,6 +361,15 @@ impl Encode for Value {
                 encode_enum_variant(5, buf);
                 buf.push(*tag);
                 value.ssz_append(buf);
+            }
+            Value::Record { fields } => {
+                encode_enum_variant(6, buf);
+                (fields.len() as u32).ssz_append(buf);
+                for (key, value) in fields {
+                    (key.len() as u32).ssz_append(buf);
+                    buf.extend_from_slice(key.as_bytes());
+                    value.ssz_append(buf);
+                }
             }
         }
     }
@@ -392,6 +428,29 @@ impl Decode for Value {
                     tag,
                     value: Box::new(value),
                 })
+            }
+            6 => {
+                let field_count = u32::from_ssz_bytes(&data[0..4])? as usize;
+                let mut offset = 4;
+                let mut fields = std::collections::BTreeMap::new();
+                
+                for _ in 0..field_count {
+                    // Decode key length
+                    let key_len = u32::from_ssz_bytes(&data[offset..offset + 4])? as usize;
+                    offset += 4;
+                    
+                    // Decode key
+                    let key = String::from_utf8(data[offset..offset + key_len].to_vec())
+                        .map_err(|_| DecodeError::BytesInvalid("Invalid UTF-8 in field name".into()))?;
+                    offset += key_len;
+                    
+                    // Decode value
+                    let (value, remaining_after_value) = Value::decode_with_remainder(&data[offset..])?;
+                    offset = data.len() - remaining_after_value.len();
+                    
+                    fields.insert(key, value);
+                }
+                Ok(Value::Record { fields })
             }
             _ => Err(DecodeError::BytesInvalid(
                 format!("Invalid Value variant: {}", variant).into()
@@ -456,6 +515,29 @@ impl DecodeWithRemainder for Value {
                     value: Box::new(value),
                 }, remaining))
             }
+            6 => {
+                let field_count = u32::from_ssz_bytes(&data[0..4])? as usize;
+                let mut offset = 4;
+                let mut fields = std::collections::BTreeMap::new();
+                
+                for _ in 0..field_count {
+                    // Decode key length
+                    let key_len = u32::from_ssz_bytes(&data[offset..offset + 4])? as usize;
+                    offset += 4;
+                    
+                    // Decode key
+                    let key = String::from_utf8(data[offset..offset + key_len].to_vec())
+                        .map_err(|_| DecodeError::BytesInvalid("Invalid UTF-8 in field name".into()))?;
+                    offset += key_len;
+                    
+                    // Decode value
+                    let (value, remaining_after_value) = Value::decode_with_remainder(&data[offset..])?;
+                    offset = data.len() - remaining_after_value.len();
+                    
+                    fields.insert(key, value);
+                }
+                Ok((Value::Record { fields }, &data[offset..]))
+            }
             _ => Err(DecodeError::BytesInvalid(
                 format!("Invalid Value variant: {}", variant).into()
             )),
@@ -482,6 +564,15 @@ impl Value {
                 // This is a simplified version
                 value.value_type()
             }
+            Value::Record { fields } => {
+                // Build a row type from the field types
+                let field_types = fields.iter()
+                    .map(|(name, value)| (name.clone(), value.value_type()))
+                    .collect();
+                
+                let row = crate::lambda::row::RowType::with_fields(field_types);
+                TypeInner::Record(crate::lambda::row::RecordType::from_row(row))
+            }
         }
     }
     
@@ -506,14 +597,14 @@ impl Value {
 /// Registry for storing and retrieving type definitions by their content ID
 #[derive(Debug, Clone)]
 pub struct TypeRegistry {
-    types: std::collections::HashMap<EntityId, TypeInner>,
+    types: std::collections::BTreeMap<EntityId, TypeInner>,
 }
 
 impl TypeRegistry {
     /// Create a new empty type registry
     pub fn new() -> Self {
         Self {
-            types: std::collections::HashMap::new(),
+            types: std::collections::BTreeMap::new(),
         }
     }
     

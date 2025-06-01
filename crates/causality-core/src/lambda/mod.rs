@@ -25,6 +25,9 @@ pub mod symbol;
 /// Term representation for Layer 1
 pub mod term;
 
+/// Row types for extensible records
+pub mod row;
+
 /// Interface to Layer 0
 pub mod interface;
 
@@ -56,6 +59,9 @@ pub use symbol::Symbol;
 
 // Term language
 pub use term::{Term, TermKind, Literal};
+
+// Row types
+pub use row::{RowType, RowVariable, RowConstraint, RecordType, RowOpResult, row, open_row, record};
 
 // Layer 0 interface
 pub use interface::{compile_term, CompileError, CompilationContext};

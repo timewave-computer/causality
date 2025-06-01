@@ -1,0 +1,82 @@
+//! Causality Compiler: Parse → Check → Compile
+//!
+//! Minimal compiler implementation following the three-layer architecture.
+//! Compiles Lisp source code through S-expressions and lambda calculus
+//! to verifiable register machine instructions.
+
+pub mod error;
+pub mod pipeline;
+pub mod checker;
+pub mod artifact;
+
+// Re-export key types for convenience
+pub use pipeline::{
+    compile, compile_expression, compile_program,
+    CompiledArtifact, SExpression
+};
+pub use error::{CompileError, CompileResult};
+pub use checker::{check_sexpr, check_linearity, TypeEnvironment};
+pub use artifact::{
+    ContentAddressedArtifact, ContentHash, ArtifactCache,
+    build_artifact, verify_artifact
+};
+
+/// Minimal test function for E2E validation
+/// Compiles a simple expression and returns the instructions
+pub fn minimal_test() -> Result<Vec<causality_core::machine::instruction::Instruction>, CompileError> {
+    let source = "(pure 42)";
+    let artifact = compile(source)?;
+    Ok(artifact.instructions)
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    
+    #[test]
+    fn test_full_pipeline() {
+        // Test the complete Parse → Check → Compile flow
+        let source = "(pure 42)";
+        
+        // Parse
+        let artifact = compile(source).unwrap();
+        assert_eq!(artifact.source, source);
+        
+        // Check (currently placeholder)
+        assert!(check_sexpr(&artifact.sexpr).is_ok());
+        
+        // Verify compilation produced instructions
+        assert!(!artifact.instructions.is_empty());
+    }
+    
+    #[test]
+    fn test_content_addressing() {
+        let source = "(pure 123)"; // Use a simpler expression without arithmetic
+        
+        // Build content-addressed artifact
+        let artifact = build_artifact(source).unwrap();
+        
+        // Verify hash consistency
+        assert!(verify_artifact(&artifact));
+        
+        // Test caching
+        let mut cache = ArtifactCache::new();
+        let hash = artifact.hash().clone();
+        cache.insert(artifact);
+        
+        assert!(cache.contains(&hash));
+        let retrieved = cache.get(&hash).unwrap();
+        assert_eq!(retrieved.source(), source);
+    }
+    
+    #[test]
+    fn test_error_handling() {
+        // Test parse error
+        let result = compile("(unclosed list");
+        assert!(result.is_err());
+        
+        // Test invalid syntax  
+        let result = compile("(pure)"); // missing argument
+        assert!(result.is_err());
+    }
+} 

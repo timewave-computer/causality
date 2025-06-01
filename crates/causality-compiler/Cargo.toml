@@ -1,0 +1,12 @@
+[package]
+name = "causality-compiler"
+version = "0.1.0"
+edition = "2021"
+description = "Compiler for the Causality three-layer architecture"
+authors = ["Causality Team"]
+
+[dependencies]
+causality-core = { path = "../causality-core" }
+
+[dev-dependencies]
+# Test dependencies will be added as needed 

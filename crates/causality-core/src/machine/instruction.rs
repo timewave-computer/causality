@@ -20,8 +20,8 @@ use crate::lambda::{TypeInner, Symbol};
 // Register Identifiers
 //-----------------------------------------------------------------------------
 
-/// Unique identifier for a register in the machine
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// A register identifier for the machine
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RegisterId(pub u32);
 
 impl RegisterId {
@@ -40,8 +40,8 @@ impl RegisterId {
 // Labels for Control Flow
 //-----------------------------------------------------------------------------
 
-/// Label for control flow jumps
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// A label for control flow jumps
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Label(pub String);
 
 impl Label {

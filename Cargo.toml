@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/causality-core",
+  "crates/causality-compiler",
 ]
 resolver = "2"
 

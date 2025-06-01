@@ -129,6 +129,7 @@ impl Metering {
             Instruction::Perform { .. } => self.instruction_costs.perform_cost,
             Instruction::Select { .. } => self.instruction_costs.select_cost,
             Instruction::Witness { .. } => self.instruction_costs.witness_cost,
+            Instruction::LabelMarker(_) => 0, // Label markers have no execution cost
         }
     }
     

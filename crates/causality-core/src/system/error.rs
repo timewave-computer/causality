@@ -4,7 +4,7 @@
 //! error types and `anyhow` for error context and chaining.
 
 use thiserror::Error;
-use crate::machine::{RegisterId, ResourceId};
+use crate::machine::{RegisterId, resource::ResourceId};
 use crate::lambda::TypeInner;
 
 /// Type alias for Results using our Error type

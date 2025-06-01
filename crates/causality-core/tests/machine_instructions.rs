@@ -21,10 +21,12 @@ fn test_match_instruction() {
             right_label: Label::new("right"),
         },
         // Define labels for the branches
-        Instruction::LabelDef { label: Label::new("left") },
-        Instruction::Halt, // End of left branch
-        Instruction::LabelDef { label: Label::new("right") },
-        Instruction::Halt, // End of right branch
+        Instruction::LabelMarker(Label::new("left")),
+        // Intentionally no instruction here for the left branch for this test,
+        // execution will fall through or halt if it's the end of the program.
+        // We could add a Nop or another instruction if needed.
+        Instruction::LabelMarker(Label::new("right"))
+        // Similarly, no specific instruction for the right branch target.
     ], 10);
     
     struct MatchWitness;

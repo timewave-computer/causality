@@ -490,4 +490,3 @@ mod tests {
         assert_eq!(term.ty, Some(ty_annotation));
     }
 }
- 

@@ -10,7 +10,7 @@ use super::resource::{ResourceId, ResourceHeap, ResourceManager};
 use super::effect::{Effect, Constraint};
 use crate::lambda::TypeInner;
 use crate::system::error::MachineError;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Abstract machine state
 ///
@@ -23,7 +23,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct MachineState {
     /// Register file - holds values for computation
-    pub registers: HashMap<RegisterId, RegisterValue>,
+    pub registers: BTreeMap<RegisterId, RegisterValue>,
     
     /// Resource heap - stores linear resources
     pub resources: ResourceHeap,
@@ -39,18 +39,26 @@ pub struct MachineState {
 
     /// Flag to indicate if the last instruction caused a jump
     pub jumped: bool,
+
+    /// Execution terminated flag
+    pub terminated: bool,
+    
+    /// Gas remaining (for resource accounting)
+    pub gas: u64,
 }
 
 impl MachineState {
     /// Create a new empty machine state
     pub fn new() -> Self {
         Self {
-            registers: HashMap::new(),
+            registers: BTreeMap::new(),
             resources: ResourceHeap::new(),
             effects: Vec::new(),
             constraints: Vec::new(),
             pc: 0,
             jumped: false,
+            terminated: false,
+            gas: 1000, // Default gas limit
         }
     }
     
