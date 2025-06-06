@@ -3,8 +3,8 @@
 //! This module defines the value types that can be stored in registers
 //! and manipulated by the register machine.
 
-use super::instruction::{RegisterId, Instruction, LiteralValue, Pattern};
-use super::resource::ResourceId;
+use super::instruction::{RegisterId, LiteralValue, Pattern, Label};
+use crate::system::content_addressing::ResourceId;
 use crate::lambda::{TypeInner, Symbol, BaseType};
 
 /// Values that can be stored in registers
@@ -48,8 +48,11 @@ pub enum MachineValue {
     Function {
         /// Parameter registers to bind
         params: Vec<RegisterId>,
-        /// Instructions to execute
-        body: Vec<Instruction>,
+        /// Label pointing to the function's code in the main program
+        body_label: Label,
+        /// Holds a reference to the captured lexical environment for closures
+        /// None if the function is not a closure or captures no variables
+        capture_env_reg: Option<RegisterId>,
     },
     
     /// Resource reference (points to resource heap)
@@ -62,7 +65,7 @@ pub enum MachineValue {
     Type(TypeInner),
     
     /// Effect result placeholder
-    EffectResult(Symbol),
+    EffectResult(String),
     
     /// Partially applied function (for currying)
     PartiallyApplied {

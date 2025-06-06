@@ -5,6 +5,16 @@
 
 use ssz::{Encode, Decode};
 use super::errors::{CausalityError, Result};
+use crate::system::content_addressing::{ContentAddressable, EntityId};
+
+// Re-export SSZ traits and types for external use
+pub use ssz::{Encode as SszEncode, Decode as SszDecode, DecodeError};
+
+/// SimpleSerialize trait alias for compatibility
+pub trait SimpleSerialize: SszEncode + SszDecode + Clone + PartialEq {}
+
+// Blanket implementation for all types that implement the required traits
+impl<T> SimpleSerialize for T where T: SszEncode + SszDecode + Clone + PartialEq {}
 
 //-----------------------------------------------------------------------------
 // Trait Definitions
@@ -47,10 +57,10 @@ impl<T: Decode> FromBytes for T {
 
 /// Helper to encode a value and compute its hash
 pub fn hash_encode<T: Encode>(value: &T) -> [u8; 32] {
-    use crate::{Blake3Hasher, Hasher};
+    use crate::{Sha256Hasher, Hasher};
     let encoded = value.as_ssz_bytes();
-    let hash = Blake3Hasher::hash(&encoded);
-    hash.into()
+    let hash = Sha256Hasher::hash(&encoded);
+    hash
 }
 
 /// Helper to encode multiple values together
@@ -245,6 +255,15 @@ macro_rules! impl_ssz_delegate {
             }
         }
     };
+}
+
+impl<T: Encode> ContentAddressable for T {
+    fn content_id(&self) -> EntityId {
+        use crate::{Sha256Hasher, Hasher};
+        let encoded = self.as_ssz_bytes();
+        let hash = Sha256Hasher::hash(&encoded);
+        EntityId::from_bytes(hash)
+    }
 }
 
 //-----------------------------------------------------------------------------

@@ -249,6 +249,73 @@ impl CompileContext {
 }
 
 //-----------------------------------------------------------------------------
+// Helper Functions
+//-----------------------------------------------------------------------------
+
+/// Convert our S-expression format to the causality-lisp Expr format
+fn sexpr_to_lisp_ast(expr: &SExpression) -> CompileResult<causality_lisp::ast::Expr> {
+    use causality_lisp::ast::{Expr, ExprKind, LispValue};
+    
+    let kind = match expr {
+        SExpression::Symbol(s) => ExprKind::Var(s.clone().into()),
+        SExpression::Integer(n) => ExprKind::Const(LispValue::Int(*n as i64)),
+        SExpression::Boolean(b) => ExprKind::Const(LispValue::Bool(*b)),
+        SExpression::Nil => ExprKind::UnitVal,
+        SExpression::List(elements) => {
+            if elements.is_empty() {
+                ExprKind::UnitVal
+            } else {
+                let func = Box::new(sexpr_to_lisp_ast(&elements[0])?);
+                let args: Result<Vec<_>, _> = elements.iter().skip(1)
+                    .map(sexpr_to_lisp_ast)
+                    .collect();
+                ExprKind::Apply(func, args?)
+            }
+        }
+    };
+    
+    Ok(Expr::new(kind))
+}
+
+/// Basic linearity checking for resource usage patterns
+fn check_linearity(expr: &SExpression) -> CompileResult<()> {
+    // Simplified linearity check - just verify basic structure
+    match expr {
+        SExpression::List(elements) => {
+            if !elements.is_empty() {
+                if let SExpression::Symbol(op) = &elements[0] {
+                    match op.as_str() {
+                        "alloc" => {
+                            if elements.len() != 2 {
+                                return Err(CompileError::CompilationError {
+                                    message: format!("alloc requires exactly 1 argument, got {}", elements.len() - 1),
+                                    location: None,
+                                });
+                            }
+                        }
+                        "consume" => {
+                            if elements.len() != 2 {
+                                return Err(CompileError::CompilationError {
+                                    message: format!("consume requires exactly 1 argument, got {}", elements.len() - 1),
+                                    location: None,
+                                });
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                // Recursively check sub-expressions
+                for element in elements {
+                    check_linearity(element)?;
+                }
+            }
+            Ok(())
+        }
+        _ => Ok(())
+    }
+}
+
+//-----------------------------------------------------------------------------
 // Main Compilation Pipeline
 //-----------------------------------------------------------------------------
 
@@ -260,6 +327,24 @@ pub fn compile(source: &str) -> CompileResult<CompiledArtifact> {
     
     // Stage 2: Check (simplified - full type checking not implemented yet)
     // TODO: Implement proper type checking and linearity verification
+    
+    // Type checking and validation
+    // Convert S-expression to the format expected by type checker
+    if let Ok(lisp_ast) = sexpr_to_lisp_ast(&sexpr) {
+        let mut type_checker = causality_lisp::TypeChecker::new();
+        let type_result = type_checker.check_expr(&lisp_ast);
+        
+        if let Err(ref type_error) = type_result {
+            eprintln!("Type checking warning: {:?}", type_error);
+        }
+    }
+    
+    // Basic linearity verification - check for proper resource usage patterns
+    let linearity_result = check_linearity(&sexpr);
+    
+    if let Err(ref linearity_error) = linearity_result {
+        eprintln!("Linearity checking warning: {:?}", linearity_error);
+    }
     
     // Stage 3: Compile
     let term = compile_sexpr_to_term(&sexpr)?;
@@ -330,6 +415,22 @@ fn compile_sexpr_to_term(expr: &SExpression) -> CompileResult<Term> {
                     let arg = compile_sexpr_to_term(&elements[2])?;
                     Ok(Term::apply(func, arg))
                 }
+                SExpression::Symbol(op) if op == "alloc" => {
+                    if elements.len() != 2 {
+                        return Err(CompileError::InvalidArity { expected: 1, found: elements.len() - 1, location: None });
+                    }
+                    let value_term = compile_sexpr_to_term(&elements[1])?;
+                    // Create an alloc term - we'll handle this in the term compilation
+                    Ok(Term::alloc(value_term))
+                }
+                SExpression::Symbol(op) if op == "consume" => {
+                    if elements.len() != 2 {
+                        return Err(CompileError::InvalidArity { expected: 1, found: elements.len() - 1, location: None });
+                    }
+                    let resource_term = compile_sexpr_to_term(&elements[1])?;
+                    // Create a consume term - we'll handle this in the term compilation
+                    Ok(Term::consume(resource_term))
+                }
                 _ => {
                     // Default to function application
                     if elements.len() >= 2 {
@@ -372,6 +473,8 @@ fn compile_term(ctx: &mut CompileContext, term: &Term) -> CompileResult<Register
         TermKind::Apply { func, arg } => compile_application(ctx, func, arg),
         TermKind::Lambda { param, body, .. } => compile_lambda(ctx, param, body),
         TermKind::Let { var, value, body } => compile_let(ctx, var, value, body),
+        TermKind::Alloc { value } => compile_alloc(ctx, value),
+        TermKind::Consume { resource } => compile_consume(ctx, resource),
         _ => Err(CompileError::Layer1Error {
             message: format!("Compilation not yet implemented for {:?}", term.kind),
             location: None,
@@ -439,6 +542,35 @@ fn compile_let(ctx: &mut CompileContext, var: &str, value: &Term, body: &Term) -
     let value_reg = compile_term(ctx, value)?;
     ctx.bind_variable(var.to_string(), value_reg);
     compile_term(ctx, body)
+}
+
+fn compile_alloc(ctx: &mut CompileContext, value: &Term) -> CompileResult<RegisterId> {
+    let value_reg = compile_term(ctx, value)?;
+    let result_reg = ctx.alloc_register();
+    let type_reg = ctx.alloc_register();
+    
+    // For now, use witness to provide a default type
+    ctx.emit(Instruction::Witness { out_reg: type_reg });
+    
+    ctx.emit(Instruction::Alloc {
+        type_reg: type_reg,
+        val_reg: value_reg,
+        out_reg: result_reg,
+    });
+    
+    Ok(result_reg)
+}
+
+fn compile_consume(ctx: &mut CompileContext, resource: &Term) -> CompileResult<RegisterId> {
+    let resource_reg = compile_term(ctx, resource)?;
+    let result_reg = ctx.alloc_register();
+    
+    ctx.emit(Instruction::Consume {
+        resource_reg: resource_reg,
+        out_reg: result_reg,
+    });
+    
+    Ok(result_reg)
 }
 
 //-----------------------------------------------------------------------------

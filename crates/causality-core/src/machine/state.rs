@@ -5,12 +5,16 @@
 //! in the three-layer architecture.
 
 use super::instruction::RegisterId;
-use super::value::{RegisterValue, MachineValue};
-use super::resource::{ResourceId, ResourceHeap, ResourceManager};
-use super::effect::{Effect, Constraint};
+use super::value::{MachineValue, RegisterValue};
+use crate::system::content_addressing::ResourceId;
+use super::resource::{ResourceHeap, ResourceManager};
 use crate::lambda::TypeInner;
 use crate::system::error::MachineError;
 use std::collections::BTreeMap;
+use super::effect::{Effect, Constraint};
+
+/// Maximum call stack depth (bounded for ZK compatibility)
+pub const MAX_CALL_STACK_DEPTH: usize = 256;
 
 /// Abstract machine state
 ///
@@ -45,6 +49,9 @@ pub struct MachineState {
     
     /// Gas remaining (for resource accounting)
     pub gas: u64,
+    
+    /// Call stack for function returns (bounded for ZK compatibility)
+    pub call_stack: Vec<usize>,
 }
 
 impl MachineState {
@@ -59,6 +66,7 @@ impl MachineState {
             jumped: false,
             terminated: false,
             gas: 1000, // Default gas limit
+            call_stack: Vec::new(),
         }
     }
     
@@ -130,6 +138,25 @@ impl MachineState {
     /// Add a constraint to be checked
     pub fn add_constraint(&mut self, constraint: Constraint) {
         self.constraints.push(constraint);
+    }
+    
+    /// Push a return address onto the call stack
+    pub fn push_call(&mut self, return_address: usize) -> Result<(), MachineError> {
+        if self.call_stack.len() >= MAX_CALL_STACK_DEPTH {
+            return Err(MachineError::CallStackOverflow);
+        }
+        self.call_stack.push(return_address);
+        Ok(())
+    }
+    
+    /// Pop a return address from the call stack
+    pub fn pop_call(&mut self) -> Result<usize, MachineError> {
+        self.call_stack.pop().ok_or(MachineError::CallStackUnderflow)
+    }
+    
+    /// Get the current call stack depth
+    pub fn call_depth(&self) -> usize {
+        self.call_stack.len()
     }
 }
 

@@ -92,6 +92,7 @@ fn compile_term_to_register(
                 Literal::Bool(b) => LiteralValue::Bool(*b),
                 Literal::Int(i) => LiteralValue::Int(*i),
                 Literal::Symbol(s) => LiteralValue::Symbol(s.clone()),
+                Literal::Unit => LiteralValue::Unit,
             };
             
             // For now, we use a hack: store literal in register via witness

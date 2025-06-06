@@ -8,6 +8,10 @@ pub mod error;
 pub mod pipeline;
 pub mod checker;
 pub mod artifact;
+pub mod enhanced_pipeline;
+
+#[cfg(test)]
+pub mod benchmarks;
 
 // Re-export key types for convenience
 pub use pipeline::{
@@ -19,6 +23,10 @@ pub use checker::{check_sexpr, check_linearity, TypeEnvironment};
 pub use artifact::{
     ContentAddressedArtifact, ContentHash, ArtifactCache,
     build_artifact, verify_artifact
+};
+pub use enhanced_pipeline::{
+    EnhancedCompilerPipeline, CompiledProgram, CompilationMetadata,
+    CodeGenerator, InstructionOptimizer, OptimizationPass
 };
 
 /// Minimal test function for E2E validation

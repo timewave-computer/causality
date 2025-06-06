@@ -1,200 +1,171 @@
 # Causality API
 
-External interfaces and API gateways for the Causality Resource Model framework. This crate provides HTTP/gRPC APIs, blockchain integration, ZK coprocessor interaction, and FFI bindings for external system integration.
+External interface layer for the Causality framework that provides HTTP APIs and ZK coprocessor interaction for seamless integration with external systems while maintaining the verifiable properties of the resource model.
 
-## Overview
+## Purpose
 
-The `causality-api` crate serves as the external interface layer for the Causality system, providing:
+The `causality-api` crate serves as the **external integration gateway** for the Causality system, providing standardized interfaces that enable external systems to interact with the three-layer architecture. It bridges the gap between the internal resource model and external infrastructure including coprocessors and traditional applications.
 
-- **HTTP/gRPC APIs**: RESTful and streaming interfaces for Resource operations
-- **Blockchain Integration**: Direct integration with Ethereum, Neutron, and other chains
-- **ZK Coprocessor Interface**: Communication with Valence ZK coprocessors
-- **FFI Bindings**: Foreign function interfaces for language interoperability
-- **Intent Management**: High-level intent submission and tracking
-- **API Gateway**: Unified access point for all external interactions
+### Key Responsibilities
 
-All APIs maintain consistency with the Resource Model's content-addressed, SSZ-serialized architecture.
+- **HTTP API Gateway**: Provide RESTful interfaces for resource operations
+- **ZK Coprocessor Interface**: Facilitate communication with zero-knowledge coprocessors
+- **Session Management**: Handle execution sessions and state management
+- **Protocol Translation**: Convert between internal resource representations and external formats
+
+## Architecture Overview
+
+The API layer is designed around several integration patterns:
+
+### HTTP REST Interface
+Standard RESTful APIs for resource operations:
+- **Resource Management**: Create, read, update, and consume resources
+- **Session Handling**: Manage execution sessions and state
+- **System Operations**: Health checks and system monitoring
+
+### Coprocessor Integration
+Specialized interfaces for computational coprocessors:
+- **ZK Proof Coordination**: Manage zero-knowledge proof generation workflows
+- **Computation Offloading**: Delegate intensive computations to coprocessors
+- **Result Verification**: Verify coprocessor computation results
 
 ## Core Components
 
-### HTTP API Server
+### HTTP API Server (`server.rs`)
 
-RESTful API for Resource operations:
+RESTful API server for resource and session operations:
 
 ```rust
-use causality_api::http::{ApiServer, ApiConfig};
+use causality_api::{CausalityApi, ApiConfig};
 
 let config = ApiConfig {
     bind_address: "0.0.0.0:8080".to_string(),
-    cors_enabled: true,
-    rate_limiting: true,
+    enable_cors: true,
 };
 
-let server = ApiServer::new(config).await?;
-server.start().await?;
+let api = CausalityApi::new(config);
+api.start().await?;
 ```
 
-### gRPC Services
+**API Endpoints:**
+- **Resource Operations**: Create, read, update, and consume resources
+- **Session Management**: Create and manage execution sessions
+- **System Monitoring**: Health checks and system metrics
 
-High-performance streaming APIs:
+### Session Management (`session.rs`)
+
+Execution session handling for stateful operations:
 
 ```rust
-use causality_api::grpc::{ResourceService, IntentService};
+use causality_api::{ExecutionSession, SessionConfig};
 
-// Resource management service
-let resource_service = ResourceService::new(resource_manager);
+// Create execution session
+let session = ExecutionSession::new(SessionConfig {
+    timeout: Duration::from_secs(300),
+    max_operations: 1000,
+});
 
-// Intent submission service  
-let intent_service = IntentService::new(intent_processor);
+// Execute operations within session
+let result = session.execute_operation(operation).await?;
 ```
 
-### Blockchain Integration
+**Session Features:**
+- **State Management**: Maintain execution state across operations
+- **Timeout Handling**: Automatic session cleanup and timeout management
+- **Operation Tracking**: Track operations and resource usage
 
-Direct blockchain interaction capabilities:
+### ZK Coprocessor Interface (`coprocessor.rs`)
+
+Integration with zero-knowledge coprocessors:
 
 ```rust
-use causality_api::blockchain::{EthereumClient, NeutronClient};
+use causality_api::{CoprocessorService, CoprocessorConfig};
 
-// Ethereum integration
-let eth_client = EthereumClient::new(rpc_url, private_key).await?;
-let tx_hash = eth_client.submit_intent(&intent).await?;
+let coprocessor = CoprocessorService::new(CoprocessorConfig {
+    endpoint: "https://coprocessor.valence.xyz".to_string(),
+    timeout: Duration::from_secs(600),
+})?;
 
-// Neutron integration
-let neutron_client = NeutronClient::new(grpc_endpoint).await?;
-let result = neutron_client.execute_intent(&intent).await?;
+// Submit proof generation request
+let proof_id = coprocessor.submit_proof_request(circuit, witness).await?;
+
+// Check proof status
+let status = coprocessor.get_proof_status(proof_id).await?;
 ```
 
-### ZK Coprocessor Interface
+**Coprocessor Features:**
+- **Async Proof Generation**: Non-blocking proof generation with status tracking
+- **Error Recovery**: Robust error handling and retry mechanisms
+- **Result Caching**: Intelligent caching of proof results
 
-Integration with Valence ZK coprocessors:
+### Client Interface (`client.rs`)
+
+Client library for interacting with the API:
 
 ```rust
-use causality_api::zk_coprocessor::{CoprocessorClient, ProofRequest};
+use causality_api::{CausalityClient, ClientConfig};
 
-let client = CoprocessorClient::new("https://coprocessor.valence.xyz").await?;
-let proof_request = ProofRequest::new(circuit_id, witness_data);
-let proof = client.generate_proof(proof_request).await?;
-```
-
-### Intent Management
-
-High-level intent operations:
-
-```rust
-use causality_api::intent::{IntentManager, IntentStatus};
-
-let intent_manager = IntentManager::new(blockchain_clients);
-
-// Submit intent
-let intent_id = intent_manager.submit_intent(intent).await?;
-
-// Track status
-let status = intent_manager.get_status(&intent_id).await?;
-```
-
-## API Endpoints
-
-### Resource Operations
-
-- `GET /resources/{id}` - Retrieve Resource by ID
-- `POST /resources` - Create new Resource
-- `PUT /resources/{id}` - Update Resource state
-- `DELETE /resources/{id}` - Nullify Resource
-
-### Intent Operations
-
-- `POST /intents` - Submit new intent
-- `GET /intents/{id}` - Get intent status
-- `GET /intents` - List intents with filters
-- `DELETE /intents/{id}` - Cancel pending intent
-
-### ZK Proof Operations
-
-- `POST /proofs/generate` - Generate ZK proof
-- `GET /proofs/{id}` - Get proof status
-- `POST /proofs/verify` - Verify proof
-
-### Domain Operations
-
-- `GET /domains` - List available domains
-- `GET /domains/{id}/resources` - List domain resources
-- `POST /domains/{id}/intents` - Submit domain-specific intent
-
-## FFI Bindings
-
-### C/C++ Interface
-
-```c
-// C header definitions
-typedef struct CausalityResource CausalityResource;
-typedef struct CausalityIntent CausalityIntent;
-
-// Resource operations
-CausalityResource* causality_create_resource(const char* data);
-int causality_validate_resource(CausalityResource* resource);
-void causality_free_resource(CausalityResource* resource);
-
-// Intent operations
-CausalityIntent* causality_create_intent(const char* intent_data);
-int causality_submit_intent(CausalityIntent* intent);
-```
-
-### Python Bindings
-
-```python
-import causality_api
-
-# Create resource
-resource = causality_api.create_resource(data)
-
-# Submit intent
-intent = causality_api.Intent(type="transfer", params=params)
-intent_id = causality_api.submit_intent(intent)
-
-# Check status
-status = causality_api.get_intent_status(intent_id)
-```
-
-### JavaScript/WASM Bindings
-
-```javascript
-import { CausalityAPI } from 'causality-api';
-
-const api = new CausalityAPI();
+let client = CausalityClient::new(ClientConfig {
+    base_url: "http://localhost:8080".to_string(),
+    timeout: Duration::from_secs(30),
+});
 
 // Create resource
-const resource = await api.createResource(data);
+let resource_id = client.create_resource(resource_data).await?;
 
-// Submit intent
-const intentId = await api.submitIntent(intent);
+// Read resource
+let resource = client.get_resource(resource_id).await?;
 ```
 
-## Configuration
+## Configuration Management
 
-API configuration through environment variables or config file:
+### API Configuration
 
 ```toml
 [api]
 bind_address = "0.0.0.0:8080"
-cors_enabled = true
-rate_limit_requests_per_minute = 1000
+enable_cors = true
+max_request_size = "10MB"
 
-[blockchain.ethereum]
-rpc_url = "https://eth-mainnet.alchemyapi.io/v2/API_KEY"
-chain_id = 1
+[session]
+default_timeout = "300s"
+max_operations = 1000
+cleanup_interval = "60s"
 
-[blockchain.neutron]
-grpc_endpoint = "https://grpc.neutron.org:443"
-chain_id = "neutron-1"
-
-[zk_coprocessor]
+[coprocessor]
 endpoint = "https://coprocessor.valence.xyz"
-timeout_seconds = 30
+timeout = "600s"
+retry_attempts = 3
 ```
 
-## Error Handling
+## REST API Specification
 
-Comprehensive error responses with proper HTTP status codes:
+### Resource Operations
+```http
+GET    /api/v1/resources/{id}           # Retrieve resource
+POST   /api/v1/resources               # Create resource
+PUT    /api/v1/resources/{id}          # Update resource
+DELETE /api/v1/resources/{id}          # Consume resource
+```
+
+### Session Operations
+```http
+POST   /api/v1/sessions                # Create session
+GET    /api/v1/sessions/{id}           # Get session status
+DELETE /api/v1/sessions/{id}           # End session
+POST   /api/v1/sessions/{id}/execute   # Execute operation
+```
+
+### System Operations
+```http
+GET    /api/v1/health                  # Health check
+GET    /api/v1/metrics                 # System metrics
+GET    /api/v1/version                 # API version
+```
+
+## Error Handling and Response Formats
+
+### Standardized Error Responses
 
 ```json
 {
@@ -203,27 +174,78 @@ Comprehensive error responses with proper HTTP status codes:
     "message": "Resource with ID res_123 not found",
     "details": {
       "resource_id": "res_123",
-      "domain_id": "domain_456"
+      "timestamp": "2024-01-15T10:30:00Z"
     }
   }
 }
 ```
 
-## Security
+**Error Categories:**
+- **Client Errors (4xx)**: Invalid requests, authentication failures
+- **Server Errors (5xx)**: Internal errors, external service failures
+- **Coprocessor Errors**: Proof generation and verification errors
 
-- **Authentication**: JWT-based authentication for API access
-- **Authorization**: Role-based access control for operations
-- **Rate Limiting**: Configurable rate limits per endpoint
-- **Input Validation**: Comprehensive validation of all inputs
-- **CORS**: Configurable cross-origin resource sharing
+## Design Philosophy
 
-## Feature Flags
+### Simplicity First
+The API layer prioritizes simplicity and ease of use:
+- **RESTful Design**: Follow standard REST conventions
+- **Clear Error Messages**: Provide actionable error information
+- **Minimal Configuration**: Sensible defaults with simple configuration
 
-- **default**: Standard API features
-- **http**: HTTP server support
-- **grpc**: gRPC server support
-- **blockchain**: Blockchain integration
-- **zk-coprocessor**: ZK coprocessor integration
-- **ffi**: Foreign function interface bindings
+### Extensibility
+Built for future expansion:
+- **Modular Design**: Easy addition of new endpoints and features
+- **Protocol Agnostic**: Design allows for additional protocols
+- **Backend Independence**: Abstract over different backend systems
 
-This crate provides comprehensive external interfaces for the Causality system, enabling integration with existing infrastructure while maintaining the verifiable and deterministic properties of the Resource Model.
+### Reliability
+Designed for production use:
+- **Error Recovery**: Comprehensive error handling and recovery
+- **Timeout Management**: Configurable timeouts with graceful handling
+- **Resource Cleanup**: Automatic cleanup of resources and sessions
+
+## Testing Framework
+
+Comprehensive testing across all API components:
+
+```rust
+#[tokio::test]
+async fn test_resource_lifecycle() {
+    let api = setup_test_api().await;
+    
+    // Create resource
+    let resource_id = api.create_resource(test_resource_data()).await?;
+    
+    // Read resource
+    let resource = api.get_resource(resource_id).await?;
+    assert_eq!(resource.data, test_resource_data());
+    
+    // Consume resource
+    api.consume_resource(resource_id).await?;
+    
+    // Verify resource is consumed
+    assert!(api.get_resource(resource_id).await.is_err());
+}
+
+#[tokio::test]
+async fn test_coprocessor_integration() {
+    let coprocessor = setup_test_coprocessor().await;
+    
+    let proof_id = coprocessor.submit_proof_request(test_circuit(), test_witness()).await?;
+    
+    // Wait for proof completion
+    loop {
+        let status = coprocessor.get_proof_status(proof_id).await?;
+        if status.is_complete() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    
+    let proof = coprocessor.get_proof(proof_id).await?;
+    assert!(proof.verify(&public_inputs));
+}
+```
+
+This comprehensive API layer enables seamless integration between the Causality system and external infrastructure while maintaining the verifiable and deterministic properties of the resource model.

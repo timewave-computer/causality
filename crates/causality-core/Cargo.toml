@@ -67,10 +67,19 @@ tokio = { workspace = true, optional = true }
 
 # Sparse Merkle Tree implementation
 valence-coprocessor = { version = "0.1.13", git = "https://github.com/timewave-computer/valence-coprocessor.git", tag = "v0.1.13", default-features = false, features = ["std"] }
-blake3 = "1.8.2"
+sha2 = "0.10.8"
 
 [dev-dependencies]
 # Required for async tests
 tokio = { workspace = true, features = ["macros", "rt"] }
 ethereum_ssz = { workspace = true }
 ethereum_ssz_derive = { workspace = true }
+
+[[example]]
+name = "layer2_effect_demo"
+path = "../../examples/layer2_effect_demo.rs"
+
+[[example]]
+name = "zk_effect_demo"
+path = "../../examples/zk_effect_demo.rs"
+required-features = ["tokio"]

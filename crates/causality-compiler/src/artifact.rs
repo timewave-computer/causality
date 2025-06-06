@@ -4,7 +4,7 @@
 //! enabling caching and reproducible builds.
 
 use crate::pipeline::{SExpression, CompiledArtifact};
-use crate::error::{CompileError, CompileResult};
+use crate::error::CompileResult;
 use causality_core::lambda::Term;
 use causality_core::machine::Instruction;
 use std::collections::hash_map::DefaultHasher;

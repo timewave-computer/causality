@@ -101,9 +101,9 @@ impl fmt::Display for CompileError {
             }
             CompileError::UnknownSymbol { symbol, location } => {
                 if let Some(loc) = location {
-                    write!(f, "Unknown symbol '{}' at {}:{}", symbol, loc.line, loc.column)
+                    write!(f, "Undefined variable '{}' at {}:{}", symbol, loc.line, loc.column)
                 } else {
-                    write!(f, "Unknown symbol '{}'", symbol)
+                    write!(f, "Undefined variable '{}'", symbol)
                 }
             }
             CompileError::InvalidArity { expected, found, location } => {

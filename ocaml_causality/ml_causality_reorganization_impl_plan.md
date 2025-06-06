@@ -116,7 +116,7 @@
 
 #### Task 5.2: Consolidate SSZ serialization
 - [ ] Consolidate SSZ logic → `serialization/ssz.ml`
-- [ ] Import and use separate `ml_ssz` module (do not inline)
+- [ ] Import and use separate `ocaml_ssz` module (do not inline)
 - [ ] Structure with encoding/decoding sections
 - [ ] Create `serialization/ssz.mli` with public interface
 
@@ -127,7 +127,7 @@
 - [ ] Create corresponding .mli files
 
 #### Task 5.4: Update serialization module structure
-- [ ] Update `serialization/dune` to export all modules and depend on ml_ssz
+- [ ] Update `serialization/dune` to export all modules and depend on ocaml_ssz
 - [ ] Test compilation of serialization module
 - [ ] Verify all serialization functions work
 

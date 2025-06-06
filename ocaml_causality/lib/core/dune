@@ -1,6 +1,2 @@
 (library
- (name ocaml_causality_core)
- (libraries
-  batteries
-  digestif)
- (modules domains identifiers patterns types ocaml_causality_core))
+ (name ocaml_causality_core)) 

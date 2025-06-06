@@ -1,12 +1,13 @@
 //! Layer 0: Register Machine
 //!
-//! This module implements the minimal verifiable execution model with 9 core instructions.
-//! It provides the computational substrate for the layers above, with deterministic
-//! execution and linear resource tracking suitable for ZK verification.
+//! This module implements the foundational register machine that executes
+//! causality operations. It provides the basic execution model for resource
+//! manipulation and state transitions.
 
+pub mod nullifier;
+pub mod resource;
 pub mod state;
 pub mod value;
-pub mod resource;
 pub mod effect;
 pub mod instruction;
 pub mod reduction;
@@ -24,8 +25,11 @@ pub use value::{
 };
 
 pub use resource::{
-    ResourceId, Resource, ResourceHeap, ResourceManager,
+    Resource, ResourceHeap, ResourceManager,
 };
+
+// Re-export ResourceId from system module
+pub use crate::system::content_addressing::ResourceId;
 
 pub use effect::{
     Effect, Constraint,
@@ -38,6 +42,8 @@ pub use reduction::{
 pub use metering::{
     Metering, ComputeBudget, InstructionCosts,
 };
+
+pub use nullifier::*;
 
 // Re-export error types from system
 pub use crate::system::error::{MachineError, ReductionError};

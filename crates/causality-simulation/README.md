@@ -1,222 +1,261 @@
 # Causality Simulation
 
-Simulation and testing framework for the Causality Resource Model. This crate provides tools for simulating Resource interactions, testing ProcessDataflowBlock orchestrations, and validating system behavior under various conditions.
+Comprehensive simulation framework for the Causality system that enables testing, debugging, and visualization of effects, resources, and distributed computation across all three architectural layers.
 
-## Overview
+## Purpose
 
-The `causality-simulation` crate enables comprehensive testing and simulation of Causality systems, providing:
+The `causality-simulation` crate provides a **complete simulation environment** for the Causality system, enabling developers to test complex distributed scenarios, debug effect interactions, and visualize system behavior without requiring full distributed infrastructure. It supports testing across all three layers of the architecture while maintaining full compatibility with production execution.
 
-- **Resource Interaction Simulation**: Simulate complex Resource state transitions and interactions
-- **ProcessDataflowBlock Testing**: Test dataflow orchestrations with various input scenarios
-- **Property-Based Testing**: Generate and test Resource behaviors with property-based approaches
-- **Performance Analysis**: Analyze system performance under different load conditions
-- **Mock Generation**: Generate mock Resources and effects for testing
+### Key Responsibilities
 
-All simulations maintain consistency with the Resource Model's content-addressed, SSZ-serialized architecture.
+- **Effect Simulation**: Simulate complex effect sequences and interactions
+- **State Management**: Provide snapshot and rollback capabilities for debugging
+- **Performance Testing**: Measure and analyze performance characteristics
+- **Fault Injection**: Test system resilience under adverse conditions
+- **Visualization**: Generate visual representations of effect execution flows
 
-## Core Components
+## Core Features
 
 ### Simulation Engine
 
-The core simulation engine orchestrates Resource interactions:
+Central orchestration for simulation execution:
 
 ```rust
 use causality_simulation::{SimulationEngine, SimulationConfig};
 
 let config = SimulationConfig {
-    max_steps: 1000,
-    random_seed: Some(42),
-    enable_tracing: true,
+    max_effects: 1000,
+    effect_timeout_ms: 5000,
+    enable_fault_injection: true,
+    enable_visualization: true,
+    enable_snapshots: true,
 };
 
 let mut engine = SimulationEngine::new(config);
-engine.add_resource(initial_resource);
-engine.add_effect_generator(transfer_generator);
 
-let results = engine.run_simulation().await?;
+// Install effect handlers
+engine.install_effect_handler::<TransferEffect>()?;
+engine.install_effect_handler::<MintEffect>()?;
+
+// Execute simulation
+let result = engine.run_simulation().await?;
+println!("Simulation completed: {:?}", result.summary);
 ```
 
-### Resource State Evolution
+### Mock Effect Handlers
 
-Simulate Resource state changes over time:
+Configurable mock implementations for rapid testing:
 
 ```rust
-use causality_simulation::resource::{ResourceSimulator, StateTransition};
+use causality_simulation::{MockStrategy, EffectSchema};
 
-let simulator = ResourceSimulator::new();
-let transitions = simulator.simulate_state_evolution(
-    &initial_resource,
-    &effect_sequence,
-    100 // steps
+// Install mock handler with specific behavior
+engine.install_mock_handler(
+    "test_effect".to_string(),
+    effect_schema,
+    MockStrategy::AlwaysSucceed
 )?;
 
-for transition in transitions {
-    println!("Step {}: {} -> {}", 
-        transition.step, 
-        transition.old_state, 
-        transition.new_state
+// Install handler with failure simulation
+engine.install_mock_handler(
+    "flaky_effect".to_string(),
+    effect_schema,
+    MockStrategy::FailWithProbability { probability: 0.1 }
+)?;
+```
+
+**Mock Strategies:**
+- **AlwaysSucceed**: Always return success for testing happy paths
+- **AlwaysFail**: Always fail for testing error handling
+- **FailWithProbability**: Random failures for resilience testing
+- **SimulateSuccess**: Add controllable delays and outcomes
+
+### Resource State Snapshots
+
+State snapshot and rollback for debugging:
+
+```rust
+use causality_simulation::SimulationEngine;
+
+let mut engine = SimulationEngine::new(config);
+
+// Create a snapshot before risky operation
+let snapshot_id = engine.create_snapshot("before_complex_effect".to_string()).await?;
+
+// Execute some operations
+engine.execute_effect("complex_transfer_effect".to_string()).await?;
+
+// Rollback if needed
+engine.restore_snapshot(&snapshot_id).await?;
+```
+
+### Effect Testing
+
+Comprehensive effect execution testing with various strategies:
+
+```rust
+use causality_simulation::{SimulationEngine, TestScenario, FailureRecoveryStrategy};
+
+let mut engine = SimulationEngine::new(config);
+
+// Create test scenario
+let scenario = TestScenario {
+    id: "transfer_test".to_string(),
+    description: "Test token transfer effects".to_string(),
+    test_suites: vec![transfer_test_suite],
+    expected_outcomes: vec![ScenarioOutcome::AllTestsPass],
+    recovery_strategies: vec![FailureRecoveryStrategy::Retry { 
+        max_attempts: 3, 
+        backoff: Duration::from_millis(100) 
+    }],
+    timeout: Duration::from_secs(30),
+};
+
+let result = engine.execute_test_scenario(scenario).await?;
+assert_eq!(result.status, ScenarioStatus::Success);
+```
+
+## Testing Strategies by Layer
+
+### Layer 0: Register Machine Testing
+
+Direct testing of the 11-instruction typed register machine:
+
+```rust
+use causality_simulation::SimulationEngine;
+use causality_core::machine::instruction::Instruction;
+
+let mut engine = SimulationEngine::new(config);
+
+// Test individual instructions
+let instructions = vec![
+    Instruction::Move { src: RegisterId(0), dest: RegisterId(1) },
+    Instruction::Alloc { value_reg: RegisterId(1), dest: RegisterId(2) },
+    Instruction::Consume { resource_reg: RegisterId(2), dest: RegisterId(3) },
+];
+
+engine.load_program(instructions)?;
+
+// Execute with detailed state tracking
+while engine.execute_step().await? {
+    let step = engine.state_progression().current_step().unwrap();
+    println!("PC: {}, Resources: {}, Gas: {}", 
+        step.machine_state.program_counter,
+        step.machine_state.resource_count,
+        step.machine_state.gas_remaining
     );
 }
 ```
 
-### ProcessDataflowBlock Testing
+### Layer 1: Causality Lisp Testing
 
-Test complex dataflow orchestrations:
+Testing Lisp compilation and execution:
 
 ```rust
-use causality_simulation::dataflow::{DataflowTester, TestScenario};
+// Test Lisp function execution
+let lisp_expr = "(lambda (x) (alloc (tensor x (symbol transfer))))";
+let result = engine.execute_effect(lisp_expr.to_string()).await?;
 
-let tester = DataflowTester::new();
-let scenario = TestScenario::new()
-    .with_input_resources(input_resources)
-    .with_expected_outputs(expected_outputs)
-    .with_timeout(Duration::from_secs(30));
-
-let result = tester.test_dataflow_block(&dataflow_block, scenario).await?;
-assert!(result.success);
+// Verify type safety and linearity
+assert!(matches!(result, LispValue::ResourceRef(_)));
 ```
 
-### Property-Based Testing
+### Layer 2: Effects and TEG Testing
 
-Generate and test Resource properties:
+High-level effect orchestration testing:
 
 ```rust
-use causality_simulation::property::{PropertyTester, ResourceProperty};
+// Test complex effect sequences
+let complex_scenario = TestScenario {
+    id: "multi_party_escrow".to_string(),
+    description: "Test multi-party escrow with timeouts".to_string(),
+    test_suites: vec![escrow_test_suite],
+    expected_outcomes: vec![
+        ScenarioOutcome::AllTestsPass,
+        ScenarioOutcome::PerformanceThreshold { 
+            metric: "execution_time".to_string(), 
+            threshold: 1.0 
+        }
+    ],
+    recovery_strategies: vec![FailureRecoveryStrategy::FailFast],
+    timeout: Duration::from_secs(60),
+};
 
-let property = ResourceProperty::new("balance_non_negative")
-    .with_invariant(|resource| {
-        resource.get_field("balance").unwrap().as_integer() >= 0
-    });
-
-let tester = PropertyTester::new();
-let result = tester.test_property(&property, 1000).await?;
-assert!(result.all_passed());
+let result = engine.execute_test_scenario(complex_scenario).await?;
 ```
 
-### Mock Generation
+## Zero-Knowledge Proof Integration Testing
 
-Generate mock Resources and effects for testing:
+Test ZK-proof integration with mock provers for rapid iteration:
 
 ```rust
-use causality_simulation::mock::{MockGenerator, MockConfig};
+use causality_simulation::{MockStrategy, EffectSchema};
 
-let generator = MockGenerator::new();
-let mock_config = MockConfig::new()
-    .with_resource_type("TokenResource")
-    .with_field_range("balance", 0..1000)
-    .with_field_values("owner", vec!["alice", "bob", "charlie"]);
+// Install mock ZK prover
+engine.install_mock_handler(
+    "zk_proof_effect".to_string(),
+    zk_proof_schema,
+    MockStrategy::SimulateSuccess { delay_ms: 100 }
+)?;
 
-let mock_resources = generator.generate_resources(&mock_config, 100)?;
+// Test with controlled ZK proof timing
+let zk_test = TestCase {
+    name: "zk_proof_generation".to_string(),
+    description: "Test ZK proof generation timing".to_string(),
+    inputs: zk_test_inputs,
+    expected_outputs: zk_expected_outputs,
+    timeout: Duration::from_secs(5),
+};
 ```
 
-## Testing Utilities
+## Visualization and Analysis
 
-### Assertion Helpers
-
-Specialized assertions for Resource testing:
+Generate TEG visualizations and execution traces:
 
 ```rust
-use causality_simulation::assertions::*;
+// Generate TEG visualization
+let teg_graph = engine.generate_teg_visualization()?;
+println!("TEG Structure:\n{}", teg_graph);
 
-// Assert Resource state
-assert_resource_state(&resource, "balance", 1000);
+// Analyze performance metrics
+let metrics = engine.metrics();
+println!("Total effects executed: {}", metrics.total_effects);
+println!("Average effect duration: {:?}", metrics.average_effect_duration);
 
-// Assert effect execution
-assert_effect_success(&effect_result);
-
-// Assert dataflow completion
-assert_dataflow_completed(&dataflow_instance);
-
-// Assert property holds
-assert_property_holds(&resource, &balance_positive_property);
-```
-
-### Test Fixtures
-
-Pre-built test scenarios and data:
-
-```rust
-use causality_simulation::fixtures::*;
-
-// Standard test scenarios
-let token_scenario = create_token_transfer_scenario();
-let nft_scenario = create_nft_marketplace_scenario();
-let defi_scenario = create_defi_protocol_scenario();
-
-// Test data generators
-let random_resources = generate_random_resources(100);
-let stress_test_effects = generate_stress_test_effects(1000);
-```
-
-### Trace Analysis
-
-Analyze simulation execution traces:
-
-```rust
-use causality_simulation::trace::{TraceAnalyzer, TraceQuery};
-
-let analyzer = TraceAnalyzer::new();
-let query = TraceQuery::new()
-    .filter_by_resource_type("TokenResource")
-    .filter_by_effect_type("TransferEffect")
-    .time_range(start_time..end_time);
-
-let analysis = analyzer.analyze_trace(&simulation_trace, query)?;
-println!("Resource interactions: {}", analysis.interaction_count());
+// Examine effect execution log
+for effect_execution in engine.effects_log() {
+    println!("Effect: {}, Status: {:?}, Duration: {:?}",
+        effect_execution.effect_id,
+        effect_execution.result,
+        effect_execution.duration
+    );
+}
 ```
 
 ## Configuration
 
-Simulation configuration options:
+Comprehensive simulation configuration options:
 
-```toml
-[simulation]
-max_steps = 1000
-random_seed = 42
-enable_tracing = true
-trace_level = "debug"
+```rust
+use causality_simulation::SimulationConfig;
 
-[simulation.performance]
-max_concurrent_effects = 100
-timeout_seconds = 30
-memory_limit_mb = 512
-
-[simulation.mock]
-default_resource_count = 100
-field_value_distribution = "uniform"
-enable_property_validation = true
-
-[simulation.output]
-format = "json"
-include_traces = true
-include_metrics = true
-output_dir = "simulation_results"
+let config = SimulationConfig {
+    max_effects: 10000,           // Maximum effects to execute
+    effect_timeout_ms: 30000,     // Individual effect timeout
+    enable_fault_injection: true, // Enable resilience testing
+    enable_visualization: true,   // Enable TEG visualization
+    enable_snapshots: true,       // Enable state snapshots
+    snapshot_interval: 50,        // Snapshot every 50 effects
+    max_steps: 100000,           // Maximum simulation steps
+    step_by_step_mode: false,    // Enable single-step debugging
+};
 ```
 
-## Feature Flags
+## Testing Best Practices
 
-- **default**: Standard simulation features
-- **property-testing**: Property-based testing support
-- **performance**: Performance testing utilities
-- **mock-generation**: Mock data generation
-- **trace-analysis**: Execution trace analysis
-- **visualization**: Simulation result visualization
-
-## Module Structure
-
-```
-src/
-├── lib.rs                    # Main library interface
-├── engine.rs                 # Core simulation engine
-├── resource.rs               # Resource simulation utilities
-├── dataflow.rs               # ProcessDataflowBlock testing
-├── property.rs               # Property-based testing
-├── mock.rs                   # Mock generation
-├── performance.rs            # Performance testing
-├── trace.rs                  # Trace analysis
-├── assertions.rs             # Testing assertions
-├── fixtures.rs               # Test fixtures and scenarios
-└── config.rs                 # Configuration management
-```
-
-This crate enables comprehensive testing and validation of Resource-based systems, ensuring reliability and correctness while maintaining the deterministic properties of the Causality framework.
+1. **Use Deterministic Seeds**: Always use fixed seeds for random number generators to ensure reproducible tests
+2. **Leverage Snapshots**: Create snapshots before complex operations for easy debugging
+3. **Test Failure Modes**: Use fault injection to verify resilience under adverse conditions
+4. **Monitor Resources**: Track resource allocation/consumption to verify conservation laws
+5. **Validate Performance**: Establish performance baselines and monitor regressions
+6. **Test Incrementally**: Build complex scenarios from well-tested simple components

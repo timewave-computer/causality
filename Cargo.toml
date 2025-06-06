@@ -2,6 +2,14 @@
 members = [
   "crates/causality-core",
   "crates/causality-compiler",
+  "crates/causality-runtime",
+  "crates/causality-zk",
+  "crates/causality-api",
+  "crates/causality-cli",
+  "crates/causality-toolkit",
+  "crates/causality-simulation",
+  "crates/causality-lisp",
+  "crates/causality-ffi",
 ]
 resolver = "2"
 

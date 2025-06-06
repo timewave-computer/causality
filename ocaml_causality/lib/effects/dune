@@ -1,5 +1,7 @@
 (library
  (name ocaml_causality_effects)
- (libraries ocaml_causality_core digestif batteries)
- (wrapped true)
- (modules effects handlers registry advanced_orchestration))
+ (libraries
+  causality_lambda
+  causality_machine
+  causality_system
+  unix)) 

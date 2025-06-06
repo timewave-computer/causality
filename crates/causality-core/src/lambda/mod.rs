@@ -1,8 +1,8 @@
 //! Layer 1: Linear Lambda Calculus
 //!
-//! This module implements the type-safe functional programming layer
-//! with linear resource tracking. It provides the term model for
-//! the register machine below.
+//! This module implements the core linear lambda calculus with exactly 11 primitives.
+//! Complex features like capabilities, objects, and record operations have been 
+//! moved to Layer 2 (effect module) for better architectural separation.
 
 /// Base types and core type definitions
 pub mod base;
@@ -24,9 +24,6 @@ pub mod symbol;
 
 /// Term representation for Layer 1
 pub mod term;
-
-/// Row types for extensible records
-pub mod row;
 
 /// Interface to Layer 0
 pub mod interface;
@@ -59,9 +56,6 @@ pub use symbol::Symbol;
 
 // Term language
 pub use term::{Term, TermKind, Literal};
-
-// Row types
-pub use row::{RowType, RowVariable, RowConstraint, RecordType, RowOpResult, row, open_row, record};
 
 // Layer 0 interface
 pub use interface::{compile_term, CompileError, CompilationContext};

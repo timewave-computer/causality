@@ -6,6 +6,7 @@
 
 use ssz::Encode;
 use std::fmt;
+use serde::{Serialize, Deserialize};
 
 //-----------------------------------------------------------------------------
 // Core Data Structures
@@ -14,14 +15,14 @@ use std::fmt;
 /// Universal content-addressed identifier.
 /// 
 /// All significant entities in the Causality system (resources, expressions, types,
-/// handlers, transactions) are identified by the Blake3 hash of their canonical
+/// handlers, transactions) are identified by the SHA256 hash of their canonical
 /// SSZ serialization. This ensures:
 /// 
 /// - Deterministic identification (same content always produces same ID)
 /// - Global uniqueness and deduplication
 /// - Verifiable references and integrity checking
 /// - ZK-friendly fixed-size identifiers
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct EntityId {
     /// The 32-byte hash that uniquely identifies this entity
     pub bytes: [u8; 32],
@@ -35,10 +36,10 @@ impl EntityId {
     
     /// Create an EntityId from the content hash of SSZ-serializable data
     pub fn from_content<T: Encode>(content: &T) -> Self {
-        use crate::{Blake3Hasher, Hasher};
+        use crate::{Sha256Hasher, Hasher};
         let serialized = content.as_ssz_bytes();
-        let hash = Blake3Hasher::hash(&serialized);
-        Self { bytes: hash.into() }
+        let hash = Sha256Hasher::hash(&serialized);
+        EntityId { bytes: hash }
     }
     
     /// Get the raw bytes of this EntityId
@@ -64,6 +65,12 @@ impl EntityId {
     
     /// Zero EntityId (for testing)
     pub const ZERO: EntityId = EntityId { bytes: [0u8; 32] };
+}
+
+impl Default for EntityId {
+    fn default() -> Self {
+        Self::ZERO
+    }
 }
 
 impl fmt::Display for EntityId {
@@ -159,18 +166,12 @@ pub trait ContentAddressable {
     fn content_id(&self) -> EntityId;
 }
 
-impl<T: Encode> ContentAddressable for T {
-    fn content_id(&self) -> EntityId {
-        EntityId::from_content(self)
-    }
-}
-
 //-----------------------------------------------------------------------------
 // Timestamp Implementation
 //-----------------------------------------------------------------------------
 
 /// Unix timestamp in milliseconds (u64 for ZK compatibility)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Timestamp {
     /// Milliseconds since Unix epoch
     pub millis: u64,
@@ -244,10 +245,8 @@ impl Timestamp {
 // SSZ-Compatible String Type
 //-----------------------------------------------------------------------------
 
-/// A string type optimized for SSZ serialization and ZK circuits.
-/// For now, we use a simple String wrapper. In the future, this should be
-/// replaced with a fixed-size Symbol type for better ZK compatibility.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// UTF-8 string wrapper for SSZ compatibility with ordering support
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Str {
     /// The inner string value
     pub value: String,
@@ -365,3 +364,4 @@ mod tests {
         assert_eq!(id, decoded);
     }
 } 
+

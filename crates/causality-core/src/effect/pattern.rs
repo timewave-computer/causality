@@ -331,6 +331,7 @@ impl From<Literal> for crate::machine::LiteralValue {
             Literal::Bool(b) => crate::machine::LiteralValue::Bool(b),
             Literal::Int(i) => crate::machine::LiteralValue::Int(i),
             Literal::Symbol(s) => crate::machine::LiteralValue::Symbol(s),
+            Literal::Unit => crate::machine::LiteralValue::Unit,
         }
     }
 } 

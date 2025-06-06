@@ -5,6 +5,7 @@
 
 use std::fmt;
 use ssz::{Encode, Decode, DecodeError};
+use serde::{Serialize, Deserialize};
 
 //-----------------------------------------------------------------------------
 // Symbol Type
@@ -14,7 +15,7 @@ use ssz::{Encode, Decode, DecodeError};
 /// 
 /// Symbols are represented as fixed-size 32-byte hashes for ZK compatibility,
 /// but maintain optional human-readable names for development and debugging.
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Symbol {
     /// Content hash of the symbol (ZK-compatible fixed size)
     pub hash: [u8; 32],
@@ -28,8 +29,8 @@ pub struct Symbol {
 impl Symbol {
     /// Create a new symbol from a string
     pub fn new(name: &str) -> Self {
-        use valence_coprocessor::{Hasher, Blake3Hasher};
-        let hash = Blake3Hasher::hash(name.as_bytes());
+        use crate::{Hasher, Sha256Hasher};
+        let hash = Sha256Hasher::hash(name.as_bytes());
         
         Self {
             hash: hash.into(),

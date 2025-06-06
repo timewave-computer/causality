@@ -1,8 +1,0 @@
-(library
- (name ocaml_causality)
- (libraries
-  ocaml_causality_core
-  ocaml_causality_lang
-  ocaml_causality_effects
-  ocaml_causality_serialization
-  ocaml_causality_interop)) 

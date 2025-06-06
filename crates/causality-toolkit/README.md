@@ -1,257 +1,276 @@
 # Causality Toolkit
 
-Standard effects, handlers, and utilities for building applications with the Causality Resource Model framework. This crate provides reusable components that simplify common patterns in Resource-based systems.
+High-level development toolkit for the Causality framework that provides effects system, testing utilities, and development abstractions for building robust applications with the three-layer architecture.
 
-## Overview
+## Purpose
 
-The `causality-toolkit` crate serves as a high-level toolkit that builds on the core types and runtime capabilities of the Causality framework. It provides:
+The `causality-toolkit` crate serves as the **application development layer** for the Causality system, providing high-level abstractions, reusable components, and standard patterns that simplify building applications on top of the core framework. It bridges the gap between the low-level core infrastructure and application-specific logic while maintaining the mathematical rigor and verifiability properties of the resource model.
 
-- **Standard Effects**: Common effect implementations for typical application needs
-- **Effect Handlers**: Production-ready handlers for standard effects
-- **Type-Safe Resource Management**: Utilities for managing Resource lifecycle and state
-- **Capability System**: Tools for building permission and authorization systems
-- **Schema Integration**: Type schema support for content-addressed type definitions
+### Key Responsibilities
 
-All components maintain consistency with the Resource Model's content-addressed, SSZ-serialized architecture.
+- **Effect System**: Provide effect abstractions and utilities for application development
+- **Testing Framework**: Comprehensive testing utilities and mock implementations
+- **Development Utilities**: High-level utilities for common development patterns
+- **DSL Support**: Domain-specific language support for effect composition
+
+## Architecture Overview
+
+The toolkit is designed around several core architectural patterns:
+
+### Effect System Architecture
+A comprehensive effect system that builds on the core Causality types:
+- **Effect Composition**: Composable effect building blocks for complex workflows
+- **Utilities**: Helper functions and abstractions for effect management
+- **Testing Support**: Mock implementations and testing utilities
+
+### Development Support
+High-level abstractions for application development:
+- **Testing Utilities**: Comprehensive testing framework with mocks
+- **Debug Support**: Debugging utilities and helper functions
+- **DSL Components**: Domain-specific language support for effect composition
 
 ## Core Components
 
-### Effect System
+### Effect System (`effects/`)
 
-The toolkit provides a comprehensive effect system built on top of the core Causality types:
+Effect system components for application development:
 
 ```rust
-use causality_toolkit::core::ToolkitEffect;
+use causality_toolkit::effects::{EffectBuilder, EffectComposer};
 
-pub trait ToolkitEffect: Send + Sync + AsValueExpr + Debug + 'static {
-    fn effect_type_str(&self) -> Str;
-    fn effect_logic_id(&self) -> EffectId;
-    fn as_any(&self) -> &dyn Any;
+// Build and compose effects
+let effect_builder = EffectBuilder::new();
+let composed_effect = effect_builder
+    .add_validation()
+    .add_transformation()
+    .add_result_handling()
+    .build()?;
+```
+
+**Effect System Features:**
+- **Effect Composition**: Build complex workflows from simple effect primitives
+- **Utilities**: Helper functions for common effect patterns
+- **Testing Support**: Mock implementations for testing
+
+### Testing Framework (`testing/`)
+
+Comprehensive testing utilities for Causality applications:
+
+```rust
+use causality_toolkit::testing::{TestHarness, MockExecutor};
+
+// Create test environment
+let test_harness = TestHarness::new()
+    .with_mock_executor()
+    .with_test_resources();
+
+// Execute test scenarios
+let result = test_harness.execute_test_scenario(scenario).await?;
+assert!(result.is_successful());
+```
+
+**Testing Features:**
+- **Test Harness**: Comprehensive testing environment setup
+- **Mock Implementations**: Mock executors and components for testing
+- **Scenario Support**: Test scenario definition and execution
+- **Assertion Utilities**: Specialized assertions for Causality concepts
+
+### Mock System (`mocks/`)
+
+Mock implementations for testing and development:
+
+```rust
+use causality_toolkit::mocks::{MockResource, MockEffect, MockExecutor};
+
+// Create mock components for testing
+let mock_resource = MockResource::new()
+    .with_id("test_resource")
+    .with_data(test_data);
+
+let mock_executor = MockExecutor::new()
+    .with_success_rate(0.95)
+    .with_latency(Duration::from_millis(10));
+```
+
+**Mock Features:**
+- **Resource Mocks**: Mock resource implementations with configurable behavior
+- **Effect Mocks**: Mock effect implementations for testing
+- **Executor Mocks**: Mock execution environments with controllable parameters
+
+### DSL Support (`dsl/`)
+
+Domain-specific language support for effect composition:
+
+```rust
+use causality_toolkit::dsl::{EffectDSL, CompositionBuilder};
+
+// Use DSL for effect composition
+let effect = EffectDSL::compose()
+    .validate_inputs()
+    .transform_data()
+    .apply_business_logic()
+    .handle_results()
+    .build()?;
+```
+
+**DSL Features:**
+- **Fluent Interface**: Natural language-like effect composition
+- **Type Safety**: Compile-time guarantees for effect composition
+- **Extensibility**: Easy extension with custom DSL components
+
+### Development Utilities (`utils.rs`)
+
+General utilities for application development:
+
+```rust
+use causality_toolkit::utils::{ResourceHelper, EffectHelper, ValidationHelper};
+
+// Use utility functions
+let validated_resource = ResourceHelper::validate_and_create(resource_data)?;
+let optimized_effect = EffectHelper::optimize_composition(effect_chain)?;
+let result = ValidationHelper::check_constraints(&resource, &constraints)?;
+```
+
+**Utility Features:**
+- **Resource Utilities**: Helper functions for resource management
+- **Effect Utilities**: Utilities for effect optimization and management
+- **Validation Utilities**: Common validation patterns and helpers
+
+## Usage Patterns
+
+### Effect Composition Workflow
+
+Build complex effects from simple components:
+
+```rust
+use causality_toolkit::effects::{EffectBuilder, ValidationEffect, TransformEffect};
+
+// Compose effects using builder pattern
+let transfer_effect = EffectBuilder::new()
+    .add_effect(ValidationEffect::balance_check())
+    .add_effect(ValidationEffect::permission_check())
+    .add_effect(TransformEffect::debit_source())
+    .add_effect(TransformEffect::credit_target())
+    .build()?;
+
+// Execute composed effect
+let result = transfer_effect.execute(&execution_context).await?;
+```
+
+### Testing Workflow
+
+Comprehensive testing with mocks and utilities:
+
+```rust
+use causality_toolkit::testing::{TestHarness, TestScenario};
+
+// Create test scenario
+let scenario = TestScenario::new("token_transfer")
+    .with_initial_state(initial_resources)
+    .with_expected_outcome(expected_results)
+    .with_constraints(validation_rules);
+
+// Execute test
+let test_harness = TestHarness::new();
+let result = test_harness.run_scenario(scenario).await?;
+
+// Validate results
+assert!(result.meets_expectations());
+assert!(result.satisfies_constraints());
+```
+
+## Configuration and Customization
+
+### Toolkit Configuration
+
+```toml
+# Causality.toml - Toolkit configuration
+
+[toolkit]
+enable_debug_mode = true
+default_test_timeout = "30s"
+mock_success_rate = 0.95
+
+[effects]
+enable_composition_validation = true
+optimize_effect_chains = true
+cache_composed_effects = true
+
+[testing]
+parallel_test_execution = true
+generate_test_reports = true
+mock_latency = "10ms"
+```
+
+### Custom Extensions
+
+Extend the toolkit with custom components:
+
+```rust
+use causality_toolkit::effects::{EffectTrait, EffectResult};
+
+// Custom effect implementation
+pub struct CustomBusinessLogicEffect {
+    parameters: BusinessParameters,
 }
-```
 
-#### Effect Composition
-
-```rust
-use causality_toolkit::core::EffectExpr;
-
-let effect1 = MyEffect::new("param1");
-let effect2 = MyEffect::new("param2");
-
-let workflow = EffectExpr::single(effect1)
-    .then(effect2)
-    .then(MyOtherEffect::new());
-
-workflow.execute(&handler).await?;
-```
-
-### Standard Effects
-
-#### LogMessage Effect
-
-```rust
-use causality_toolkit::effects::{LogMessageEffect, LogMessageEffectInput, LogMessageHandler};
-
-let log_input = LogMessageEffectInput {
-    level: "info".to_string(),
-    message: "Resource validation completed".to_string(),
-    context: Some("ResourceValidator".to_string()),
-};
-
-let handler = LogMessageHandler::default();
-let result = handler.handle(log_input).await?;
-```
-
-#### Effect Input/Output Schema
-
-```rust
-use causality_types::effects_core::{EffectInput, EffectOutput};
-
-impl EffectInput for LogMessageEffectInput {
-    fn from_value_expr(value: ValueExpr) -> Result<Self, ConversionError> {
-        // Convert from ValueExpr to typed input
+impl EffectTrait for CustomBusinessLogicEffect {
+    async fn execute(&self, context: &ExecutionContext) -> EffectResult {
+        // Custom business logic implementation
+        self.apply_business_rules(context).await
     }
+}
+
+// Register custom effect
+let effect_registry = EffectRegistry::new();
+effect_registry.register("custom_business_logic", CustomBusinessLogicEffect::new)?;
+```
+
+## Design Philosophy
+
+### Simplicity and Productivity
+The toolkit prioritizes ease of use and developer productivity:
+- **High-Level Abstractions**: Hide complexity while maintaining power
+- **Intuitive APIs**: Natural, discoverable API design
+- **Testing First**: Built-in testing support from the ground up
+
+### Composability and Extensibility
+Built for composition and extension:
+- **Modular Design**: Components can be used independently
+- **Extension Points**: Clear extension mechanisms for custom functionality
+- **Interoperability**: Works seamlessly with core Causality components
+
+### Performance and Reliability
+Optimized for production use:
+- **Efficient Implementation**: Minimal overhead over core components
+- **Error Handling**: Comprehensive error handling with clear messages
+- **Resource Management**: Careful resource usage and cleanup
+
+## Testing Framework
+
+Comprehensive testing across all toolkit components:
+
+```rust
+#[test]
+fn test_effect_composition() {
+    let effect = EffectBuilder::new()
+        .add_validation()
+        .add_transformation()
+        .build()
+        .unwrap();
     
-    fn schema() -> TypeExpr {
-        TypeExpr::Record(/* field definitions */)
-    }
-}
-```
-
-### Resource Management
-
-#### Type-Safe Resource References
-
-```rust
-use causality_toolkit::core::{TypedResource, ConsumedResource, ResourceState};
-
-let resource: TypedResource<TokenData, ResourceState> = 
-    TypedResource::new(resource_id);
-
-let consumed: ConsumedResource<TokenData> = 
-    ConsumedResource::consume(resource);
-
-let nullifier = consumed.nullifier();
-```
-
-#### Resource State Management
-
-```rust
-use causality_toolkit::core::ResourceState;
-
-#[derive(Debug, Clone, Copy)]
-pub enum ResourceState {
-    Active,    // Resource exists and can be used
-    Consumed,  // Resource has been consumed
-    Created,   // Resource created but not committed
-}
-```
-
-### Type Schema System
-
-```rust
-use causality_toolkit::AsTypeSchema;
-
-pub trait AsTypeSchema {
-    fn type_schema(&self) -> TypeExpr;
-    fn schema_id(&self) -> TypeExprId;
-    fn effect_type_name(&self) -> &'static str;
-}
-```
-
-### Capability System
-
-```rust
-use causality_toolkit::capability::{CapabilitySystem, CapabilityCheck};
-
-let capability_check = CapabilityCheck::new()
-    .requires_capability("token.transfer")
-    .with_resource_constraint("source_balance >= transfer_amount")
-    .with_domain_scope(domain_id);
-
-let authorized = capability_system.check_capability(
-    &capability_check,
-    &user_capabilities,
-    &context
-).await?;
-```
-
-## Usage Examples
-
-### Defining Custom Effects
-
-```rust
-use causality_toolkit::core::{ToolkitEffect, ToolkitTelEffectData};
-
-#[derive(Debug, Clone)]
-pub struct TransferTokenEffect {
-    pub from_resource: ResourceId,
-    pub to_resource: ResourceId,
-    pub amount: u64,
+    assert!(effect.is_valid());
+    assert_eq!(effect.component_count(), 2);
 }
 
-impl ToolkitEffect for TransferTokenEffect {
-    fn effect_type_str(&self) -> Str {
-        Str::from("token.transfer")
-    }
+#[tokio::test]
+async fn test_mock_execution() {
+    let mock_executor = MockExecutor::new()
+        .with_success_rate(1.0);
     
-    fn effect_logic_id(&self) -> EffectId {
-        EffectId::new([/* hash of effect logic */])
-    }
-    
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    let result = mock_executor.execute_effect(test_effect()).await;
+    assert!(result.is_ok());
 }
 ```
 
-### Implementing Effect Handlers
-
-```rust
-use causality_toolkit::core::Handles;
-
-pub struct TransferTokenHandler {
-    // Handler state and dependencies
-}
-
-impl Handles<TransferTokenEffect> for TransferTokenHandler {
-    fn handle(&self, effect: &TransferTokenEffect) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.validate_transfer(effect)?;
-        self.execute_transfer(effect)?;
-        self.update_resource_states(effect)?;
-        Ok(())
-    }
-}
-```
-
-### Building Effect Workflows
-
-```rust
-use causality_toolkit::core::EffectExpr;
-
-let token_transfer_workflow = EffectExpr::sequence(vec![
-    EffectExpr::single(ValidateBalanceEffect::new(from_resource)),
-    EffectExpr::single(CheckPermissionEffect::new(user_id, "transfer")),
-    EffectExpr::single(TransferTokenEffect::new(from_resource, to_resource, amount)),
-    EffectExpr::single(LogMessageEffect::new("info", "Transfer completed")),
-]);
-
-token_transfer_workflow.execute(&handler_registry).await?;
-```
-
-## Integration with Core Crates
-
-### causality-core Integration
-
-- Uses all core Resource Model types
-- Implements effect traits from `effects_core`
-- Maintains content-addressed consistency
-- Supports SSZ serialization throughout
-
-### causality-runtime Integration
-
-- Provides handlers for runtime execution
-- Integrates with host function system
-- Supports async effect execution
-- Enables Resource state management
-
-### causality-lisp Integration
-
-- Effect logic can be expressed in Lisp
-- Supports constraint validation expressions
-- Enables ZK-compatible effect definitions
-- Provides schema-to-expression conversion
-
-## Feature Flags
-
-- **default**: Standard toolkit features
-- **testing**: Additional testing utilities
-- **capability-system-lisp-generator**: Capability system Lisp code generation
-- **async**: Asynchronous effect handling
-
-## Module Structure
-
-```
-src/
-├── lib.rs                    # Main library interface and re-exports
-├── core.rs                   # Core traits and resource management
-├── effects.rs                # Standard effect implementations
-├── capability.rs             # Capability system components
-├── registry.rs               # Effect and handler registry
-├── meta.rs                   # Metadata and schema utilities
-├── control_flow.rs           # Control flow effects and patterns
-└── capability_system_lisp/   # Lisp code generation for capabilities
-```
-
-## Testing Support
-
-```rust
-use causality_toolkit::core::testing::RecordingHandler;
-
-let recording_handler = RecordingHandler::new();
-effect.handle(&recording_handler)?;
-let recorded_effects = recording_handler.get_recorded_effects();
-assert_eq!(recorded_effects.len(), 1);
-```
-
-This toolkit enables rapid development of Resource-based applications by providing battle-tested components that handle common patterns while maintaining the verifiable and deterministic properties of the Causality framework.
+This comprehensive toolkit enables developers to build sophisticated applications on the Causality framework while maintaining the mathematical rigor, verifiability, and performance characteristics essential for distributed zero-knowledge computation.

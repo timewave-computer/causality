@@ -1,5 +1,0 @@
-(library
- (name ocaml_causality_core)
- (libraries
-  batteries
-  digestif)) 

@@ -2,8 +2,4 @@
  (name ocaml_causality_serialization)
  (libraries
   ocaml_causality_core
-  ocaml_causality_lang
-  digestif
-  batteries)
- (wrapped true)
- (modules ssz content_addressing merkle ssz_compat smt tel_serialization))
+  digestif)) 

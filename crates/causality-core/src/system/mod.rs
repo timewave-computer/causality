@@ -1,37 +1,30 @@
-//! System-level utilities and core types
+//! System-level utilities and infrastructure
 //!
-//! This module contains fundamental types and utilities used throughout the
-//! Causality framework, including:
-//! - Content addressing and entity identification
-//! - Common error types
-//! - Serialization utilities
+//! This module provides cross-cutting concerns like errors, serialization,
+//! content addressing, causality tracking, domain management, and nullifier-based
+//! resource consumption tracking.
 
-/// Content addressing system
-pub mod content_addressing;
-
-/// Common error types (simple enum-based)
-pub mod errors;
-
-/// Unified error handling (thiserror-based)
 pub mod error;
-
-/// Serialization utilities
+pub mod errors;
 pub mod serialization;
+pub mod content_addressing;
+pub mod causality;
+pub mod domain;
+pub mod utils;
 
-// Re-export commonly used types
+// Re-export common types
+pub use error::{Error, Result, ErrorKind, ResultExt};
 pub use content_addressing::{
-    EntityId, ResourceId, ValueExprId, ExprId, RowTypeId, HandlerId,
-    TransactionId, IntentId, DomainId, NullifierId, Timestamp, Str,
-    ContentAddressable,
+    EntityId, ResourceId, ExprId, RowTypeId, HandlerId, TransactionId, IntentId, DomainId, NullifierId,
+    Timestamp, Str, ContentAddressable
 };
-
-// Re-export both error systems
-pub use errors::{CausalityError, Result as CausalityResult};
-pub use error::{Error, Result, ErrorKind, TypeError, MachineError, ReductionError, LinearityError, ResultExt};
-
 pub use serialization::{
-    ToBytes, FromBytes, hash_encode, encode_tuple, encode_list,
-    check_serialized_size, MAX_SERIALIZED_SIZE,
-    encode_fixed_bytes, decode_fixed_bytes, encode_enum_variant, decode_enum_variant,
-    DecodeWithRemainder, encode_with_length, decode_with_length,
-}; 
+    encode_fixed_bytes, decode_fixed_bytes, DecodeWithRemainder,
+    encode_with_length, decode_with_length, encode_enum_variant, decode_enum_variant
+};
+pub use causality::CausalProof;
+pub use domain::Domain;
+pub use utils::{get_current_time_ms, SszDuration};
+
+pub use content_addressing::*;
+ 

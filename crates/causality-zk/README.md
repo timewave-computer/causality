@@ -1,248 +1,261 @@
 # Causality ZK
 
-Zero-knowledge proof generation and verification for the Causality Resource Model framework. This crate provides ZK circuit implementations, proof generation utilities, and integration with ZK coprocessors for verifiable Resource operations.
+Zero-knowledge proof framework for the Causality system that compiles register machine instructions into arithmetic circuits and provides comprehensive proving infrastructure with multiple backend support for distributed, verifiable computation.
 
-## Overview
+## Purpose
 
-The `causality-zk` crate enables zero-knowledge proof capabilities for the Causality system, providing:
+The `causality-zk` crate serves as the **zero-knowledge bridge** for the Causality system, transforming Layer 0 register machine instructions into arithmetic circuits suitable for zero-knowledge proof generation. It provides a complete ZK development framework with backend abstraction, enabling verifiable computation across different proving systems while maintaining the deterministic properties of the three-layer architecture.
 
-- **Resource Validation Circuits**: ZK circuits for verifying Resource state transitions
-- **ProcessDataflowBlock Verification**: Proof generation for complex dataflow operations
-- **Capability System Proofs**: ZK proofs for authorization and permission verification
-- **ZK Coprocessor Integration**: Communication with external ZK proof services
-- **Circuit Management**: Tools for managing and deploying ZK circuits
+### Key Responsibilities
 
-All ZK implementations maintain compatibility with the Resource Model's content-addressed, SSZ-serialized architecture.
+- **Circuit Compilation**: Transform register machine instructions into arithmetic circuit representations
+- **Multi-Backend Support**: Provide unified interface for different proving systems (Mock, SP1, Valence)
+- **Proof Generation**: Generate zero-knowledge proofs for program execution
+- **Proof Verification**: Verify proofs with public input validation
+- **Witness Management**: Handle private witness data with schema validation
+- **Content Addressing**: Manage circuits and proofs with deterministic identifiers
+
+## Architecture Overview
+
+The ZK framework is designed around several key architectural principles:
+
+### Backend Abstraction
+A unified interface that supports multiple proving backends:
+- **Mock Backend**: Development and testing with configurable behaviors
+- **SP1 Backend**: Local proving with SP1 infrastructure
+- **Valence Backend**: Production proving with Valence coprocessors
+
+### Circuit Compilation
+Systematic mapping from register machine instructions to arithmetic constraints:
+- **Instruction Mapping**: Each register machine instruction maps to specific circuit constraints
+- **Type Preservation**: Linear type constraints enforced at the circuit level
+- **Optimization**: Circuit optimization for proof efficiency
+
+### Witness Processing
+Comprehensive handling of private and public data:
+- **Schema Validation**: Type-safe witness generation and validation
+- **Privacy Preservation**: Proper separation of public and private inputs
+- **Deterministic Generation**: Content-addressed witness management
 
 ## Core Components
 
-### ZK Circuit System
+### ZK Circuit Compiler (`circuit.rs`)
 
-Core traits and structures for ZK circuit management:
+Transforms register machine instructions into arithmetic circuits:
 
 ```rust
-use causality_zk::circuit::{ZkCircuit, CircuitInput, CircuitOutput};
+use causality_zk::{ZkCircuit, CircuitCompiler, Instruction};
 
-pub trait ZkCircuit {
-    type Input: CircuitInput;
-    type Output: CircuitOutput;
-    
-    fn circuit_id(&self) -> CircuitId;
-    fn generate_proof(&self, input: Self::Input) -> Result<ZkProof, ZkError>;
-    fn verify_proof(&self, proof: &ZkProof, public_inputs: &[u8]) -> Result<bool, ZkError>;
+// Compile register machine program to ZK circuit
+let instructions = vec![
+    Instruction::Witness { out_reg: RegisterId(0) },
+    Instruction::Move { src: RegisterId(0), dst: RegisterId(1) },
+    Instruction::Alloc { type_reg: RegisterId(2), val_reg: RegisterId(3), out_reg: RegisterId(4) },
+];
+
+let compiler = CircuitCompiler::new();
+let circuit = compiler.compile_program(instructions)?;
+```
+
+**Instruction Set Mapping:**
+- **Data Movement**: `Move` → equality constraints
+- **Resource Operations**: `Alloc`, `Consume` → type and linearity validation circuits
+- **Control Flow**: `Apply`, `Select`, `Match`, `Return` → conditional constraints
+- **External Interface**: `Witness` for public/private input separation
+
+### Backend Abstraction Layer (`backends/`)
+
+Unified interface for multiple proving systems:
+
+```rust
+use causality_zk::{ZkBackend, ProofGenerator, BackendType};
+
+// Create backend (Mock, SP1, or Valence)
+let backend = causality_zk::create_backend(BackendType::Valence);
+
+// Generate proof using unified interface
+let proof_generator = ProofGenerator::new(backend);
+let proof = proof_generator.generate_proof(&circuit, &witness)?;
+
+// Verify proof
+let verified = proof_generator.verify_proof(&proof, &public_inputs)?;
+```
+
+**Backend Implementations:**
+- **Mock Backend**: Configurable testing backend with success rate control
+- **SP1 Backend**: Integration with SP1 proving infrastructure
+- **Valence Backend**: Production-ready Valence coprocessor integration
+
+### Witness Management System (`witness.rs`)
+
+Schema-based witness validation and generation:
+
+```rust
+use causality_zk::{WitnessSchema, WitnessRule, ZkWitness};
+
+// Define witness schema with validation rules
+let schema = WitnessSchema::new()
+    .with_rule("balance", WitnessRule::Range { min: 0, max: 1000000 })
+    .with_rule("owner", WitnessRule::Boolean)
+    .with_rule("amount", WitnessRule::NonZero);
+
+// Create and validate witness
+let witness = ZkWitness::new("circuit_id".to_string(), vec![500], vec![1, 2, 3]);
+schema.validate(&witness)?;
+```
+
+**Witness Features:**
+- **Schema Definition**: Type-safe witness structure definition
+- **Validation Rules**: Comprehensive validation rule system
+- **Public/Private Separation**: Clear separation of public and private data
+- **Content Addressing**: Deterministic witness identification
+
+### Proof Management (`proof.rs`)
+
+Content-addressed proof storage and verification:
+
+```rust
+use causality_zk::{ProofManager, ProofId, ProofMetadata};
+
+let proof_manager = ProofManager::new();
+
+// Store proof with metadata
+let proof_id = proof_manager.store_proof(proof, metadata)?;
+
+// Retrieve and verify stored proof
+let stored_proof = proof_manager.get_proof(&proof_id)?;
+let verification_result = proof_manager.verify_stored_proof(&proof_id)?;
+```
+
+## Circuit Instruction Mapping
+
+Complete mapping from register machine instructions to arithmetic circuits:
+
+### Data Movement Instructions
+```rust
+// Move instruction: dst = src
+match instruction {
+    Instruction::Move { src, dst } => {
+        circuit.add_constraint(register[dst] - register[src]); // dst == src
+    }
 }
 ```
 
-### Resource Validation Circuits
-
-ZK circuits for Resource state validation:
-
+### Resource Operations
 ```rust
-use causality_zk::circuits::ResourceValidationCircuit;
+// Resource allocation with type validation
+match instruction {
+    Instruction::Alloc { type_reg, val_reg, out_reg } => {
+        circuit.add_type_validation_constraint(type_reg, val_reg);
+        circuit.add_resource_creation_constraint(out_reg);
+    }
+    Instruction::Consume { resource_reg } => {
+        circuit.add_nullifier_generation_constraint(resource_reg);
+        circuit.add_linearity_constraint(resource_reg);
+    }
+}
+```
 
-let circuit = ResourceValidationCircuit::new(resource_type);
-let input = ResourceValidationInput {
-    resource_state: resource.value.clone(),
-    validation_expr: resource.static_expr.clone(),
-    domain_constraints: domain.constraints.clone(),
+### Control Flow Instructions
+```rust
+// Conditional execution and function calls
+match instruction {
+    Instruction::Select { cond, a, b, out } => {
+        circuit.add_constraint(out - (cond * a + (1 - cond) * b));
+    }
+    Instruction::Apply { fn_reg, arg_reg, out_reg } => {
+        circuit.add_function_call_constraint(fn_reg, arg_reg, out_reg);
+    }
+}
+```
+
+## Backend Configuration
+
+### Mock Backend Configuration
+```rust
+use causality_zk::backends::{MockBackend, MockConfig};
+
+let config = MockConfig {
+    success_rate: 1.0,  // Always succeed for testing
+    proof_delay: Duration::from_millis(100),
+    verification_delay: Duration::from_millis(50),
 };
-
-let proof = circuit.generate_proof(input)?;
-let verified = circuit.verify_proof(&proof, &public_inputs)?;
+let backend = MockBackend::with_config(config);
 ```
 
-### ProcessDataflowBlock Verification
-
-ZK proofs for dataflow execution verification:
-
+### SP1 Backend Configuration
 ```rust
-use causality_zk::circuits::DataflowVerificationCircuit;
+use causality_zk::backends::{Sp1Backend, Sp1Config};
 
-let circuit = DataflowVerificationCircuit::new();
-let input = DataflowVerificationInput {
-    block_definition: dataflow_block,
-    execution_trace: trace,
-    input_resources: inputs,
-    output_resources: outputs,
+let config = Sp1Config {
+    use_remote_prover: false,
+    timeout_secs: 300,
+    recursion_enabled: true,
 };
-
-let proof = circuit.generate_proof(input)?;
+let backend = Sp1Backend::with_config(config);
 ```
 
-### ZK Coprocessor Integration
-
-Integration with external ZK proof services:
-
+### Valence Backend Configuration
 ```rust
-use causality_zk::coprocessor::{ZkCoprocessorClient, ProofRequest};
+use causality_zk::backends::{ValenceBackend, ValenceConfig};
 
-let client = ZkCoprocessorClient::new("https://coprocessor.valence.xyz").await?;
-let request = ProofRequest {
-    circuit_id: "resource-validation".to_string(),
-    witness_data: witness_bytes,
-    public_inputs: public_inputs_bytes,
+let config = ValenceConfig {
+    endpoint: "http://prover.timewave.computer:37281".to_string(),
+    timeout: Duration::from_secs(600),
+    auto_deploy: true,
 };
-
-let proof_id = client.submit_proof_request(request).await?;
-let proof = client.get_proof(&proof_id).await?;
+let backend = ValenceBackend::with_config(config);
 ```
 
-### Capability System Proofs
+## Design Philosophy
 
-ZK proofs for capability-based authorization:
+### Verifiability by Design
+Every component is designed to maintain verifiability:
+- **Deterministic Compilation**: Same program always produces same circuit
+- **Cryptographic Integrity**: All artifacts are cryptographically verified
+- **Transparent Proof Generation**: Clear audit trail for all proof operations
+
+### Backend Agnostic
+The framework abstracts over different proving systems:
+- **Unified Interface**: Consistent API across all backends
+- **Backend Selection**: Runtime backend selection based on requirements
+- **Migration Support**: Easy migration between different proving systems
+
+### Performance Optimization
+Optimized for both proving time and verification efficiency:
+- **Circuit Optimization**: Multiple optimization passes for efficient circuits
+- **Parallel Processing**: Leverage multiple cores for proof generation
+- **Caching**: Intelligent caching of compilation and verification results
+
+## Testing Framework
+
+Comprehensive testing across all ZK components:
 
 ```rust
-use causality_zk::circuits::CapabilityProofCircuit;
+// Property-based testing for circuit correctness
+#[test]
+fn test_circuit_preserves_semantics() {
+    proptest!(|(program in any_valid_program())| {
+        let direct_result = execute_program_directly(&program);
+        let circuit = compile_to_circuit(&program);
+        let proof = generate_proof(&circuit, &witness);
+        let verified_result = verify_and_extract_result(&proof);
+        assert_eq!(direct_result, verified_result);
+    });
+}
 
-let circuit = CapabilityProofCircuit::new();
-let input = CapabilityProofInput {
-    user_capabilities: user_caps,
-    required_capabilities: required_caps,
-    resource_constraints: constraints,
-    operation_context: context,
-};
-
-let proof = circuit.generate_proof(input)?;
+// Backend compatibility testing
+#[test]
+fn test_backend_compatibility() {
+    let circuit = create_test_circuit();
+    let witness = create_test_witness();
+    
+    for backend_type in [BackendType::Mock, BackendType::SP1, BackendType::Valence] {
+        let backend = create_backend(backend_type);
+        let proof = backend.generate_proof(&circuit, &witness)?;
+        assert!(backend.verify_proof(&proof, &public_inputs)?);
+    }
+}
 ```
 
-## Circuit Implementations
-
-### Resource State Transition Circuit
-
-```rust
-use causality_zk::circuits::StateTransitionCircuit;
-
-let circuit = StateTransitionCircuit::new();
-let input = StateTransitionInput {
-    old_state: previous_resource_state,
-    new_state: updated_resource_state,
-    transition_logic: effect_expr,
-    nullifier: resource_nullifier,
-};
-
-let proof = circuit.generate_proof(input)?;
-```
-
-### Merkle Tree Inclusion Circuit
-
-```rust
-use causality_zk::circuits::MerkleInclusionCircuit;
-
-let circuit = MerkleInclusionCircuit::new(tree_depth);
-let input = MerkleInclusionInput {
-    leaf: resource_commitment,
-    path: merkle_path,
-    root: tree_root,
-};
-
-let proof = circuit.generate_proof(input)?;
-```
-
-### Cross-Domain Operation Circuit
-
-```rust
-use causality_zk::circuits::CrossDomainCircuit;
-
-let circuit = CrossDomainCircuit::new();
-let input = CrossDomainInput {
-    source_domain: source_domain_id,
-    target_domain: target_domain_id,
-    operation: cross_domain_op,
-    authorization_proof: auth_proof,
-};
-
-let proof = circuit.generate_proof(input)?;
-```
-
-## Proof Management
-
-### Proof Storage and Retrieval
-
-```rust
-use causality_zk::storage::{ProofStorage, ProofMetadata};
-
-let storage = ProofStorage::new(storage_config);
-
-// Store proof with metadata
-let metadata = ProofMetadata {
-    circuit_id: "resource-validation".to_string(),
-    proof_type: ProofType::ResourceValidation,
-    created_at: SystemTime::now(),
-    public_inputs_hash: hash_public_inputs(&public_inputs),
-};
-
-storage.store_proof(&proof_id, &proof, metadata).await?;
-
-// Retrieve proof
-let (proof, metadata) = storage.get_proof(&proof_id).await?;
-```
-
-### Batch Proof Generation
-
-```rust
-use causality_zk::batch::{BatchProofGenerator, BatchRequest};
-
-let batch_generator = BatchProofGenerator::new(coprocessor_client);
-let requests = vec![
-    BatchRequest::new("circuit-1", input1),
-    BatchRequest::new("circuit-2", input2),
-    BatchRequest::new("circuit-3", input3),
-];
-
-let batch_id = batch_generator.submit_batch(requests).await?;
-let proofs = batch_generator.get_batch_results(&batch_id).await?;
-```
-
-## Configuration
-
-ZK system configuration:
-
-```toml
-[zk]
-coprocessor_endpoint = "https://coprocessor.valence.xyz"
-circuit_cache_dir = ".causality/circuits"
-proof_storage_dir = ".causality/proofs"
-batch_size = 10
-timeout_seconds = 300
-
-[zk.circuits]
-resource_validation = "circuits/resource_validation.r1cs"
-dataflow_verification = "circuits/dataflow_verification.r1cs"
-capability_proof = "circuits/capability_proof.r1cs"
-
-[zk.proving_keys]
-resource_validation = "keys/resource_validation.pk"
-dataflow_verification = "keys/dataflow_verification.pk"
-
-[zk.verification_keys]
-resource_validation = "keys/resource_validation.vk"
-dataflow_verification = "keys/dataflow_verification.vk"
-```
-
-## Feature Flags
-
-- **default**: Standard ZK features
-- **coprocessor**: ZK coprocessor integration
-- **batch-proving**: Batch proof generation
-- **circuit-cache**: Circuit caching and optimization
-- **async**: Asynchronous proof generation
-
-## Module Structure
-
-```
-src/
-├── lib.rs                    # Main library interface
-├── circuit.rs                # Core circuit traits and types
-├── circuits/                 # Circuit implementations
-│   ├── resource_validation.rs
-│   ├── dataflow_verification.rs
-│   ├── capability_proof.rs
-│   ├── state_transition.rs
-│   └── merkle_inclusion.rs
-├── coprocessor.rs            # ZK coprocessor integration
-├── storage.rs                # Proof storage and retrieval
-├── batch.rs                  # Batch proof generation
-└── utils.rs                  # ZK utilities and helpers
-```
-
-This crate enables the Causality system to generate and verify zero-knowledge proofs for Resource operations, ensuring privacy and verifiability while maintaining the deterministic properties of the Resource Model.
+This comprehensive ZK framework enables the Causality system to generate zero-knowledge proofs for all register machine programs while maintaining the mathematical properties and deterministic execution characteristics essential for distributed verifiable computation.

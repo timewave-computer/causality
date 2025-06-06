@@ -3,7 +3,7 @@
 use causality_core::machine::{
     ReductionEngine, Instruction, RegisterId, ConstraintExpr, MachineValue,
     reduction::WitnessProvider,
-    instruction::{Effect, Label},
+    instruction::Effect,
 };
 use causality_core::lambda::Symbol;
 
@@ -17,15 +17,15 @@ fn test_match_instruction() {
             sum_reg: RegisterId::new(1),
             left_reg: RegisterId::new(2),
             right_reg: RegisterId::new(3),
-            left_label: Label::new("left"),
-            right_label: Label::new("right"),
+            left_label: "left".to_string(),
+            right_label: "right".to_string(),
         },
         // Define labels for the branches
-        Instruction::LabelMarker(Label::new("left")),
+        Instruction::LabelMarker("left".to_string()),
         // Intentionally no instruction here for the left branch for this test,
         // execution will fall through or halt if it's the end of the program.
         // We could add a Nop or another instruction if needed.
-        Instruction::LabelMarker(Label::new("right"))
+        Instruction::LabelMarker("right".to_string())
         // Similarly, no specific instruction for the right branch target.
     ], 10);
     
@@ -112,8 +112,7 @@ fn test_perform_effect() {
         // Perform effect
         Instruction::Perform {
             effect: Effect {
-                tag: Symbol::new("transfer"),
-                params: vec![RegisterId::new(1)],
+                tag: "transfer".to_string(),
                 pre: ConstraintExpr::True,
                 post: ConstraintExpr::True,
                 hints: vec![],

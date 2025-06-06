@@ -1,0 +1,19 @@
+[package]
+name = "causality-lisp"
+version = "0.1.0"
+edition = "2021"
+authors = ["Causality Team"]
+description = "Causality Lisp Language Implementation with Linear Type System Integration"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/timewave/reverse-causality"
+
+[dependencies]
+causality-core = { version = "0.1.0", path = "../causality-core" }
+anyhow = "1.0"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rand = "0.8"
+
+[dev-dependencies]
+criterion = "0.5" 

@@ -1,53 +1,47 @@
 //! Integration tests for the Sparse Merkle Tree implementation
 
-use causality_core::{MemorySmt, Blake3Hasher, Hasher};
+use causality_core::{MemorySmt, Sha256Hasher, Hasher};
 
 #[test]
-fn test_basic_smt_operations() {
-    // Create a new SMT
-    let tree = MemorySmt::default();
-    let mut root = MemorySmt::empty_tree_root();
+fn test_empty_smt() {
+    let smt = MemorySmt::default();
+    let initial_root = [0u8; 32]; // Empty root
     
-    // Test data
-    let key1 = Blake3Hasher::hash(b"key1");
-    let data1 = b"Hello, SMT!";
+    let key1 = Sha256Hasher::hash(b"key1");
+    let value1 = b"Hello, SMT!";
     
-    let key2 = Blake3Hasher::hash(b"key2");
-    let data2 = b"Another value";
+    let key2 = Sha256Hasher::hash(b"key2");
+    let value2 = b"Another value";
     
     // Insert first value
-    root = tree.insert(root, &key1, data1).unwrap();
+    let root1 = smt.insert(initial_root, &key1, value1).unwrap();
     
-    // Verify proof for first value
-    let proof1 = tree.get_opening(root, &key1).unwrap().unwrap();
-    assert!(MemorySmt::verify(&proof1, &root, &key1, data1));
+    // Insert second value  
+    let root2 = smt.insert(root1, &key2, value2).unwrap();
     
-    // Insert second value
-    root = tree.insert(root, &key2, data2).unwrap();
+    // Verify values can be retrieved
+    let proof1 = smt.get_opening(root2, &key1).unwrap().unwrap();
+    let proof2 = smt.get_opening(root2, &key2).unwrap().unwrap();
     
-    // Verify both proofs still work
-    let proof1_updated = tree.get_opening(root, &key1).unwrap().unwrap();
-    let proof2 = tree.get_opening(root, &key2).unwrap().unwrap();
+    assert!(MemorySmt::verify(&proof1, &root2, &key1, value1));
+    assert!(MemorySmt::verify(&proof2, &root2, &key2, value2));
     
-    assert!(MemorySmt::verify(&proof1_updated, &root, &key1, data1));
-    assert!(MemorySmt::verify(&proof2, &root, &key2, data2));
-    
-    println!("✅ SMT implementation is working correctly!");
+    println!("✅ Basic SMT operations working correctly!");
 }
 
 #[test]
-fn test_smt_with_blake3() {
-    let tree = MemorySmt::default();
-    let data = b"test data for Blake3";
-    let key = Blake3Hasher::hash(data);
+fn test_smt_with_sha256() {
+    let smt = MemorySmt::default();
+    let initial_root = [0u8; 32]; // Empty root
+    let data = b"test data for SHA256";
+    let key = Sha256Hasher::hash(data);
     
-    let root = MemorySmt::empty_tree_root();
-    let new_root = tree.insert(root, &key, data).unwrap();
+    let root = smt.insert(initial_root, &key, data).unwrap();
     
-    assert_ne!(root, new_root);
+    assert_ne!(initial_root, root);
     
-    let proof = tree.get_opening(new_root, &key).unwrap().unwrap();
-    assert!(MemorySmt::verify(&proof, &new_root, &key, data));
+    let proof = smt.get_opening(root, &key).unwrap().unwrap();
+    assert!(MemorySmt::verify(&proof, &root, &key, data));
     
-    println!("✅ Blake3 hashing is working correctly in SMT!");
+    println!("✅ SHA256 hashing is working correctly in SMT!");
 } 

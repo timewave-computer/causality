@@ -1,0 +1,19 @@
+(executable
+ (public_name test_content_addressing)
+ (name test_content_addressing)
+ (libraries causality_system unix))
+
+(executable
+ (public_name test_comprehensive)
+ (name test_comprehensive)
+ (libraries causality_system causality_machine causality_lambda unix))
+
+(executable
+ (public_name test_machine)
+ (name test_machine)
+ (libraries causality_system causality_machine unix))
+
+(executable
+ (public_name test_effects)
+ (name test_effects)
+ (libraries ocaml_causality_effects unix)) 

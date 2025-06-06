@@ -111,7 +111,7 @@ effects/
 serialization/
 ├── sexpr.ml           # S-expression serialization
 ├── sexpr.mli          # S-expression public interface
-├── ssz.ml             # SSZ serialization implementation (imports ml_ssz)
+├── ssz.ml             # SSZ serialization implementation (imports ocaml_ssz)
 ├── content.ml         # Content addressing and hashing
 ├── merkle.ml          # Sparse Merkle Tree implementation
 └── dune
@@ -119,7 +119,7 @@ serialization/
 
 **Responsibilities:**
 - S-expression serialization (currently in `types/sexpr.ml`)
-- SSZ serialization (currently scattered across `ssz_bridge/`) - imports separate `ml_ssz` module
+- SSZ serialization (currently scattered across `ssz_bridge/`) - imports separate `ocaml_ssz` module
 - Content addressing and hashing (currently in `content_addressing/`)
 - SMT implementation (currently in `smt/`)
 - **Size estimate**: ~150-250 lines per file
@@ -183,7 +183,7 @@ test/
 
 ### Phase 5: Consolidate Serialization
 1. Move all serialization to `serialization/`
-2. Consolidate SSZ logic from `ssz_bridge/` (importing separate `ml_ssz` module)
+2. Consolidate SSZ logic from `ssz_bridge/` (importing separate `ocaml_ssz` module)
 3. Move SMT implementation from `smt/`
 
 ### Phase 6: Organize External Integrations

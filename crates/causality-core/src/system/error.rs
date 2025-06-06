@@ -4,7 +4,8 @@
 //! error types and `anyhow` for error context and chaining.
 
 use thiserror::Error;
-use crate::machine::{RegisterId, resource::ResourceId};
+use crate::machine::RegisterId;
+use crate::system::content_addressing::ResourceId;
 use crate::lambda::TypeInner;
 
 /// Type alias for Results using our Error type
@@ -91,8 +92,8 @@ impl Error {
 pub enum TypeError {
     #[error("type mismatch: expected {expected:?}, found {found:?}")]
     Mismatch {
-        expected: TypeInner,
-        found: TypeInner,
+        expected: Box<TypeInner>,
+        found: Box<TypeInner>,
     },
     
     #[error("unknown type: {0:?}")]
@@ -103,6 +104,13 @@ pub enum TypeError {
     
     #[error("type inference failed: {0}")]
     InferenceFailed(String),
+    
+    /// Type mismatch error  
+    #[error("type mismatch: expected {expected:?}, found {found:?}")]
+    TypeMismatch {
+        expected: Box<TypeInner>,
+        found: Box<TypeInner>,
+    },
 }
 
 //-----------------------------------------------------------------------------
@@ -129,6 +137,12 @@ pub enum MachineError {
         expected: TypeInner,
         found: TypeInner,
     },
+    
+    #[error("call stack overflow: maximum depth exceeded")]
+    CallStackOverflow,
+    
+    #[error("call stack underflow: no return address available")]
+    CallStackUnderflow,
     
     #[error("feature not implemented")]
     NotImplemented,

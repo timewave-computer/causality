@@ -1,3 +1,0 @@
-(lang dune 3.0)
-(name ml_ssz_project) 
-(version 0.1.0)

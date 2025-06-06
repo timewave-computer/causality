@@ -1,9 +1,9 @@
-//! Register machine instructions
+//! Register machine instruction set for Layer 0 execution
 //!
 //! This module defines the core instruction set for the register machine,
 //! implementing the operational semantics of the language.
 //! 
-//! The machine operates with 9 core instructions:
+//! The machine operates with 11 core instructions:
 //! - move r₁ r₂: Move value between registers
 //! - apply r_fn r_arg r_out: Function application
 //! - match r_sum r_left r_right label_l label_r: Pattern matching on sums
@@ -14,14 +14,15 @@
 //! - select r_cond r_true r_false r_out: Conditional value selection
 //! - witness r_out: Read from untrusted witness
 
-use crate::lambda::{TypeInner, Symbol};
+use crate::lambda::Symbol;
+use serde::{Serialize, Deserialize};
 
 //-----------------------------------------------------------------------------
 // Register Identifiers
 //-----------------------------------------------------------------------------
 
-/// A register identifier for the machine
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// Register identifier
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct RegisterId(pub u32);
 
 impl RegisterId {
@@ -52,84 +53,53 @@ impl Label {
 }
 
 //-----------------------------------------------------------------------------
-// Core Instruction Set (9 Instructions)
+// Core Instruction Set (11 Instructions)
 //-----------------------------------------------------------------------------
 
-/// Core instruction set for the register machine
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Register machine instruction set
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Instruction {
-    /// Move value from one register to another (consuming source)
-    /// move r₁ r₂
-    Move {
-        src: RegisterId,
-        dst: RegisterId,
-    },
+    /// Move value between registers: dst := src
+    Move { src: RegisterId, dst: RegisterId },
     
-    /// Apply a function to an argument, storing result in destination
-    /// apply r_fn r_arg r_out
-    Apply {
-        fn_reg: RegisterId,
-        arg_reg: RegisterId,
-        out_reg: RegisterId,
-    },
+    /// Function application: out := fn(arg)
+    Apply { fn_reg: RegisterId, arg_reg: RegisterId, out_reg: RegisterId },
     
-    /// Pattern match on a sum type value
-    /// match r_sum r_left r_right label_l label_r
-    Match {
-        sum_reg: RegisterId,
-        left_reg: RegisterId,
+    /// Pattern matching: match sum with left => l | right => r
+    Match { 
+        sum_reg: RegisterId, 
+        left_reg: RegisterId, 
         right_reg: RegisterId,
-        left_label: Label,
-        right_label: Label,
+        left_label: String,
+        right_label: String,
     },
     
-    /// Allocate a new resource on the heap
-    /// alloc r_type r_val r_out
-    Alloc {
-        type_reg: RegisterId,
-        val_reg: RegisterId,
-        out_reg: RegisterId,
-    },
+    /// Allocate resource: out := alloc(type, value)
+    Alloc { type_reg: RegisterId, val_reg: RegisterId, out_reg: RegisterId },
     
-    /// Consume a resource (marking it as used in heap)
-    /// consume r_resource r_out
-    Consume {
-        resource_reg: RegisterId,
-        out_reg: RegisterId,
-    },
+    /// Consume resource: out := consume(resource)
+    Consume { resource_reg: RegisterId, out_reg: RegisterId },
     
-    /// Check a constraint/precondition
-    /// check constraint
-    Check {
-        constraint: ConstraintExpr,
-    },
+    /// Check constraint: assert(constraint)
+    Check { constraint: ConstraintExpr },
     
-    /// Perform an effect
-    /// perform effect r_out
-    Perform {
-        effect: Effect,
-        out_reg: RegisterId,
-    },
+    /// Perform effect: out := perform(effect)
+    Perform { effect: Effect, out_reg: RegisterId },
     
-    /// Conditional value selection
-    /// select r_cond r_true r_false r_out
-    Select {
-        cond_reg: RegisterId,
-        true_reg: RegisterId,
-        false_reg: RegisterId,
-        out_reg: RegisterId,
-    },
+    /// Conditional selection: out := cond ? true_val : false_val
+    Select { cond_reg: RegisterId, true_reg: RegisterId, false_reg: RegisterId, out_reg: RegisterId },
     
-    /// Read from untrusted witness
-    /// witness r_out
-    Witness {
-        out_reg: RegisterId,
-    },
+    /// Witness value: out := witness()
+    Witness { out_reg: RegisterId },
     
-    /// Defines a label at the current position in the program sequence.
-    /// This instruction does nothing during execution but is used by the
-    /// ReductionEngine to build its label map for jumps.
-    LabelMarker(Label),
+    /// Label marker for control flow
+    LabelMarker(String),
+    
+    /// Return from function call
+    Return { 
+        /// Register containing the result value (if Some)
+        result_reg: Option<RegisterId> 
+    },
 }
 
 //-----------------------------------------------------------------------------
@@ -137,7 +107,7 @@ pub enum Instruction {
 //-----------------------------------------------------------------------------
 
 /// Constraint expressions for runtime checks
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConstraintExpr {
     /// Always true
     True,
@@ -163,21 +133,21 @@ pub enum ConstraintExpr {
     LessEqual(RegisterId, RegisterId),
     GreaterEqual(RegisterId, RegisterId),
     
-    /// Type check
-    HasType(RegisterId, TypeInner),
+    /// Type check (simplified with string type name)
+    HasType(RegisterId, String),
     
     /// Linear resource consumption check
     IsConsumed(RegisterId),
     
-    /// Capability check
-    HasCapability(RegisterId, Symbol),
+    /// Capability check (simplified with string capability name)
+    HasCapability(RegisterId, String),
     
     /// Ownership check
     IsOwner(RegisterId, RegisterId), // resource, owner
     
-    /// Custom predicate
+    /// Custom predicate (simplified with string name)
     Predicate {
-        name: Symbol,
+        name: String,
         args: Vec<RegisterId>,
     },
 }
@@ -187,13 +157,10 @@ pub enum ConstraintExpr {
 //-----------------------------------------------------------------------------
 
 /// Effect to be performed
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Effect {
-    /// Name/tag of the effect
-    pub tag: Symbol,
-    
-    /// Parameters for the effect
-    pub params: Vec<RegisterId>,
+    /// Name/tag of the effect (simplified as string)
+    pub tag: String,
     
     /// Pre-condition constraint
     pub pre: ConstraintExpr,
@@ -206,51 +173,40 @@ pub struct Effect {
 }
 
 /// Optimization hints for effects
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Hint {
-    /// Batch with effects matching selector
+    /// Prefer parallel execution
+    Parallel,
+    
+    /// Prefer sequential execution
+    Sequential,
+    
+    /// Target execution domain (simplified as string)
+    Domain(String),
+    
+    /// Optimization priority
+    Priority(u32),
+    
+    /// Resource usage estimate
+    ResourceUsage(u32),
+    
+    /// Apply all hints in the list (from MachineHint)
+    HintAll(Vec<MachineHint>),
+    
+    /// Batch operations with given selector (from MachineHint)
     BatchWith(Selector),
     
-    /// Minimize metric
+    /// Minimize the given metric (from MachineHint)
     Minimize(Metric),
     
-    /// Maximize metric
-    Maximize(Metric),
-    
-    /// Prefer specific domain
+    /// Prefer execution in specific domain (from MachineHint)
     PreferDomain(String),
     
-    /// Require specific domain
-    RequireDomain(String),
+    /// Deadline for completion (milliseconds)
+    Deadline(u64),
     
-    /// Deadline for completion
-    Deadline(u64), // timestamp
-    
-    /// Conjunction of hints
-    HintAll(Vec<Hint>),
-    
-    /// Disjunction of hints
-    HintAny(Vec<Hint>),
-}
-
-/// Selector for batching effects
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Selector {
-    /// Effects with same type tag
-    SameType,
-    
-    /// Effects with same target
-    SameTarget,
-    
-    /// Custom selection predicate
-    Custom(String),
-}
-
-/// Metric to optimize
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Metric {
-    Price,
-    Latency,
+    /// Machine-level hint integration
+    Custom(MachineHint),
 }
 
 //-----------------------------------------------------------------------------
@@ -316,14 +272,14 @@ pub enum LiteralValue {
 /// Represents a call to an effect
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectCall {
-    /// Name/tag of the effect
-    pub tag: Symbol,
+    /// Name/tag of the effect (simplified as string)
+    pub tag: String,
     
     /// Arguments to the effect
     pub args: Vec<RegisterId>,
     
-    /// Expected return type
-    pub return_type: Option<TypeInner>,
+    /// Expected return type (simplified as string description)
+    pub return_type: Option<String>,
 }
 
 //-----------------------------------------------------------------------------
@@ -340,12 +296,15 @@ impl Instruction {
             Instruction::Alloc { type_reg, val_reg, .. } => vec![*type_reg, *val_reg],
             Instruction::Consume { resource_reg, .. } => vec![*resource_reg],
             Instruction::Check { constraint } => constraint.reads(),
-            Instruction::Perform { effect, .. } => effect.params.clone(),
+            Instruction::Perform { effect, .. } => effect.pre.reads(),
             Instruction::Select { cond_reg, true_reg, false_reg, .. } => {
                 vec![*cond_reg, *true_reg, *false_reg]
             }
             Instruction::Witness { .. } => vec![],
             Instruction::LabelMarker(_) => vec![],
+            Instruction::Return { result_reg } => {
+                result_reg.iter().cloned().collect()
+            }
         }
     }
     
@@ -362,6 +321,9 @@ impl Instruction {
             Instruction::Select { out_reg, .. } => vec![*out_reg],
             Instruction::Witness { out_reg } => vec![*out_reg],
             Instruction::LabelMarker(_) => vec![],
+            Instruction::Return { result_reg } => {
+                result_reg.iter().cloned().collect()
+            }
         }
     }
 }
@@ -389,4 +351,65 @@ impl ConstraintExpr {
             ConstraintExpr::Predicate { args, .. } => args.clone(),
         }
     }
+}
+
+//-----------------------------------------------------------------------------
+// Metrics and Selectors for Optimization
+//-----------------------------------------------------------------------------
+
+/// Metrics for optimization hints
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Metric {
+    /// Optimize for low latency
+    Latency,
+    
+    /// Optimize for low cost
+    Cost,
+    
+    /// Optimize for high throughput
+    Throughput,
+    
+    /// Optimize for low memory usage
+    Memory,
+    
+    /// Custom metric
+    Custom(String),
+}
+
+/// Selectors for batching strategies
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Selector {
+    /// Batch operations of the same type
+    SameType,
+    
+    /// Batch operations on same domain
+    SameDomain,
+    
+    /// Batch operations with similar cost
+    SimilarCost,
+    
+    /// Custom selector
+    Custom(String),
+}
+
+/// Machine-level optimization hints
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MachineHint {
+    /// Apply all hints in the list
+    HintAll(Vec<MachineHint>),
+    
+    /// Batch operations with given selector
+    BatchWith(Selector),
+    
+    /// Minimize the given metric
+    Minimize(Metric),
+    
+    /// Prefer execution in specific domain (simplified as string)
+    PreferDomain(String),
+    
+    /// Deadline for completion (milliseconds)
+    Deadline(u64),
+    
+    /// Custom hint
+    Custom(String),
 } 

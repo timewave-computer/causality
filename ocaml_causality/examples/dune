@@ -1,0 +1,5 @@
+; Temporarily disabled until FFI bindings are implemented
+; (executable
+;  (public_name causality_example)
+;  (name causality_example)
+;  (libraries ocaml_causality unix)) 

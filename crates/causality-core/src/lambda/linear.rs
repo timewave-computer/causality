@@ -142,7 +142,7 @@ impl<T: Clone> LinearResource<T, Unrestricted> {
 }
 
 impl<T: Clone> LinearResource<T, Relevant> {
-    /// Copy a relevant resource (must be used at least once)
+    /// Copy a relevant resource (marks as used)
     pub fn copy_resource(&self) -> Result<T, LinearityError> {
         self.used.set(true);
         self.value.as_ref()

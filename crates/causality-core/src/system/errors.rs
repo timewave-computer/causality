@@ -1,6 +1,8 @@
 //! Common error types for the Causality framework
 
 use std::fmt;
+use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
 //-----------------------------------------------------------------------------
 // Error Types
@@ -84,5 +86,135 @@ impl From<hex::FromHexError> for CausalityError {
 impl From<std::string::FromUtf8Error> for CausalityError {
     fn from(err: std::string::FromUtf8Error) -> Self {
         CausalityError::SerializationError(format!("UTF-8 decode error: {:?}", err))
+    }
+}
+
+//-----------------------------------------------------------------------------
+// Enhanced Error Handling
+//-----------------------------------------------------------------------------
+
+/// Logging levels
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+/// Logger trait
+pub trait AsLogger: Send + Sync {
+    fn log(&self, level: LogLevel, message: &str);
+}
+
+/// Mock logger for testing
+#[derive(Debug, Default)]
+pub struct MockLogger {
+    pub messages: std::sync::Mutex<Vec<(LogLevel, String)>>,
+}
+
+impl MockLogger {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
+    pub fn get_messages(&self) -> Vec<(LogLevel, String)> {
+        self.messages.lock().unwrap().clone()
+    }
+}
+
+impl AsLogger for MockLogger {
+    fn log(&self, level: LogLevel, message: &str) {
+        self.messages.lock().unwrap().push((level, message.to_string()));
+    }
+}
+
+/// Error categories for classification
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ErrorCategory {
+    /// Validation errors (bad inputs, constraints violated)
+    Validation,
+    
+    /// Resource errors (not found, insufficient, etc.)
+    Resource,
+    
+    /// Network/external boundary errors
+    Boundary,
+    
+    /// Internal system errors
+    Internal,
+    
+    /// Resource not found
+    ResourceNotFound,
+}
+
+/// Enhanced error metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorMetadata {
+    /// Error category
+    pub category: ErrorCategory,
+    
+    /// Additional context fields
+    pub context: HashMap<String, String>,
+    
+    /// Timestamp
+    pub timestamp: u64,
+}
+
+impl ErrorMetadata {
+    pub fn new(category: ErrorCategory) -> Self {
+        Self {
+            category,
+            context: HashMap::new(),
+            timestamp: crate::system::utils::get_current_time_ms(),
+        }
+    }
+    
+    pub fn with_context(mut self, key: &str, value: &str) -> Self {
+        self.context.insert(key.to_string(), value.to_string());
+        self
+    }
+}
+
+/// Enhanced contextual error
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextualError {
+    /// Error message
+    pub message: String,
+    
+    /// Error metadata
+    pub metadata: ErrorMetadata,
+}
+
+impl ContextualError {
+    pub fn new(message: impl Into<String>, metadata: ErrorMetadata) -> Self {
+        Self {
+            message: message.into(),
+            metadata,
+        }
+    }
+}
+
+impl fmt::Display for ContextualError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({:?})", self.message, self.metadata.category)
+    }
+}
+
+impl std::error::Error for ContextualError {}
+
+/// Trait for creating errors with context
+pub trait AsErrorContext: Send + Sync {
+    fn create_error(&self, message: String, metadata: ErrorMetadata) -> ContextualError;
+}
+
+/// Default error context implementation
+#[derive(Debug, Default)]
+pub struct DefaultErrorContext;
+
+impl AsErrorContext for DefaultErrorContext {
+    fn create_error(&self, message: String, metadata: ErrorMetadata) -> ContextualError {
+        ContextualError::new(message, metadata)
     }
 } 

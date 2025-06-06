@@ -6,12 +6,12 @@
 
 use super::{
     instruction::Instruction,
-    resource::{ResourceId, ResourceManager},
+    resource::ResourceManager,
     state::MachineState,
     value::MachineValue,
 };
-use crate::lambda::{TypeInner, BaseType};
-use crate::system::error::MachineError;
+use crate::lambda::{TypeInner, BaseType, Value};
+use crate::system::{content_addressing::ResourceId, error::MachineError};
 
 /// Compute budget resource that tracks remaining computational steps
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,6 +130,7 @@ impl Metering {
             Instruction::Select { .. } => self.instruction_costs.select_cost,
             Instruction::Witness { .. } => self.instruction_costs.witness_cost,
             Instruction::LabelMarker(_) => 0, // Label markers have no execution cost
+            Instruction::Return { .. } => 1, // Return instructions have minimal cost
         }
     }
     
@@ -143,16 +144,7 @@ impl Metering {
         
         if let Some(budget_id) = &self.budget_resource_id {
             // Check if we can peek at the resource
-            let remaining = match state.resources.peek_resource(*budget_id) {
-                Ok(resource) if !resource.consumed => {
-                    match &resource.value {
-                        MachineValue::Int(remaining) => *remaining as u64,
-                        _ => return Err(MachineError::Generic("Invalid compute budget type".to_string())),
-                    }
-                }
-                Ok(_) => return Err(MachineError::Generic("Compute budget already consumed".to_string())),
-                Err(_) => return Err(MachineError::Generic("Compute budget resource not found".to_string())),
-            };
+            let remaining = self.get_remaining_budget(state)?;
             
             if remaining >= cost {
                 // We need to consume and re-allocate since we can't modify in place
@@ -183,15 +175,23 @@ impl Metering {
     }
     
     /// Get remaining compute budget
-    pub fn get_remaining_budget(&self, state: &MachineState) -> Option<u64> {
-        self.budget_resource_id.as_ref().and_then(|budget_id| {
-            state.resources.peek_resource(*budget_id).ok().and_then(|resource| {
-                match &resource.value {
-                    MachineValue::Int(remaining) => Some(*remaining as u64),
-                    _ => None,
+    pub fn get_remaining_budget(&self, state: &MachineState) -> Result<u64, MachineError> {
+        if let Some(budget_id) = &self.budget_resource_id {
+            let peek_result = state.resources.peek_resource(*budget_id);
+            match peek_result {
+                Ok(resource) => {
+                    // Check if this resource represents gas/compute credits
+                    match &resource.data {
+                        Value::Int(remaining) => Ok(*remaining as u64),
+                        _ => Ok(0), // No gas remaining if not an integer
+                    }
                 }
-            })
-        })
+                Err(_) => Ok(0), // Resource doesn't exist or is already consumed
+            }
+        } else {
+            // No budget tracking initialized, return unlimited
+            Ok(u64::MAX)
+        }
     }
 }
 

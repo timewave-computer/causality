@@ -111,6 +111,9 @@ pub enum TermKind {
 /// Literal values in Layer 1
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Literal {
+    /// Unit literal
+    Unit,
+    
     /// Boolean literal
     Bool(bool),
     
@@ -217,6 +220,7 @@ impl Term {
 impl From<Literal> for MachineValue {
     fn from(lit: Literal) -> Self {
         match lit {
+            Literal::Unit => MachineValue::Unit,
             Literal::Bool(b) => MachineValue::Bool(b),
             Literal::Int(i) => MachineValue::Int(i),
             Literal::Symbol(s) => MachineValue::Symbol(s),

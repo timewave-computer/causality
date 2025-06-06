@@ -1,9 +1,7 @@
 (library
  (name ocaml_causality_interop)
- (libraries
-  ocaml_causality_core
-  ocaml_causality_lang
-  ocaml_causality_effects
-  ocaml_causality_serialization)
- (wrapped true)
- (modules ocaml_causality_interop rust_bridge external_apis type_conversion binary json rpc uuid_utils))
+ (public_name ocaml-causality.interop)
+ (foreign_stubs
+  (language c)
+  (names ffi_stub))
+ (c_library_flags (-L../../target/debug -lcausality_ffi))) 

@@ -13,7 +13,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Result, anyhow};
 use chrono::prelude::*;
 use serde_json::{self, json, Value};
-use causality_types::core::ErrorCategory;
 
 /// Shared error handler for command line operations
 #[derive(Clone)]
@@ -92,36 +91,6 @@ impl CliErrorHandler {
     // Helper method to create a standardized error
     pub fn create_error(&self, message: impl Into<String>, category: impl Into<String>) -> anyhow::Error {
         anyhow!("{}: {}", category.into(), message.into())
-    }
-    
-    // Helper method for working with ErrorCategory
-    #[allow(dead_code)]
-    pub fn error_from_category(&self, message: impl Into<String>, category: ErrorCategory) -> anyhow::Error {
-        let category_str = match category {
-            ErrorCategory::General => "General",
-            ErrorCategory::Serialization => "Serialization",
-            ErrorCategory::Expression => "Expression",
-            ErrorCategory::Type => "Type",
-            ErrorCategory::Resource => "Resource",
-            ErrorCategory::Storage => "Storage",
-            ErrorCategory::Registry => "Registry",
-            ErrorCategory::StateTransition => "StateTransition",
-            ErrorCategory::Network => "Network",
-            ErrorCategory::Authentication => "Authentication",
-            ErrorCategory::Authorization => "Authorization",
-            ErrorCategory::Validation => "Validation",
-            ErrorCategory::System => "System",
-            ErrorCategory::Time => "Time",
-            ErrorCategory::Messaging => "Messaging",
-            ErrorCategory::EffectHandling => "EffectHandling",
-            ErrorCategory::Coordination => "Coordination",
-            ErrorCategory::Runtime => "Runtime",
-            ErrorCategory::Boundary => "Boundary",
-            ErrorCategory::ResourceNotFound => "ResourceNotFound",
-            ErrorCategory::Unknown => "Unknown",
-        };
-        
-        self.create_error(message, category_str)
     }
 }
 

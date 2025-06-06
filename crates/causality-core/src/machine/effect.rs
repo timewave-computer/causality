@@ -35,7 +35,7 @@ impl Effect {
     }
     
     /// Get the effect tag
-    pub fn tag(&self) -> &crate::lambda::Symbol {
+    pub fn tag(&self) -> &String {
         &self.call.tag
     }
     

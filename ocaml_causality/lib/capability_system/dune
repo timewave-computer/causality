@@ -1,5 +1,0 @@
-(library
- (name ocaml_causality_capability_system)
- (libraries ocaml_causality_core ocaml_causality_serialization batteries)
- (wrapped true)
- (modules capability_system)) 

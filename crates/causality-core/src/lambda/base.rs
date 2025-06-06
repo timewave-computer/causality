@@ -4,9 +4,16 @@
 //! for the linear lambda calculus layer. All higher-level types are built 
 //! from these primitives.
 
-use crate::system::{EntityId, ContentAddressable, DecodeWithRemainder};
+use crate::{
+    system::{
+        content_addressing::{EntityId, ContentAddressable}, 
+        DecodeWithRemainder,
+    },
+    effect::row::{RecordType, RowType},
+};
 use ssz::{Decode, Encode, DecodeError};
 use std::marker::PhantomData;
+use serde::{Serialize, Deserialize};
 
 //-----------------------------------------------------------------------------
 // Type Definitions
@@ -28,8 +35,11 @@ pub struct Unrestricted;
 // Base Type Enum
 //-----------------------------------------------------------------------------
 
-/// Core primitive types in the type system, optimized for SP1 zkVM.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// Base types in the Causality type system
+/// 
+/// These are the primitive value types that can be stored directly 
+/// in registers and manipulated by the register machine.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BaseType {
     /// Unit type - carries no information
     Unit,
@@ -65,7 +75,7 @@ pub struct Type<L = Linear> {
 }
 
 /// The actual type structure without linearity information
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TypeInner {
     /// Base primitive type
     Base(BaseType),
@@ -80,7 +90,7 @@ pub enum TypeInner {
     LinearFunction(Box<TypeInner>, Box<TypeInner>),
     
     /// Record type with row polymorphism
-    Record(crate::lambda::row::RecordType),
+    Record(RecordType),
 }
 
 // Manual SSZ implementation for TypeInner
@@ -163,7 +173,7 @@ impl Decode for TypeInner {
                 Ok(TypeInner::LinearFunction(Box::new(left), Box::new(right)))
             }
             4 => {
-                let record = crate::lambda::row::RecordType::from_ssz_bytes(data)?;
+                let record = RecordType::from_ssz_bytes(data)?;
                 Ok(TypeInner::Record(record))
             }
             _ => Err(DecodeError::BytesInvalid(
@@ -207,7 +217,7 @@ impl DecodeWithRemainder for TypeInner {
                 Ok((result, remaining))
             }
             4 => {
-                let record = crate::lambda::row::RecordType::from_ssz_bytes(data)?;
+                let record = RecordType::from_ssz_bytes(data)?;
                 let record_len = record.ssz_bytes_len();
                 Ok((TypeInner::Record(record), &data[record_len..]))
             }
@@ -298,6 +308,9 @@ pub enum Value {
     /// Symbol value
     Symbol(crate::system::Str),
     
+    /// String value
+    String(crate::system::Str),
+    
     /// Product value (pair)
     Product(Box<Value>, Box<Value>),
     
@@ -325,6 +338,7 @@ impl Encode for Value {
             Value::Bool(_) => 1,
             Value::Int(_) => 4,
             Value::Symbol(s) => s.ssz_bytes_len(),
+            Value::String(s) => s.ssz_bytes_len(),
             Value::Product(left, right) => left.ssz_bytes_len() + right.ssz_bytes_len(),
             Value::Sum { tag: _, value } => 1 + value.ssz_bytes_len(),
             Value::Record { fields } => {
@@ -352,18 +366,22 @@ impl Encode for Value {
                 encode_enum_variant(3, buf);
                 s.ssz_append(buf);
             }
-            Value::Product(left, right) => {
+            Value::String(s) => {
                 encode_enum_variant(4, buf);
+                s.ssz_append(buf);
+            }
+            Value::Product(left, right) => {
+                encode_enum_variant(5, buf);
                 left.ssz_append(buf);
                 right.ssz_append(buf);
             }
             Value::Sum { tag, value } => {
-                encode_enum_variant(5, buf);
+                encode_enum_variant(6, buf);
                 buf.push(*tag);
                 value.ssz_append(buf);
             }
             Value::Record { fields } => {
-                encode_enum_variant(6, buf);
+                encode_enum_variant(7, buf);
                 (fields.len() as u32).ssz_append(buf);
                 for (key, value) in fields {
                     (key.len() as u32).ssz_append(buf);
@@ -411,11 +429,16 @@ impl Decode for Value {
                 Ok(Value::Symbol(s))
             }
             4 => {
+                let s = crate::system::Str::from_ssz_bytes(data)?;
+                let s_len = s.ssz_bytes_len();
+                Ok(Value::String(s))
+            }
+            5 => {
                 let (left, remaining) = Value::decode_with_remainder(data)?;
                 let (right, _) = Value::decode_with_remainder(remaining)?;
                 Ok(Value::Product(Box::new(left), Box::new(right)))
             }
-            5 => {
+            6 => {
                 if data.is_empty() {
                     return Err(DecodeError::InvalidByteLength {
                         len: 0,
@@ -429,7 +452,7 @@ impl Decode for Value {
                     value: Box::new(value),
                 })
             }
-            6 => {
+            7 => {
                 let field_count = u32::from_ssz_bytes(&data[0..4])? as usize;
                 let mut offset = 4;
                 let mut fields = std::collections::BTreeMap::new();
@@ -497,11 +520,16 @@ impl DecodeWithRemainder for Value {
                 Ok((Value::Symbol(s), remaining))
             }
             4 => {
-                let (left, remaining) = Self::decode_with_remainder(data)?;
-                let (right, remaining) = Self::decode_with_remainder(remaining)?;
-                Ok((Value::Product(Box::new(left), Box::new(right)), remaining))
+                let s = crate::system::Str::from_ssz_bytes(data)?;
+                let s_len = s.ssz_bytes_len();
+                Ok((Value::String(s), &data[s_len..]))
             }
             5 => {
+                let (left, remaining) = Value::decode_with_remainder(data)?;
+                let (right, _) = Value::decode_with_remainder(remaining)?;
+                Ok((Value::Product(Box::new(left), Box::new(right)), remaining))
+            }
+            6 => {
                 if data.is_empty() {
                     return Err(DecodeError::InvalidByteLength {
                         len: 0,
@@ -509,13 +537,13 @@ impl DecodeWithRemainder for Value {
                     });
                 }
                 let tag = data[0];
-                let (value, remaining) = Self::decode_with_remainder(&data[1..])?;
+                let (value, _) = Value::decode_with_remainder(&data[1..])?;
                 Ok((Value::Sum {
                     tag,
                     value: Box::new(value),
-                }, remaining))
+                }, &data[1..]))
             }
-            6 => {
+            7 => {
                 let field_count = u32::from_ssz_bytes(&data[0..4])? as usize;
                 let mut offset = 4;
                 let mut fields = std::collections::BTreeMap::new();
@@ -553,6 +581,7 @@ impl Value {
             Value::Bool(_) => TypeInner::Base(BaseType::Bool),
             Value::Int(_) => TypeInner::Base(BaseType::Int),
             Value::Symbol(_) => TypeInner::Base(BaseType::Symbol),
+            Value::String(_) => TypeInner::Base(BaseType::Symbol),
             Value::Product(left, right) => {
                 TypeInner::Product(
                     Box::new(left.value_type()),
@@ -570,8 +599,8 @@ impl Value {
                     .map(|(name, value)| (name.clone(), value.value_type()))
                     .collect();
                 
-                let row = crate::lambda::row::RowType::with_fields(field_types);
-                TypeInner::Record(crate::lambda::row::RecordType::from_row(row))
+                let row = RowType::with_fields(field_types);
+                TypeInner::Record(RecordType::from_row(row))
             }
         }
     }
@@ -735,4 +764,5 @@ impl<L> Decode for Type<L> {
             _phantom: PhantomData,
         })
     }
-} 
+}
+
