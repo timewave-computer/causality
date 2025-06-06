@@ -119,7 +119,7 @@ let as_string value =
 
 (** Serialize a value to SSZ bytes *)
 let serialize value =
-  let (data, length, error_code, error_message) = serialize_value value in
+  let (data, _length, error_code, error_message) = serialize_value value in
   if error_code = 0 then
     Result.Ok data
   else

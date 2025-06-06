@@ -1,5 +1,5 @@
 (library
- (public_name ocaml_causality.lambda)
+ (public_name ocaml-causality.lambda)
  (name causality_lambda)
  (libraries 
   causality_system

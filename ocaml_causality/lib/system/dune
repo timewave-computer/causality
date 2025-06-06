@@ -1,5 +1,5 @@
 (library
- (public_name ocaml_causality.system)
+ (public_name ocaml-causality.system)
  (name causality_system)
  (libraries unix)
  (modules 

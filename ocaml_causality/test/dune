@@ -16,4 +16,9 @@
 (executable
  (public_name test_effects)
  (name test_effects)
- (libraries ocaml_causality_effects unix)) 
+ (libraries ocaml_causality_effects unix))
+
+(executable
+ (public_name test_ffi_roundtrip)
+ (name test_ffi_roundtrip)
+ (libraries ocaml_causality_interop unix)) 
