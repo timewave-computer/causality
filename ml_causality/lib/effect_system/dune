@@ -1,6 +1,0 @@
-(library
- (name ml_causality_lib_effect_system)
- (public_name ml_causality.lib.effect_system)
- (modules effect_system)
- (libraries ml_causality_lib_types ml_causality_lib_content_addressing ml_causality_lib_dsl ml_causality_lib_ppx_registry ml_causality_lib_smt digestif str)
- (flags (:standard -warn-error -A)))

@@ -10,6 +10,14 @@ Causality is built around a core primitive: the Resource. Resources are content-
 
 The framework provides a Resource-centric architecture where all state and logic are represented as content-addressed Resources. Executable expressions (`Expr`) define Resource behavior and constraints, while verifiable storage uses SSZ serialization with Sparse Merkle Trees for cryptographic verification. The system supports typed domains with `VerifiableDomain` for ZK-provable operations and `ServiceDomain` for external interactions, complemented by multi-language DSL support through both Rust and OCaml toolkits for constructing Lisp expressions.
 
+The implementation follows a mathematically grounded three-layer categorical architecture:
+
+**Layer 0: Register Machine** - 9 fundamental instructions (`move`, `apply`, `match`, `alloc`, `consume`, `check`, `perform`, `select`, `witness`) with linear resource tracking and deterministic execution optimized for zero-knowledge proofs.
+
+**Layer 1: Linear Lambda Calculus** - 11 primitives for type construction/elimination with unit operations, tensor products, sum types, functions, and linear resource management.
+
+**Layer 2: Effect Algebra** - Core operations (`pure`, `bind`, `perform`, `handle`) with resource algebra, conservation checks, and cross-domain transaction orchestration.
+
 ## Resource Model
 
 A Resource comprises an `id` as a content-addressed identifier (SSZ Merkle root), a `value` reference to SSZ-encoded state data (`ValueExpr`), an optional `static_expr` for validation logic used in off-chain verification, a `primary_domain_id` indicating the primary execution domain, and `contextual_scope_domain_ids` for additional domains enabling cross-domain interactions.
@@ -37,13 +45,13 @@ Both OCaml and Rust DSLs produce the same canonical `Expr` AST, which is SSZ-ser
 
 ## Crates
 
-- `causality-types`: Core data structures, traits, and type definitions for Resources, expressions, and IDs
+- `causality-core`: Foundation layer with Layer 0 register machine, Layer 1 linear type system, and content-addressed system utilities
+- `causality-compiler`: Parse → Check → Compile pipeline implementing three-layer compilation from Lisp source to register machine instructions  
 - `causality-lisp`: Lisp interpreter for evaluating Resource logic and expressions
 - `causality-runtime`: Executes Resource interactions and manages the evaluation context
 - `causality-simulation`: Simulation engine with schema-aware mocking for testing
 - `causality-zk`: Zero-Knowledge proof generation and verification using execution traces
 - `causality-api`: Traits for external system integration (ZK coprocessors, blockchain connectors)
-- `causality-compiler`: *(Future)* Compiles Resource definitions and validates cross-domain logic
 - `causality-toolkit`: Standard library of reusable Resources, effects, and Lisp utilities for Rust development
 
 ## Environment & Build

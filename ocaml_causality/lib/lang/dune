@@ -1,0 +1,4 @@
+(library
+ (name ocaml_causality_lang)
+ (libraries
+  ocaml_causality_core)) 

@@ -1,0 +1,8 @@
+(library
+ (public_name ocaml_causality.lambda)
+ (name causality_lambda)
+ (libraries 
+  causality_system
+  causality_machine
+  unix)
+ (preprocess (pps ppx_deriving.show ppx_deriving.eq))) 

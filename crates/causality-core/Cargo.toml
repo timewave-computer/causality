@@ -2,65 +2,84 @@
 name = "causality-core"
 version = "0.1.0"
 edition = "2021"
+description = "Core computational substrate for the Causality framework"
+authors = ["TimeWave Labs"]
+rust-version = "1.70.0"
 license = "Apache-2.0"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-# Core serialization is now SSZ
-causality-types = { path = "../causality-types" }
-
-# Error handling
-anyhow = "1.0.75"
-thiserror = "1.0.50"
-
-# Cryptography
-sha2 = "0.10.8"
-hex = "0.4.3"
-
-# Data structures
-maplit = "1.0.2"
-
-# Async utilities
-tokio = { version = "1.34.0", features = ["full"] }
-futures = "0.3.29"
-
-# FFI tools
-libc = "0.2.152"
-
-# Traits
-async-trait = "0.1.74"
-
-# Logging
-log = "0.4.20"
-
-# Tracing functionality (moved from causality-tracing)
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["registry", "env-filter", "fmt", "json"] }
-tracing-futures = "0.2.5"
-serde = { version = "1.0", features = ["derive"] }
-
-# Optional dependencies
-getrandom = { version = "0.2.10", optional = true }
-
-# Optional features for benchmarks
-criterion = { version = "0.5.1", optional = true }
-
-# S-expression handling for Rust/OCaml interoperability
-lexpr = "0.2.7"
-
-# Thread-safe synchronization for SMT operations
-parking_lot = "0.12"
-
-# JSON handling for domain library interfaces
-serde_json = "1.0"
+[lib]
 
 [features]
-default = ["getrandom", "std"]
+default = ["std", "getrandom", "serde", "sexpr"]
 std = []
 getrandom = ["dep:getrandom"]
+# Optional serde support for ZK crate compatibility
+serde = ["dep:serde", "serde/derive", "dep:serde_json"]
+sexpr = ["lexpr"]
 benchmarks = ["dep:criterion"]
+tokio = ["dep:tokio"]
+
+[dependencies]
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Cryptography
+hex = { workspace = true }
+getrandom = { workspace = true, optional = true }
+zerocopy = { version = "0.8.23", features = ["alloc", "derive"] }
+
+# String interning
+once_cell = "1.19"
+
+# Collections
+hashbrown = "0.15.2"
+
+# Optional serialization support for ZK compatibility only
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+ethereum_ssz = { workspace = true }
+ethereum_ssz_derive = { workspace = true }
+
+# S-expression handling for Rust/OCaml interoperability
+lexpr = { version = "0.2.7", optional = true }
+
+# Required for traits with async methods
+async-trait = { workspace = true }
+
+# Required for HList types
+frunk = { workspace = true }
+
+# Required for logging
+log = { workspace = true }
+
+# Required for effects system
+inventory = "0.3.12"
+
+# Required for benchmarks
+criterion = { version = "0.5.1", optional = true }
+
+# Arbitrary precision arithmetic for ZK compatibility
+dashu = { version = "0.4", default-features = false, features = ["std"] }
+
+# Optional tokio support for async tests
+tokio = { workspace = true, optional = true }
+
+# Sparse Merkle Tree implementation
+valence-coprocessor = { version = "0.1.13", git = "https://github.com/timewave-computer/valence-coprocessor.git", tag = "v0.1.13", default-features = false, features = ["std"] }
+sha2 = "0.10.8"
 
 [dev-dependencies]
-tempfile = "3.8.1"
-tracing-test = "0.2"
+# Required for async tests
+tokio = { workspace = true, features = ["macros", "rt"] }
+ethereum_ssz = { workspace = true }
+ethereum_ssz_derive = { workspace = true }
+
+[[example]]
+name = "layer2_effect_demo"
+path = "../../examples/layer2_effect_demo.rs"
+
+[[example]]
+name = "zk_effect_demo"
+path = "../../examples/zk_effect_demo.rs"
+required-features = ["tokio"]

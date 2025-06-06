@@ -43,13 +43,15 @@
         batteriesPkg = ocamlEnv.batteries;
         camlpStreamsPkg = ocamlEnv.camlp-streams;
         numPkg = ocamlEnv.num;
+        base64Pkg = ocamlEnv.base64;
+        uuidmPkg = ocamlEnv.uuidm;
         
         # Create a list of OCaml libraries needed for OCAMLPATH
         # This list should NOT include the base ocaml compiler itself.
         ocamlLibDeps = with ocamlEnv; [
           # ocaml # The compiler itself, findlib should find stdlib automatically
           findlib # Essential for library discovery
-          fmt
+          fmtTtyPkg
           ocamlCompilerLibsPkg # This is ocaml-compiler-libs, reinstated
           ppx_inline_test
           sexplib0
@@ -76,6 +78,11 @@
           batteriesPkg # Add batteries to library dependencies
           camlpStreamsPkg # Add camlp-streams as a dependency for batteries
           numPkg # Add num as a dependency for batteries
+          yojson
+          ppx_deriving_yojson
+          ctypes
+          base64Pkg
+          uuidmPkg
         ];
 
         # Create a list of OCaml development tools
@@ -130,10 +137,10 @@
 
             # --- Debugging OCAMLPATH Construction ---
             echo "---- START OCAMLPATH DEBUG ----"
-            echo "DEBUG: Value of uutfPkg (raw): ${uutfPkg}"
-            echo "DEBUG: uutfPkg.outPath: ${uutfPkg.outPath}"
-            echo "DEBUG: mkOcamlPath for uutfPkg only: ${mkOcamlPath [ uutfPkg ]}"
-            echo "DEBUG: Value of astringPkg (raw): ${astringPkg}"
+            echo "DEBUG: Value of uutf (raw): ${ocamlEnv.uutf}"
+            echo "DEBUG: uutf.outPath: ${ocamlEnv.uutf.outPath}"
+            echo "DEBUG: mkOcamlPath for uutf only: ${mkOcamlPath [ ocamlEnv.uutf ]}"
+            echo "DEBUG: Value of astring (raw): ${astringPkg}"
             echo "DEBUG: astringPkg.outPath: ${astringPkg.outPath}"
             echo "DEBUG: mkOcamlPath for astringPkg only: ${mkOcamlPath [ astringPkg ]}"
             export OCAMLPATH_BEFORE_ASSIGN="${mkOcamlPath ocamlLibDeps}"
@@ -197,8 +204,8 @@
               echo "Astring path: ${astringPkg}/lib/ocaml/${ocamlEnv.ocaml.version}/site-lib/astring"
               echo "Exists: $(ls -la ${astringPkg}/lib/ocaml/${ocamlEnv.ocaml.version}/site-lib/astring 2>/dev/null || echo 'Not found')"
               echo ""
-              echo "Uutf path: ${uutfPkg}/lib/ocaml/${ocamlEnv.ocaml.version}/site-lib/uutf"
-              echo "Exists: $(ls -la ${uutfPkg}/lib/ocaml/${ocamlEnv.ocaml.version}/site-lib/uutf 2>/dev/null || echo 'Not found')"
+              echo "Uutf path: ${ocamlEnv.uutf}/lib/ocaml/${ocamlEnv.ocaml.version}/site-lib/uutf"
+              echo "Exists: $(ls -la ${ocamlEnv.uutf}/lib/ocaml/${ocamlEnv.ocaml.version}/site-lib/uutf 2>/dev/null || echo 'Not found')"
             }
             export -f check-ocaml-paths
 

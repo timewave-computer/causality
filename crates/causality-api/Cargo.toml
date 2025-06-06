@@ -8,28 +8,35 @@ repository = "https://github.com/timewave-lab/micro-causality"
 description = "API interface management and domain mocking for Causality"
 
 [dependencies]
-paste = "1.0"
-url = "2.4.1"
-hex = { workspace = true }
-sha2 = { workspace = true }
-# Use workspace dependencies where possible
-ethereum_ssz = { workspace = true }
-ethereum_ssz_derive = { workspace = true }
-rand = "0.8.5"
-uuid = { version = "1.5", features = ["v4", "v5"] }
-dashmap = "5.5"
-
-causality-types = { path = "../causality-types", features = ["serde"] }
+# Core causality dependencies
+causality-core = { path = "../causality-core" }
 causality-runtime = { path = "../causality-runtime" }
+causality-compiler = { path = "../causality-compiler" }
+causality-toolkit = { path = "../causality-toolkit" }
 
-# Standard Rust crates
-tokio = { workspace = true }
-async-trait = { workspace = true }
+# Core async runtime
+tokio = { workspace = true, features = ["full"] }
+
+# Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# HTTP client/server
+reqwest = { version = "0.11", features = ["json"] }
+
+# Error handling
 anyhow = { workspace = true }
-log = { workspace = true }
+thiserror = { workspace = true }
+
+# Utilities
+uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { workspace = true, features = ["serde"] }
+colored = { version = "2.0" }
+base64 = { version = "0.21" }
+
+# Standard Rust crates
+async-trait = { workspace = true }
+log = { workspace = true }
 
 # Blockchain client library
 valence-domain-clients = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310", default-features = false, features = ["ethereum", "neutron"] }

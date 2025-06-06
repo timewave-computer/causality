@@ -1,242 +1,282 @@
 # Causality Runtime
 
-Execution environment for the Causality Resource Model framework. This crate provides the runtime system that orchestrates Resource logic evaluation, ProcessDataflowBlock execution, and cross-domain operations through the TEL (Temporal Effect Logic) interpreter.
+Execution environment for the Causality framework that provides specialized executors for sequential, zero-knowledge, and parallel execution modes while maintaining consistency across the three-layer architecture.
 
-## Overview
+## Purpose
 
-The `causality-runtime` crate serves as the execution environment for the Causality system, providing:
+The `causality-runtime` crate serves as the execution environment for the Causality system, providing specialized executors that can handle different execution requirements while maintaining consistency with the resource model's linear constraints and verifiable properties. It bridges the gap between compiled instructions and actual execution, offering optimal performance for various workload types.
 
-- **TEL Interpreter**: Orchestrates Resource logic evaluation and ProcessDataflowBlock execution
-- **Host Functions**: Bridge between Lisp expressions and runtime capabilities
-- **State Management**: Manages Resource states and system-wide state transitions
-- **ProcessDataflowBlock Orchestration**: Executes complex multi-step, multi-domain workflows
-- **Domain-Aware Execution**: Handles both VerifiableDomain and ServiceDomain operations
+### Key Responsibilities
 
-All runtime operations maintain consistency with the Resource Model's content-addressed, SSZ-serialized architecture.
+- **Execution Orchestration**: Coordinate execution across multiple execution modes
+- **Resource Lifecycle Management**: Enforce linear resource constraints during execution
+- **ZK Integration**: Generate and verify zero-knowledge proofs during execution
+- **Parallel Execution**: Enable parallel execution of effect graphs through work stealing
 
-## Core Components
+## Architecture Overview
 
-### TEL Interpreter
+The runtime system is designed around specialized executors optimized for different execution patterns:
 
-The Temporal Effect Logic interpreter orchestrates all Resource operations:
+### Basic Executor
+Sequential execution engine for register machine instructions:
+- **Simple Interface**: Direct execution of instruction sequences
+- **Resource Tracking**: Linear resource consumption enforcement
+- **Error Handling**: Comprehensive error reporting and recovery
+
+### ZK Executor
+Zero-knowledge proof generation during execution:
+- **Proof Generation**: Automatic proof generation for specified instruction sequences
+- **Backend Abstraction**: Support for multiple ZK backends (Mock, SP1, Valence)
+- **Circuit Caching**: Intelligent caching of compiled circuits for performance
+
+### TEG Executor
+Parallel execution for Task Effect Graphs:
+- **Work Stealing**: Dynamic load balancing across worker threads
+- **Adaptive Scheduling**: Machine learning-based task scheduling optimization
+- **Performance Monitoring**: Detailed metrics for parallel execution analysis
+
+## Core Executors
+
+### Basic Executor
+
+Sequential execution of register machine instructions:
 
 ```rust
-use causality_runtime::{TelInterpreter, RuntimeConfig};
+use causality_runtime::{Executor, RuntimeContext};
+use causality_core::machine::{Instruction, RegisterId, MachineValue};
 
-let config = RuntimeConfig {
-    max_execution_steps: 10000,
-    enable_tracing: true,
-    domain_timeout: Duration::from_secs(30),
+// Create basic executor
+let mut executor = Executor::new();
+
+// Execute instruction sequence
+let instructions = vec![
+    Instruction::Witness { out_reg: RegisterId(0) },
+    Instruction::Move { src: RegisterId(0), dst: RegisterId(1) },
+    Instruction::Return { reg: RegisterId(1) },
+];
+
+let result = executor.execute(&instructions)?;
+println!("Execution result: {:?}", result);
+```
+
+**Basic Executor Features:**
+- **Sequential Execution**: Execute instructions in order with proper dependencies
+- **State Management**: Maintain machine state across instruction sequences
+- **Resource Enforcement**: Enforce linear resource consumption constraints
+- **Error Recovery**: Provide detailed error information for debugging
+
+### ZK Executor
+
+Zero-knowledge proof generation during execution:
+
+```rust
+use causality_runtime::zk_executor::{ZkExecutor, ZkExecutionConfig, ZkBackendConfig};
+
+// Configure ZK execution
+let config = ZkExecutionConfig {
+    enable_circuit_caching: true,
+    max_circuit_size: 1000,
+    always_generate_proofs: false,
+    backend_config: ZkBackendConfig::Mock {
+        success_rate: 1.0,
+        proof_time_ms: 100,
+    },
 };
 
-let interpreter = TelInterpreter::new(config);
-let result = interpreter.evaluate_resource_logic(&resource, &context).await?;
-```
+// Create ZK executor
+let mut zk_executor = ZkExecutor::with_config(config);
 
-### Host Functions
+// Execute with proof generation
+let (result, proof_option) = zk_executor.execute_with_proof(&instructions)?;
 
-Bridge between Lisp expressions and runtime capabilities:
-
-```rust
-use causality_runtime::host_functions::{HostFunctionRegistry, HostFunction};
-
-let mut registry = HostFunctionRegistry::new();
-
-// Register custom host function
-registry.register("get-current-time", HostFunction::new(|_args| {
-    Ok(ValueExpr::Integer(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64))
-}));
-
-// Use in TEL interpreter
-let interpreter = TelInterpreter::with_host_functions(registry);
-```
-
-### State Management
-
-Manages Resource states and transitions:
-
-```rust
-use causality_runtime::state::{StateManager, StateTransition};
-
-let mut state_manager = StateManager::new();
-
-// Apply state transition
-let transition = StateTransition::new(
-    resource_id,
-    old_state,
-    new_state,
-    effect_id
-);
-
-state_manager.apply_transition(transition).await?;
-let current_state = state_manager.get_resource_state(&resource_id).await?;
-```
-
-### ProcessDataflowBlock Orchestration
-
-Executes complex multi-step workflows:
-
-```rust
-use causality_runtime::dataflow::{DataflowOrchestrator, DataflowInstance};
-
-let orchestrator = DataflowOrchestrator::new();
-
-// Create dataflow instance
-let instance = orchestrator.create_instance(&dataflow_block, &initial_context).await?;
-
-// Execute dataflow step
-let completed_effect = Effect::new(/* ... */);
-let result = orchestrator.execute_step(&instance, &completed_effect).await?;
-
-// Check if dataflow is complete
-if result.is_complete {
-    println!("Dataflow completed successfully");
+if let Some(proof) = proof_option {
+    println!("Proof generated successfully");
+    // Verify proof
+    let verified = zk_executor.verify_proof(&proof, &public_inputs)?;
+    assert!(verified);
 }
 ```
 
-### Domain-Aware Execution
+**ZK Executor Features:**
+- **Automatic Proof Generation**: Generate proofs for specified instruction sequences
+- **Circuit Compilation**: Compile instructions to arithmetic circuits
+- **Multi-Backend Support**: Support for Mock, SP1, and Valence proving backends
+- **Proof Verification**: Built-in proof verification capabilities
 
-Handles operations across different domain types:
+### TEG Executor
+
+Parallel execution using work-stealing task scheduler:
 
 ```rust
-use causality_runtime::domain::{DomainExecutor, DomainType};
+use causality_runtime::teg_executor::{TegExecutor, TegExecutorConfig};
+use causality_core::effect::TaskEffectGraph;
 
-let executor = DomainExecutor::new();
+// Configure parallel execution
+let config = TegExecutorConfig {
+    worker_count: 4,
+    steal_timeout_ms: 50,
+    load_balance_threshold: 2,
+    node_timeout_ms: 10000,
+    adaptive_scheduling: true,
+};
 
-// Execute in VerifiableDomain
-let verifiable_result = executor.execute_in_domain(
-    &DomainType::Verifiable,
-    &resource_operation
-).await?;
+// Create TEG executor
+let mut teg_executor = TegExecutor::with_config(config, runtime_context);
 
-// Execute in ServiceDomain
-let service_result = executor.execute_in_domain(
-    &DomainType::Service,
-    &external_service_call
-).await?;
+// Execute effect graph in parallel
+let teg = TaskEffectGraph::from_effects(effects);
+let result = teg_executor.execute(teg)?;
+
+println!("Parallel execution completed:");
+println!("  Nodes executed: {}", result.nodes_executed);
+println!("  Total time: {:?}", result.execution_time);
+println!("  Parallelism efficiency: {:.2}%", result.parallelism_efficiency * 100.0);
 ```
 
-## Runtime Context
+**TEG Executor Features:**
+- **Work Stealing**: Dynamic load balancing across multiple threads
+- **Adaptive Scheduling**: Learning-based optimization of task scheduling
+- **Performance Analytics**: Detailed metrics for parallel execution optimization
+- **Timeout Management**: Configurable timeouts for individual nodes
 
-### Execution Context
+## Backend Configuration
 
-Provides context for Resource logic evaluation:
-
+### Mock Backend Configuration
 ```rust
-use causality_runtime::context::{RuntimeContext, ContextBuilder};
+use causality_runtime::zk_executor::{ZkBackendConfig, MockCircuitConfig};
 
-let context = ContextBuilder::new()
-    .with_resource_state(&resource_id, &current_state)
-    .with_domain_config(&domain_config)
-    .with_capability_grants(&user_capabilities)
-    .build();
-
-let result = interpreter.evaluate_with_context(&expression, &context).await?;
+let mock_config = ZkBackendConfig::Mock {
+    success_rate: 0.95,        // 95% success rate
+    proof_time_ms: 100,        // 100ms simulated proof time
+};
 ```
 
-### Resource Access
-
-Provides access to Resource states during evaluation:
-
+### SP1 Backend Configuration
 ```rust
-use causality_runtime::access::{ResourceAccessor, AccessPermissions};
-
-let accessor = ResourceAccessor::new(state_manager);
-
-// Get resource field with permissions check
-let balance = accessor.get_resource_field(
-    &resource_id,
-    "balance",
-    &AccessPermissions::Read
-).await?;
+let sp1_config = ZkBackendConfig::SP1 {
+    use_remote_prover: false,
+    timeout_secs: 300,
+    recursion_enabled: true,
+};
 ```
 
-## Host Function Library
-
-### Core Functions
-
-Built-in host functions for common operations:
-
-- `get-current-timestamp`: Get current system timestamp
-- `get-resource-field`: Access Resource field values
-- `compute-hash`: Compute cryptographic hashes
-- `verify-signature`: Verify digital signatures
-- `emit-effect`: Emit new Effects for processing
-
-### Custom Functions
-
-Register custom host functions for domain-specific operations:
-
+### Valence Backend Configuration
 ```rust
-use causality_runtime::host_functions::*;
-
-// Register domain-specific function
-registry.register("validate-token-transfer", HostFunction::new(|args| {
-    let from_balance = args[0].as_integer()?;
-    let transfer_amount = args[1].as_integer()?;
-    
-    Ok(ValueExpr::Boolean(from_balance >= transfer_amount))
-}));
+let valence_config = ZkBackendConfig::Valence {
+    endpoint: "https://api.valence.network".to_string(),
+    api_key: Some("your_api_key".to_string()),
+    circuit_deployment_config: ValenceCircuitConfig {
+        controller_path: "/path/to/controller.wasm".to_string(),
+        circuit_name: "causality_execution".to_string(),
+        auto_deploy: true,
+    },
+};
 ```
 
 ## Error Handling
 
-Comprehensive error handling throughout the runtime:
+Comprehensive error types for different failure modes:
 
 ```rust
-use causality_runtime::error::{RuntimeError, ErrorContext};
+use causality_runtime::{RuntimeError, RuntimeResult};
 
-match interpreter.evaluate(&expression, &context).await {
-    Ok(result) => process_result(result),
-    Err(RuntimeError::ExecutionTimeout) => {
-        eprintln!("Expression evaluation timed out");
-    }
-    Err(RuntimeError::ResourceNotFound { resource_id }) => {
-        eprintln!("Resource {} not found", resource_id);
-    }
-    Err(RuntimeError::PermissionDenied { operation }) => {
-        eprintln!("Permission denied for operation: {}", operation);
+fn handle_execution_errors(result: RuntimeResult<MachineValue>) {
+    match result {
+        Ok(value) => println!("Success: {:?}", value),
+        Err(RuntimeError::ExecutionFailed { message }) => {
+            eprintln!("Execution failed: {}", message);
+        }
+        Err(RuntimeError::LinearityViolation { message }) => {
+            eprintln!("Resource linearity violated: {}", message);
+        }
+        Err(RuntimeError::MachineError(machine_err)) => {
+            eprintln!("Machine-level error: {:?}", machine_err);
+        }
+        Err(RuntimeError::TypeMismatch(msg)) => {
+            eprintln!("Type error: {}", msg);
+        }
+        Err(err) => eprintln!("Other error: {}", err),
     }
 }
 ```
 
-## Performance Optimization
+## Performance Monitoring
 
-### Execution Optimization
+### Execution Metrics
 
-- **Expression Caching**: Cache compiled expressions for reuse
-- **State Caching**: Cache frequently accessed Resource states
-- **Parallel Execution**: Execute independent operations in parallel
-- **Lazy Evaluation**: Defer expensive operations until needed
+Track performance across different execution modes:
 
-### Resource Management
+```rust
+// Basic execution metrics
+let start_time = std::time::Instant::now();
+let result = executor.execute(&instructions)?;
+let execution_time = start_time.elapsed();
 
-- **Memory Pooling**: Reuse memory allocations for better performance
-- **Connection Pooling**: Pool connections to external services
-- **Batch Operations**: Batch multiple operations for efficiency
+println!("Basic execution took: {:?}", execution_time);
 
-## Feature Flags
+// ZK execution metrics  
+let zk_metrics = zk_executor.get_performance_metrics();
+println!("ZK proof generation stats:");
+println!("  Average proof time: {}ms", zk_metrics.avg_proof_generation_time_ms);
+println!("  Total proofs: {}", zk_metrics.total_proofs_generated);
+println!("  Circuit cache hit rate: {:.2}%", zk_metrics.cache_hit_rate * 100.0);
 
-- **default**: Standard runtime features
-- **tracing**: Execution tracing and debugging
-- **metrics**: Performance metrics collection
-- **async**: Asynchronous execution support
-- **persistence**: State persistence capabilities
-
-## Module Structure
-
-```
-src/
-├── lib.rs                    # Main library interface
-├── interpreter.rs            # TEL interpreter implementation
-├── host_functions.rs         # Host function registry and implementations
-├── state.rs                  # State management
-├── dataflow.rs               # ProcessDataflowBlock orchestration
-├── domain.rs                 # Domain-aware execution
-├── context.rs                # Runtime context management
-├── access.rs                 # Resource access control
-├── error.rs                  # Error handling
-└── config.rs                 # Runtime configuration
+// TEG execution metrics
+let teg_result = teg_executor.execute(teg)?;
+println!("TEG execution stats:");
+println!("  Nodes executed: {}", teg_result.nodes_executed);
+println!("  Parallel efficiency: {:.2}%", teg_result.parallelism_efficiency * 100.0);
+println!("  Work stealing events: {}", teg_result.total_work_stealing_events);
 ```
 
-This crate provides the execution environment for the Causality Resource Model, enabling deterministic and verifiable execution of Resource logic while maintaining the content-addressed and SSZ-serialized properties of the framework.
+## Configuration
+
+### Basic Executor Configuration
+
+```rust
+use causality_runtime::Executor;
+
+// Basic executor requires no configuration - uses default machine state
+let mut executor = Executor::new();
+```
+
+### ZK Executor Configuration
+
+```rust
+use causality_runtime::zk_executor::{ZkExecutionConfig, ZkBackendConfig};
+
+let config = ZkExecutionConfig {
+    enable_circuit_caching: true,     // Cache compiled circuits
+    max_circuit_size: 2000,           // Maximum instructions per circuit
+    always_generate_proofs: false,    // Generate proofs on demand
+    backend_config: ZkBackendConfig::Mock {
+        success_rate: 0.95,           // 95% success rate for testing
+        proof_time_ms: 250,           // Simulated proof generation time
+    },
+};
+```
+
+### TEG Executor Configuration
+
+```rust
+use causality_runtime::teg_executor::TegExecutorConfig;
+
+let config = TegExecutorConfig {
+    worker_count: num_cpus::get(),    // Use all available cores
+    steal_timeout_ms: 100,            // Wait 100ms before stealing work
+    load_balance_threshold: 4,        // Load balance when queue > 4 items
+    node_timeout_ms: 30000,           // 30 second timeout per node
+    adaptive_scheduling: true,        // Enable learning-based optimization
+};
+```
+
+## Runtime Architecture
+
+The runtime system is organized into specialized executors for different execution modes:
+
+1. **Basic Executor**: Foundation for sequential instruction execution
+2. **ZK Executor**: Extends basic execution with zero-knowledge proof capabilities  
+3. **TEG Executor**: Orchestrates parallel execution of effect graphs
+4. **Error System**: Unified error handling across all execution modes
+
+This modular design enables optimal performance for different workload types while maintaining consistency across the Causality execution model.

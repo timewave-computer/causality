@@ -2,30 +2,26 @@
 name = "causality-compiler"
 version = "0.1.0"
 edition = "2021"
+description = "Causality multi-layer compiler with optimization engine"
+
+[lib]
+name = "causality_compiler"
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-causality-types = { path = "../causality-types", features = ["getrandom"] }
-causality-core = { path = "../causality-core", features = ["getrandom"] }
+causality-core = { path = "../causality-core" }
 causality-lisp = { path = "../causality-lisp" }
-
-# Use SSZ serialization instead of ssz
-ethereum_ssz = { workspace = true }
-ethereum_ssz_derive = { workspace = true }
-
-# Core utilities
-tokio = { version = "1.36.0", features = ["full"] }
-async-trait = "0.1.74"
-thiserror = "1.0.50"
-anyhow = "1.0.75"
-log = "0.4.20"
-sha2 = "0.10.8"
-uuid = { version = "1.6.1", features = ["v4"] } 
-hex = "0.4.3"
-parking_lot = "0.12"
-inventory = "0.3.15"
-lexpr = "0.2"
+anyhow = "1.0"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+hashbrown = "0.15"
+rustc-hash = "1.1"
 
-# CLI tools
-clap = { version = "4.4", features = ["derive"] }
-env_logger = "0.10"
+[features]
+default = []
+ffi = []
+
+[dev-dependencies]
+# Test dependencies will be added as needed 
+tempfile = "3.0" 

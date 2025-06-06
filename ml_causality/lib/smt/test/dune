@@ -1,5 +1,0 @@
-; Temporarily disabled - SMT library needs integration work
-; (executable
-;  (public_name test_smt)
-;  (name test_smt)
-;  (libraries ml_causality_lib_smt)) 

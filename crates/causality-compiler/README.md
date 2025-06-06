@@ -1,232 +1,261 @@
 # Causality Compiler
 
-Compilation and optimization tools for the Causality Resource Model framework. This crate transforms Resource definitions, ProcessDataflowBlocks, and Lisp expressions into optimized, content-addressed artifacts for runtime execution.
+Advanced compilation pipeline for the Causality framework that transforms high-level Lisp expressions, resource definitions, and effect specifications into optimized register machine instructions for distributed, zero-knowledge verifiable computation.
 
-## Overview
+## Purpose
 
-The `causality-compiler` crate provides compilation capabilities for the Causality system, including:
+The `causality-compiler` crate serves as the compilation bridge between high-level declarative programming and low-level verifiable execution in the Causality system. It provides compilation, optimization, and analysis capabilities that transform programs across all three architectural layers while maintaining type precision and deterministic execution.
 
-- **Resource Type Compilation**: Transform Resource definitions into optimized runtime representations
-- **ProcessDataflowBlock Compilation**: Compile complex dataflow orchestrations into executable artifacts
-- **Expression Optimization**: Optimize Lisp expressions for efficient evaluation
-- **Content-Addressed Artifacts**: Generate deterministic, content-addressed compilation outputs
-- **Multi-Stage Compilation**: Support for incremental and dependency-aware compilation
+### Key Responsibilities
 
-All compilation outputs maintain consistency with the Resource Model's SSZ-serialized, content-addressed architecture.
+- **Multi-Layer Compilation**: Transform expressions from Layer 2 (effects) through Layer 1 (lambda calculus) down to Layer 0 (register machine)
+- **Advanced Optimization**: Apply sophisticated optimization passes to improve execution efficiency and reduce proof complexity
+- **Static Analysis**: Perform comprehensive type checking, linearity analysis, and dependency analysis
+- **Content-Addressed Artifacts**: Generate deterministic, cacheable compilation artifacts
+- **Error Recovery**: Provide detailed error diagnostics with helpful suggestions
+
+## Architecture Overview
+
+The compiler is structured as a multi-stage pipeline that processes programs through several phases:
+
+### Multi-Source Parsing
+The compiler can parse multiple input formats:
+- **Lisp Expressions**: S-expression syntax for functional programming
+- **Resource Definitions**: Declarative resource type specifications
+- **Effect Specifications**: High-level effect and intent definitions
+
+### Semantic Analysis
+Comprehensive static analysis including:
+- **Type Inference**: Automatic type inference with constraint solving
+- **Linearity Analysis**: Verification of linear resource usage patterns
+- **Effect Analysis**: Analysis of effect dependencies and capabilities
+
+### Cross-Layer Compilation
+Systematic transformation across architectural layers:
+- **Layer 2 → Layer 1**: Effect algebra to linear lambda calculus
+- **Layer 1 → Layer 0**: Lambda calculus to register machine instructions
+- **Cross-Layer Optimization**: Optimization opportunities spanning multiple layers
 
 ## Core Components
 
-### Resource Type Compiler
+### Enhanced Parser (`parser/`)
 
-Compiles Resource type definitions into optimized runtime representations:
-
-```rust
-use causality_compiler::resource::{ResourceTypeCompiler, CompilationConfig};
-
-let compiler = ResourceTypeCompiler::new();
-let config = CompilationConfig {
-    optimization_level: OptimizationLevel::Release,
-    target_domain: domain_id,
-    enable_zk_compatibility: true,
-};
-
-let compiled_resource = compiler.compile_resource_type(
-    &resource_definition,
-    &config
-)?;
-```
-
-### ProcessDataflowBlock Compiler
-
-Compiles dataflow orchestrations into executable artifacts:
+Multi-format parsing with sophisticated error recovery:
 
 ```rust
-use causality_compiler::dataflow::{DataflowCompiler, DataflowArtifact};
+use causality_compiler::parser::{Parser, SourceType};
 
-let compiler = DataflowCompiler::new();
-let artifact = compiler.compile_dataflow_block(
-    &dataflow_definition,
-    &compilation_context
-)?;
+// Parse different source formats
+let lisp_parser = Parser::new(SourceType::Lisp);
+let lisp_ast = lisp_parser.parse("(lambda (x) (* x x))")?;
 
-let optimized_artifact = compiler.optimize_dataflow(&artifact)?;
+let resource_parser = Parser::new(SourceType::Resource);
+let resource_def = resource_parser.parse_resource(definition)?;
+
+let effect_parser = Parser::new(SourceType::Effect);
+let effect_spec = effect_parser.parse_effects(specification)?;
 ```
 
-### Expression Compiler
+**Capabilities:**
+- **S-Expression Parsing**: Complete Lisp syntax support with macros
+- **Resource Definition Parsing**: Structured resource type definitions
+- **Effect Specification Parsing**: Declarative effect and constraint parsing
+- **Error Recovery**: Robust error handling with source location tracking
 
-Optimizes Lisp expressions for runtime evaluation:
+### Semantic Analyzer (`semantic/`)
+
+Comprehensive static analysis for type safety and correctness:
 
 ```rust
-use causality_compiler::expr::{ExpressionCompiler, OptimizationPass};
+use causality_compiler::semantic::{SemanticAnalyzer, AnalysisResult};
 
-let compiler = ExpressionCompiler::new();
-let optimized_expr = compiler.compile_expression(
-    &lisp_expr,
-    &[OptimizationPass::ConstantFolding, OptimizationPass::DeadCodeElimination]
-)?;
+let analyzer = SemanticAnalyzer::new();
+let analysis = analyzer.analyze_program(&ast)?;
 
-let expr_id = optimized_expr.content_id();
+// Access analysis results
+let type_info = analysis.type_information();
+let linearity_constraints = analysis.linearity_analysis();
+let effect_dependencies = analysis.effect_dependencies();
 ```
 
-### Content-Addressed Compilation
+**Analysis Passes:**
+- **Type Inference**: Automatic type inference with polymorphism support
+- **Linearity Checking**: Verification of linear resource usage patterns
+- **Effect Analysis**: Analysis of effect composition and dependencies
+- **Scope Analysis**: Variable scoping and closure analysis
 
-All compilation outputs are content-addressed for deterministic builds:
+### Multi-Layer Compiler (`compiler/`)
+
+Cross-layer compilation with optimization:
 
 ```rust
-use causality_compiler::artifacts::{CompilationArtifact, ArtifactId};
+use causality_compiler::{Compiler, CompilationTarget, OptimizationLevel};
 
-let artifact = CompilationArtifact::new(compiled_data);
-let artifact_id = artifact.content_id(); // Deterministic based on content
+let mut compiler = Compiler::new();
+compiler.set_target(CompilationTarget::RegisterMachine)
+        .set_optimization_level(OptimizationLevel::Aggressive)
+        .enable_parallel_compilation();
 
-// Store artifact with content-addressed ID
-artifact_store.store(artifact_id, artifact)?;
+let result = compiler.compile_program(&analyzed_ast)?;
 ```
+
+**Compilation Stages:**
+- **Layer 2 Compilation**: Effect algebra to structured lambda expressions
+- **Layer 1 Compilation**: Lambda calculus to imperative register operations
+- **Layer 0 Generation**: Register machine instruction sequence generation
+- **Optimization Integration**: Cross-layer optimization opportunities
+
+### Optimization Engine (`optimization/`)
+
+Advanced optimization with multiple passes:
+
+```rust
+use causality_compiler::optimization::{OptimizerEngine, OptimizationPass};
+
+let mut optimizer = OptimizerEngine::new();
+optimizer.add_pass(OptimizationPass::DeadCodeElimination)
+         .add_pass(OptimizationPass::InstructionCombining)
+         .add_pass(OptimizationPass::ControlFlowOptimization)
+         .add_pass(OptimizationPass::DataFlowAnalysis);
+
+let optimized_code = optimizer.optimize(&instructions)?;
+let metrics = optimizer.performance_metrics();
+```
+
+**Optimization Categories:**
+- **Instruction-Level**: Dead code elimination, instruction combining, constant folding
+- **Control Flow**: Branch optimization, loop unrolling, tail call optimization
+- **Data Flow**: Register allocation, value propagation, alias analysis
+- **Effect-Level**: Effect fusion, parallelization, dependency minimization
+
+### Artifact Manager (`artifacts/`)
+
+Content-addressed compilation artifact management:
+
+```rust
+use causality_compiler::artifacts::{CompilationArtifact, ArtifactCache};
+
+// Create content-addressed artifacts
+let artifact = CompilationArtifact::new(instructions, metadata);
+let artifact_id = artifact.content_hash(); // Deterministic hash
+
+// Caching for incremental builds
+let mut cache = ArtifactCache::new();
+cache.store_artifact(artifact_id, artifact)?;
+
+// Retrieve cached results
+if let Some(cached) = cache.get_artifact(&artifact_id) {
+    return Ok(cached.instructions);
+}
+```
+
+**Features:**
+- **Content Addressing**: Deterministic artifact identification
+- **Incremental Compilation**: Smart dependency-based recompilation
+- **Artifact Caching**: Persistent caching for build performance
+- **Metadata Management**: Comprehensive compilation metadata
 
 ## Compilation Pipeline
 
-### Multi-Stage Compilation
+The compilation process follows a structured pipeline:
 
-The compiler supports incremental compilation with dependency tracking:
+### 1. Parsing Phase
+- **Multi-Format Input**: Parse Lisp, resource definitions, effect specifications
+- **AST Construction**: Build unified abstract syntax tree
+- **Syntax Validation**: Early syntax error detection and recovery
+
+### 2. Analysis Phase
+- **Type Inference**: Infer types throughout the program
+- **Linearity Analysis**: Verify linear resource usage constraints
+- **Effect Analysis**: Analyze effect dependencies and capabilities
+- **Semantic Validation**: Ensure program correctness
+
+### 3. Compilation Phase
+- **Layer 2 → Layer 1**: Transform effect algebra to lambda calculus
+- **Layer 1 → Layer 0**: Compile lambda expressions to register machine
+- **Symbol Resolution**: Resolve all symbolic references
+- **Code Generation**: Generate final instruction sequences
+
+### 4. Optimization Phase
+- **Analysis-Driven Optimization**: Use analysis results to guide optimization
+- **Multi-Pass Optimization**: Apply optimization passes in optimal order
+- **Cross-Layer Optimization**: Optimize across architectural boundaries
+- **Performance Metrics**: Track optimization effectiveness
+
+### 5. Artifact Generation
+- **Content Addressing**: Generate deterministic artifact identifiers
+- **Metadata Generation**: Create comprehensive compilation metadata
+- **Caching Integration**: Store artifacts for future incremental builds
+
+## Advanced Features
+
+### Incremental Compilation
+Smart recompilation based on content addressing:
+- **Dependency Tracking**: Track fine-grained dependencies between compilation units
+- **Change Detection**: Detect changes at the content level
+- **Selective Recompilation**: Recompile only affected components
+- **Cache Coherence**: Maintain cache consistency across builds
+
+### Parallel Compilation
+Multi-threaded compilation for performance:
+- **Independent Module Compilation**: Compile modules in parallel
+- **Pipeline Parallelism**: Overlap compilation pipeline stages
+- **Optimization Parallelism**: Parallel execution of optimization passes
+- **Resource Management**: Efficient CPU and memory utilization
+
+### Error Recovery and Diagnostics
+Comprehensive error handling with actionable feedback:
+- **Contextual Error Messages**: Provide detailed error context
+- **Suggestion Engine**: Offer specific suggestions for error resolution
+- **Error Recovery**: Continue compilation after recoverable errors
+- **IDE Integration**: Structured error output for development tools
+
+## Design Philosophy
+
+### Compositional Compilation
+The compiler emphasizes compositionality at every level:
+- **Modular Parsing**: Independent parsing of different source formats
+- **Compositional Analysis**: Analysis passes that compose cleanly
+- **Layered Compilation**: Clean separation between compilation layers
+- **Incremental Optimization**: Optimization passes that compose effectively
+
+### Deterministic Builds
+All compilation is designed to be deterministic:
+- **Content Addressing**: Compilation artifacts are content-addressed
+- **Reproducible Optimization**: Optimization passes produce consistent results
+- **Platform Independence**: Compilation results are platform-independent
+
+### Performance by Design
+The compiler is optimized for both compile-time and runtime performance:
+- **Parallel Compilation**: Leverage multiple CPU cores effectively
+- **Incremental Builds**: Minimize redundant compilation work
+- **Efficient Data Structures**: Use optimal data structures throughout
+- **Memory Management**: Careful memory usage during compilation
+
+## Testing Framework
+
+Comprehensive testing infrastructure covers all compilation aspects:
 
 ```rust
-use causality_compiler::pipeline::{CompilationPipeline, Stage};
+// Property-based testing for optimization correctness
+#[test]
+fn test_optimization_preserves_semantics() {
+    proptest!(|(program in any_valid_program())| {
+        let original_result = execute_program(&program);
+        let optimized = optimize_program(&program);
+        let optimized_result = execute_program(&optimized);
+        assert_eq!(original_result, optimized_result);
+    });
+}
 
-let pipeline = CompilationPipeline::new()
-    .add_stage(Stage::Parse)
-    .add_stage(Stage::TypeCheck)
-    .add_stage(Stage::Optimize)
-    .add_stage(Stage::CodeGen);
-
-let result = pipeline.compile(&source_files)?;
-```
-
-### Dependency Resolution
-
-Automatic dependency resolution for Resource and dataflow definitions:
-
-```rust
-use causality_compiler::deps::{DependencyResolver, DependencyGraph};
-
-let resolver = DependencyResolver::new();
-let dep_graph = resolver.resolve_dependencies(&project_sources)?;
-
-// Compile in dependency order
-for component in dep_graph.topological_order() {
-    compiler.compile_component(component)?;
+// Integration testing across compilation layers
+#[test]
+fn test_cross_layer_compilation() {
+    let effect_program = parse_effect_specification(test_spec);
+    let lambda_program = compile_to_lambda(&effect_program);
+    let machine_program = compile_to_machine(&lambda_program);
+    assert!(validate_machine_program(&machine_program));
 }
 ```
 
-### Optimization Passes
-
-Multiple optimization passes for different compilation targets:
-
-```rust
-use causality_compiler::optimization::{OptimizationPass, PassManager};
-
-let pass_manager = PassManager::new()
-    .add_pass(OptimizationPass::ConstantFolding)
-    .add_pass(OptimizationPass::DeadCodeElimination)
-    .add_pass(OptimizationPass::ExpressionSimplification)
-    .add_pass(OptimizationPass::ZkOptimization);
-
-let optimized = pass_manager.run_passes(&compilation_unit)?;
-```
-
-## Compilation Targets
-
-### Runtime Target
-
-Compile for efficient runtime execution:
-
-```rust
-use causality_compiler::targets::RuntimeTarget;
-
-let target = RuntimeTarget::new();
-let runtime_artifact = target.compile(&resource_definition)?;
-
-// Optimized for fast evaluation
-assert!(runtime_artifact.is_optimized_for_runtime());
-```
-
-### ZK Target
-
-Compile for zero-knowledge proof generation:
-
-```rust
-use causality_compiler::targets::ZkTarget;
-
-let target = ZkTarget::new();
-let zk_artifact = target.compile(&resource_definition)?;
-
-// Optimized for ZK circuit generation
-assert!(zk_artifact.is_zk_compatible());
-```
-
-### Cross-Domain Target
-
-Compile for cross-domain operations:
-
-```rust
-use causality_compiler::targets::CrossDomainTarget;
-
-let target = CrossDomainTarget::new(source_domain, target_domain);
-let cross_domain_artifact = target.compile(&dataflow_block)?;
-```
-
-## Configuration
-
-Compiler configuration options:
-
-```toml
-[compiler]
-optimization_level = "release"
-target_architecture = "wasm32"
-enable_debug_info = false
-parallel_compilation = true
-
-[compiler.optimization]
-constant_folding = true
-dead_code_elimination = true
-expression_simplification = true
-zk_optimization = true
-
-[compiler.targets]
-default_target = "runtime"
-zk_target_enabled = true
-cross_domain_enabled = true
-
-[compiler.cache]
-enabled = true
-cache_dir = ".causality/cache"
-max_cache_size = "1GB"
-```
-
-## Error Handling
-
-Comprehensive compilation error reporting:
-
-```rust
-use causality_compiler::error::{CompilationError, ErrorContext};
-
-match compiler.compile(&source) {
-    Ok(artifact) => println!("Compilation successful"),
-    Err(CompilationError::ParseError { location, message }) => {
-        eprintln!("Parse error at {}: {}", location, message);
-    }
-    Err(CompilationError::TypeCheckError { expr_id, expected, actual }) => {
-        eprintln!("Type error in {}: expected {}, got {}", expr_id, expected, actual);
-    }
-    Err(CompilationError::OptimizationError { pass, reason }) => {
-        eprintln!("Optimization error in {}: {}", pass, reason);
-    }
-}
-```
-
-## Feature Flags
-
-- **default**: Standard compilation features
-- **optimization**: Advanced optimization passes
-- **zk-target**: ZK proof compilation target
-- **cross-domain**: Cross-domain compilation support
-- **parallel**: Parallel compilation support
-- **cache**: Compilation caching
+This comprehensive compilation infrastructure enables sophisticated program transformation while maintaining the mathematical rigor and verifiability properties essential for distributed zero-knowledge computation.

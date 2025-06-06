@@ -1,86 +1,87 @@
-//! Error types for Simulation
-//!
-//! This module defines the error types used throughout the simulation crate,
-//! providing categorized error handling and proper context propagation.
+//! Error types for the Causality simulation framework
 
-//-----------------------------------------------------------------------------
-// Error Types
-//-----------------------------------------------------------------------------
-
-use causality_runtime::tel::traits::HostCallError as TelExecutionError;
 use thiserror::Error;
 
-/// Main error type for the simulation crate.
-#[derive(Error, Debug)]
+/// Main error type for simulation operations
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum SimulationError {
-    /// Represents an error during simulation setup or configuration.
-    #[error("Configuration error: {0}")]
+    #[error("Simulation configuration error: {0}")]
     Configuration(String),
-
-    /// Represents an error during simulation runtime.
-    #[error("Runtime error: {0}")]
-    Runtime(String),
-
-    /// Represents an error related to an invalid operation or state.
-    #[error("Invalid operation: {0}")]
-    InvalidOperation(String),
-
-    /// Represents an error related to snapshotting or history management.
-    #[error("History/Snapshot error: {0}")]
-    History(String),
-
-    /// An IO error occurred (no longer direct std::io::Error to avoid From conflict).
-    #[error("I/O error: {0}")]
-    Io(String),
-
-    /// A ssz (de)serialization error occurred.
-    #[error("SSZ error: {0}")]
-    Ssz(#[from] std::io::Error),
-
-    /// An error passed up from another Causality crate.
-    #[error(transparent)]
-    Upstream(#[from] anyhow::Error),
-
-    /// Represents a file I/O error.
-    #[error("File I/O error: {0}")]
-    FileIo(String),
-
-    /// Represents a serialization/deserialization error.
-    #[error("Serialization/Deserialization error: {0}")]
-    Serialization(String),
-
-    /// Represents an invalid state for an operation.
-    #[error("Invalid state for operation: {0}")]
-    State(String),
-
-    /// Represents a mocking error.
-    #[error("Mocking error: {0}")]
-    Mocking(String),
-
-    /// Represents a handler registration error.
-    #[error("Effect handler registration error: {0}")]
-    HandlerRegistration(String),
-
-    /// Represents a TEL execution error.
-    #[error("TEL execution error: {0}")]
-    TelExecution(#[from] TelExecutionError),
-
-    /// Represents a checkpoint/restoration error.
-    #[error("Checkpoint error: {0}")]
-    CheckpointError(String),
-
-    /// Represents an evaluation error.
-    #[error("Evaluation error: {0}")]
-    EvaluationError(String),
-
-    /// Represents a configuration error.
-    #[error("Configuration error: {0}")]
-    ConfigurationError(String),
-
-    /// Represents an unknown error.
-    #[error("Unknown error: {0}")]
-    Unknown(String),
+    
+    #[error("Engine state error: {0}")]
+    EngineState(String),
+    
+    #[error("Effect execution error: {0}")]
+    EffectExecutionError(String),
+    
+    #[error("Network simulation error: {0}")]
+    NetworkError(String),
+    
+    #[error("Cross-chain simulation error: {0}")]
+    CrossChainError(String),
+    
+    #[error("Invalid state: {0}")]
+    InvalidState(String),
+    
+    #[error("Snapshot error: {0}")]
+    SnapshotError(String),
+    
+    #[error("Resource unavailable: {resource_id}")]
+    ResourceUnavailable { resource_id: String },
+    
+    #[error("Constraint violation: {constraint}")]
+    ConstraintViolation { constraint: String },
+    
+    #[error("Snapshot operation failed: {0}")]
+    SnapshotOperationFailed(String),
+    
+    #[error("Fault injection error: {0}")]
+    FaultInjectionError(String),
+    
+    #[error("TEG execution error: {0}")]
+    TegExecutionError(String),
+    
+    #[error("Intent processing error: {0}")]
+    IntentProcessingError(String),
+    
+    #[error("Visualization error: {0}")]
+    VisualizationError(String),
+    
+    #[error("Engine operation error: {0}")]
+    EngineError(String),
+    
+    #[error("Core causality error: {0}")]
+    CoreError(#[from] causality_core::system::error::MachineError),
 }
 
-/// Result type alias for simulation operations.
+/// Result type for simulation operations
 pub type SimulationResult<T> = Result<T, SimulationError>;
+
+/// Error type for fault injection operations
+#[derive(Error, Debug)]
+pub enum FaultError {
+    #[error("Invalid fault target: {0}")]
+    InvalidTarget(String),
+    
+    #[error("Fault injection failed: {0}")]
+    InjectionFailed(String),
+    
+    #[error("Fault configuration error: {0}")]
+    ConfigurationError(String),
+}
+
+/// Error type for snapshot operations
+#[derive(Error, Debug)]
+pub enum SnapshotError {
+    #[error("Snapshot not found: {id}")]
+    NotFound { id: String },
+    
+    #[error("Snapshot creation failed: {0}")]
+    CreationFailed(String),
+    
+    #[error("Snapshot restoration failed: {0}")]
+    RestorationFailed(String),
+    
+    #[error("Invalid snapshot state: {0}")]
+    InvalidState(String),
+} 

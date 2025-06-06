@@ -2,49 +2,41 @@
 name = "causality-zk"
 version = "0.1.0"
 edition = "2021"
-description = "ZK proof generation and verification for the Causality system"
-
-# See Valence Coprocessor architecture in docs/valence-coprocessor-interaction.md
+authors = ["Causality Team"]
+description = "Zero-knowledge proof infrastructure for the Causality system"
+license = "MIT"
 
 [dependencies]
-# Essential dependencies only
-causality-types = { path = "../causality-types", features = ["std"] }
-causality-core = { path = "../causality-core" }  # For SMT functionality
-causality-lisp = { path = "../causality-lisp", features = ["std"] }  # For interpreter/validator
-causality-api = { path = "../causality-api" }  # For coprocessor client
-ethereum_ssz = { workspace = true }  # Use workspace dependency for consistent features
-ethereum_ssz_derive = { workspace = true }
-sha2 = { workspace = true }    # For hashing and content-addressing
-frunk = { workspace = true }  # Type-level programming for witness types
-hex = { workspace = true }  # For hex encoding/decoding
-parking_lot = { workspace = true }  # For SMT storage synchronization
-async-trait = { workspace = true }  # Required for trait implementations
-thiserror = { workspace = true }
-serde = { workspace = true, optional = true }  # Optional to maintain SSZ-first approach
-serde_json = { workspace = true, optional = true }
-lazy_static = "1.4.0"  # Pin to workspace compatible version
-log = { workspace = true }
+causality-core = { version = "0.1.0", path = "../causality-core" }
+anyhow = "1.0"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+rand = "0.8"
+bincode = "1.3"
+hex = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+async-trait = "0.1"
+base64 = "0.21"
+log = "0.4"
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+uuid = { version = "1.0", features = ["v4"] }
 
-# Optional dependencies - all disabled by default
-tokio = { workspace = true, optional = true }
-# SP1 support is temporarily disabled during refactoring
-# sp1-zkvm = { version = "4.0.0-rc.11", optional = true }
+# ZK backend integrations (optional)
+sp1-sdk = { version = "1.0", optional = true }
+risc0-zkvm = { version = "0.19", optional = true }
 
-# Cross-compilation targets
 [features]
-default = ["std"]
-
-# Standard features
-std = ["causality-types/std", "causality-lisp/std"]
-host = ["std", "dep:tokio"]  # For host environment with async support
-
-# SP1 features - even though dependency is commented out, we need the feature flag
-# to prevent cfg errors in the code
-sp1 = []  # For SP1 RISC-V target without async support
-
-# Utility features
-debug_logging = []
+default = ["mock"]
+mock = []  # Mock backend for testing
+sp1 = ["sp1-sdk"]
+risc0 = ["risc0-zkvm"]
 
 [dev-dependencies]
-criterion = "0.4.0"  # For benchmarking ZK operations
-tokio = { workspace = true, features = ["full", "macros", "rt-multi-thread"] }  # For async tests
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[[example]]
+name = "zk_effect_demo"
+path = "../../examples/zk_effect_demo.rs" 

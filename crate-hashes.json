@@ -1,4 +1,5 @@
 {
+  "git+https://github.com/timewave-computer/valence-coprocessor.git?tag=v0.1.13#valence-coprocessor@0.1.13": "1hhc43d8l2l8vc6sjih06l1a4zqhyhpllpgvi9vg2hsh4awnc48v",
   "git+https://github.com/timewave-computer/valence-domain-clients?rev=d26460ceb0f95599300b1521131ef4b078638310#0.1.0": "1jldrmj7nl0dqxcg0yhzrcgvk2ggj7f0q5nws0pf61cvyqpbj4pz",
   "git+https://github.com/timewave-computer/valence-domain-clients?rev=d26460ceb0f95599300b1521131ef4b078638310#valence-coprocessor-client@0.1.0": "1jldrmj7nl0dqxcg0yhzrcgvk2ggj7f0q5nws0pf61cvyqpbj4pz",
   "git+https://github.com/timewave-computer/valence-domain-clients?rev=d26460ceb0f95599300b1521131ef4b078638310#valence-core@0.1.0": "1jldrmj7nl0dqxcg0yhzrcgvk2ggj7f0q5nws0pf61cvyqpbj4pz",

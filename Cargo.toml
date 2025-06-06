@@ -1,17 +1,15 @@
 [workspace]
 members = [
-  "crates/causality-types",
-  "crates/causality-types/derive",
   "crates/causality-core",
-  "crates/causality-lisp",
   "crates/causality-compiler",
   "crates/causality-runtime",
-  "crates/causality-simulation",
   "crates/causality-zk",
-  "crates/causality-cli",
   "crates/causality-api",
+  "crates/causality-cli",
   "crates/causality-toolkit",
-  "e2e",
+  "crates/causality-simulation",
+  "crates/causality-lisp",
+  "crates/causality-ffi",
 ]
 resolver = "2"
 

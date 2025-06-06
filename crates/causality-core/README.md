@@ -1,220 +1,194 @@
 # Causality Core
 
-Core business logic and implementation utilities for the Causality Resource Model framework. This crate provides concrete implementations, utility functions, and infrastructure components that support the type definitions in `causality-types`.
+The foundational implementation of the Causality framework's three-layer architecture, providing register machine execution, linear lambda calculus, and effect algebra for distributed, zero-knowledge verifiable computation.
 
-## Overview
+## Purpose
 
-The `causality-core` crate serves as the implementation layer for the Causality system, providing:
+The `causality-core` crate serves as the architectural foundation of the Causality system, implementing the mathematical abstractions and execution models that enable verifiable distributed computation. It provides three distinct but integrated computational layers that work together to support everything from low-level register operations to high-level declarative programming.
 
-- **Content Addressing**: Utilities for SSZ-based content addressing and hashing
-- **Sparse Merkle Trees (SMT)**: Implementation of authenticated data structures
-- **Graph Management**: TEG (Temporal Effect Graph) state management and analysis
-- **S-Expression Utilities**: Lisp integration and FFI support
-- **Domain Management**: Domain configuration and boundary handling
-- **Tracing and Debugging**: Execution tracing and analysis tools
-- **ZK Integration**: Zero-knowledge proof utilities and state root management
+### Key Responsibilities
 
-All implementations maintain consistency with the Resource Model's content-addressed, SSZ-serialized architecture.
+- **Register Machine Implementation**: Provide a minimal, verifiable instruction set for deterministic computation
+- **Linear Type System**: Enforce resource linearity and affine constraints at the type level
+- **Effect Algebra**: Enable declarative programming through intent specification
+- **Resource Management**: Implement content-addressed, nullifier-based resource lifecycle management
+- **Domain Organization**: Provide capability-based access control and resource scoping
+
+## Architecture Overview
+
+The three-layer architecture represents different levels of computational abstraction:
+
+### Layer 0: Register Machine Foundation
+A minimal 11-instruction set virtual machine designed for verifiability and deterministic execution. This layer provides the computational foundation that can be easily proven in zero-knowledge systems.
+
+### Layer 1: Linear Lambda Calculus  
+A structured type system with configurable linearity constraints, enabling safe resource management and functional programming patterns while maintaining mathematical rigor.
+
+### Layer 2: Effect Algebra
+A declarative programming model where computations are expressed as effects that can be analyzed and optimized.
 
 ## Core Components
 
-### Content Addressing
+### Register Machine (`machine/`)
 
-Utilities for creating and managing content-addressed identifiers:
-
-```rust
-use causality_core::content_addressing::{ContentAddressable, content_id_from_bytes};
-
-let data = b"resource data";
-let content_id = content_id_from_bytes(data);
-let resource_id = resource.content_id();
-```
-
-### Sparse Merkle Trees (SMT)
-
-Authenticated data structures for verifiable storage:
+The register machine implements a minimal instruction set designed for verifiable computation:
 
 ```rust
-use causality_core::smt::{SparseMerkleTree, SmtProof};
+use causality_core::machine::{MachineState, Instruction, RegisterId};
 
-let mut smt = SparseMerkleTree::new();
-smt.insert(key, value)?;
+let mut machine = MachineState::new();
 
-let proof = smt.generate_proof(&key)?;
-let verified = proof.verify(&root, &key, &value)?;
+// Basic register operations
+machine.execute_instruction(Instruction::Move { 
+    src: RegisterId(0), 
+    dst: RegisterId(1) 
+})?;
+
+// Resource lifecycle operations
+machine.execute_instruction(Instruction::Alloc { 
+    type_reg: RegisterId(2), 
+    val_reg: RegisterId(3), 
+    out_reg: RegisterId(4) 
+})?;
 ```
 
-#### SMT Collections
+**Core Instruction Set (11 Instructions):**
+- **Movement**: `Move` for data movement between registers
+- **Resource Operations**: `Alloc`, `Consume` for resource lifecycle
+- **Control Flow**: `Apply`, `Match`, `Select`, `Return` for program control
+- **Constraints**: `Check` for runtime constraint verification
+- **Effects**: `Perform` for effect execution
+- **External Interface**: `Witness` for external data input
+
+### Linear Lambda Calculus (`lambda/`)
+
+A type system that enforces linearity constraints to ensure safe resource usage:
 
 ```rust
-use causality_core::smt_collections::{SmtMap, SmtSet};
+use causality_core::lambda::{Value, Type, Linearity};
 
-let mut smt_map = SmtMap::new();
-smt_map.insert("key", "value")?;
-
-let mut smt_set = SmtSet::new();
-smt_set.insert("element")?;
+// Create values with linearity constraints
+let linear_value = Value::with_linearity(42, Linearity::Linear);
 ```
 
-### TEG State Management
+**Linearity Levels:**
+- **Linear**: Must be used exactly once
+- **Affine**: Can be used at most once  
+- **Relevant**: Must be used at least once
+- **Unrestricted**: Can be used any number of times
 
-Temporal Effect Graph state tracking and management:
+### Effect Algebra (`effect/`)
+
+A declarative programming model based on effect expressions:
 
 ```rust
-use causality_core::teg_state_root::{TegStateRoot, StateTransition};
+use causality_core::effect::{EffectExpr, EffectExprKind};
 
-let mut state_root = TegStateRoot::new();
-let transition = StateTransition::new(effect_id, old_state, new_state);
-state_root.apply_transition(transition)?;
-
-let root_hash = state_root.get_root_hash();
+// Define effect expressions
+let effect = EffectExpr::new(EffectExprKind::Effect {
+    name: "transfer".to_string(),
+    args: vec![],
+});
 ```
 
-#### TEG Persistence
+### Resource Model (`machine/resource.rs`)
+
+The resource system provides content-addressed, immutable entities with privacy-preserving consumption:
 
 ```rust
-use causality_core::teg_persistence::{TegPersistence, PersistenceConfig};
+use causality_core::machine::{Resource, ResourceHeap, Nullifier};
 
-let config = PersistenceConfig {
-    storage_path: "teg_data".to_string(),
-    compression_enabled: true,
-    backup_enabled: true,
-};
+let mut heap = ResourceHeap::new();
 
-let persistence = TegPersistence::new(config)?;
-persistence.store_teg_state(&teg_state).await?;
+// Resources are content-addressed and immutable
+let resource = Resource::simple("test", vec![42]);
+let resource_id = heap.store_resource(resource)?;
+
+// Consumption uses nullifiers for privacy
+let nullifier = heap.consume_resource(&resource_id)?;
 ```
 
-### Graph Analysis
+**Key Properties:**
+- **Content Addressing**: IDs determined by cryptographic hash of content
+- **Immutability**: Resources never change after creation
+- **Nullifier System**: Privacy-preserving consumption tracking
+- **Zero-Knowledge Compatibility**: Designed for efficient proof generation
 
-Analysis tools for TEG structures:
+### Content Addressing System
+
+All entities use deterministic, content-based identifiers:
 
 ```rust
-use causality_core::graph_analysis::tel_graph_has_cycles;
-use causality_core::graph_registry::{NodeRegistry, EdgeRegistry};
+use causality_core::{EntityId, ContentAddressable};
 
-let has_cycles = tel_graph_has_cycles(&teg)?;
-
-let mut node_registry = NodeRegistry::new();
-let mut edge_registry = EdgeRegistry::new();
-node_registry.register_node(node_id, node_data)?;
+// IDs are deterministic based on content
+let resource = Resource::simple("test", vec![42]);
+let entity_id = resource.entity_id(); // SHA256 of content
 ```
 
-### S-Expression Integration
+## Layer Integration
 
-Lisp integration and FFI support:
+The three layers work together seamlessly:
+
+### Layer 0 → Layer 1 Integration
+The register machine provides the execution foundation for lambda calculus operations. Lambda expressions compile down to sequences of register machine instructions.
+
+### Layer 1 → Layer 2 Integration  
+The type system enables structured parameters for effects. Effects can manipulate typed values while preserving linearity constraints.
+
+### Layer 2 → Layer 0 Integration
+Effects ultimately compile down to register machine instruction sequences, providing high-level abstractions that generate low-level execution plans.
+
+## Design Philosophy
+
+### Mathematical Foundation
+The system is built on solid mathematical principles:
+- **Linear Logic**: Resource usage follows linear logic principles
+- **Type Theory**: Strong static type system with linearity constraints
+- **Content Addressing**: Cryptographic integrity built into addressing
+
+### Verifiability by Design
+Every component is designed for zero-knowledge proof generation:
+- **Deterministic Operations**: All computations are reproducible
+- **Minimal Instruction Set**: Register machine designed for circuit compilation
+- **Content Addressing**: Cryptographic integrity throughout
+
+### Compositional Architecture
+The system emphasizes composition at every level:
+- **Instruction Composition**: Complex programs built from simple instructions
+- **Effect Composition**: Complex behaviors built from simple effects
+- **Type Composition**: Complex types built from simple primitives
+
+## Performance Characteristics
+
+### Register Machine Performance
+- **Instruction Overhead**: Minimal per-instruction cost
+- **Memory Management**: Efficient register allocation and heap management
+- **Nullifier Operations**: Constant-time nullifier verification
+
+### Resource System Performance
+- **Content Addressing**: O(1) lookup for existing resources
+- **Nullifier Verification**: Constant-time verification operations
+- **Serialization**: Efficient encoding/decoding
+
+## Testing Framework
+
+The crate includes comprehensive testing infrastructure:
 
 ```rust
-use causality_core::sexpr_utils::{parse_sexpr, sexpr_to_value_expr};
-use causality_core::sexpr_ffi::{sexpr_to_ocaml, sexpr_from_ocaml};
-
-let sexpr = parse_sexpr("(+ 1 2 3)")?;
-let value_expr = sexpr_to_value_expr(&sexpr)?;
-
-let ocaml_data = sexpr_to_ocaml(&sexpr)?;
+#[test]
+fn test_linearity_constraints() {
+    let mut state = MachineState::new();
+    
+    // Store value in register
+    state.store_register(RegisterId::new(1), MachineValue::Int(42), None);
+    
+    // Consume register
+    assert!(state.consume_register(RegisterId::new(1)).is_ok());
+    
+    // Try to consume again - should fail
+    assert!(state.consume_register(RegisterId::new(1)).is_err());
+}
 ```
 
-### Domain Management
-
-Domain configuration and boundary handling:
-
-```rust
-use causality_core::domain::{DomainManager, DomainConfig, DomainBoundary};
-
-let domain_config = DomainConfig {
-    domain_id: domain_id,
-    domain_type: DomainType::Verifiable,
-    capabilities: vec!["resource.create", "resource.transfer"],
-    constraints: domain_constraints,
-};
-
-let mut domain_manager = DomainManager::new();
-domain_manager.register_domain(domain_config)?;
-```
-
-### Utility Functions
-
-#### Expression Utilities
-
-```rust
-use causality_core::utils::expr::{
-    compute_expr_hash, value_expr_as_string, create_value_expr_list
-};
-
-let expr_hash = compute_expr_hash(&expr);
-let string_value = value_expr_as_string(&value_expr)?;
-```
-
-#### Resource Utilities
-
-```rust
-use causality_core::utils::{compute_resource_hash, create_resource, resource_id};
-
-let resource = create_resource(value_expr, static_expr, domain_id)?;
-let resource_hash = compute_resource_hash(&resource);
-```
-
-### ZK Integration
-
-Zero-knowledge proof utilities and integration:
-
-```rust
-use causality_core::teg_zkp::{ZkProofGenerator, ZkCircuit};
-
-let proof_generator = ZkProofGenerator::new(circuit_config);
-let proof = proof_generator.generate_state_transition_proof(
-    &old_state,
-    &new_state,
-    &transition_witness
-)?;
-```
-
-### Tracing and Debugging
-
-Execution tracing and analysis:
-
-```rust
-use causality_core::tracing::{init_tracing, TraceConfig};
-use causality_core::trace_utils::{TraceCollector, ExecutionTrace};
-
-let trace_config = TraceConfig {
-    level: "debug".to_string(),
-    output_format: "json".to_string(),
-};
-init_tracing(trace_config)?;
-
-let mut trace_collector = TraceCollector::new();
-trace_collector.start_trace("resource_validation")?;
-```
-
-## Feature Flags
-
-- **default**: Standard core features with getrandom and std
-- **std**: Standard library support
-- **getrandom**: Random number generation
-- **benchmarks**: Performance benchmarking utilities
-
-## Module Structure
-
-```
-src/
-├── lib.rs                    # Main library interface and re-exports
-├── content_addressing.rs     # Content addressing utilities
-├── smt.rs                    # Sparse Merkle Tree implementation
-├── smt_collections.rs        # SMT-based collections
-├── teg_state_root.rs         # TEG state root management
-├── teg_persistence.rs        # TEG persistence layer
-├── teg_deployment.rs         # TEG deployment utilities
-├── teg_zkp.rs               # ZK proof integration
-├── graph_registry.rs        # Graph node and edge management
-├── graph_analysis.rs        # Graph analysis tools
-├── domain.rs                # Domain management
-├── sexpr_utils.rs           # S-expression utilities
-├── sexpr_ffi.rs             # FFI integration
-├── tracing.rs               # Tracing configuration
-└── utils/                   # Utility modules
-    ├── core.rs              # Core utilities
-    └── serialization.rs     # Serialization utilities
-```
-
-This crate forms the implementation backbone of the Causality system, providing the concrete functionality needed to build verifiable, deterministic Resource-based applications. 
+This comprehensive foundation enables the construction of complex distributed systems while maintaining mathematical rigor and verifiability throughout.
