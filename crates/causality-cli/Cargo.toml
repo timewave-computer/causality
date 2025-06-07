@@ -15,15 +15,16 @@ ethereum_ssz_derive = { workspace = true }
 async-trait = { workspace = true }
 indicatif = "0.16.2"
 tokio = { workspace = true, features = ["full", "macros"] }
-chrono = { workspace = true }
+chrono = { workspace = true, version = "0.4", features = ["serde"] }
 colored = "2.1.0"
 hex = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
+serde_json = { workspace = true, version = "1.0" }
 url = "2.4.1"
 rand = { workspace = true }
 dirs = "5.0"
+uuid = { version = "1.0", features = ["v4"] }
 
 [[bin]]
 name = "causality"

@@ -74,15 +74,14 @@ async fn run_comprehensive_demo() -> Result<(), SimulationError> {
     let effects = create_test_effects();
     println!("   Created {} test effects", effects.len());
     
-    // Test different optimization strategies
-    let strategies = vec![
-        ("Gas Optimization", OptimizationStrategy::MinimizeGasCost),
-        ("Time Optimization", OptimizationStrategy::MinimizeTime),
-        ("Parallelization", OptimizationStrategy::MaximizeParallelism),
-        ("Balanced", OptimizationStrategy::Balanced),
+    // Test different optimization strategies in different branches
+    let optimization_strategies = vec![
+        ("Gas Optimization", OptimizationStrategy::GasEfficiency),
+        ("Speed Optimization", OptimizationStrategy::Speed),
+        ("Balanced Optimization", OptimizationStrategy::Balanced),
     ];
     
-    for (name, strategy) in strategies {
+    for (name, strategy) in optimization_strategies {
         println!("\n   Testing {} strategy:", name);
         optimizer.set_strategy(strategy);
         

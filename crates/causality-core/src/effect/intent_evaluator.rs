@@ -127,7 +127,7 @@ impl IntentEvaluator {
     }
     
     /// Evaluate an intent and return the results
-    pub fn evaluate_intent(&self, intent: &Intent) -> IntentEvaluationResult {
+    pub fn evaluate_intent(&self, _intent: &Intent) -> IntentEvaluationResult {
         // For now, return a simple result to get compilation working
         // Full implementation will come in subsequent steps
         Ok(vec![Value::Unit])

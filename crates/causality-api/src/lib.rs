@@ -1,67 +1,64 @@
 //! Causality API
 //!
-//! High-level API server for interacting with the Causality system.
-//! Provides REST endpoints for compilation, execution, debugging, and session management.
+//! This crate provides the API interface for the Causality system, including
+//! HTTP server endpoints, client libraries, and blockchain integrations.
 
 use anyhow::Result;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use std::collections::HashMap;
 
+// Core modules
+pub mod client;
 pub mod config;
+pub mod coprocessor;
+pub mod handlers;
+pub mod server;
+pub mod session;
 pub mod traits;
 pub mod types;
-pub mod session;
-pub mod handlers;
-pub mod client;
-pub mod server;
-pub mod coprocessor;
-// pub mod effects;
 
-// Re-export key types
-pub use server::*;
+// Blockchain integration modules
+pub mod blockchain;
+
+// Re-exports for convenience
+pub use client::CausalityClient;
+pub use config::ApiConfig;
+pub use coprocessor::{CoprocessorClient, CoprocessorService};
+pub use session::{ExecutionSession};
 pub use types::*;
-pub use client::*;
-pub use session::*;
-pub use config::*;
-pub use coprocessor::*;
 
-/// Main API service for Causality
+// Re-export blockchain clients
+pub use blockchain::{EthereumClientWrapper, NeutronClientWrapper, CoprocessorClientWrapper};
+
+/// Main API service
 #[derive(Debug)]
 pub struct CausalityApi {
-    /// Execution sessions
-    sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
-    
-    /// Server configuration
+    /// Configuration
     config: ApiConfig,
     
-    /// Coprocessor service
-    coprocessor: Option<Arc<tokio::sync::Mutex<CoprocessorService>>>,
+    /// Session manager
+    sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
 }
 
 impl CausalityApi {
     /// Create a new API instance
-    pub fn new(config: ApiConfig) -> Self {
-        Self {
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-            config,
-            coprocessor: None,
-        }
-    }
-    
-    /// Create a new API instance with coprocessor integration
-    pub fn with_coprocessor(config: ApiConfig, coprocessor_config: CoprocessorConfig) -> Result<Self> {
-        let coprocessor = CoprocessorService::new(coprocessor_config)?;
+    pub fn new(config: ApiConfig) -> Result<Self> {
+        let sessions = Arc::new(RwLock::new(HashMap::new()));
         
         Ok(Self {
-            sessions: Arc::new(RwLock::new(HashMap::new())),
             config,
-            coprocessor: Some(Arc::new(tokio::sync::Mutex::new(coprocessor))),
+            sessions,
         })
     }
     
-    /// Start the API server
-    pub async fn start(&self) -> Result<()> {
-        server::start_server(self.config.clone(), self.sessions.clone()).await
+    /// Get the configuration
+    pub fn config(&self) -> &ApiConfig {
+        &self.config
+    }
+    
+    /// Get the session manager
+    pub fn sessions(&self) -> Arc<RwLock<HashMap<String, ExecutionSession>>> {
+        Arc::clone(&self.sessions)
     }
 } 

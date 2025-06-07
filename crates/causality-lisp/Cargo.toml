@@ -3,7 +3,7 @@ name = "causality-lisp"
 version = "0.1.0"
 edition = "2021"
 authors = ["Causality Team"]
-description = "Causality Lisp Language Implementation with Linear Type System Integration"
+description = "Causality Lisp language implementation with linear lambda calculus"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/timewave/reverse-causality"
 
@@ -12,6 +12,8 @@ causality-core = { version = "0.1.0", path = "../causality-core" }
 anyhow = "1.0"
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
+ethereum_ssz = { workspace = true }
+ethereum_ssz_derive = { workspace = true }
 serde_json = "1.0"
 rand = "0.8"
 

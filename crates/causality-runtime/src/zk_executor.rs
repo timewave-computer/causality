@@ -7,6 +7,7 @@
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use causality_core::machine::{Instruction, MachineState, MachineValue, RegisterId};
 use causality_core::effect::teg::TemporalEffectGraph;
@@ -45,6 +46,9 @@ pub struct ZkExecutor {
     
     /// ZK backend for proof operations
     pub zk_backend: Arc<dyn ZkBackend + Send + Sync>,
+    
+    /// Performance tracking
+    performance_tracker: PerformanceTracker,
 }
 
 /// Result of ZK-enabled execution with proof
@@ -165,6 +169,7 @@ impl ZkExecutor {
             circuit_cache: HashMap::new(),
             current_witness: None,
             zk_backend,
+            performance_tracker: PerformanceTracker::default(),
         }
     }
     
@@ -186,9 +191,15 @@ impl ZkExecutor {
         let result = self.executor.execute(instructions)?;
         let witness = self.build_witness(instructions, &result)?;
         
-        // Generate proof
+        // Generate proof with timing
+        let proof_start = Instant::now();
         let mut proof_gen = self.proof_generator.lock().unwrap();
         let proof = proof_gen.generate_proof(&circuit_id, &witness)?;
+        let proof_time = proof_start.elapsed().as_millis() as u64;
+        
+        // Update performance tracking
+        self.performance_tracker.proofs_generated += 1;
+        self.performance_tracker.total_proof_time_ms += proof_time;
         
         Ok((result, proof))
     }
@@ -246,13 +257,23 @@ impl ZkExecutor {
     
     /// Get performance metrics for ZK operations
     pub fn get_performance_metrics(&self) -> ZkPerformanceMetrics {
-        let cache = self.circuit_cache.lock().unwrap();
+        let cache_hit_rate = if self.performance_tracker.total_cache_lookups > 0 {
+            self.performance_tracker.cache_hits as f64 / self.performance_tracker.total_cache_lookups as f64
+        } else {
+            0.0
+        };
+        
+        let avg_proof_time = if self.performance_tracker.proofs_generated > 0 {
+            self.performance_tracker.total_proof_time_ms / self.performance_tracker.proofs_generated
+        } else {
+            0
+        };
         
         ZkPerformanceMetrics {
-            cached_circuits: cache.len(),
-            cache_hit_rate: 0.0, // TODO: Track actual hit rate
-            avg_proof_generation_time_ms: 100, // TODO: Track actual times
-            total_proofs_generated: 0, // TODO: Track count
+            cached_circuits: self.circuit_cache.len(),
+            cache_hit_rate,
+            avg_proof_generation_time_ms: avg_proof_time,
+            total_proofs_generated: self.performance_tracker.proofs_generated,
         }
     }
     
@@ -262,12 +283,16 @@ impl ZkExecutor {
         &mut self,
         instructions: &[Instruction]
     ) -> Result<ZkCircuitId, ZkExecutionError> {
+        // Track cache lookup
+        self.performance_tracker.total_cache_lookups += 1;
+        
+        // Create a cache key from instructions
+        let cache_key = format!("{:?}", instructions);
+        
         // Check cache first
-        {
-            let cache = self.circuit_cache.lock().unwrap();
-            if let Some(circuit_id) = cache.get(instructions) {
-                return Ok(*circuit_id);
-            }
+        if let Some(circuit_id) = self.circuit_cache.get(&cache_key) {
+            self.performance_tracker.cache_hits += 1;
+            return Ok(*circuit_id);
         }
         
         // Compile new circuit
@@ -275,10 +300,7 @@ impl ZkExecutor {
         let circuit_id = circuit.id();
         
         // Cache the compiled circuit
-        {
-            let mut cache = self.circuit_cache.lock().unwrap();
-            cache.insert(instructions.to_vec(), circuit_id);
-        }
+        self.circuit_cache.insert(cache_key, circuit_id);
         
         Ok(circuit_id)
     }
@@ -474,9 +496,34 @@ impl ZkExecutor {
     
     /// Serialize machine state for witness
     fn serialize_machine_state(&self, state: &causality_core::machine::MachineState) -> Result<Vec<u8>, ZkExecutionError> {
-        // For now, return a simple representation
-        // In a real implementation, this would serialize the full machine state
-        Ok(vec![0u8; 32]) // Placeholder: 32 bytes of state data
+        // Implement proper machine state serialization
+        let mut bytes = Vec::new();
+        
+        // Serialize program counter
+        bytes.extend(state.pc.to_le_bytes());
+        
+        // Serialize register count
+        bytes.extend((state.registers.len() as u32).to_le_bytes());
+        
+        // Serialize each register value
+        for (reg_id, value) in &state.registers {
+            bytes.extend(reg_id.0.to_le_bytes());
+            let value_bytes = self.serialize_machine_value(value)?;
+            bytes.extend((value_bytes.len() as u32).to_le_bytes());
+            bytes.extend(value_bytes);
+        }
+        
+        // Serialize resource heap size (if available)
+        bytes.extend((state.resource_heap.resource_count() as u32).to_le_bytes());
+        
+        // Add state checksum for integrity
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(&bytes);
+        let checksum = hasher.finalize();
+        bytes.extend(&checksum[..8]); // Add first 8 bytes of checksum
+        
+        Ok(bytes)
     }
     
     /// Serialize machine value to bytes
@@ -514,8 +561,24 @@ impl ZkExecutor {
             MachineValue::Int(i) => Ok(i.to_le_bytes().to_vec()),
             MachineValue::Bool(b) => Ok(vec![if *b { 1 } else { 0 }]),
             MachineValue::Unit => Ok(vec![]),
-            // TODO: Handle other MachineValue types
-            _ => Ok(vec![]),
+            MachineValue::ResourceId(id) => {
+                // Extract bytes from ResourceId for public inputs
+                Ok(id.as_bytes().to_vec())
+            },
+            MachineValue::Tensor(tensor_data) => {
+                // Serialize tensor data for public inputs
+                let mut result = Vec::new();
+                result.extend((tensor_data.len() as u32).to_le_bytes());
+                for value in tensor_data {
+                    result.extend(value.to_le_bytes());
+                }
+                Ok(result)
+            },
+            MachineValue::Lambda(_closure) => {
+                // For lambdas, we can't expose the closure as public input
+                // Instead, provide a hash or identifier
+                Ok(vec![0xFF, 0xFF, 0xFF, 0xFF]) // Lambda marker
+            },
         }
     }
     
@@ -549,6 +612,33 @@ pub struct ZkPerformanceMetrics {
     
     /// Total number of proofs generated
     pub total_proofs_generated: u64,
+}
+
+/// Performance tracking data
+#[derive(Debug, Clone)]
+pub struct PerformanceTracker {
+    /// Total cache lookups
+    pub total_cache_lookups: u64,
+    
+    /// Successful cache hits
+    pub cache_hits: u64,
+    
+    /// Total proof generation times
+    pub total_proof_time_ms: u64,
+    
+    /// Number of proofs generated
+    pub proofs_generated: u64,
+}
+
+impl Default for PerformanceTracker {
+    fn default() -> Self {
+        Self {
+            total_cache_lookups: 0,
+            cache_hits: 0,
+            total_proof_time_ms: 0,
+            proofs_generated: 0,
+        }
+    }
 }
 
 impl Default for ZkExecutor {

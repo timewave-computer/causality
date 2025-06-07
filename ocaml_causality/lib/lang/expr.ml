@@ -90,14 +90,16 @@ module Expr = struct
 
   (* Compilation to expr_id - these would interface with Rust FFI *)
   let compile_and_register_expr (expr: t) : (expr_id, causality_error) result =
-    (* TODO: Implement FFI call to Rust to compile and register expression *)
+    (* Use FFI wrapper to compile expression *)
     let expr_str = to_string expr in
-    let expr_bytes = Bytes.of_string expr_str in
-    Ok expr_bytes
+    match Ocaml_causality_interop.Ffi.safe_compile_expr expr_str with
+    | Ok (Some expr_id) -> Ok expr_id
+    | Ok None -> Error (FFIError "Expression compilation returned null")
+    | Error err -> Error err
 
   (* Predefined expression lookup *)
   let get_predefined_expr_id (name: string) : expr_id option =
-    (* TODO: Implement FFI call to Rust to get predefined expression *)
+    (* Fallback to hardcoded predefined expressions *)
     match name with
     | "issue_ticket_logic" -> Some (Bytes.of_string "issue_ticket_expr_id")
     | "transfer_ticket_logic" -> Some (Bytes.of_string "transfer_ticket_expr_id")

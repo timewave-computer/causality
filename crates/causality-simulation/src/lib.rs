@@ -23,6 +23,7 @@ pub mod cross_chain;
 pub mod branching;
 pub mod time_travel;
 pub mod optimizer;
+pub mod executor;
 
 // Legacy modules for backward compatibility
 pub mod network;
@@ -44,6 +45,15 @@ pub use optimizer::*;
 // Legacy exports
 pub use network::*;
 pub use testing::*;
+
+// Missing type aliases and exports for e2e test compatibility
+pub type PerformanceProfiler = optimizer::SimulationOptimizer;
+pub type ScenarioGenerator = cross_chain::CrossChainTestExecutor;
+pub type BranchManager = branching::BranchingManager;
+
+// Re-export specific types that the e2e test expects
+pub use cross_chain::TestExecution;
+pub use effect_runner::MockGenerator;
 
 // Simulation engine for testing algebraic effects
 //

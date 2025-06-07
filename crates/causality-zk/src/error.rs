@@ -1,8 +1,8 @@
-//! Error types for ZK operations
+//! Error types for the ZK module
 
 use thiserror::Error;
 
-/// Main ZK error type encompassing all ZK-related errors
+/// Main ZK error type
 #[derive(Error, Debug)]
 pub enum ZkError {
     #[error("Circuit error: {0}")]
@@ -22,9 +22,36 @@ pub enum ZkError {
     
     #[error("Serialization error: {0}")]
     Serialization(String),
+    
+    #[error("Circuit too large: {0} gates (max: {1})")]
+    CircuitTooLarge(usize, usize),
+    
+    #[error("Invalid circuit: {0}")]
+    InvalidCircuit(String),
+    
+    #[error("Invalid proof: {0}")]
+    InvalidProof(String),
+    
+    #[error("Invalid inputs: {0}")]
+    InvalidInputs(String),
+    
+    #[error("Invalid verification key: {0}")]
+    InvalidVerificationKey(String),
+    
+    #[error("Unsupported proof system: {0}")]
+    UnsupportedProofSystem(String),
+    
+    #[error("Unsupported operation: {0}")]
+    UnsupportedOperation(String),
+    
+    #[error("Invalid witness: {0}")]
+    InvalidWitness(String),
+    
+    #[error("Constraint violation: {0}")]
+    ConstraintViolation(String),
 }
 
-/// Circuit compilation and validation errors
+/// Circuit compilation errors
 #[derive(Error, Debug)]
 pub enum CircuitError {
     #[error("Invalid instruction sequence: {0}")]
@@ -131,4 +158,17 @@ pub type ProofResult<T> = Result<T, ProofError>;
 pub type VerificationResult<T> = Result<T, VerificationError>;
 
 /// Result type for witness operations
-pub type WitnessResult<T> = Result<T, WitnessError>; 
+pub type WitnessResult<T> = Result<T, WitnessError>;
+
+// Error conversions
+impl From<ZkError> for ProofError {
+    fn from(err: ZkError) -> Self {
+        match err {
+            ZkError::InvalidWitness(msg) => ProofError::InvalidWitness(msg),
+            ZkError::ConstraintViolation(msg) => ProofError::GenerationFailed(msg),
+            ZkError::InvalidProof(msg) => ProofError::GenerationFailed(msg),
+            ZkError::UnsupportedProofSystem(sys) => ProofError::GenerationFailed(format!("Unsupported proof system: {}", sys)),
+            _ => ProofError::GenerationFailed(format!("ZK error: {}", err)),
+        }
+    }
+} 

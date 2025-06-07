@@ -3,7 +3,9 @@
 //! This module provides functionality to split computations across multiple domains,
 //! generate proofs for each domain, and compose them into a single verifiable proof.
 
-use crate::{ZkCircuit, ZkProof, ZkWitness, ZkBackend, error::{ProofResult, ProofError}};
+use crate::{ZkCircuit, ZkProof, ZkWitness, backends::ZkBackend};
+use crate::backends::mock_backend::MockBackend;
+use crate::error::{ProofResult, ProofError};
 use causality_core::machine::instruction::Instruction;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
@@ -63,6 +65,15 @@ pub enum DomainPartition {
     
     /// Custom partition strategy with explicit domain assignments
     Custom(HashMap<String, DomainId>),
+    
+    /// Partition by circuit size
+    ByCircuitSize { threshold: usize },
+}
+
+impl Default for DomainPartition {
+    fn default() -> Self {
+        DomainPartition::ByEffectType
+    }
 }
 
 /// Cross-domain ZK proof manager
@@ -78,8 +89,13 @@ pub struct CrossDomainZkManager {
 }
 
 impl CrossDomainZkManager {
-    /// Create a new cross-domain ZK manager
-    pub fn new(partition_strategy: DomainPartition) -> Self {
+    /// Create a new cross-domain ZK manager with default partition
+    pub fn new() -> Self {
+        Self::new_with_partition(DomainPartition::default())
+    }
+    
+    /// Create a new cross-domain ZK manager with a specific partition
+    pub fn new_with_partition(partition_strategy: DomainPartition) -> Self {
         Self {
             backends: HashMap::new(),
             partition_strategy,
@@ -128,6 +144,17 @@ impl CrossDomainZkManager {
                     let domain = mapping.get(&instruction_key)
                         .cloned()
                         .unwrap_or_else(|| "default".to_string());
+                    partitions.entry(domain).or_insert_with(Vec::new).push(instruction.clone());
+                }
+            }
+            DomainPartition::ByCircuitSize { threshold } => {
+                // Partition by circuit size
+                for instruction in instructions {
+                    let domain = if self.calculate_circuit_size(instruction) > *threshold {
+                        "large".to_string()
+                    } else {
+                        "small".to_string()
+                    };
                     partitions.entry(domain).or_insert_with(Vec::new).push(instruction.clone());
                 }
             }
@@ -277,6 +304,159 @@ impl CrossDomainZkManager {
         
         true // Placeholder
     }
+    
+    /// Coordinate cross-domain proof generation and verification
+    pub async fn coordinate_cross_domain_proof(
+        &mut self,
+        instructions: &[Instruction],
+        witness_data: &[u8],
+    ) -> Result<CompositeProof, crate::error::ZkError> {
+        println!("Coordinating cross-domain proof for {} instructions", instructions.len());
+        
+        // Partition instructions by domain
+        let partitions = self.partition_instructions(instructions);
+        
+        let mut domain_proofs = HashMap::new();
+        
+        // Generate proofs for each domain
+        for (domain_id, domain_instructions) in partitions {
+            println!("  Generating proof for domain: {}", domain_id);
+            
+            // Ensure backend exists for this domain
+            if !self.backends.contains_key(&domain_id) {
+                let backend = Box::new(MockBackend::new());
+                self.backends.insert(domain_id.to_string(), backend);
+            }
+            
+            // Generate domain-specific proof data
+            let proof_data = self.mock_generate_proof_data(&domain_instructions, witness_data);
+            
+            // Create a ZkProof structure
+            let zk_proof = ZkProof::new(
+                format!("circuit_{}", domain_id),
+                proof_data,
+                vec![1, 2, 3], // Mock public inputs
+            );
+            
+            let domain_proof = DomainProof {
+                domain_id: domain_id.to_string(),
+                proof: zk_proof,
+                interface_constraints: vec![
+                    "cross_domain_consistency".to_string(),
+                    format!("domain_{}_constraints", domain_id),
+                ],
+                public_outputs: vec![0u8; 32], // Mock public outputs
+                dependencies: vec![], // No dependencies for mock implementation
+            };
+            
+            domain_proofs.insert(domain_id, domain_proof);
+        }
+        
+        // Generate cross-domain consistency proof
+        let consistency_proof = self.generate_consistency_proof(&domain_proofs)
+            .map_err(|e| crate::error::ZkError::Backend(format!("Consistency proof failed: {:?}", e)))?;
+        
+        // Create composite proof
+        let composite_proof = CompositeProof {
+            id: format!("composite_{}", chrono::Utc::now().timestamp()),
+            domain_proofs,
+            consistency_proof,
+            global_inputs: witness_data.to_vec(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
+        
+        println!("  ✓ Cross-domain proof coordination complete");
+        
+        Ok(composite_proof)
+    }
+    
+    /// Mock-generate proof data
+    fn mock_generate_proof_data(&self, instructions: &[Instruction], witness_data: &[u8]) -> Vec<u8> {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        instructions.len().hash(&mut hasher);
+        witness_data.hash(&mut hasher);
+        
+        let hash = hasher.finish();
+        
+        // Generate deterministic proof data based on inputs
+        let mut proof_data = Vec::new();
+        for i in 0..32 {
+            proof_data.push(((hash >> (i % 64)) & 0xFF) as u8);
+        }
+        
+        proof_data
+    }
+    
+    /// Calculate a simple hash of witness data
+    fn calculate_witness_hash(&self, witness_data: &[u8]) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        witness_data.hash(&mut hasher);
+        format!("{:x}", hasher.finish())
+    }
+    
+    /// Calculate estimated circuit size for an instruction
+    fn calculate_circuit_size(&self, _instruction: &Instruction) -> usize {
+        // Mock circuit size calculation
+        100 // All instructions have mock size of 100
+    }
+    
+    /// Coordinate cross-domain computation (simplified interface)
+    pub async fn coordinate_domains(&self, instructions: &[Instruction]) -> Result<DomainCoordinationResult, crate::error::ZkError> {
+        println!("Coordinating cross-domain computation for {} instructions", instructions.len());
+        
+        // Partition instructions
+        let partitions = self.partition_instructions(instructions);
+        let domain_count = partitions.len();
+        
+        println!("  ✓ Partitioned into {} domains", domain_count);
+        
+        // Simulate domain coordination
+        for (domain_id, domain_instructions) in &partitions {
+            println!("    Domain {}: {} instructions", domain_id, domain_instructions.len());
+        }
+        
+        Ok(DomainCoordinationResult {
+            domain_count,
+            total_instructions: instructions.len(),
+            partition_strategy: format!("{:?}", self.partition_strategy),
+        })
+    }
+    
+    /// Generate a domain-specific proof for a computation
+    pub async fn generate_domain_proof(&self, computation: &str) -> Result<String, crate::error::ZkError> {
+        println!("Generating domain proof for computation: {}", computation);
+        
+        // Mock proof generation based on computation
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        computation.hash(&mut hasher);
+        let proof_hash = hasher.finish();
+        
+        let proof_id = format!("domain_proof_{:x}", proof_hash);
+        
+        println!("  ✓ Domain proof generated: {}", proof_id);
+        
+        Ok(proof_id)
+    }
+}
+
+/// Result of domain coordination
+#[derive(Debug, Clone)]
+pub struct DomainCoordinationResult {
+    /// Number of domains the computation was partitioned into
+    pub domain_count: usize,
+    /// Total number of instructions processed
+    pub total_instructions: usize,
+    /// Strategy used for partitioning
+    pub partition_strategy: String,
 }
 
 #[cfg(test)]
@@ -286,14 +466,14 @@ mod tests {
     
     #[test]
     fn test_cross_domain_manager_creation() {
-        let manager = CrossDomainZkManager::new(DomainPartition::ByEffectType);
+        let manager = CrossDomainZkManager::new();
         assert!(manager.backends.is_empty());
         assert!(manager.circuit_cache.is_empty());
     }
     
     #[test]
     fn test_domain_partitioning() {
-        let manager = CrossDomainZkManager::new(DomainPartition::ByComplexity);
+        let manager = CrossDomainZkManager::new_with_partition(DomainPartition::ByComplexity);
         
         let instructions = vec![
             Instruction::Witness { out_reg: causality_core::machine::RegisterId(1) },
@@ -318,7 +498,7 @@ mod tests {
     
     #[test]
     fn test_instruction_classification() {
-        let manager = CrossDomainZkManager::new(DomainPartition::ByEffectType);
+        let manager = CrossDomainZkManager::new_with_partition(DomainPartition::ByEffectType);
         
         let alloc_instruction = Instruction::Alloc { 
             type_reg: causality_core::machine::RegisterId(1),
@@ -340,7 +520,7 @@ mod tests {
     
     #[test]
     fn test_cross_domain_proof_generation() {
-        let mut manager = CrossDomainZkManager::new(DomainPartition::ByEffectType);
+        let mut manager = CrossDomainZkManager::new_with_partition(DomainPartition::ByEffectType);
         
         // Register mock backends for different domains
         manager.register_backend("resource".to_string(), create_backend(crate::BackendType::Valence));

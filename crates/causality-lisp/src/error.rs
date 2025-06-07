@@ -15,7 +15,7 @@ pub enum LispError {
     Type(#[from] TypeError),
 }
 
-/// Parse-time errors
+/// Parse-time errors with enhanced context and helpful suggestions
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum ParseError {
     #[error("Unexpected end of input")]
@@ -44,6 +44,82 @@ pub enum ParseError {
     
     #[error("Invalid syntax: {0}")]
     InvalidSyntax(String),
+    
+    // Enhanced error types with better context
+    #[error("Expected {expected} but found {found} at line {line}, column {column}")]
+    ExpectedToken {
+        expected: String,
+        found: String,
+        line: usize,
+        column: usize,
+    },
+    
+    #[error("Expected symbol for {context} but found {found} at line {line}, column {column}")]
+    ExpectedSymbol {
+        context: String,
+        found: String,
+        line: usize,
+        column: usize,
+    },
+    
+    #[error("Invalid special form '{form}' at line {line}, column {column}\n  Hint: {hint}")]
+    InvalidSpecialForm {
+        form: String,
+        hint: String,
+        line: usize,
+        column: usize,
+    },
+    
+    #[error("Incomplete {construct} at line {line}, column {column}\n  Expected: {expected}\n  Hint: {hint}")]
+    IncompleteConstruct {
+        construct: String,
+        expected: String,
+        hint: String,
+        line: usize,
+        column: usize,
+    },
+    
+    #[error("Malformed {construct} at line {line}, column {column}\n  Error: {description}\n  Hint: {hint}")]
+    MalformedConstruct {
+        construct: String,
+        description: String,
+        hint: String,
+        line: usize,
+        column: usize,
+    },
+    
+    #[error("Too {issue} arguments for '{form}' at line {line}, column {column}\n  Expected: {expected}\n  Found: {found}")]
+    ArgumentCount {
+        form: String,
+        issue: String, // "many" or "few"
+        expected: String,
+        found: usize,
+        line: usize,
+        column: usize,
+    },
+    
+    #[error("Invalid token sequence at line {line}, column {column}\n  Context: {context}\n  Suggestion: {suggestion}")]
+    InvalidTokenSequence {
+        context: String,
+        suggestion: String,
+        line: usize,
+        column: usize,
+    },
+    
+    #[error("Unexpected end of input while parsing {construct}\n  Hint: {hint}")]
+    UnexpectedEofInConstruct {
+        construct: String,
+        hint: String,
+    },
+    
+    #[error("Reserved keyword '{keyword}' used as {usage} at line {line}, column {column}\n  Hint: {hint}")]
+    ReservedKeyword {
+        keyword: String,
+        usage: String,
+        hint: String,
+        line: usize,
+        column: usize,
+    },
 }
 
 /// Runtime evaluation errors
@@ -147,6 +223,64 @@ pub enum TypeError {
     
     #[error("Effect type error: {0}")]
     EffectTypeError(String),
+}
+
+/// Helper functions for creating common error patterns
+impl ParseError {
+    /// Create an error for when a symbol is expected in a specific context
+    pub fn expected_symbol_for(context: &str, found: &str, line: usize, column: usize) -> Self {
+        Self::ExpectedSymbol {
+            context: context.to_string(),
+            found: found.to_string(),
+            line,
+            column,
+        }
+    }
+    
+    /// Create an error for when a specific token is expected
+    pub fn expected_token(expected: &str, found: &str, line: usize, column: usize) -> Self {
+        Self::ExpectedToken {
+            expected: expected.to_string(),
+            found: found.to_string(),
+            line,
+            column,
+        }
+    }
+    
+    /// Create an error for malformed constructs with helpful hints
+    pub fn malformed_construct(construct: &str, description: &str, hint: &str, line: usize, column: usize) -> Self {
+        Self::MalformedConstruct {
+            construct: construct.to_string(),
+            description: description.to_string(),
+            hint: hint.to_string(),
+            line,
+            column,
+        }
+    }
+    
+    /// Create an error for incomplete constructs
+    pub fn incomplete_construct(construct: &str, expected: &str, hint: &str, line: usize, column: usize) -> Self {
+        Self::IncompleteConstruct {
+            construct: construct.to_string(),
+            expected: expected.to_string(),
+            hint: hint.to_string(),
+            line,
+            column,
+        }
+    }
+    
+    /// Create an error for wrong argument counts
+    pub fn wrong_argument_count(form: &str, expected: &str, found: usize, line: usize, column: usize) -> Self {
+        let issue = if found > expected.parse::<usize>().unwrap_or(0) { "many" } else { "few" };
+        Self::ArgumentCount {
+            form: form.to_string(),
+            issue: issue.to_string(),
+            expected: expected.to_string(),
+            found,
+            line,
+            column,
+        }
+    }
 }
 
 /// Result types for convenience

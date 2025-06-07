@@ -3,14 +3,15 @@
 //! This module contains the command structure for the Causality CLI,
 //! providing clean, minimal commands for working with Causality.
 
-pub mod diagnostics;
-pub mod intent;
-pub mod project;
 pub mod repl;
-pub mod simulate;
 pub mod test_effects;
-pub mod visualizer;
-pub mod zk;
+pub mod compile;
+pub mod simulate;
+
+// Re-export command structs
+pub use test_effects::TestEffectsCommand;
+pub use compile::CompileCommand;
+pub use simulate::SimulateCommand;
 
 // Re-export REPL command
 pub use repl::*; 

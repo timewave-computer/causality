@@ -348,4 +348,116 @@ mod tests {
         // Different content should have different ID
         assert_ne!(effect1.content_id(), effect3.content_id());
     }
+}
+
+/// Library for managing and organizing effects
+#[derive(Debug)]
+pub struct EffectLibrary {
+    effects: std::collections::HashMap<String, Box<dyn std::any::Any + Send + Sync>>,
+}
+
+impl EffectLibrary {
+    /// Create a new effect library
+    pub fn new() -> Self {
+        Self {
+            effects: std::collections::HashMap::new(),
+        }
+    }
+    
+    /// Add an effect to the library
+    pub fn add_effect<T: AlgebraicEffect>(&mut self, name: String, effect: T) {
+        self.effects.insert(name, Box::new(effect));
+    }
+    
+    /// Check if an effect exists in the library
+    pub fn has_effect(&self, name: &str) -> bool {
+        self.effects.contains_key(name)
+    }
+    
+    /// Get the number of effects in the library
+    pub fn count(&self) -> usize {
+        self.effects.len()
+    }
+    
+    /// List all effect names
+    pub fn list_effects(&self) -> Vec<String> {
+        self.effects.keys().cloned().collect()
+    }
+    
+    /// Clear all effects
+    pub fn clear(&mut self) {
+        self.effects.clear();
+    }
+    
+    /// Execute a mathematical operation
+    pub fn execute_math_operation(&self, operation: &str, args: Vec<i32>) -> Option<i32> {
+        match operation {
+            "add" => {
+                if args.len() >= 2 {
+                    Some(args[0] + args[1])
+                } else {
+                    None
+                }
+            }
+            "multiply" => {
+                if args.len() >= 2 {
+                    Some(args[0] * args[1])
+                } else {
+                    None
+                }
+            }
+            "subtract" => {
+                if args.len() >= 2 {
+                    Some(args[0] - args[1])
+                } else {
+                    None
+                }
+            }
+            "divide" => {
+                if args.len() >= 2 && args[1] != 0 {
+                    Some(args[0] / args[1])
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+    
+    /// Execute a string operation
+    pub fn execute_string_operation(&self, operation: &str, args: Vec<&str>) -> Option<String> {
+        match operation {
+            "concat" => {
+                Some(args.join(""))
+            }
+            "uppercase" => {
+                if !args.is_empty() {
+                    Some(args[0].to_uppercase())
+                } else {
+                    None
+                }
+            }
+            "lowercase" => {
+                if !args.is_empty() {
+                    Some(args[0].to_lowercase())
+                } else {
+                    None
+                }
+            }
+            "reverse" => {
+                if !args.is_empty() {
+                    Some(args[0].chars().rev().collect())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+impl Default for EffectLibrary {
+    fn default() -> Self {
+        Self::new()
+    }
 } 

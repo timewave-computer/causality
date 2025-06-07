@@ -177,3 +177,6 @@ type transaction = {
 }
 
 (* Re-export all core modules *)
+module Patterns = struct
+  include Patterns
+end

@@ -3,8 +3,10 @@
 
 open Ocaml_causality_core
 
-(* Abstract type for Causality values *)
+(* Abstract types for FFI handles *)
 type causality_value
+type causality_resource
+type causality_expr
 
 (* Value type enumeration matching Rust FFI *)
 type value_type =
@@ -48,7 +50,10 @@ type serialization_result = {
   error_message: string option;
 }
 
+(* --------------------------------------------------------------------------- *)
 (* External C function declarations for basic value operations *)
+(* --------------------------------------------------------------------------- *)
+
 external create_unit : unit -> causality_value = "ocaml_causality_value_unit"
 external create_bool : bool -> causality_value = "ocaml_causality_value_bool"
 external create_int : int -> causality_value = "ocaml_causality_value_int"
@@ -56,26 +61,42 @@ external create_string : string -> causality_value = "ocaml_causality_value_stri
 external create_symbol : string -> causality_value = "ocaml_causality_value_symbol"
 external free_value : causality_value -> unit = "ocaml_causality_value_free"
 
-(* External C function declarations for value inspection *)
 external get_value_type_int : causality_value -> int = "ocaml_causality_value_type"
 external extract_bool : causality_value -> int = "ocaml_causality_value_as_bool"
 external extract_int : causality_value -> int = "ocaml_causality_value_as_int"
 external extract_string_ptr : causality_value -> string option = "ocaml_causality_value_as_string"
 
-(* External C function declarations for SSZ serialization *)
 external serialize_value : causality_value -> bytes * int * int * string option = "ocaml_causality_value_serialize"
 external deserialize_value : bytes -> int -> causality_value option = "ocaml_causality_value_deserialize"
 external free_serialized_data : bytes -> int -> unit = "ocaml_causality_free_serialized_data"
 
-(* External C function declarations for round-trip testing *)
 external test_roundtrip : causality_value -> bool = "ocaml_causality_test_roundtrip"
 external test_all_roundtrips : unit -> bool = "ocaml_causality_test_all_roundtrips"
 
-(* External C function declarations for diagnostics *)
 external get_ffi_version : unit -> string = "ocaml_causality_ffi_version"
 external get_debug_info : causality_value -> string = "ocaml_causality_value_debug_info"
 
+(* --------------------------------------------------------------------------- *)
+(* External C function declarations for resource management *)
+(* --------------------------------------------------------------------------- *)
+
+external create_resource_ffi : string -> bytes -> int64 -> causality_resource = "ocaml_causality_create_resource"
+external consume_resource_ffi : causality_resource -> bool = "ocaml_causality_consume_resource"
+external is_resource_valid_ffi : causality_resource -> bool = "ocaml_causality_is_resource_valid"
+external get_resource_id_ffi : causality_resource -> bytes = "ocaml_causality_resource_id"
+
+(* --------------------------------------------------------------------------- *)
+(* External C function declarations for expression management *)
+(* --------------------------------------------------------------------------- *)
+
+external compile_expr_ffi : string -> causality_expr = "ocaml_causality_compile_expr"
+external get_expr_id_ffi : causality_expr -> bytes = "ocaml_causality_expr_id"
+external submit_intent_ffi : string -> bytes -> string -> bool = "ocaml_causality_submit_intent"
+external get_system_metrics_ffi : unit -> string = "ocaml_causality_get_system_metrics"
+
+(* --------------------------------------------------------------------------- *)
 (* High-level OCaml interface *)
+(* --------------------------------------------------------------------------- *)
 
 (** Create a unit value *)
 let create_unit () = create_unit ()
@@ -115,7 +136,9 @@ let as_string value =
   | String | Symbol -> extract_string_ptr value
   | _ -> None
 
-(** SSZ Serialization support *)
+(* --------------------------------------------------------------------------- *)
+(* SSZ Serialization support *)
+(* --------------------------------------------------------------------------- *)
 
 (** Serialize a value to SSZ bytes *)
 let serialize value =
@@ -132,7 +155,9 @@ let deserialize data =
   | Some value -> Result.Ok value
   | None -> Result.Error "Deserialization failed"
 
-(** Round-trip testing support *)
+(* --------------------------------------------------------------------------- *)
+(* Round-trip testing support *)
+(* --------------------------------------------------------------------------- *)
 
 (** Test round-trip serialization/deserialization for a single value *)
 let test_value_roundtrip value = test_roundtrip value
@@ -167,7 +192,53 @@ let test_ocaml_roundtrips () =
     let failed_names = List.map fst failed in
     Result.Error ("Failed tests: " ^ String.concat ", " failed_names)
 
-(** Diagnostic and utility functions *)
+(* --------------------------------------------------------------------------- *)
+(* Resource Management API *)
+(* --------------------------------------------------------------------------- *)
+
+(** Safe wrapper for resource creation that handles exceptions *)
+let safe_create_resource resource_type domain_id quantity : (resource_id option, causality_error) result =
+  try
+    let resource_handle = create_resource_ffi resource_type domain_id quantity in
+    let resource_id = get_resource_id_ffi resource_handle in
+    Ok (Some resource_id)
+  with
+  | exn -> Error (FFIError ("Unexpected error in resource creation: " ^ Printexc.to_string exn))
+
+(** Safe wrapper for resource consumption *)
+let safe_consume_resource_by_id _resource_id : (bool, causality_error) result =
+  (* Note: This is a simplified version. In practice, we'd need to maintain a registry
+     of resource handles to look up by ID *)
+  Error (FFIError "Direct resource consumption by ID not implemented - use resource handle")
+
+(** Safe wrapper for expression compilation *)
+let safe_compile_expr expr_string : (expr_id option, causality_error) result =
+  try
+    let expr_handle = compile_expr_ffi expr_string in
+    let expr_id = get_expr_id_ffi expr_handle in
+    Ok (Some expr_id)
+  with
+  | exn -> Error (FFIError ("Unexpected error in expression compilation: " ^ Printexc.to_string exn))
+
+(** Safe wrapper for intent submission *)
+let safe_submit_intent name domain_id expr_string : (bool, causality_error) result =
+  try
+    let success = submit_intent_ffi name domain_id expr_string in
+    Ok success
+  with
+  | exn -> Error (FFIError ("Unexpected error in intent submission: " ^ Printexc.to_string exn))
+
+(** Safe wrapper for getting system metrics *)
+let safe_get_system_metrics () : (str_t, causality_error) result =
+  try
+    let metrics = get_system_metrics_ffi () in
+    Ok metrics
+  with
+  | exn -> Error (FFIError ("Unexpected error getting system metrics: " ^ Printexc.to_string exn))
+
+(* --------------------------------------------------------------------------- *)
+(* Diagnostic and utility functions *)
+(* --------------------------------------------------------------------------- *)
 
 (** Get FFI version information *)
 let get_version () = get_ffi_version ()
@@ -190,7 +261,47 @@ let pretty_print value =
   let debug_info = debug_value value in
   Printf.sprintf "%s: %s" type_name debug_info
 
-(** Comprehensive FFI test suite *)
+(* --------------------------------------------------------------------------- *)
+(* Type conversion utilities *)
+(* --------------------------------------------------------------------------- *)
+
+(** Convert OCaml lisp_value to string for FFI *)
+let lisp_value_to_ffi_string value =
+  let rec to_sexp = function
+    | Ocaml_causality_core.Unit -> "()"
+    | Ocaml_causality_core.Bool true -> "true"
+    | Ocaml_causality_core.Bool false -> "false"
+    | Ocaml_causality_core.Int i -> Int64.to_string i
+    | Ocaml_causality_core.String s -> "\"" ^ String.escaped s ^ "\""
+    | Ocaml_causality_core.Symbol s -> s
+    | Ocaml_causality_core.List l -> "(" ^ String.concat " " (List.map to_sexp l) ^ ")"
+    | Ocaml_causality_core.ResourceId rid -> "#<resource:" ^ Bytes.to_string rid ^ ">"
+    | Ocaml_causality_core.ExprId eid -> "#<expr:" ^ Bytes.to_string eid ^ ">"
+    | Ocaml_causality_core.Bytes b -> "#<bytes:" ^ Bytes.to_string b ^ ">"
+  in
+  to_sexp value
+
+(** Convert string from FFI back to lisp_value *)
+let ffi_string_to_lisp_value s : (lisp_value, causality_error) result =
+  try
+    (* Simple parser for basic types - in production this would be more robust *)
+    if s = "()" then Ok Ocaml_causality_core.Unit
+    else if s = "true" then Ok (Ocaml_causality_core.Bool true)
+    else if s = "false" then Ok (Ocaml_causality_core.Bool false)
+    else if String.contains s '"' then
+      let unescaped = String.sub s 1 (String.length s - 2) in
+      Ok (Ocaml_causality_core.String unescaped)
+    else if String.for_all (fun c -> Char.code c >= 48 && Char.code c <= 57 || c = '-') s then
+      Ok (Ocaml_causality_core.Int (Int64.of_string s))
+    else
+      Ok (Ocaml_causality_core.Symbol s)
+  with
+  | exn -> Error (SerializationError ("Failed to parse lisp value: " ^ Printexc.to_string exn))
+
+(* --------------------------------------------------------------------------- *)
+(* Comprehensive FFI test suite *)
+(* --------------------------------------------------------------------------- *)
+
 let run_comprehensive_ffi_tests () =
   let version = get_version () in
   Printf.printf "FFI Version: %s\n" version;
@@ -241,153 +352,30 @@ let run_comprehensive_ffi_tests () =
   
   Printf.printf "\nFFI tests completed.\n"
 
-(* ------------ LEGACY PLACEHOLDER FFI FUNCTIONS ------------ *)
-(* TODO: Replace with actual external declarations when C bindings are available *)
-
-(* ------------ SAFETY WRAPPERS ------------ *)
-
-(** Safe wrapper for resource creation that handles exceptions *)
-let safe_create_resource resource_type domain_id quantity : (Ocaml_causality_core.resource_id option, Ocaml_causality_core.causality_error) result =
-  try
-    (* TODO: Replace with actual FFI call *)
-    let _ = (resource_type, domain_id, quantity) in
-    Ok (Some (Bytes.of_string "mock_resource_id"))
-  with
-  | exn -> Error (Ocaml_causality_core.FFIError ("Unexpected error in resource creation: " ^ Printexc.to_string exn))
-
-(** Safe wrapper for resource consumption *)
-let safe_consume_resource resource_id : (bool, Ocaml_causality_core.causality_error) result =
-  try
-    (* TODO: Replace with actual FFI call *)
-    let _ = resource_id in
-    Ok true
-  with
-  | exn -> Error (Ocaml_causality_core.FFIError ("Unexpected error in resource consumption: " ^ Printexc.to_string exn))
-
-(** Safe wrapper for expression compilation *)
-let safe_compile_expr expr_string : (Ocaml_causality_core.expr_id option, Ocaml_causality_core.causality_error) result =
-  try
-    (* TODO: Replace with actual FFI call *)
-    let expr_bytes = Bytes.of_string expr_string in
-    Ok (Some expr_bytes)
-  with
-  | exn -> Error (Ocaml_causality_core.FFIError ("Unexpected error in expression compilation: " ^ Printexc.to_string exn))
-
-(** Safe wrapper for intent submission *)
-let safe_submit_intent name domain_id expr_string : (bool, Ocaml_causality_core.causality_error) result =
-  try
-    (* TODO: Replace with actual FFI call *)
-    let _ = (name, domain_id, expr_string) in
-    Ok true
-  with
-  | exn -> Error (Ocaml_causality_core.FFIError ("Unexpected error in intent submission: " ^ Printexc.to_string exn))
-
-(** Safe wrapper for getting system metrics *)
-let safe_get_system_metrics () : (Ocaml_causality_core.str_t, Ocaml_causality_core.causality_error) result =
-  try
-    (* TODO: Replace with actual FFI call *)
-    Ok "Mock system metrics"
-  with
-  | exn -> Error (Ocaml_causality_core.FFIError ("Unexpected error getting system metrics: " ^ Printexc.to_string exn))
-
-(* ------------ TYPE CONVERSION UTILITIES ------------ *)
-
-(** Convert OCaml lisp_value to string for FFI *)
-let lisp_value_to_ffi_string value =
-  let rec to_sexp = function
-    | Ocaml_causality_core.Unit -> "()"
-    | Ocaml_causality_core.Bool true -> "true"
-    | Ocaml_causality_core.Bool false -> "false"
-    | Ocaml_causality_core.Int i -> Int64.to_string i
-    | Ocaml_causality_core.String s -> "\"" ^ String.escaped s ^ "\""
-    | Ocaml_causality_core.Symbol s -> s
-    | Ocaml_causality_core.List l -> "(" ^ String.concat " " (List.map to_sexp l) ^ ")"
-    | Ocaml_causality_core.ResourceId rid -> "#<resource:" ^ Bytes.to_string rid ^ ">"
-    | Ocaml_causality_core.ExprId eid -> "#<expr:" ^ Bytes.to_string eid ^ ">"
-    | Ocaml_causality_core.Bytes b -> "#<bytes:" ^ Bytes.to_string b ^ ">"
-  in
-  to_sexp value
-
-(** Convert string from FFI back to lisp_value *)
-let ffi_string_to_lisp_value s : (Ocaml_causality_core.lisp_value, Ocaml_causality_core.causality_error) result =
-  try
-    (* Simple parser for basic types - in production this would be more robust *)
-    if s = "()" then Ok Ocaml_causality_core.Unit
-    else if s = "true" then Ok (Ocaml_causality_core.Bool true)
-    else if s = "false" then Ok (Ocaml_causality_core.Bool false)
-    else if String.contains s '"' then
-      let unescaped = String.sub s 1 (String.length s - 2) in
-      Ok (Ocaml_causality_core.String unescaped)
-    else if String.for_all (fun c -> Char.code c >= 48 && Char.code c <= 57 || c = '-') s then
-      Ok (Ocaml_causality_core.Int (Int64.of_string s))
-    else
-      Ok (Ocaml_causality_core.Symbol s)
-  with
-  | exn -> Error (Ocaml_causality_core.SerializationError ("Failed to parse lisp value: " ^ Printexc.to_string exn))
-
-(* ------------ MEMORY MANAGEMENT ------------ *)
-
-(** Resource ID handle registry to track valid resource IDs *)
-module ResourceRegistry = struct
-  let valid_resources = Hashtbl.create 1024
-
-  let register_resource (id: Ocaml_causality_core.resource_id) =
-    Hashtbl.replace valid_resources id true
-
-  let invalidate_resource (id: Ocaml_causality_core.resource_id) =
-    Hashtbl.remove valid_resources id
-
-  let is_valid_resource (id: Ocaml_causality_core.resource_id) =
-    Hashtbl.mem valid_resources id
-
-  let get_valid_resources () =
-    Hashtbl.fold (fun id _ acc -> id :: acc) valid_resources []
-end
-
-(** Expression ID registry *)
-module ExprRegistry = struct
-  let registered_exprs = Hashtbl.create 1024
-
-  let register_expr (id: Ocaml_causality_core.expr_id) (name: Ocaml_causality_core.str_t) =
-    Hashtbl.replace registered_exprs name id
-
-  let lookup_expr (name: Ocaml_causality_core.str_t) : Ocaml_causality_core.expr_id option =
-    Hashtbl.find_opt registered_exprs name
-
-  let get_registered_exprs () =
-    Hashtbl.fold (fun name id acc -> (name, id) :: acc) registered_exprs []
-end
-
-(* ------------ ERROR HANDLING ------------ *)
+(* --------------------------------------------------------------------------- *)
+(* Error handling *)
+(* --------------------------------------------------------------------------- *)
 
 (** Convert Rust error codes to OCaml causality_error *)
 let interpret_rust_error error_code =
   match error_code with
-  | 1 -> Ocaml_causality_core.LinearityViolation "Resource already consumed"
-  | 2 -> Ocaml_causality_core.InvalidResource (Bytes.of_string "unknown")
-  | 3 -> Ocaml_causality_core.InvalidExpression (Bytes.of_string "unknown")
-  | 4 -> Ocaml_causality_core.DomainError "Domain not found"
-  | 5 -> Ocaml_causality_core.SerializationError "Invalid data format"
-  | _ -> Ocaml_causality_core.FFIError ("Unknown Rust error code: " ^ string_of_int error_code)
+  | 1 -> LinearityViolation "Resource already consumed"
+  | 2 -> InvalidResource (Bytes.of_string "unknown")
+  | 3 -> InvalidExpression (Bytes.of_string "unknown")
+  | 4 -> DomainError "Domain not found"
+  | 5 -> SerializationError "Invalid data format"
+  | _ -> FFIError ("Unknown Rust error code: " ^ string_of_int error_code)
 
-(** Log FFI operations for debugging *)
-let log_ffi_call operation result =
-  if !Sys.interactive then
-    Printf.printf "[FFI] %s -> %s\n" operation result
-
-(* ------------ INITIALIZATION ------------ *)
+(* --------------------------------------------------------------------------- *)
+(* Initialization *)
+(* --------------------------------------------------------------------------- *)
 
 (** Initialize the FFI subsystem *)
-let initialize_ffi () : (unit, Ocaml_causality_core.causality_error) result =
+let initialize_ffi () : (unit, causality_error) result =
   try
-    (* Initialize resource and expression registries *)
-    Hashtbl.clear ResourceRegistry.valid_resources;
-    Hashtbl.clear ExprRegistry.registered_exprs;
     Ok ()
   with
-  | exn -> Error (Ocaml_causality_core.FFIError ("FFI initialization failed: " ^ Printexc.to_string exn))
+  | exn -> Error (FFIError ("FFI initialization failed: " ^ Printexc.to_string exn))
 
 (** Cleanup FFI resources *)
-let cleanup_ffi () =
-  Hashtbl.clear ResourceRegistry.valid_resources;
-  Hashtbl.clear ExprRegistry.registered_exprs 
+let cleanup_ffi () = () 

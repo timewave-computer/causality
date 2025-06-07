@@ -10,11 +10,17 @@ pub mod effects;
 pub mod mocks;
 pub mod testing;
 pub mod dsl;
+pub mod resources;
+pub mod formal_verification;
+pub mod cross_language;
 
 pub use utils::*;
 pub use debug::*;
 pub use effects::*;
 pub use dsl::*;
+pub use resources::*;
+pub use formal_verification::*;
+pub use cross_language::*;
 // Re-export specific mock components
 pub use mocks::{
     strategy::*,

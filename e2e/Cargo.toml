@@ -7,26 +7,46 @@ publish = false # This is a test crate, not meant to be published
 
 [dependencies]
 # Core causality crates
-causality-types = { path = "../crates/causality-types" }
 causality-core = { path = "../crates/causality-core" }
 causality-compiler = { path = "../crates/causality-compiler" }
 causality-lisp = { path = "../crates/causality-lisp" }
+causality-runtime = { path = "../crates/causality-runtime" }
+causality-zk = { path = "../crates/causality-zk" }
+causality-api = { path = "../crates/causality-api" }
+causality-cli = { path = "../crates/causality-cli" }
+causality-toolkit = { path = "../crates/causality-toolkit" }
+causality-simulation = { path = "../crates/causality-simulation" }
+causality-ffi = { path = "../crates/causality-ffi" }  # Re-enabled FFI support
 
 # Testing and async
-tokio = { version = "1.0", features = ["full"] }
-anyhow = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+tokio = { workspace = true, features = ["full"] }
+anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+uuid = { version = "1.0", features = ["v4"] }
+
+# Additional dependencies
+log = { workspace = true }
+futures = { workspace = true }
+parking_lot = { workspace = true }
 env_logger = "0.10"
 
-# Additional dependencies for bridge e2e test
-# causality-runtime = { path = "../crates/causality-runtime" } # Removed as per instructions
-# causality-zk = { path = "../crates/causality-zk", optional = true } # Temporarily commented out to avoid c-kzg conflict
-
 [dev-dependencies]
-# No specific dev-dependencies for this test file itself, it's a [[test]]
-tempfile = "3.10.1" # Or any recent compatible version
+tempfile = { workspace = true }
+tokio-test = { workspace = true }
 
 [[test]]
-name = "bridge_e2e_test"
-path = "tests/bridge_e2e_test.rs"
+name = "comprehensive_compilation_workflow_e2e"
+path = "tests/comprehensive_compilation_workflow_e2e.rs"
+
+[[test]]
+name = "simulation_zk_integration_e2e"
+path = "tests/simulation_zk_integration_e2e.rs"
+
+[[test]]
+name = "ocaml_interop_ffi_e2e"
+path = "tests/ocaml_interop_ffi_e2e.rs"
+
+[[test]]
+name = "core_integration_e2e"
+path = "tests/core_integration_e2e.rs"

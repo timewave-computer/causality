@@ -1,11 +1,11 @@
-//! Simulated clock for time-dependent testing
+//! Simulated clock for deterministic time management in tests
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
-/// Simulated timestamp for deterministic time-based testing
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+/// Simulated timestamp for testing
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize)]
 pub struct SimulatedTimestamp(u64);
 
 impl SimulatedTimestamp {

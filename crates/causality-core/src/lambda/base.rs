@@ -294,7 +294,7 @@ impl Type<Linear> {
 //-----------------------------------------------------------------------------
 
 /// Runtime values corresponding to the type system
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Value {
     /// Unit value
     Unit,

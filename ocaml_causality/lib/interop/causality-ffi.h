@@ -1,165 +1,169 @@
-#ifndef CAUSALITY-FFI_H
-#define CAUSALITY-FFI_H
+#ifndef CAUSALITY_FFI_H
+#define CAUSALITY_FFI_H
 
-#include <stdarg.h>
-#include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
+#include <stdbool.h>
 
-/**
- * FFI error codes for external bindings
- */
-typedef enum FfiErrorCode {
-  /**
-   * Operation succeeded
-   */
-  Success = 0,
-  /**
-   * Invalid input parameter
-   */
-  InvalidInput = 1,
-  /**
-   * Serialization failed
-   */
-  SerializationError = 2,
-  /**
-   * Deserialization failed
-   */
-  DeserializationError = 3,
-  /**
-   * Memory allocation/deallocation error
-   */
-  MemoryError = 4,
-  /**
-   * Internal system error
-   */
-  InternalError = 5,
-} FfiErrorCode;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/**
- * Value type enumeration for C interface
- */
-typedef enum ValueType {
-  Unit = 0,
-  Bool = 1,
-  Int = 2,
-  Symbol = 3,
-  String = 4,
-  Product = 5,
-  Sum = 6,
-  Record = 7,
+//-----------------------------------------------------------------------------
+// Core Types
+//-----------------------------------------------------------------------------
+
+/// Opaque handle to a Causality value
+typedef struct CausalityValue CausalityValue;
+
+/// Value type enumeration
+typedef enum {
+    VALUE_TYPE_UNIT = 0,
+    VALUE_TYPE_BOOL = 1,
+    VALUE_TYPE_INT = 2,
+    VALUE_TYPE_SYMBOL = 3,
+    VALUE_TYPE_STRING = 4,
+    VALUE_TYPE_PRODUCT = 5,
+    VALUE_TYPE_SUM = 6,
+    VALUE_TYPE_RECORD = 7,
 } ValueType;
 
-/**
- * Opaque handle to a Causality Value
- */
-typedef struct CausalityValue {
-  uint8_t _private[0];
-} CausalityValue;
+/// FFI error codes
+typedef enum {
+    FFI_SUCCESS = 0,
+    FFI_INVALID_INPUT = 1,
+    FFI_SERIALIZATION_ERROR = 2,
+    FFI_DESERIALIZATION_ERROR = 3,
+    FFI_MEMORY_ERROR = 4,
+    FFI_INTERNAL_ERROR = 5,
+} FfiErrorCode;
 
-/**
- * Serialization result
- */
-typedef struct SerializationResult {
-  uint8_t *data;
-  uintptr_t length;
-  enum FfiErrorCode error_code;
-  char *error_message;
+/// Serialization result
+typedef struct {
+    uint8_t* data;
+    uintptr_t length;
+    FfiErrorCode error_code;
+    char* error_message;
 } SerializationResult;
 
-/**
- * Create a unit value
- */
-struct CausalityValue *causality_value_unit(void);
+//-----------------------------------------------------------------------------
+// Value Creation and Management
+//-----------------------------------------------------------------------------
 
-/**
- * Create a boolean value
- */
-struct CausalityValue *causality_value_bool(int b);
+/// Create a unit value
+CausalityValue* causality_value_unit(void);
 
-/**
- * Create an integer value
- */
-struct CausalityValue *causality_value_int(unsigned int i);
+/// Create a boolean value
+CausalityValue* causality_value_bool(int b);
 
-/**
- * Create a string value
- */
-struct CausalityValue *causality_value_string(const char *s);
+/// Create an integer value
+CausalityValue* causality_value_int(uint32_t i);
 
-/**
- * Create a symbol value
- */
-struct CausalityValue *causality_value_symbol(const char *s);
+/// Create a string value
+CausalityValue* causality_value_string(const char* s);
 
-/**
- * Free a Causality value
- */
-void causality_value_free(struct CausalityValue *value);
+/// Create a symbol value
+CausalityValue* causality_value_symbol(const char* s);
 
-/**
- * Serialize a Causality value to SSZ bytes
- */
-struct SerializationResult causality_value_serialize(const struct CausalityValue *value);
+/// Free a Causality value
+void causality_value_free(CausalityValue* value);
 
-/**
- * Deserialize SSZ bytes to a Causality value
- */
-struct CausalityValue *causality_value_deserialize(const uint8_t *data, uintptr_t length);
+//-----------------------------------------------------------------------------
+// Value Inspection
+//-----------------------------------------------------------------------------
 
-/**
- * Free serialized data
- */
-void causality_free_serialized_data(uint8_t *data, uintptr_t length);
+/// Get the type of a value
+ValueType causality_value_type(const CausalityValue* value);
 
-/**
- * Free error message
- */
-void causality_free_error_message(char *message);
+/// Extract boolean value (-1 if not bool, 0 for false, 1 for true)
+int causality_value_as_bool(const CausalityValue* value);
 
-/**
- * Get the type of a Causality value
- */
-enum ValueType causality_value_type(const struct CausalityValue *value);
+/// Extract integer value
+uint32_t causality_value_as_int(const CausalityValue* value);
 
-/**
- * Extract boolean value (returns 0 for false, 1 for true, -1 for error)
- */
-int causality_value_as_bool(const struct CausalityValue *value);
+/// Extract string value (caller must free with causality_free_string)
+char* causality_value_as_string(const CausalityValue* value);
 
-/**
- * Extract integer value (returns 0 for error cases)
- */
-unsigned int causality_value_as_int(const struct CausalityValue *value);
+/// Free a string returned by the library
+void causality_free_string(char* s);
 
-/**
- * Extract string value (caller must free with causality_free_string)
- */
-char *causality_value_as_string(const struct CausalityValue *value);
+//-----------------------------------------------------------------------------
+// Serialization
+//-----------------------------------------------------------------------------
 
-/**
- * Free a string returned by causality_value_as_string
- */
-void causality_free_string(char *s);
+/// Serialize a value to SSZ bytes
+SerializationResult causality_value_serialize(const CausalityValue* value);
 
-/**
- * Test round-trip serialization for a value (returns 1 for success, 0 for failure)
- */
-int causality_test_roundtrip(const struct CausalityValue *value);
+/// Deserialize SSZ bytes to a value
+CausalityValue* causality_value_deserialize(const uint8_t* data, uintptr_t length);
 
-/**
- * Test all round-trip serializations for basic types
- */
+/// Free serialized data
+void causality_free_serialized_data(uint8_t* data, uintptr_t length);
+
+/// Free error message
+void causality_free_error_message(char* message);
+
+//-----------------------------------------------------------------------------
+// Testing and Diagnostics
+//-----------------------------------------------------------------------------
+
+/// Test round-trip serialization/deserialization for a value
+int causality_test_roundtrip(const CausalityValue* value);
+
+/// Test round-trip for all basic value types
 int causality_test_all_roundtrips(void);
 
-/**
- * Get FFI version string (caller must free with causality_free_string)
- */
-char *causality_ffi_version(void);
+/// Get FFI version information (caller must free with causality_free_string)
+char* causality_ffi_version(void);
 
-/**
- * Get debug information for a value (caller must free with causality_free_string)
- */
-char *causality_value_debug_info(const struct CausalityValue *value);
+/// Get debug information about a value (caller must free with causality_free_string)
+char* causality_value_debug_info(const CausalityValue* value);
 
-#endif /* CAUSALITY-FFI_H */
+//-----------------------------------------------------------------------------
+// Resource Management Extensions
+//-----------------------------------------------------------------------------
+
+/// Resource handle
+typedef struct CausalityResource CausalityResource;
+
+/// Create a resource
+CausalityResource* causality_create_resource(const char* resource_type, const uint8_t* domain_id, uint64_t quantity);
+
+/// Consume a resource (returns 1 on success, 0 on failure)
+int causality_consume_resource(CausalityResource* resource);
+
+/// Check if a resource is valid
+int causality_is_resource_valid(const CausalityResource* resource);
+
+/// Free a resource
+void causality_resource_free(CausalityResource* resource);
+
+/// Get resource ID as bytes (32 bytes, caller must not free)
+const uint8_t* causality_resource_id(const CausalityResource* resource);
+
+//-----------------------------------------------------------------------------
+// Expression Management Extensions
+//-----------------------------------------------------------------------------
+
+/// Expression handle
+typedef struct CausalityExpr CausalityExpr;
+
+/// Compile an expression from string
+CausalityExpr* causality_compile_expr(const char* expr_string);
+
+/// Get expression ID as bytes (32 bytes, caller must not free)
+const uint8_t* causality_expr_id(const CausalityExpr* expr);
+
+/// Free an expression
+void causality_expr_free(CausalityExpr* expr);
+
+/// Submit an intent
+int causality_submit_intent(const char* name, const uint8_t* domain_id, const char* expr_string);
+
+/// Get system metrics (caller must free with causality_free_string)  
+char* causality_get_system_metrics(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // CAUSALITY_FFI_H

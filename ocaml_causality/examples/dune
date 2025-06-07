@@ -2,4 +2,22 @@
 ; (executable
 ;  (public_name causality_example)
 ;  (name causality_example)
-;  (libraries ocaml_causality unix)) 
+;  (libraries ocaml_causality unix))
+
+(executable
+ (public_name e2e_demo)
+ (name e2e_demo)
+ (libraries
+  ocaml_causality_core
+  ocaml_causality_lang
+  ocaml_causality_serialization
+  ocaml_causality_interop))
+
+(executable
+ (public_name integration_test)
+ (name integration_test)
+ (libraries
+  ocaml_causality_core
+  ocaml_causality_lang
+  ocaml_causality_serialization
+  ocaml_causality_interop)) 

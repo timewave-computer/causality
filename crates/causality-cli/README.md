@@ -1,241 +1,486 @@
 # Causality CLI
 
-Command-line interface for the Causality framework that provides comprehensive tooling for development, debugging, visualization, and REPL interaction with the three-layer architecture.
+The Causality CLI is your comprehensive command-line interface for building, testing, and deploying privacy-preserving, cross-chain applications. It provides an intuitive, discovery-oriented experience that guides you through the framework's powerful capabilities.
 
-## Purpose
-
-The `causality-cli` crate serves as the primary developer interface for the Causality system, offering a unified command-line experience for working with all aspects of the three-layer architecture. It provides essential tooling for development, testing, debugging, and interactive exploration while maintaining consistency with the resource model's content-addressed, deterministic properties.
-
-### Key Responsibilities
-
-- **Interactive Development**: REPL environment for exploring the Causality system
-- **System Diagnostics**: Comprehensive diagnostic tools for debugging and analysis
-- **Visualization**: Graphical representation of effects, resources, and system state
-- **Development Workflow**: Streamline the development and testing workflow
-
-## Architecture Overview
-
-The CLI is structured around several operational domains:
-
-### Interactive REPL Domain
-Complete REPL environment for interactive development:
-- **Expression Evaluation**: Real-time evaluation of Causality expressions
-- **Resource Inspection**: Interactive resource exploration and manipulation
-- **Effect Visualization**: Visual representation of effect execution
-- **System Integration**: Direct integration with all system components
-
-### Diagnostics and Analysis Domain
-Comprehensive diagnostic and analysis capabilities:
-- **System Analysis**: Deep analysis of system state and behavior
-- **Effect Profiling**: Performance analysis and optimization guidance
-- **Error Diagnostics**: Detailed error analysis with actionable suggestions
-- **Resource Validation**: Comprehensive resource validation and verification
-
-### Visualization Domain
-Rich visualization capabilities for system understanding:
-- **Effect Flow Visualization**: Graphical representation of effect execution flows
-- **Resource State Diagrams**: Visual representation of resource states and transitions
-- **System Architecture Views**: Comprehensive system architecture visualization
-
-## Core Commands
-
-### Interactive REPL (`repl`)
-
-Interactive Read-Eval-Print Loop for development:
+## Quick Start
 
 ```bash
-# Start interactive REPL
+# Start interactive development
 causality repl
 
-# REPL commands:
-> create resource "token" { balance: 1000, owner: "alice" }
-> eval (transfer token 100 "bob")
-> inspect resource token
-> visualize effects last
+# Get guided help
+causality help tutorial
+
+# Create your first project  
+causality project new my-defi-app --template defi
+
+# Compile and test
+causality dev compile -i src/main.lisp -o build/main.ir
+causality test unit
 ```
 
-**REPL Features:**
-- **Expression Evaluation**: Evaluate Causality expressions interactively
-- **Resource Creation**: Create and manipulate resources
-- **Effect Execution**: Execute effects and observe results
-- **System Inspection**: Inspect system state and configuration
+## Command Overview
 
-### System Diagnostics (`diagnostics`)
+The CLI is organized into logical groups that mirror your development workflow:
 
-Comprehensive system analysis and debugging:
+### **Interactive Development**
+- `causality repl` - Start the interactive REPL environment
+- `causality help` - Comprehensive help system with tutorials
+
+### **Project Management** 
+- `causality project new` - Create projects from templates
+- `causality project build` - Build your project
+- `causality project status` - Check project health
+
+### **Development Workflow**
+- `causality dev compile` - Compile source code to various formats
+- `causality dev run` - Execute compiled programs
+- `causality dev serve` - Start development server with hot reload
+- `causality dev fmt` - Format source code
+
+### **Zero-Knowledge Proofs**
+- `causality zk compile` - Compile to ZK circuits
+- `causality zk prove` - Generate ZK proofs
+- `causality zk verify` - Verify ZK proofs
+- `causality zk setup` - Trusted setup ceremonies
+
+### **Cross-Chain Deployment**
+- `causality deploy simulate` - Simulate deployment with cost analysis
+- `causality deploy submit` - Submit transactions to chains
+- `causality deploy report` - Generate deployment reports
+
+### **Analysis & Diagnostics**
+- `causality analyze code` - Static code analysis
+- `causality analyze resources` - Resource usage analysis
+- `causality analyze effects` - Effect composition analysis
+- `causality analyze security` - Security analysis
+
+### **Testing & Validation**
+- `causality test unit` - Run unit tests
+- `causality test effects` - Test algebraic effects
+- `causality test integration` - Integration testing
+- `causality test e2e` - End-to-end testing
+
+### **System Inspection**
+- `causality inspect system` - System health diagnostics
+- `causality inspect artifacts` - Inspect compiled artifacts
+- `causality inspect runtime` - Runtime state inspection
+
+### **Visualization**
+- `causality viz effects` - Visualize effect execution flows
+- `causality viz resources` - Resource dependency diagrams
+- `causality viz architecture` - System architecture overview
+
+### **Configuration**
+- `causality config show` - View configuration
+- `causality config set` - Set configuration values
+
+## Learning Path
+
+### 1. **Start with the REPL**
+The REPL is your best friend for learning the framework:
 
 ```bash
-# Run full system diagnostics
-causality diagnostics --comprehensive
+# Start with a tutorial
+causality repl --load-tutorial basic
 
-# Analyze specific components
-causality diagnostics --component machine --verbose
-causality diagnostics --component effects --trace-dependencies
-
-# Check system health
-causality diagnostics --health-check --report-format json
+# Enable debug mode for learning
+causality repl --debug --show-state
 ```
 
-**Diagnostic Capabilities:**
-- **Component Analysis**: Deep analysis of individual system components
-- **Performance Profiling**: Identify performance bottlenecks and optimization opportunities
-- **Dependency Analysis**: Analyze component dependencies and interactions
-- **Health Monitoring**: Comprehensive system health checks
+**REPL Commands:**
+```lisp
+> (alloc 1000)              # Allocate a resource
+> (tensor 10 20)            # Create tensor pairs
+> (lambda (x) (+ x 1))      # Define functions
+```
 
-### Visualization Tools (`visualizer`)
-
-Rich visualization capabilities for system understanding:
+### 2. **Explore with Help**
+Get contextual help for any topic:
 
 ```bash
-# Visualize effect execution flow
-causality visualizer effects --flow --output flow.svg
-
-# Generate resource state diagrams
-causality visualizer resources --state-diagram --format png
-
-# Create system architecture overview
-causality visualizer system --architecture --interactive
+causality help tutorial     # Framework overview
+causality help guides       # Step-by-step guides
+causality help reference    # Language syntax
+causality help examples     # Code examples
 ```
 
-**Visualization Features:**
-- **Effect Flow Diagrams**: Visual representation of effect execution patterns
-- **Resource State Visualization**: Graphical resource state transitions
-- **System Architecture**: Comprehensive system architecture diagrams
-- **Interactive Exploration**: Interactive visualization with drill-down capabilities
-
-### Testing Framework (`test-effects`)
-
-Comprehensive effect testing and validation:
+### 3. **Create Your First Project**
+Choose a template that matches your goals:
 
 ```bash
-# Run effect test suite
-causality test-effects --all --parallel
+# DeFi application
+causality project new defi-bridge --template defi
 
-# Test specific effect patterns
-causality test-effects --pattern transfer --verbose
+# Privacy-focused app
+causality project new private-voting --template privacy
 
-# Validate effect correctness
-causality test-effects --validate --property linearity
+# ZK circuit development
+causality project new zk-proof --template zk
+
+# Basic learning project
+causality project new learning --template basic
 ```
 
-**Testing Capabilities:**
-- **Property-Based Testing**: Validate effect properties and invariants
-- **Regression Testing**: Comprehensive regression testing for effects
-- **Performance Testing**: Effect performance testing and benchmarking
-- **Correctness Validation**: Verify effect correctness and safety properties
+### 4. **Development Workflow**
+Follow the natural development flow:
 
-## Configuration Management
+```bash
+cd my-project
 
-### Global Configuration
+# Compile your code
+causality dev compile -i src/main.lisp -o build/
 
-CLI configuration system supporting multiple environments:
+# Run with execution trace
+causality dev run -f build/main.ir --trace
 
-```toml
-# ~/.causality/cli-config.toml
+# Start development server
+causality dev serve --watch --open
 
-[repl]
-auto_save = true
-history_size = 1000
-prompt_style = "enhanced"
-
-[diagnostics]
-default_verbosity = "info"
-enable_profiling = true
-output_format = "pretty"
-
-[visualization]
-default_format = "svg"
-theme = "dark"
-interactive_mode = true
-
-[testing]
-parallel_execution = true
-default_timeout = "30s"
-generate_reports = true
+# Format your code
+causality dev fmt
 ```
 
-## Error Handling and User Experience
+### 5. **Testing Strategy**
+Build confidence with comprehensive testing:
 
-### Contextual Error Messages
+```bash
+# Start with unit tests
+causality test unit --coverage
 
-Comprehensive error handling with actionable feedback:
+# Test effect composition
+causality test effects --property-based
 
-```
-ERROR: Effect execution failed
-  Effect: transfer
-  Error: Insufficient balance
-  
-  Context:
-    Source balance: 50
-    Transfer amount: 100
-    Required: balance >= transfer_amount
-  
-  Suggestions:
-    1. Check source resource balance before transfer
-    2. Reduce transfer amount to 50 or less
-    3. Add balance validation to transfer effect
+# Integration testing
+causality test integration --env docker
+
+# End-to-end validation
+causality test e2e --chains ethereum,polygon
 ```
 
-## Design Philosophy
+### 6. **Analysis & Debugging**
+Understand your code deeply:
 
-### Developer-Centric Design
-The CLI prioritizes developer experience and productivity:
-- **Intuitive Commands**: Natural language-inspired command structure
-- **Rich Feedback**: Comprehensive output with actionable information
-- **Progressive Discovery**: Help users discover capabilities as they learn
-- **Interactive Exploration**: Powerful REPL for hands-on experimentation
+```bash
+# Analyze code quality
+causality analyze code src/ --depth comprehensive
 
-### Consistency with Resource Model
-All CLI operations maintain consistency with the underlying resource model:
-- **Content Addressing**: All artifacts referenced by content-addressed identifiers
-- **Deterministic Operations**: Commands produce reproducible results
-- **Verifiable Outputs**: All operations maintain audit trails and verifiability
+# Check resource usage
+causality analyze resources src/main.lisp --detailed --check-leaks
 
-### Performance and Efficiency
-Optimized for both interactive use and automated workflows:
-- **Lazy Loading**: Load components only when needed
-- **Caching**: Intelligent caching of frequently accessed data
-- **Responsive Interface**: Fast response times for interactive operations
+# Security analysis
+causality analyze security src/ --level strict --report security.json
 
-## Testing Framework
-
-Comprehensive testing across all CLI functionality:
-
-```rust
-#[test]
-fn test_repl_basic_operations() {
-    let mut repl = setup_test_repl();
-    
-    // Test resource creation
-    let result = repl.execute("create resource test { value: 42 }");
-    assert!(result.is_ok());
-    
-    // Test resource inspection
-    let result = repl.execute("inspect resource test");
-    assert!(result.unwrap().contains("value: 42"));
-}
-
-#[test]
-fn test_diagnostics_system_health() {
-    let diagnostics = setup_test_diagnostics();
-    
-    let health_report = diagnostics.run_health_check();
-    assert!(health_report.overall_status.is_healthy());
-    
-    let component_status = diagnostics.check_component("machine");
-    assert!(component_status.is_operational());
-}
-
-#[test]
-fn test_visualizer_effect_flow() {
-    let visualizer = setup_test_visualizer();
-    
-    let effect_flow = create_test_effect_flow();
-    let diagram = visualizer.generate_flow_diagram(&effect_flow);
-    
-    assert!(diagram.contains_nodes(&["transfer", "validate", "update"]));
-    assert!(diagram.has_edges_between("transfer", "validate"));
-}
+# System health
+causality inspect system --health-check --perf
 ```
 
-This comprehensive CLI provides developers with powerful, intuitive tools for working with the entire Causality ecosystem while maintaining the mathematical rigor and verifiable properties essential for distributed zero-knowledge computation.
+### 7. **Zero-Knowledge Development**
+Add privacy to your applications:
+
+```bash
+# Compile to ZK circuit
+causality zk compile -i build/main.ir -o build/circuit.zk --privacy-level high
+
+# Generate proofs
+causality zk prove -c build/circuit.zk -w witness.json -o proof.zk
+
+# Verify proofs
+causality zk verify -c build/circuit.zk -p proof.zk --mock
+```
+
+### 8. **Deployment & Production**
+Deploy with confidence:
+
+```bash
+# Simulate deployment
+causality deploy simulate -i build/main.ir --chains ethereum,polygon --cost-analysis
+
+# Submit to chains (dry run first)
+causality deploy submit -c circuit.zk -p proof.zk --chains ethereum,polygon --dry-run
+
+# Generate compliance report
+causality deploy report --scenario bridge-deployment --include-proofs --include-gas --include-privacy -o report.json
+```
+
+## 🎨 Visualization & Understanding
+
+Gain insights through visual representation:
+
+```bash
+# Visualize effect flows
+causality viz effects src/main.lisp --format mermaid --interactive
+
+# Resource dependency graphs
+causality viz resources src/main.lisp --flow --states
+
+# System architecture
+causality viz architecture --detail comprehensive
+```
+
+## 🔧 Configuration & Customization
+
+Tailor the CLI to your workflow:
+
+```bash
+# View current config
+causality config show
+
+# Set preferences
+causality config set repl.auto_save true
+causality config set output.format json --global
+
+# Project-specific settings
+causality config set build.target wasm
+causality config set test.parallel true
+```
+
+## 🚀 Advanced Features
+
+### Command Aliases
+Save time with shorter commands:
+- `causality r` → `causality repl`
+- `causality p new` → `causality project new`
+- `causality d c` → `causality dev compile`
+- `causality t u` → `causality test unit`
+- `causality a c` → `causality analyze code`
+
+### Output Formats
+Control output format for automation:
+```bash
+# JSON output for scripts
+causality inspect system --format json
+
+# YAML for configuration
+causality config show --format yaml
+
+# Plain text for logging
+causality test unit --format plain
+```
+
+### Global Options
+Available on all commands:
+- `--verbose` - Detailed output for debugging
+- `--quiet` - Minimize output
+- `--format` - Control output format
+- `--help` - Command-specific help
+
+## 🛠️ Development Server
+
+The development server provides a web interface for learning and development:
+
+```bash
+causality dev serve --port 3000 --watch --open
+```
+
+**Features:**
+- **Live REPL**: Interactive development at `/repl`
+- **Code Compilation**: Real-time compilation at `/compile`
+- **Visualization Tools**: Interactive visualizations at `/visualize`
+- **Documentation**: API docs and guides at `/docs`
+- **Auto-reload**: Automatic refresh on file changes
+
+## Project Templates
+
+### Basic Template
+```bash
+causality project new hello-causality --template basic
+```
+Perfect for learning the framework fundamentals.
+
+### DeFi Template
+```bash
+causality project new defi-bridge --template defi
+```
+Cross-chain DeFi applications with:
+- Token bridging logic
+- Liquidity management
+- Automated market making
+- Yield farming contracts
+
+### Privacy Template
+```bash
+causality project new private-voting --template privacy
+```
+Privacy-preserving applications with:
+- Zero-knowledge proofs
+- Private state transitions
+- Encrypted communications
+- Anonymous voting systems
+
+### ZK Template
+```bash
+causality project new zk-circuits --template zk
+```
+zkSNARK circuit development with:
+- Circuit compilation
+- Witness generation
+- Proof systems integration
+- Verification workflows
+
+### Library Template
+```bash
+causality project new shared-lib --template library
+```
+Reusable library development with:
+- Module exports
+- Dependency management
+- Testing framework
+- Documentation generation
+
+### Advanced Template
+```bash
+causality project new enterprise-app --template advanced
+```
+Production-ready multi-chain setup with:
+- Multiple deployment targets
+- Comprehensive testing
+- CI/CD integration
+- Monitoring and analytics
+
+## Common Workflows
+
+### DeFi Development Workflow
+```bash
+# 1. Create DeFi project
+causality project new my-defi --template defi
+
+cd my-defi
+
+# 2. Start development server
+causality dev serve --watch &
+
+# 3. Interactive development
+causality repl --load-tutorial defi
+
+# 4. Compile and test
+causality dev compile -i src/bridge.lisp -o build/bridge.ir
+causality test unit --filter bridge
+causality test integration --env docker
+
+# 5. ZK proof integration
+causality zk compile -i build/bridge.ir -o build/bridge.zk --privacy-level high
+causality zk prove -c build/bridge.zk -w witness.json -o proof.zk
+
+# 6. Deployment simulation
+causality deploy simulate -i build/bridge.ir --chains ethereum,polygon --cost-analysis
+
+# 7. Production deployment
+causality deploy submit -c build/bridge.zk -p proof.zk --chains ethereum,polygon --dry-run
+```
+
+### Privacy Application Workflow
+```bash
+# 1. Create privacy project
+causality project new private-app --template privacy
+
+cd private-app
+
+# 2. Develop with privacy analysis
+causality dev compile -i src/main.lisp -o build/main.ir
+causality analyze security src/ --level paranoid
+
+# 3. ZK circuit development
+causality zk compile -i build/main.ir -o build/privacy.zk --privacy-level maximum
+causality zk setup -c build/privacy.zk -o setup/ --participants 3
+
+# 4. Privacy testing
+causality test effects --pattern privacy --property-based --cases 1000
+
+# 5. Privacy audit report
+causality deploy report --scenario privacy-app --include-privacy --include-proofs -o privacy-audit.json
+```
+
+### Library Development Workflow
+```bash
+# 1. Create library
+causality project new utils-lib --template library
+
+cd utils-lib
+
+# 2. Development with formatting
+causality dev fmt --check
+causality dev compile -i src/lib.lisp -o build/lib.ir
+
+# 3. Comprehensive testing
+causality test unit --coverage
+causality test effects --property-based
+
+# 4. Documentation generation
+causality viz effects src/lib.lisp --format mermaid -o docs/effects.md
+
+# 5. Quality analysis
+causality analyze code src/ --depth comprehensive -o quality-report.json
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Compilation Errors:**
+```bash
+# Check syntax with detailed errors
+causality dev compile -i src/main.lisp -o /tmp/test.ir --verbose
+
+# Analyze code for issues
+causality analyze code src/main.lisp --depth deep
+```
+
+**Runtime Issues:**
+```bash
+# Run with execution trace
+causality dev run -f build/main.ir --trace --max-steps 1000
+
+# Inspect runtime state
+causality inspect runtime --memory --stats --live
+```
+
+**ZK Proof Issues:**
+```bash
+# Verify circuit compilation
+causality zk compile -i build/main.ir -o /tmp/test.zk --stats
+
+# Test with mock runtime
+causality zk verify -c circuit.zk -p proof.zk --mock
+```
+
+**Performance Issues:**
+```bash
+# System performance check
+causality inspect system --perf --component all
+
+# Resource usage analysis
+causality analyze resources src/ --detailed --check-leaks
+```
+
+### Getting Help
+
+1. **Built-in Help**: `causality help troubleshooting`
+2. **Command Help**: `causality <command> --help`
+3. **Verbose Output**: Add `--verbose` to any command
+4. **System Diagnostics**: `causality inspect system --health-check`
+
+## Performance & Best Practices
+
+### Development Performance
+- Use `--watch` mode for rapid iteration
+- Enable `--parallel` for faster testing
+- Use `--format json` for script automation
+
+### Build Optimization
+```bash
+# Optimized builds
+causality dev compile -i src/main.lisp -o build/main.ir --optimize --show-stages
+
+# Release builds
+causality project build --release --timings
+```
+
+### Testing Efficiency
+```bash
+# Parallel testing
+causality test unit --parallel --filter fast
+
+# Targeted testing
+causality test effects --pattern transfer --cases 100
+```
