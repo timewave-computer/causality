@@ -3,10 +3,15 @@
 //! This module provides a shared error pipeline using `thiserror` for structured
 //! error types and `anyhow` for error context and chaining.
 
+#![allow(clippy::result_large_err)]
+
+use crate::{
+    lambda::TypeInner,
+    machine::instruction::RegisterId,
+    system::content_addressing::ResourceId,
+};
 use thiserror::Error;
-use crate::machine::RegisterId;
-use crate::system::content_addressing::ResourceId;
-use crate::lambda::TypeInner;
+use anyhow;
 
 /// Type alias for Results using our Error type
 pub type Result<T> = std::result::Result<T, Error>;
@@ -77,7 +82,7 @@ impl Error {
         Error::Other(anyhow::Error::new(self).context(context))
     }
     
-    /// Create a serialization error
+    /// Helper for serialization errors
     pub fn serialization<S: Into<String>>(msg: S) -> Self {
         Error::Serialization(msg.into())
     }

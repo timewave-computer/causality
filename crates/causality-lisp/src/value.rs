@@ -420,7 +420,7 @@ impl Value {
         if self.linearity.is_linear {
             if self.linearity.is_consumed {
                 return Err(crate::error::EvalError::LinearityViolation(
-                    format!("Value already consumed")
+                    "Value already consumed".to_string()
                 ));
             }
             self.linearity.is_consumed = true;
@@ -677,11 +677,17 @@ fn create_builtin_function(name: &str) -> BuiltinFunc {
             Ok(Value::list(args.to_vec()))
         }),
         _ => Rc::new(|_| {
-            Err(crate::error::EvalError::InvalidCall(format!("Unknown builtin function")))
+            Err(crate::error::EvalError::InvalidCall("Unknown builtin function".to_string()))
         }),
     };
     
     BuiltinFunc { func }
+}
+
+impl Default for Environment {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Environment {

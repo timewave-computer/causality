@@ -24,16 +24,26 @@ pub mod ocaml;
 
 // Re-exports for specific features
 #[cfg(feature = "c-ffi")]
-pub use c_interface::*;
+pub use c_interface::{
+    // Core C interface types and functions
+    CausalityValue, ValueType, SerializationResult,
+    causality_value_unit, causality_value_bool, causality_value_int, 
+    causality_value_string, causality_value_symbol, causality_value_free,
+    causality_value_type, causality_value_as_bool, causality_value_as_int, 
+    causality_value_as_string, causality_free_string,
+    causality_value_serialize, causality_value_deserialize,
+    causality_free_serialized_data, causality_free_error_message,
+    causality_test_roundtrip, causality_test_all_roundtrips,
+    causality_ffi_version, causality_value_debug_info,
+    // High-level FFI interface
+    CausalityFfi, FfiConfig, MemoryMode
+};
 
 #[cfg(feature = "ocaml-ffi")]
 pub use ocaml::*;
 
 // Common exports
 pub use error::*;
-
-use std::ffi::CString;
-use std::os::raw::c_char;
 
 //-----------------------------------------------------------------------------
 // Error Handling
@@ -60,28 +70,24 @@ pub enum FfiErrorCode {
     InternalError = 5,
 }
 
-/// FFI error type
-#[repr(C)]
-pub struct FfiError {
-    /// Error code
-    pub code: FfiErrorCode,
-    /// Error message (caller must free with causality_free_string)
-    pub message: *mut c_char,
-}
-
-impl FfiError {
-    #[allow(dead_code)]
-    fn new(code: FfiErrorCode, message: &str) -> Self {
-        let c_message = match CString::new(message) {
-            Ok(s) => s.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        };
-        
-        Self {
-            code,
-            message: c_message,
-        }
-    }
+/// FFI error type for internal use
+#[derive(Debug, thiserror::Error)]
+pub enum FfiError {
+    /// Null pointer error
+    #[error("Null pointer: {0}")]
+    NullPointer(String),
+    /// Invalid string error
+    #[error("Invalid string: {0}")]
+    InvalidString(String),
+    /// Unsupported type error
+    #[error("Unsupported type: {0}")]
+    UnsupportedType(String),
+    /// Serialization failed
+    #[error("Serialization failed: {0}")]
+    SerializationFailed(String),
+    /// Deserialization failed
+    #[error("Deserialization failed: {0}")]
+    DeserializationFailed(String),
 }
 
 #[cfg(test)]

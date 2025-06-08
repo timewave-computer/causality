@@ -44,5 +44,5 @@ fn test_compile_only() {
     // This test doesn't actually test any functionality
     // It just verifies that the test file compiles correctly
     println!("Client integration tests compile successfully!");
-    assert!(true);
+    // Test passes if we reach this point without compilation errors
 }

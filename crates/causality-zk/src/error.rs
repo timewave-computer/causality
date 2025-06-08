@@ -1,8 +1,8 @@
-//! Error types for ZK operations
+//! Error types for the ZK module
 
 use thiserror::Error;
 
-/// Main ZK error type encompassing all ZK-related errors
+/// Main ZK error type
 #[derive(Error, Debug)]
 pub enum ZkError {
     #[error("Circuit error: {0}")]
@@ -22,9 +22,36 @@ pub enum ZkError {
     
     #[error("Serialization error: {0}")]
     Serialization(String),
+    
+    #[error("Circuit too large: {0} gates (max: {1})")]
+    CircuitTooLarge(usize, usize),
+    
+    #[error("Invalid circuit: {0}")]
+    InvalidCircuit(String),
+    
+    #[error("Invalid proof: {0}")]
+    InvalidProof(String),
+    
+    #[error("Invalid inputs: {0}")]
+    InvalidInputs(String),
+    
+    #[error("Invalid verification key: {0}")]
+    InvalidVerificationKey(String),
+    
+    #[error("Unsupported proof system: {0}")]
+    UnsupportedProofSystem(String),
+    
+    #[error("Unsupported operation: {0}")]
+    UnsupportedOperation(String),
+    
+    #[error("Invalid witness: {0}")]
+    InvalidWitness(String),
+    
+    #[error("Constraint violation: {0}")]
+    ConstraintViolation(String),
 }
 
-/// Circuit compilation and validation errors
+/// Circuit compilation errors
 #[derive(Error, Debug)]
 pub enum CircuitError {
     #[error("Invalid instruction sequence: {0}")]
@@ -131,4 +158,51 @@ pub type ProofResult<T> = Result<T, ProofError>;
 pub type VerificationResult<T> = Result<T, VerificationError>;
 
 /// Result type for witness operations
-pub type WitnessResult<T> = Result<T, WitnessError>; 
+pub type WitnessResult<T> = Result<T, WitnessError>;
+
+/// Result type for batch verification operations
+#[derive(Debug, Clone)]
+pub struct BatchVerificationResult {
+    /// Total number of proofs verified
+    pub total_proofs: usize,
+    /// Number of successful verifications
+    pub successful_verifications: usize,
+    /// Number of failed verifications
+    pub failed_verifications: usize,
+    /// Individual verification results
+    pub individual_results: Vec<bool>,
+}
+
+impl BatchVerificationResult {
+    /// Create a new batch verification result
+    pub fn new(individual_results: Vec<bool>) -> Self {
+        let total_proofs = individual_results.len();
+        let successful_verifications = individual_results.iter().filter(|&&r| r).count();
+        let failed_verifications = total_proofs - successful_verifications;
+        
+        Self {
+            total_proofs,
+            successful_verifications,
+            failed_verifications,
+            individual_results,
+        }
+    }
+    
+    /// Check if all proofs were successfully verified
+    pub fn all_verified(&self) -> bool {
+        self.failed_verifications == 0
+    }
+}
+
+// Error conversions
+impl From<ZkError> for ProofError {
+    fn from(err: ZkError) -> Self {
+        match err {
+            ZkError::InvalidWitness(msg) => ProofError::InvalidWitness(msg),
+            ZkError::ConstraintViolation(msg) => ProofError::GenerationFailed(msg),
+            ZkError::InvalidProof(msg) => ProofError::GenerationFailed(msg),
+            ZkError::UnsupportedProofSystem(sys) => ProofError::GenerationFailed(format!("Unsupported proof system: {}", sys)),
+            _ => ProofError::GenerationFailed(format!("ZK error: {}", err)),
+        }
+    }
+} 

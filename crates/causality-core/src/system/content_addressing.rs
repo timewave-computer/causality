@@ -49,7 +49,7 @@ impl EntityId {
     
     /// Convert to a hex string for debugging/display
     pub fn to_hex(&self) -> String {
-        hex::encode(&self.bytes)
+        hex::encode(self.bytes)
     }
     
     /// Create from hex string (for testing/debugging)
@@ -60,17 +60,22 @@ impl EntityId {
         }
         let mut array = [0u8; 32];
         array.copy_from_slice(&bytes);
-        Ok(Self { bytes: array })
+        Ok(Self::from_bytes(array))
     }
     
+    /// Create a new EntityId from a 32-byte array (convenience method)
+    pub fn new(bytes: [u8; 32]) -> Self {
+        Self::from_bytes(bytes)
+    }
+    
+    /// Get the default instance of ContentId
+    #[allow(clippy::should_implement_trait)]
+    pub fn default() -> Self {
+        Self::from_bytes([0u8; 32])
+    }
+
     /// Zero EntityId (for testing)
     pub const ZERO: EntityId = EntityId { bytes: [0u8; 32] };
-}
-
-impl Default for EntityId {
-    fn default() -> Self {
-        Self::ZERO
-    }
 }
 
 impl fmt::Display for EntityId {

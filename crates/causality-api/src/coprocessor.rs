@@ -6,6 +6,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use base64::Engine;
 
 // For now, we'll define our own simplified client interface
 // until we can connect to the actual valence_coprocessor_client types
@@ -13,8 +14,8 @@ use std::collections::HashMap;
 /// Mock coprocessor client for development
 #[derive(Debug)]
 pub struct CoprocessorClient {
-    endpoint: String,
-    api_key: Option<String>,
+    _endpoint: String,
+    _api_key: Option<String>,
 }
 
 /// Circuit information
@@ -162,8 +163,8 @@ impl CoprocessorClient {
     /// Create a new coprocessor client
     pub fn new(endpoint: &str, api_key: Option<&str>) -> Result<Self> {
         Ok(Self {
-            endpoint: endpoint.to_string(),
-            api_key: api_key.map(|s| s.to_string()),
+            _endpoint: endpoint.to_string(),
+            _api_key: api_key.map(|s| s.to_string()),
         })
     }
     
@@ -265,7 +266,7 @@ impl CoprocessorService {
     pub async fn deploy_circuit(&mut self, request: DeployCircuitRequest) -> Result<CircuitInfo> {
         let deploy_req = CircuitDeployRequest {
             name: request.name.clone(),
-            wasm_bytecode: base64::decode(&request.wasm_bytecode)?,
+            wasm_bytecode: base64::engine::general_purpose::STANDARD.decode(&request.wasm_bytecode)?,
             description: request.description.unwrap_or_default(),
             parameters: request.parameters.unwrap_or_default(),
         };

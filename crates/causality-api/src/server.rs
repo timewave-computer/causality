@@ -13,7 +13,7 @@ use crate::{ApiConfig, ExecutionSession};
 /// Start the HTTP server
 pub async fn start_server(
     config: ApiConfig,
-    sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    _sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
 ) -> Result<()> {
     use colored::Colorize;
     
@@ -60,12 +60,12 @@ pub async fn health_check() -> Result<serde_json::Value> {
 
 /// Create a new session
 pub async fn create_session(
-    sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    _sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
 ) -> Result<serde_json::Value> {
     let session_id = uuid::Uuid::new_v4().to_string();
     let session = ExecutionSession::new(session_id.clone());
     
-    sessions.write().await.insert(session_id.clone(), session);
+    _sessions.write().await.insert(session_id.clone(), session);
     
     Ok(json!({
         "session_id": session_id,
@@ -76,9 +76,9 @@ pub async fn create_session(
 
 /// List all sessions
 pub async fn list_sessions(
-    sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    _sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
 ) -> Result<serde_json::Value> {
-    let sessions_guard = sessions.read().await;
+    let sessions_guard = _sessions.read().await;
     let session_list: Vec<serde_json::Value> = sessions_guard
         .values()
         .map(|session| {
@@ -104,7 +104,7 @@ pub async fn list_sessions(
 /// Compile Lisp source code
 pub async fn compile_source(
     source: String,
-    sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    _sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
     session_id: Option<String>,
 ) -> Result<serde_json::Value> {
     use causality_compiler::EnhancedCompilerPipeline;
@@ -119,7 +119,7 @@ pub async fn compile_source(
     
     // Update session stats if session provided
     if let Some(sid) = session_id {
-        if let Some(session) = sessions.write().await.get_mut(&sid) {
+        if let Some(session) = _sessions.write().await.get_mut(&sid) {
             session.metadata.stats.compilations += 1;
             session.touch();
         }
@@ -142,7 +142,7 @@ pub async fn compile_source(
 /// Execute Lisp source code
 pub async fn execute_source(
     source: String,
-    sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    _sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
     session_id: Option<String>,
 ) -> Result<serde_json::Value> {
     use causality_compiler::EnhancedCompilerPipeline;
@@ -162,7 +162,7 @@ pub async fn execute_source(
     
     // Update session stats if session provided
     if let Some(sid) = session_id {
-        if let Some(session) = sessions.write().await.get_mut(&sid) {
+        if let Some(session) = _sessions.write().await.get_mut(&sid) {
             session.metadata.stats.executions += 1;
             session.metadata.stats.total_execution_time_ms += execution_time;
             session.touch();

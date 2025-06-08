@@ -122,12 +122,12 @@ impl Interpreter {
                     if let Some(val) = old_left {
                         context.environment.bindings.insert(left_name.clone(), val);
                     } else {
-                        context.environment.bindings.remove(&left_name);
+                        context.environment.bindings.remove(left_name);
                     }
                     if let Some(val) = old_right {
                         context.environment.bindings.insert(right_name.clone(), val);
                     } else {
-                        context.environment.bindings.remove(&right_name);
+                        context.environment.bindings.remove(right_name);
                     }
                     
                     Ok(result)
@@ -159,7 +159,7 @@ impl Interpreter {
                     if let Some(val) = old_binding {
                         context.environment.bindings.insert(left_name.clone(), val);
                     } else {
-                        context.environment.bindings.remove(&left_name);
+                        context.environment.bindings.remove(left_name);
                     }
                     
                     Ok(result)
@@ -172,7 +172,7 @@ impl Interpreter {
                     if let Some(val) = old_binding {
                         context.environment.bindings.insert(right_name.clone(), val);
                     } else {
-                        context.environment.bindings.remove(&right_name);
+                        context.environment.bindings.remove(right_name);
                     }
                     
                     Ok(result)

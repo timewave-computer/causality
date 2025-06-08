@@ -33,7 +33,7 @@ impl Symbol {
         let hash = Sha256Hasher::hash(name.as_bytes());
         
         Self {
-            hash: hash.into(),
+            hash,
             #[cfg(feature = "std")]
             name: Some(name.to_string()),
         }
@@ -55,7 +55,7 @@ impl Symbol {
     
     /// Convert to hex string
     pub fn to_hex(&self) -> String {
-        hex::encode(&self.hash)
+        hex::encode(self.hash)
     }
     
     /// Get the hash (always available, ZK-compatible)

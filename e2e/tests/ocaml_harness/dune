@@ -1,0 +1,11 @@
+(executable
+ (name bridge_vault_e2e)
+ (libraries unix str)
+ (flags
+  (:standard -w -33-34)))
+
+(executable
+ (name bridge_vault_scenario)
+ (libraries str)
+ (flags
+  (:standard -w -33-34-37-69)))

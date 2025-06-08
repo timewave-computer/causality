@@ -27,5 +27,5 @@ fn test_compile_only() {
     // This test doesn't actually test any Ethereum token transfer functionality
     // It just verifies that the test file compiles correctly
     println!("Ethereum token transfer tests compile successfully!");
-    assert!(true);
+    // Test passes if we reach this point without compilation errors
 }

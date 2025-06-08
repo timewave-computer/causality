@@ -184,7 +184,7 @@ impl EffectHandler for SimpleEffectHandler {
 }
 
 /// Utility function to handle string operations
-fn handle_string_operation(operation: &str, args: Vec<Value>) -> EffectResult {
+fn _handle_string_operation(operation: &str, args: Vec<Value>) -> EffectResult {
     match operation {
         "concat" => {
             if args.len() != 2 {
@@ -237,7 +237,7 @@ mod tests {
         // Create a string concatenation handler
         let concat_handler = Arc::new(SimpleEffectHandler::new(
             "concat".to_string(),
-            |params| handle_string_operation("concat", params),
+            |params| _handle_string_operation("concat", params),
         ));
         
         registry.register_handler(concat_handler).unwrap();

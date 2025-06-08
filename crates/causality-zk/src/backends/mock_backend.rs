@@ -127,7 +127,7 @@ mod tests {
         
         let result = backend.verify_proof(&proof, &[]);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
     
     #[test]

@@ -171,6 +171,63 @@ impl SnapshotManager {
             .min_by_key(|snapshot| snapshot.timestamp)
             .map(|snapshot| snapshot.id.clone())
     }
+    
+    /// Get a snapshot by its ID
+    pub fn get_snapshot(&self, id: &SnapshotId) -> Option<&SimulationSnapshot> {
+        self.snapshots.get(id)
+    }
+    
+    /// Create a checkpoint with arbitrary data
+    pub fn create_checkpoint<T: Clone>(
+        &mut self, 
+        checkpoint_id: &str, 
+        checkpoint_name: &str, 
+        data: T
+    ) -> Result<(), crate::error::SimulationError> 
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + 'static,
+    {
+        let serialized = serde_json::to_string(&data)
+            .map_err(|e| crate::error::SimulationError::SnapshotError(format!("Serialization failed: {}", e)))?;
+            
+        let snapshot = SimulationSnapshot {
+            id: SnapshotId::new(checkpoint_id.to_string()),
+            timestamp: SimulatedTimestamp::new(0), // Use default timestamp
+            description: checkpoint_name.to_string(),
+            resource_state: serialized.into_bytes(), // Store serialized data as resource state
+            effects_log: Vec::new(), // Empty for checkpoints
+            metrics: PerformanceMetrics::default(),
+        };
+        
+        self.snapshots.insert(SnapshotId::new(checkpoint_id.to_string()), snapshot);
+        Ok(())
+    }
+    
+    /// Get checkpoint data
+    pub fn get_checkpoint<T>(&self, checkpoint_id: &str) -> Result<T, crate::error::SimulationError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let snapshot = self.snapshots
+            .get(&SnapshotId::new(checkpoint_id.to_string()))
+            .ok_or_else(|| crate::error::SimulationError::SnapshotError("Checkpoint not found".to_string()))?;
+            
+        let data_str = String::from_utf8(snapshot.resource_state.clone())
+            .map_err(|e| crate::error::SimulationError::SnapshotError(format!("UTF-8 conversion failed: {}", e)))?;
+            
+        serde_json::from_str(&data_str)
+            .map_err(|e| crate::error::SimulationError::SnapshotError(format!("Deserialization failed: {}", e)))
+    }
+    
+    /// Helper method to calculate checksum
+    fn _calculate_checksum(&self, data: &str) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        data.hash(&mut hasher);
+        format!("{:x}", hasher.finish())
+    }
 }
 
 impl Default for SnapshotManager {

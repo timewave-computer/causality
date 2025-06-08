@@ -234,7 +234,7 @@ impl Intent {
             .as_secs();
         
         // Generate content-addressed ID using simple string hash
-        let content_str = format!("intent_{}_{}", domain.to_string(), timestamp);
+        let content_str = format!("intent_{}_{}", domain, timestamp);
         let content_bytes: Vec<u8> = content_str.as_bytes().to_vec();
         let id = EntityId::from_content(&content_bytes);
         
@@ -517,6 +517,7 @@ impl Constraint {
     }
     
     /// Create a logical NOT constraint
+    #[allow(clippy::should_implement_trait)]
     pub fn not(constraint: Constraint) -> Self {
         Constraint::Not(Box::new(constraint))
     }
@@ -596,6 +597,7 @@ impl ValueExpr {
     }
     
     /// Create an addition expression
+    #[allow(clippy::should_implement_trait)]
     pub fn add(left: ValueExpr, right: ValueExpr) -> Self {
         ValueExpr::Add(Box::new(left), Box::new(right))
     }
@@ -629,6 +631,7 @@ impl Hint {
     }
     
     /// Create a logical NOT hint
+    #[allow(clippy::should_implement_trait)]
     pub fn not(hint: Hint) -> Self {
         Hint::Not(Box::new(hint))
     }

@@ -337,7 +337,7 @@ pub struct TimeTravelStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::SimulationConfig;
+    
     
     #[test]
     fn test_checkpoint_id_generation() {
@@ -376,7 +376,7 @@ mod tests {
             compress_old_checkpoints: false,
         };
         
-        let mut manager = TimeTravelManager::with_config(config);
+        let manager = TimeTravelManager::with_config(config);
         // This test would require mocking the engine creation for multiple checkpoints
         // In a real implementation, we would test the limit enforcement
         

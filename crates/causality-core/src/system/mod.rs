@@ -11,6 +11,7 @@ pub mod content_addressing;
 pub mod causality;
 pub mod domain;
 pub mod utils;
+pub mod storage;
 
 // Re-export common types
 pub use error::{Error, Result, ErrorKind, ResultExt};
@@ -25,6 +26,10 @@ pub use serialization::{
 pub use causality::CausalProof;
 pub use domain::Domain;
 pub use utils::{get_current_time_ms, SszDuration};
+pub use storage::{
+    StorageCommitment, StorageKeyDerivation, StorageKeyComponent, 
+    StorageAddressable, StorageCommitmentBatch
+};
 
 pub use content_addressing::*;
  

@@ -60,7 +60,7 @@ fn test_unit_intro_elim() {
 fn test_nested_types() {
     // Test nested product of sums    
     let left: SumValue<i32, bool> = SumValue::intro_left(10);
-    let right: SumValue<String, f64> = SumValue::intro_right(3.14);
+    let right: SumValue<String, f64> = SumValue::intro_right(std::f64::consts::PI);
     let nested = TensorValue::new(left, right);
     
     // Eliminate the nested structure
@@ -76,7 +76,7 @@ fn test_nested_types() {
         format!("({}, {})", left_str, right_str)
     });
     
-    assert_eq!(result, "(int: 10, float: 3.14)");
+    assert_eq!(result, "(int: 10, float: 3.141592653589793)");
 }
 
 #[test]

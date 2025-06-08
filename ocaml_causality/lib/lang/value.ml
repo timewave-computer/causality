@@ -4,9 +4,7 @@
 (* Import types from core module *)
 open Ocaml_causality_core
 
-type value_expr_ref_target =
-  | VERValue of value_expr_id
-  | VERExpr of expr_id
+type value_expr_ref_target = VERValue of value_expr_id | VERExpr of expr_id
 
 type value_expr =
   | VNil
@@ -14,7 +12,7 @@ type value_expr =
   | VString of str_t
   | VInt of int64
   | VList of value_expr list
-  | VRef of value_expr_ref_target 
+  | VRef of value_expr_ref_target
 
 (* ------------ LISP VALUE MODULE ------------ *)
 
@@ -42,9 +40,9 @@ module LispValue = struct
     | Symbol s -> s
     | List [] -> "()"
     | List l -> "(" ^ String.concat " " (List.map to_string_debug l) ^ ")"
-    | ResourceId rid -> "#<resource:" ^ (Bytes.to_string rid) ^ ">"
-    | ExprId eid -> "#<expr:" ^ (Bytes.to_string eid) ^ ">"
-    | Bytes b -> "#<bytes:" ^ (Bytes.to_string b) ^ ">"
+    | ResourceId rid -> "#<resource:" ^ Bytes.to_string rid ^ ">"
+    | ExprId eid -> "#<expr:" ^ Bytes.to_string eid ^ ">"
+    | Bytes b -> "#<bytes:" ^ Bytes.to_string b ^ ">"
 
   (* Type predicates *)
   let is_unit = function Unit -> true | _ -> false
@@ -63,8 +61,15 @@ module LispValue = struct
   let as_string = function String s -> s | _ -> failwith "Not a string"
   let as_symbol = function Symbol s -> s | _ -> failwith "Not a symbol"
   let as_list = function List l -> l | _ -> failwith "Not a list"
-  let as_resource_id = function ResourceId rid -> rid | _ -> failwith "Not a resource ID"
-  let as_expr_id = function ExprId eid -> eid | _ -> failwith "Not an expression ID"
+
+  let as_resource_id = function
+    | ResourceId rid -> rid
+    | _ -> failwith "Not a resource ID"
+
+  let as_expr_id = function
+    | ExprId eid -> eid
+    | _ -> failwith "Not an expression ID"
+
   let as_bytes = function Bytes b -> b | _ -> failwith "Not bytes"
 
   (* Safe extractors *)
@@ -99,17 +104,16 @@ module LispValue = struct
 
   (* Equality *)
   let rec equal a b =
-    match a, b with
+    match (a, b) with
     | Unit, Unit -> true
     | Bool a, Bool b -> a = b
     | Int a, Int b -> a = b
     | String a, String b -> a = b
     | Symbol a, Symbol b -> a = b
-    | List a, List b -> 
-        (try List.for_all2 equal a b 
-         with Invalid_argument _ -> false)
+    | List a, List b -> (
+        try List.for_all2 equal a b with Invalid_argument _ -> false)
     | ResourceId a, ResourceId b -> Bytes.equal a b
     | ExprId a, ExprId b -> Bytes.equal a b
     | Bytes a, Bytes b -> Bytes.equal a b
     | _, _ -> false
-end 
+end

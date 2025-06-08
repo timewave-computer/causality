@@ -177,7 +177,7 @@ impl Decode for TypeInner {
                 Ok(TypeInner::Record(record))
             }
             _ => Err(DecodeError::BytesInvalid(
-                format!("Invalid TypeInner variant: {}", variant).into()
+                format!("Invalid TypeInner variant: {}", variant)
             )),
         }
     }
@@ -202,7 +202,7 @@ impl DecodeWithRemainder for TypeInner {
                 let base = BaseType::from_ssz_bytes(&data[..1])?;
                 Ok((TypeInner::Base(base), &data[1..]))
             }
-            1 | 2 | 3 => {
+            1..=3 => {
                 // Product, Sum, and LinearFunction all have two TypeInner children
                 let (left, remaining) = Self::decode_with_remainder(data)?;
                 let (right, remaining) = Self::decode_with_remainder(remaining)?;
@@ -222,7 +222,7 @@ impl DecodeWithRemainder for TypeInner {
                 Ok((TypeInner::Record(record), &data[record_len..]))
             }
             _ => Err(DecodeError::BytesInvalid(
-                format!("Invalid TypeInner variant: {}", variant).into()
+                format!("Invalid TypeInner variant: {}", variant)
             )),
         }
     }
@@ -294,7 +294,7 @@ impl Type<Linear> {
 //-----------------------------------------------------------------------------
 
 /// Runtime values corresponding to the type system
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Value {
     /// Unit value
     Unit,
@@ -430,7 +430,6 @@ impl Decode for Value {
             }
             4 => {
                 let s = crate::system::Str::from_ssz_bytes(data)?;
-                let s_len = s.ssz_bytes_len();
                 Ok(Value::String(s))
             }
             5 => {
@@ -476,7 +475,7 @@ impl Decode for Value {
                 Ok(Value::Record { fields })
             }
             _ => Err(DecodeError::BytesInvalid(
-                format!("Invalid Value variant: {}", variant).into()
+                format!("Invalid Value variant: {}", variant)
             )),
         }
     }
@@ -511,18 +510,12 @@ impl DecodeWithRemainder for Value {
                 Ok((Value::Int(u32::from_le_bytes(bytes)), &data[4..]))
             }
             3 => {
-                // For Str, we need to determine its length
-                // Str is encoded as length (4 bytes) + data
-                let (str_data, remaining) = crate::system::decode_with_length(data)?;
-                let value = String::from_utf8(str_data.to_vec())
-                    .map_err(|_| DecodeError::BytesInvalid("Invalid UTF-8".into()))?;
-                let s = crate::system::Str { value };
-                Ok((Value::Symbol(s), remaining))
+                let s = crate::system::Str::from_ssz_bytes(data)?;
+                Ok((Value::Symbol(s), data))
             }
             4 => {
                 let s = crate::system::Str::from_ssz_bytes(data)?;
-                let s_len = s.ssz_bytes_len();
-                Ok((Value::String(s), &data[s_len..]))
+                Ok((Value::String(s), data))
             }
             5 => {
                 let (left, remaining) = Value::decode_with_remainder(data)?;
@@ -567,7 +560,7 @@ impl DecodeWithRemainder for Value {
                 Ok((Value::Record { fields }, &data[offset..]))
             }
             _ => Err(DecodeError::BytesInvalid(
-                format!("Invalid Value variant: {}", variant).into()
+                format!("Invalid Value variant: {}", variant)
             )),
         }
     }
@@ -661,6 +654,35 @@ impl Default for TypeRegistry {
     }
 }
 
+// Manual SSZ implementation for Type that only serializes the inner field
+impl<L> Encode for Type<L> {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        self.inner.ssz_bytes_len()
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        self.inner.ssz_append(buf);
+    }
+}
+
+impl<L> Decode for Type<L> {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let inner = TypeInner::from_ssz_bytes(bytes)?;
+        Ok(Self {
+            inner,
+            _phantom: PhantomData,
+        })
+    }
+}
+
 //-----------------------------------------------------------------------------
 // Tests
 //-----------------------------------------------------------------------------
@@ -734,35 +756,6 @@ mod tests {
         assert_eq!(registry.get_type(&product_id), Some(&product_type));
         assert!(registry.contains_type(&int_id));
         assert!(registry.contains_type(&product_id));
-    }
-}
-
-// Manual SSZ implementation for Type that only serializes the inner field
-impl<L> Encode for Type<L> {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        self.inner.ssz_bytes_len()
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        self.inner.ssz_append(buf);
-    }
-}
-
-impl<L> Decode for Type<L> {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        let inner = TypeInner::from_ssz_bytes(bytes)?;
-        Ok(Self {
-            inner,
-            _phantom: PhantomData,
-        })
     }
 }
 

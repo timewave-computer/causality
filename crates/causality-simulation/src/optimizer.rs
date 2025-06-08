@@ -3,9 +3,8 @@
 //! This module provides optimization strategies for reordering and scheduling
 //! effects to minimize execution cost and maximize parallelization opportunities.
 
+use crate::MockEffect;
 use std::collections::HashMap;
-use crate::engine::MockEffect;
-use causality_core::machine::instruction::RegisterId;
 
 /// Cost metric for effect execution
 #[derive(Debug, Clone, PartialEq)]
@@ -82,23 +81,15 @@ pub struct OptimizableEffect {
     pub parallelizable: bool,
 }
 
-/// Optimization strategy for effect scheduling
-#[derive(Debug, Clone, PartialEq)]
+/// Optimization strategy for effect execution
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OptimizationStrategy {
-    /// Minimize total gas cost
-    MinimizeGasCost,
-    
-    /// Minimize total execution time
-    MinimizeTime,
-    
-    /// Maximize parallelization
-    MaximizeParallelism,
-    
-    /// Balance all factors
+    /// Minimize gas/resource consumption
+    GasEfficiency,
+    /// Minimize execution time
+    Speed,
+    /// Balance between gas and speed
     Balanced,
-    
-    /// Custom weighted optimization
-    Custom(CostWeights),
 }
 
 /// Configuration for the optimizer
@@ -165,6 +156,188 @@ pub struct OptimizationResult {
     pub strategy_used: OptimizationStrategy,
 }
 
+/// Effect optimization and scheduling engine
+#[derive(Debug, Clone)]
+pub struct SimulationOptimizer {
+    /// Default optimization strategy
+    default_strategy: OptimizationStrategy,
+    /// Cache for optimization results
+    optimization_cache: HashMap<String, String>,
+}
+
+impl SimulationOptimizer {
+    /// Create a new simulation optimizer
+    pub fn new() -> Self {
+        Self {
+            default_strategy: OptimizationStrategy::Balanced,
+            optimization_cache: HashMap::new(),
+        }
+    }
+    
+    /// Create optimizer with specific default strategy
+    pub fn with_strategy(strategy: OptimizationStrategy) -> Self {
+        Self {
+            default_strategy: strategy,
+            optimization_cache: HashMap::new(),
+        }
+    }
+    
+    /// Optimize program for gas efficiency
+    pub fn optimize_for_gas_efficiency(&self, program: &str) -> String {
+        // Mock optimization for gas efficiency
+        // In reality, this would analyze the program and:
+        // - Merge adjacent allocations
+        // - Eliminate redundant operations
+        // - Use more efficient instruction sequences
+        
+        if program.contains("alloc") && program.contains("consume") {
+            // Optimize alloc-consume patterns
+            format!("(optimized-gas {})", program)
+        } else if program.contains("tensor") {
+            // Optimize tensor operations
+            format!("(tensor-opt-gas {})", program)
+        } else {
+            // Apply general gas optimizations
+            format!("(gas-opt {})", program)
+        }
+    }
+    
+    /// Optimize program for execution speed
+    pub fn optimize_for_speed(&self, program: &str) -> String {
+        // Mock optimization for speed
+        // In reality, this would:
+        // - Parallelize independent operations
+        // - Inline function calls
+        // - Use faster instruction variants
+        
+        if program.contains("lambda") {
+            // Inline lambda functions
+            format!("(inlined {})", program)
+        } else if program.contains("tensor") {
+            // Use vectorized operations
+            format!("(vectorized {})", program)
+        } else {
+            // Apply general speed optimizations
+            format!("(speed-opt {})", program)
+        }
+    }
+    
+    /// Optimize for parallelism (internal method for balanced optimization)
+    fn _optimize_for_parallelism(&self, program: &str) -> String {
+        // Mock parallelism optimization
+        // In reality, this would:
+        // - Identify independent operations
+        // - Create parallel execution paths
+        // - Balance workload across threads
+        
+        if program.contains("lambda") && program.contains("tensor") {
+            // Parallelize both lambda and tensor operations
+            format!("(parallel-all {})", program)
+        } else if program.contains("lambda") {
+            // Parallelize lambda operations
+            format!("(parallel-lambda {})", program)
+        } else if program.contains("tensor") {
+            // Parallelize tensor operations
+            format!("(parallel-tensor {})", program)
+        } else {
+            // Apply general parallelization
+            format!("(parallel {})", program)
+        }
+    }
+    
+    /// Apply balanced optimization
+    pub fn optimize_balanced(&self, program: &str) -> String {
+        // Mock balanced optimization
+        // Combines gas and speed optimizations with reasonable trade-offs
+        
+        let gas_optimized = self.optimize_for_gas_efficiency(program);
+        let speed_hints = if program.contains("lambda") { 
+            "-fast" 
+        } else { 
+            "" 
+        };
+        
+        format!("(balanced{} {})", speed_hints, gas_optimized)
+    }
+    
+    /// Apply optimization based on strategy
+    pub fn optimize_with_strategy(&self, program: &str, strategy: OptimizationStrategy) -> String {
+        match strategy {
+            OptimizationStrategy::GasEfficiency => self.optimize_for_gas_efficiency(program),
+            OptimizationStrategy::Speed => self.optimize_for_speed(program),
+            OptimizationStrategy::Balanced => self.optimize_balanced(program),
+        }
+    }
+    
+    /// Apply default optimization
+    pub fn optimize(&self, program: &str) -> String {
+        self.optimize_with_strategy(program, self.default_strategy)
+    }
+    
+    /// Get optimization recommendations for a program
+    pub fn analyze_program(&self, program: &str) -> OptimizationAnalysis {
+        let has_allocations = program.contains("alloc");
+        let has_consumption = program.contains("consume");
+        let has_lambdas = program.contains("lambda");
+        let has_tensors = program.contains("tensor");
+        
+        let mut recommendations = Vec::new();
+        let mut estimated_savings = 0;
+        
+        if has_allocations && has_consumption {
+            recommendations.push("Consider merging allocation-consumption patterns".to_string());
+            estimated_savings += 15;
+        }
+        
+        if has_lambdas {
+            recommendations.push("Lambda inlining available for speed optimization".to_string());
+            estimated_savings += 25;
+        }
+        
+        if has_tensors {
+            recommendations.push("Tensor operations can be vectorized".to_string());
+            estimated_savings += 20;
+        }
+        
+        OptimizationAnalysis {
+            complexity_score: program.len() as u32,
+            optimization_potential: estimated_savings,
+            recommended_strategy: if has_lambdas {
+                OptimizationStrategy::Speed
+            } else if has_allocations {
+                OptimizationStrategy::GasEfficiency
+            } else {
+                OptimizationStrategy::Balanced
+            },
+            recommendations,
+        }
+    }
+    
+    /// Clear optimization cache
+    pub fn clear_cache(&mut self) {
+        self.optimization_cache.clear();
+    }
+}
+
+/// Analysis results for optimization potential
+#[derive(Debug, Clone)]
+pub struct OptimizationAnalysis {
+    /// Complexity score of the program (higher = more complex)
+    pub complexity_score: u32,
+    /// Estimated optimization potential as percentage
+    pub optimization_potential: u32,
+    /// Recommended optimization strategy
+    pub recommended_strategy: OptimizationStrategy,
+    /// Specific optimization recommendations
+    pub recommendations: Vec<String>,
+}
+
+impl Default for SimulationOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EffectOptimizer {
     /// Create a new optimizer with default configuration
     pub fn new() -> Self {
@@ -195,11 +368,9 @@ impl EffectOptimizer {
         
         // Apply optimization strategy
         let (execution_order, parallel_batches) = match &self.config.strategy {
-            OptimizationStrategy::MinimizeGasCost => self.optimize_for_gas_cost(&effects),
-            OptimizationStrategy::MinimizeTime => self.optimize_for_time(&effects),
-            OptimizationStrategy::MaximizeParallelism => self.optimize_for_parallelism(&effects),
+            OptimizationStrategy::GasEfficiency => self.optimize_for_gas_cost(&effects),
+            OptimizationStrategy::Speed => self.optimize_for_time(&effects),
             OptimizationStrategy::Balanced => self.optimize_balanced(&effects),
-            OptimizationStrategy::Custom(weights) => self.optimize_custom(&effects, weights),
         };
         
         // Calculate cost savings
@@ -219,7 +390,7 @@ impl EffectOptimizer {
             execution_order,
             parallel_batches,
             cost_savings,
-            strategy_used: self.config.strategy.clone(),
+            strategy_used: self.config.strategy,
         }
     }
     
@@ -260,7 +431,7 @@ impl EffectOptimizer {
         db.insert("network_download".to_string(), EffectCost::new(6, 150, 1024, 4096));
         
         // Transfer effects
-        let transfer_effect = MockEffect {
+        let _transfer_effect = MockEffect {
             call: crate::engine::MockEffectCall {
                 tag: "transfer".to_string(),
                 args: vec!["sender".to_string(), "receiver".to_string(), "100".to_string()],
@@ -350,38 +521,6 @@ impl EffectOptimizer {
         (indices, batches)
     }
     
-    /// Optimize for maximum parallelization
-    fn optimize_for_parallelism(&self, effects: &[OptimizableEffect]) -> (Vec<usize>, Vec<Vec<usize>>) {
-        let mut parallel_effects = Vec::new();
-        let mut sequential_effects = Vec::new();
-        
-        for (i, effect) in effects.iter().enumerate() {
-            if effect.parallelizable {
-                parallel_effects.push(i);
-            } else {
-                sequential_effects.push(i);
-            }
-        }
-        
-        let mut batches = Vec::new();
-        
-        // Create batches of parallel effects
-        for chunk in parallel_effects.chunks(self.config.max_parallel_effects) {
-            batches.push(chunk.to_vec());
-        }
-        
-        // Add sequential effects as individual batches
-        for &idx in &sequential_effects {
-            batches.push(vec![idx]);
-        }
-        
-        let execution_order = parallel_effects.into_iter()
-            .chain(sequential_effects.into_iter())
-            .collect();
-        
-        (execution_order, batches)
-    }
-    
     /// Optimize with balanced approach
     fn optimize_balanced(&self, effects: &[OptimizableEffect]) -> (Vec<usize>, Vec<Vec<usize>>) {
         let weights = CostWeights::default();
@@ -436,10 +575,21 @@ impl Default for EffectOptimizer {
     }
 }
 
+/// Custom optimization strategy with weights
+#[derive(Debug, Clone, PartialEq)]
+pub struct CustomOptimizationWeights {
+    /// Weight for gas efficiency (0.0 to 1.0)
+    pub gas_weight: f64,
+    /// Weight for speed (0.0 to 1.0)
+    pub speed_weight: f64,
+    /// Weight for parallelism (0.0 to 1.0)
+    pub parallelism_weight: f64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_core::machine::instruction::RegisterId;
+    
     
     fn create_test_effect(tag: &str, gas: u64, time: u64, parallelizable: bool) -> OptimizableEffect {
         OptimizableEffect {
@@ -475,7 +625,7 @@ mod tests {
             create_test_effect("medium", 50, 75, true),
         ];
         
-        optimizer.config.strategy = OptimizationStrategy::MinimizeGasCost;
+        optimizer.config.strategy = OptimizationStrategy::GasEfficiency;
         let result = optimizer.optimize_effects(effects);
         
         // Should order by gas cost: cheap (10), medium (50), expensive (100)
@@ -492,31 +642,11 @@ mod tests {
             create_test_effect("medium", 75, 100, true),
         ];
         
-        optimizer.config.strategy = OptimizationStrategy::MinimizeTime;
+        optimizer.config.strategy = OptimizationStrategy::Speed;
         let result = optimizer.optimize_effects(effects);
         
         // Should order by time cost: fast (10), medium (100), slow (200)
         assert_eq!(result.execution_order, vec![1, 2, 0]);
-    }
-    
-    #[test]
-    fn test_parallelization_optimization() {
-        let mut optimizer = EffectOptimizer::new();
-        
-        let effects = vec![
-            create_test_effect("parallel1", 50, 100, true),
-            create_test_effect("sequential", 30, 50, false),
-            create_test_effect("parallel2", 40, 80, true),
-        ];
-        
-        optimizer.config.strategy = OptimizationStrategy::MaximizeParallelism;
-        optimizer.config.max_parallel_effects = 2;
-        
-        let result = optimizer.optimize_effects(effects);
-        
-        // Should group parallel effects together
-        assert_eq!(result.execution_order, vec![0, 2, 1]);
-        assert_eq!(result.parallel_batches.len(), 2); // One batch for parallel, one for sequential
     }
     
     #[test]

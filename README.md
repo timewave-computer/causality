@@ -1,14 +1,16 @@
 # Causality
 
-A programming environment for verifiable distributed programs using a linear resource model.
+Linear resource programming for distributed verifiable computation.
+
+*This project is at an exterimental stage and changing rapidly.*
 
 ![](./causality.png)
 
 ## Architecture
 
-Causality is built on linear resource programming: every resource is consumed exactly once, creating explicit causal ordering and eliminating entire classes of errors (double-spends, use-after-free, race conditions) by design. Resources are content-addressed through cryptographic hashing, enabling global deduplication, verifiable references, and natural distribution.
+Causality is built on linear resource programming: every resource is consumed exactly once, creating explicit causal ordering and eliminating many error classes (double-spends, use-after-free, race conditions) by design. Resources are content-addressed through cryptographic hashing, enabling global deduplication, verifiable references, and natural distribution.
 
-The system employs a mathematically grounded three-layer architecture where each layer has precise categorical foundations:
+The system employs a three-layer architecture where each layer has precise categorical foundations:
 
 **Layer 0: Register Machine** - Minimal execution substrate with 11 instructions (`move`, `apply`, `alloc`, `consume`, `match`, `select`, `witness`, `check`, `perform`, `labelmarker`, `return`) operating on a linear resource heap. Designed for deterministic execution and efficient zero-knowledge circuit generation.
 

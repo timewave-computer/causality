@@ -18,9 +18,17 @@ hex = "0.4"
 ethereum_ssz = { workspace = true }
 ethereum_ssz_derive = { workspace = true }
 rand = "0.8"
-tokio = { version = "1.0", features = ["time"] }
+tokio = { version = "1.0", features = ["time", "macros", "rt-multi-thread"] }
 hashbrown = "0.15"
+sha2 = "0.10"
+blake3 = "1.5"
+uuid = { version = "1.0", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 tempfile = "3.8"
-tokio = { version = "1.0", features = ["time", "macros", "rt-multi-thread"] } 
+tokio = { version = "1.0", features = ["time", "macros", "rt-multi-thread"] }
+
+[[example]]
+name = "cross_chain_defi_bridge"
+path = "examples/cross_chain_defi_bridge.rs" 

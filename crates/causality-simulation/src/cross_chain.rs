@@ -5,14 +5,19 @@ use crate::{
     snapshot::{SnapshotManager, SnapshotId},
     clock::{SimulatedClock, SimulatedTimestamp},
 };
-use causality_toolkit::{
-    testing::TestSuite,
-};
 use std::{
     collections::HashMap,
     time::Duration,
 };
 use serde::{Serialize, Deserialize};
+use uuid;
+
+/// Simple test suite for cross-chain testing
+#[derive(Debug, Clone)]
+pub struct TestSuite {
+    pub name: String,
+    pub test_cases: Vec<String>,
+}
 
 /// Cross-chain scenario status
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -175,7 +180,7 @@ pub struct CrossChainTestExecutor {
     clock: SimulatedClock,
     
     /// Cross-chain snapshot manager
-    snapshot_manager: SnapshotManager,
+    _snapshot_manager: SnapshotManager,
 }
 
 /// Single chain executor for cross-chain scenarios
@@ -417,7 +422,7 @@ impl CrossChainTestExecutor {
             chain_executors: HashMap::new(),
             message_relay: MessageRelay::new(),
             clock,
-            snapshot_manager: SnapshotManager::default(),
+            _snapshot_manager: SnapshotManager::default(),
         }
     }
     
@@ -512,7 +517,7 @@ impl CrossChainTestExecutor {
     }
     
     /// Process messages in transit
-    async fn process_messages(&mut self) -> SimulationResult<()> {
+    async fn _process_messages(&mut self) -> SimulationResult<()> {
         let current_time = self.clock.now();
         let mut delivered_messages = Vec::new();
         
@@ -572,7 +577,7 @@ impl CrossChainTestExecutor {
     }
     
     /// Handle scenario timeout
-    async fn handle_scenario_timeout(&mut self, scenario: &CrossChainTestScenario) -> SimulationResult<CrossChainTestResult> {
+    async fn _handle_scenario_timeout(&mut self, scenario: &CrossChainTestScenario) -> SimulationResult<CrossChainTestResult> {
         // Mark all running chains as timed out
         for executor in self.chain_executors.values_mut() {
             if executor.status == ChainExecutorStatus::Running {
@@ -662,7 +667,7 @@ impl CrossChainTestExecutor {
         let mut chain_results = HashMap::new();
         
         // Execute each chain according to dependencies
-        for (chain_id, _config) in &scenario.chain_configs {
+        for chain_id in scenario.chain_configs.keys() {
             if let Some(executor) = self.chain_executors.get_mut(chain_id) {
                 // Set up chain for execution
                 executor.status = ChainExecutorStatus::Running;
@@ -689,6 +694,66 @@ impl CrossChainTestExecutor {
         }
         
         Ok(chain_results)
+    }
+
+    /// Execute coordinated cross-chain operations
+    pub async fn execute_coordinated(
+        &mut self, 
+        chain_programs: &[(&str, &str)]
+    ) -> SimulationResult<CrossChainResult> {
+        println!("Executing coordinated cross-chain operations on {} chains", chain_programs.len());
+        
+        let mut chain_results = HashMap::new();
+        let mut total_steps = 0;
+        
+        for (chain_name, program) in chain_programs {
+            println!("  Executing on chain '{}': {}", chain_name, program);
+            
+            // Create a minimal test scenario for this chain
+            let mut chain_configs = HashMap::new();
+            chain_configs.insert(chain_name.to_string(), ChainParams {
+                chain_id: chain_name.to_string(),
+                gas_limit: 1000000,
+                block_time: Duration::from_secs(1),
+                finality_time: Duration::from_secs(6),
+            });
+            
+            let scenario = CrossChainTestScenario {
+                id: uuid::Uuid::new_v4().to_string(),
+                description: format!("Execution on {}", chain_name),
+                chain_configs,
+                chain_test_suites: HashMap::new(),
+                dependencies: HashMap::new(),
+                timeout: std::time::Duration::from_secs(30),
+                expected_outcomes: Vec::new(),
+                sync_points: Vec::new(),
+            };
+            
+            // Execute the scenario
+            let execution_result = self.execute_scenario(scenario).await?;
+            
+            // Extract result for this chain
+            if let Some(chain_result) = execution_result.chain_results.get(*chain_name) {
+                chain_results.insert(chain_name.to_string(), chain_result.clone());
+                total_steps += chain_result.metrics.tests_executed as usize;
+            }
+            
+            println!("    ✓ Chain '{}' completed: {} steps", chain_name, total_steps);
+        }
+        
+        Ok(CrossChainResult {
+            chain_count: chain_programs.len(),
+            total_steps,
+            chain_results,
+            coordination_successful: true,
+            execution_time_ms: 100, // Mock timing
+        })
+    }
+}
+
+impl Default for MessageRelay {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -734,6 +799,63 @@ impl Default for ScenarioMetrics {
 impl MockChainState {
     pub fn new(_config: &ChainParams) -> Self {
         Self::default()
+    }
+}
+
+/// Result of cross-chain coordination
+#[derive(Debug, Clone)]
+pub struct CrossChainResult {
+    /// Number of chains involved
+    pub chain_count: usize,
+    /// Total execution steps across all chains
+    pub total_steps: usize,
+    /// Results per chain
+    pub chain_results: HashMap<String, ChainExecutionResult>,
+    /// Whether coordination was successful
+    pub coordination_successful: bool,
+    /// Total execution time in milliseconds
+    pub execution_time_ms: u64,
+}
+
+// Local mock types to replace toolkit dependencies
+#[derive(Debug, Clone)]
+pub struct ResourceManager {
+    resources: HashMap<String, u64>,
+}
+
+impl Default for ResourceManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ResourceManager {
+    pub fn new() -> Self {
+        Self {
+            resources: HashMap::new(),
+        }
+    }
+    
+    pub fn create_resource(&mut self, name: &str, amount: u64) -> String {
+        let id = format!("{}_{}", name, amount);
+        self.resources.insert(id.clone(), amount);
+        id
+    }
+    
+    pub fn get_resource_balance(&self, id: &str) -> Option<u64> {
+        self.resources.get(id).copied()
+    }
+    
+    pub fn transfer_resource(&mut self, from_id: &str, to_id: &str, amount: u64) -> bool {
+        if let Some(from_balance) = self.resources.get(from_id).copied() {
+            if from_balance >= amount {
+                self.resources.insert(from_id.to_string(), from_balance - amount);
+                let to_balance = self.resources.get(to_id).copied().unwrap_or(0);
+                self.resources.insert(to_id.to_string(), to_balance + amount);
+                return true;
+            }
+        }
+        false
     }
 }
 

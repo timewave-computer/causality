@@ -405,10 +405,10 @@ impl ReductionEngine {
         match &res_val.value {
             MachineValue::ResourceRef(id) => {
                 // Clone the id to avoid borrow issues
-                let resource_id = id.clone();
+                let resource_id = *id;
                 
                 // Consume resource from heap
-                let value = self.state.consume_resource(resource_id.clone())
+                let value = self.state.consume_resource(resource_id)
                     .map_err(|_| ReductionError::ResourceAlreadyConsumed(resource_id))?;
                 
                 // Store extracted value in output register

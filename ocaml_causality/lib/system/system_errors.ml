@@ -1,15 +1,15 @@
 (** Unified error handling system for the Causality framework
-    
-    This module provides a consistent error handling system across all layers
-    of the Causality framework, with proper error propagation and debugging support.
-*)
+
+    This module provides a consistent error handling system across all layers of
+    the Causality framework, with proper error propagation and debugging
+    support. *)
 
 (** {1 Error Types} *)
 
 (** Base error kinds for all Causality operations *)
-type error_kind = 
+type error_kind =
   | TypeError of string
-  | MachineError of string  
+  | MachineError of string
   | LinearityError of string
   | CapabilityError of string
   | ReductionError of string
@@ -17,15 +17,15 @@ type error_kind =
   | ValidationError of string
   | SerializationError of string
   | NetworkError of string
-  [@@deriving show, eq]
+[@@deriving show, eq]
 
-(** Causality exception for unrecoverable errors *)
 exception Causality_error of error_kind * string
+(** Causality exception for unrecoverable errors *)
 
 (** {1 Result Type} *)
 
-(** Result type for error handling *)
 type ('a, 'e) result = ('a, 'e) Result.t
+(** Result type for error handling *)
 
 (** {1 Helper Functions} *)
 
@@ -34,8 +34,7 @@ let error (kind : error_kind) (_msg : string) : ('a, error_kind) result =
   Error kind
 
 (** Create a success result *)
-let ok (value : 'a) : ('a, error_kind) result =
-  Ok value
+let ok (value : 'a) : ('a, error_kind) result = Ok value
 
 (** Convert error to exception (for unrecoverable errors) *)
 let fail (kind : error_kind) (msg : string) : 'a =
@@ -44,21 +43,16 @@ let fail (kind : error_kind) (msg : string) : 'a =
 (** {1 Monadic Operations} *)
 
 module Result = struct
-  let bind (result : ('a, 'e) result) (f : 'a -> ('b, 'e) result) : ('b, 'e) result =
-    match result with
-    | Ok value -> f value
-    | Error err -> Error err
+  let bind (result : ('a, 'e) result) (f : 'a -> ('b, 'e) result) :
+      ('b, 'e) result =
+    match result with Ok value -> f value | Error err -> Error err
 
   let map (f : 'a -> 'b) (result : ('a, 'e) result) : ('b, 'e) result =
-    match result with
-    | Ok value -> Ok (f value)
-    | Error err -> Error err
+    match result with Ok value -> Ok (f value) | Error err -> Error err
 
-  let (>>=) = bind
-  let (>>|) result f = map f result
-
+  let ( >>= ) = bind
+  let ( >>| ) result f = map f result
   let return = ok
-
   let fail_with err = Error err
 
   (** Combine multiple results *)
@@ -95,5 +89,5 @@ let handle_result ?(log = true) (result : ('a, error_kind) result) : 'a option =
   match result with
   | Ok value -> Some value
   | Error kind ->
-    if log then log_error kind "";
-    None 
+      if log then log_error kind "";
+      None

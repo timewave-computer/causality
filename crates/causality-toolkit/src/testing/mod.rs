@@ -71,19 +71,19 @@ mod tests {
     fn test_generator_creation() {
         let _generator = TestGenerator::new();
         // Basic test that generator can be created
-        assert!(true); // Simple assertion to ensure compilation
+        // Test passes if we reach this point without compilation errors // Simple assertion to ensure compilation
     }
     
     #[test] 
     fn test_mock_generation_produces_valid_handlers() {
         let mut _mock_generator = MockGenerator::new();
         // Basic test that mock generator can be created
-        assert!(true); // Simple assertion to ensure compilation
+        // Test passes if we reach this point without compilation errors // Simple assertion to ensure compilation
     }
     
     #[test]
     fn test_basic_functionality() {
         // Basic test to ensure the module compiles and works
-        assert!(true);
+        // Test passes if we reach this point without compilation errors
     }
 } 

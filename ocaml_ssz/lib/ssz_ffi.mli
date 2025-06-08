@@ -1,7 +1,8 @@
 (** OCaml bindings for Rust SSZ implementation *)
 
-(** Direct Rust function bindings *)
 val rust_serialize_bool : bool -> string
+(** Direct Rust function bindings *)
+
 val rust_deserialize_bool : string -> bool
 val rust_serialize_u32 : int -> string
 val rust_deserialize_u32 : string -> int
@@ -26,10 +27,11 @@ module Mock : sig
   val roundtrip_string : string -> string
 end
 
-(** Mock round-trip functions for comprehensive testing *)
 val ocaml_to_rust_bytes : string -> string
+(** Mock round-trip functions for comprehensive testing *)
+
 val rust_to_ocaml_bytes : string -> string
 val rust_to_ocaml_to_rust_bytes : string -> string
 
+val check_hash_compatibility : string -> string * string
 (** Hash tree root compatibility check *)
-val check_hash_compatibility : string -> string * string 

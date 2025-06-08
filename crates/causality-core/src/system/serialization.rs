@@ -59,8 +59,8 @@ impl<T: Decode> FromBytes for T {
 pub fn hash_encode<T: Encode>(value: &T) -> [u8; 32] {
     use crate::{Sha256Hasher, Hasher};
     let encoded = value.as_ssz_bytes();
-    let hash = Sha256Hasher::hash(&encoded);
-    hash
+    
+    Sha256Hasher::hash(&encoded)
 }
 
 /// Helper to encode multiple values together

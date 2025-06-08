@@ -4,6 +4,8 @@
 //! registers, resource heap, effects list, and constraints as specified
 //! in the three-layer architecture.
 
+#![allow(clippy::result_large_err)]
+
 use super::instruction::RegisterId;
 use super::value::{MachineValue, RegisterValue};
 use crate::system::content_addressing::ResourceId;

@@ -62,10 +62,26 @@ pub mod intent_evaluator;
 /// ZK proof integration for effects
 pub mod zk_integration;
 
+/// Storage proof effects for blockchain state verification
+pub mod storage_proof;
+
+/// Cross-chain effect coordination for atomic operations across blockchains
+pub mod cross_chain;
+
 /// Re-export key types for convenience
 pub use handler_registry::{EffectHandler, EffectHandlerRegistry, EffectResult};
 pub use intent_evaluator::{IntentEvaluator, IntentEvaluationConfig, EvaluationContext};
 pub use zk_integration::{EffectHash, ZkProof, ZkVerifiedEffectHandler, ZkEffectRegistry};
+pub use storage_proof::{
+    StorageProofEffect, StorageDependency, StorageKeySpec, StorageSlot,
+    StorageProofRequirements, StorageProofResult, ProofData, EffectPriority,
+    StorageValueConstraint, StorageCachePolicy, ZkCircuitConfig, ProofAggregationStrategy,
+};
+pub use cross_chain::{
+    CrossChainEffect, CrossChainCoordinator, CrossChainTxState, CrossChainExecutionResult,
+    StorageProofRequirement, ProofType, VerificationConstraint, ConstraintType,
+    CrossChainStatistics, BlockchainDomain,
+};
 
 //-----------------------------------------------------------------------------
 // Re-exports

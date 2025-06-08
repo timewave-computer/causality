@@ -238,7 +238,7 @@ pub fn extend_record(
             if cap_schema != &extension {
                 return perform("capability_error", vec![
                     Term::literal(crate::lambda::Literal::Symbol(
-                        Symbol::new(&format!("Extension schema doesn't match capability"))
+                        Symbol::new("Extension schema doesn't match capability")
                     ))
                 ]);
             }
@@ -247,7 +247,7 @@ pub fn extend_record(
         _ => {
             return perform("capability_error", vec![
                 Term::literal(crate::lambda::Literal::Symbol(
-                    Symbol::new(&format!("Insufficient capability for record extension"))
+                    Symbol::new("Insufficient capability for record extension")
                 ))
             ]);
         }
@@ -285,7 +285,7 @@ pub fn restrict_record(
             if !field_names.iter().all(|f| cap_fields.contains(f)) {
                 return perform("capability_error", vec![
                     Term::literal(crate::lambda::Literal::Symbol(
-                        Symbol::new(&format!("Insufficient capability for field removal"))
+                        Symbol::new("Insufficient capability for field removal")
                     ))
                 ]);
             }
@@ -294,7 +294,7 @@ pub fn restrict_record(
         _ => {
             return perform("capability_error", vec![
                 Term::literal(crate::lambda::Literal::Symbol(
-                    Symbol::new(&format!("Insufficient capability for record restriction"))
+                    Symbol::new("Insufficient capability for record restriction")
                 ))
             ]);
         }
@@ -325,7 +325,7 @@ pub fn create_record(
             if cap_schema != &schema {
                 return perform("capability_error", vec![
                     Term::literal(crate::lambda::Literal::Symbol(
-                        Symbol::new(&format!("Schema doesn't match creation capability"))
+                        Symbol::new("Schema doesn't match creation capability")
                     ))
                 ]);
             }
@@ -334,7 +334,7 @@ pub fn create_record(
         _ => {
             return perform("capability_error", vec![
                 Term::literal(crate::lambda::Literal::Symbol(
-                    Symbol::new(&format!("Insufficient capability for record creation"))
+                    Symbol::new("Insufficient capability for record creation")
                 ))
             ]);
         }
@@ -368,7 +368,7 @@ pub fn delete_record(
         _ => {
             return perform("capability_error", vec![
                 Term::literal(crate::lambda::Literal::Symbol(
-                    Symbol::new(&format!("Insufficient capability for record deletion"))
+                    Symbol::new("Insufficient capability for record deletion")
                 ))
             ]);
         }

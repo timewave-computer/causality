@@ -3,7 +3,7 @@
 use thiserror::Error;
 
 /// Main error type for simulation operations
-#[derive(Error, Debug, Clone, PartialEq)]
+#[derive(Debug, thiserror::Error)]
 pub enum SimulationError {
     #[error("Simulation configuration error: {0}")]
     Configuration(String),
@@ -51,7 +51,32 @@ pub enum SimulationError {
     EngineError(String),
     
     #[error("Core causality error: {0}")]
-    CoreError(#[from] causality_core::system::error::MachineError),
+    MachineError(#[from] causality_core::system::error::MachineError),
+    
+    /// Branch not found
+    #[error("Branch not found: {0}")]
+    BranchNotFound(String),
+    
+    #[error("Optimization error: {0}")]
+    OptimizationError(String),
+    
+    #[error("Register error: {message} (register: {register_id})")]
+    RegisterError { 
+        message: String, 
+        register_id: String 
+    },
+    
+    #[error("Resource error: {0}")]
+    ResourceError(String),
+    
+    #[error("Parse error: {0}")]
+    ParseError(String),
+    
+    #[error("Compilation error: {0}")]
+    CompilationError(String),
+    
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
 }
 
 /// Result type for simulation operations
@@ -84,4 +109,16 @@ pub enum SnapshotError {
     
     #[error("Invalid snapshot state: {0}")]
     InvalidState(String),
+    
+    /// Branch not found
+    #[error("Branch not found: {0}")]
+    BranchNotFound(String),
+    
+    /// Parse error
+    #[error("Parse error: {0}")]
+    ParseError(String),
+    
+    /// Compilation error
+    #[error("Compilation error: {0}")]
+    CompilationError(String),
 } 

@@ -11,6 +11,7 @@ pub use core::{
     FailureMode,
     EffectResult,
     EffectError,
+    EffectLibrary,
 };
 
 pub use schema::{

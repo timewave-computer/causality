@@ -518,7 +518,7 @@ fn compile_application(ctx: &mut CompileContext, func: &Term, arg: &Term) -> Com
     
     ctx.emit(Instruction::Apply {
         fn_reg: func_reg,
-        arg_reg: arg_reg,
+        arg_reg,
         out_reg: result_reg,
     });
     
@@ -553,7 +553,7 @@ fn compile_alloc(ctx: &mut CompileContext, value: &Term) -> CompileResult<Regist
     ctx.emit(Instruction::Witness { out_reg: type_reg });
     
     ctx.emit(Instruction::Alloc {
-        type_reg: type_reg,
+        type_reg,
         val_reg: value_reg,
         out_reg: result_reg,
     });
@@ -566,7 +566,7 @@ fn compile_consume(ctx: &mut CompileContext, resource: &Term) -> CompileResult<R
     let result_reg = ctx.alloc_register();
     
     ctx.emit(Instruction::Consume {
-        resource_reg: resource_reg,
+        resource_reg,
         out_reg: result_reg,
     });
     

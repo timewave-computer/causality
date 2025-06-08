@@ -1,7 +1,9 @@
 (library
  (name ocaml_causality_interop)
  (public_name ocaml-causality.interop)
+ (libraries ocaml_causality_core)
  (foreign_stubs
   (language c)
   (names ffi_stub))
- (c_library_flags (-L../../target/debug -lcausality_ffi))) 
+ (c_library_flags
+  (-L../../target/debug -lcausality_ffi)))

@@ -7,6 +7,12 @@ use crate::{
     clock::{SimulatedClock, SimulatedTimestamp},
     snapshot::{SnapshotManager, SnapshotId},
 };
+use anyhow::Result;
+use std::collections::HashMap;
+use std::time::SystemTime;
+use uuid;
+use causality_core::lambda::base::Value;
+use crate::branching::BranchingManager;
 
 /// Simulation state enumeration
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -42,6 +48,64 @@ impl Default for SimulationConfig {
     }
 }
 
+/// Execution state for simulation engine
+#[derive(Debug, Clone)]
+pub struct ExecutionState {
+    /// Current register values
+    pub registers: HashMap<u32, Value>,
+    /// Memory state
+    pub memory: Vec<Value>,
+    /// Current instruction pointer
+    pub instruction_pointer: usize,
+    /// Effect execution history
+    pub effect_history: Vec<EngineEffectExecution>,
+}
+
+impl Default for ExecutionState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ExecutionState {
+    /// Create a new execution state
+    pub fn new() -> Self {
+        Self {
+            registers: HashMap::new(),
+            memory: Vec::new(),
+            instruction_pointer: 0,
+            effect_history: Vec::new(),
+        }
+    }
+}
+
+/// Summary of execution results
+#[derive(Debug, Clone)]
+pub struct ExecutionSummary {
+    pub step_count: usize,
+    pub instruction_count: usize,
+    pub execution_time_ms: u64,
+    pub branch_id: Option<String>,
+}
+
+/// Checkpoint data for time-travel functionality
+#[derive(Debug, Clone)]
+pub struct CheckpointData {
+    pub execution_state: ExecutionState,
+    pub step_count: usize,
+    pub timestamp: SystemTime,
+}
+
+/// Effect execution record for engine
+#[derive(Debug, Clone)]
+pub struct EngineEffectExecution {
+    pub effect_name: String,
+    pub timestamp: SimulatedTimestamp,
+    pub gas_consumed: u64,
+    pub success: bool,
+    pub result: Option<String>,
+}
+
 /// Simulation engine for running Causality programs in a controlled environment
 #[derive(Debug)]
 pub struct SimulationEngine {
@@ -55,7 +119,7 @@ pub struct SimulationEngine {
     clock: SimulatedClock,
     
     /// Snapshot manager for creating execution checkpoints
-    snapshot_manager: SnapshotManager,
+    _snapshot_manager: SnapshotManager,
     
     /// Current program to execute
     program: Vec<Instruction>,
@@ -74,6 +138,21 @@ pub struct SimulationEngine {
     
     /// Mock machine state
     pub machine: MockMachineState,
+    
+    /// Current execution state
+    execution_state: ExecutionState,
+    
+    /// Current step count
+    step_count: usize,
+    
+    /// Effect execution results
+    effect_results: Vec<EngineEffectExecution>,
+    
+    /// Branch manager for scenario exploration
+    branch_manager: BranchingManager,
+    
+    /// Current branch ID
+    current_branch: Option<String>,
 }
 
 /// Mock machine state for simulation
@@ -137,6 +216,12 @@ pub struct ExecutionMetrics {
     pub execution_time_ms: u64,
 }
 
+impl Default for SimulationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SimulationEngine {
     /// Create a new simulation engine
     pub fn new() -> Self {
@@ -144,13 +229,18 @@ impl SimulationEngine {
             state: SimulationState::Created,
             config: SimulationConfig::default(),
             clock: SimulatedClock::new(SimulatedTimestamp::new(0)),
-            snapshot_manager: SnapshotManager::new(10),
+            _snapshot_manager: SnapshotManager::new(10),
             program: Vec::new(),
             pc: 0,
             state_progression: StateProgression::default(),
             metrics: ExecutionMetrics::default(),
             effects_log: Vec::new(),
             machine: MockMachineState::new(),
+            execution_state: ExecutionState::new(),
+            step_count: 0,
+            effect_results: Vec::new(),
+            branch_manager: BranchingManager::new(),
+            current_branch: None,
         }
     }
 
@@ -160,13 +250,18 @@ impl SimulationEngine {
             state: SimulationState::Created,
             config,
             clock: SimulatedClock::new(SimulatedTimestamp::new(0)),
-            snapshot_manager: SnapshotManager::new(10),
+            _snapshot_manager: SnapshotManager::new(10),
             program: Vec::new(),
             pc: 0,
             state_progression: StateProgression::default(),
             metrics: ExecutionMetrics::default(),
             effects_log: Vec::new(),
             machine: MockMachineState::new(),
+            execution_state: ExecutionState::new(),
+            step_count: 0,
+            effect_results: Vec::new(),
+            branch_manager: BranchingManager::new(),
+            current_branch: None,
         }
     }
 
@@ -299,10 +394,8 @@ impl SimulationEngine {
         }
         
         // Simulate failure rate for network effects
-        if effect_type == "network" {
-            if rand::random::<f64>() < 0.05 { // 5% failure rate
-                return Err(SimulationError::EffectExecutionError("Network timeout".to_string()));
-            }
+        if effect_type == "network" && rand::random::<f64>() < 0.05 { // 5% failure rate
+            return Err(SimulationError::EffectExecutionError("Network timeout".to_string()));
         }
         
         // Add effect to machine state
@@ -330,6 +423,11 @@ impl SimulationEngine {
         self.metrics = ExecutionMetrics::default();
         self.effects_log.clear();
         self.machine = MockMachineState::new();
+        self.execution_state = ExecutionState::new();
+        self.step_count = 0;
+        self.effect_results.clear();
+        self.branch_manager.clear();
+        self.current_branch = None;
         Ok(())
     }
     
@@ -389,6 +487,106 @@ impl SimulationEngine {
         self.reset()?;
         Ok(())
     }
+
+    /// Get a reference to the execution state
+    pub fn execution_state(&self) -> &ExecutionState {
+        &self.execution_state
+    }
+    
+    /// Create a new execution branch for scenario exploration
+    pub async fn create_branch(&mut self, branch_name: &str) -> Result<String, SimulationError> {
+        let branch_id = uuid::Uuid::new_v4().to_string();
+        
+        // Create a snapshot of current state for the branch
+        let current_state = self.execution_state.clone();
+        self.branch_manager.create_branch(&branch_id, branch_name, current_state)?;
+        
+        println!("Created branch '{}' with ID: {}", branch_name, branch_id);
+        Ok(branch_id)
+    }
+    
+    /// Switch to a different execution branch
+    pub async fn switch_to_branch(&mut self, branch_id: &str) -> Result<(), SimulationError> {
+        let branch_state = self.branch_manager.get_branch_state(branch_id)?;
+        self.execution_state = branch_state;
+        self.current_branch = Some(branch_id.to_string());
+        
+        println!("Switched to branch: {}", branch_id);
+        Ok(())
+    }
+    
+    /// Execute a program and return execution summary
+    pub async fn execute_program(&mut self, program: &str) -> Result<ExecutionSummary, SimulationError> {
+        // Parse the program using the top-level parse function
+        let _ast = causality_lisp::parse(program)
+            .map_err(|e| SimulationError::ParseError(format!("Parse error: {:?}", e)))?;
+        
+        // Compile to instructions using the top-level compile function
+        let (instructions, _final_register) = causality_lisp::compile(program)
+            .map_err(|e| SimulationError::CompilationError(format!("Compilation error: {:?}", e)))?;
+        
+        // Execute the instructions
+        self.execute(&instructions)?;
+        
+        Ok(ExecutionSummary {
+            step_count: instructions.len(),
+            instruction_count: instructions.len(),
+            execution_time_ms: 1,
+            branch_id: None,
+        })
+    }
+    
+    /// Create a checkpoint of the current simulation state
+    pub async fn create_checkpoint(&mut self, checkpoint_name: &str) -> Result<String, SimulationError> {
+        let checkpoint_id = uuid::Uuid::new_v4().to_string();
+        
+        // For now, just store the checkpoint ID and timestamp
+        // TODO: Implement proper state serialization when causality_core supports it
+        println!("Created checkpoint '{}' with ID: {} (simplified)", checkpoint_name, checkpoint_id);
+        Ok(checkpoint_id)
+    }
+    
+    /// Rewind simulation to a previous checkpoint
+    pub async fn rewind_to_checkpoint(&mut self, checkpoint_id: &str) -> Result<(), SimulationError> {
+        // For now, just reset the simulation state
+        // TODO: Implement proper state restoration when causality_core supports it
+        self.reset()?;
+        println!("Rewound to checkpoint: {} (simplified reset)", checkpoint_id);
+        Ok(())
+    }
+    
+    /// Execute raw instructions directly
+    pub fn execute(&mut self, instructions: &[Instruction]) -> Result<(), SimulationError> {
+        self.program = instructions.to_vec();
+        self.pc = 0;
+        
+        // Execute each instruction
+        for i in 0..instructions.len() {
+            self.pc = i;
+            
+            // Simulate instruction execution
+            match &instructions[i] {
+                Instruction::Witness { out_reg: _ } => {
+                    // Mock witness instruction
+                    self.effects_log.push("witness".to_string());
+                }
+                Instruction::Move { src: _, dst: _ } => {
+                    // Mock move instruction
+                    self.effects_log.push("move".to_string());
+                }
+                Instruction::Alloc { type_reg: _, val_reg: _, out_reg: _ } => {
+                    // Mock alloc instruction
+                    self.effects_log.push("alloc".to_string());
+                }
+                _ => {
+                    // Mock other instructions
+                    self.effects_log.push("instruction".to_string());
+                }
+            }
+        }
+        
+        Ok(())
+    }
 }
 
 impl Clone for SimulationEngine {
@@ -397,13 +595,18 @@ impl Clone for SimulationEngine {
             state: self.state.clone(),
             config: self.config.clone(),
             clock: self.clock.clone(),
-            snapshot_manager: SnapshotManager::new(10), // Create new snapshot manager
+            _snapshot_manager: SnapshotManager::new(10), // Create new snapshot manager
             program: self.program.clone(),
             pc: self.pc,
             state_progression: self.state_progression.clone(),
             metrics: self.metrics.clone(),
             effects_log: self.effects_log.clone(),
             machine: self.machine.clone(),
+            execution_state: self.execution_state.clone(),
+            step_count: self.step_count,
+            effect_results: self.effect_results.clone(),
+            branch_manager: self.branch_manager.clone(),
+            current_branch: self.current_branch.clone(),
         }
     }
 }
@@ -412,7 +615,7 @@ impl Clone for SimulationEngine {
 mod tests {
     use super::*;
     use std::time::Duration;
-    use tokio::test as tokio_test;
+    
     use causality_core::machine::instruction::RegisterId;
     
     #[tokio::test]

@@ -4,18 +4,15 @@
 
 (* In-memory representation of SSZ bytes result *)
 type ffi_ssz_bytes = {
-  success : bool;
-  data : string option;
-  error_msg : string option;
+    success : bool
+  ; data : string option
+  ; error_msg : string option
 }
 
 (* In-memory representation of validation result *)
-type ffi_validation_result = {
-  valid : bool;
-  error_msg : string option;
-}
+type ffi_validation_result = { valid : bool; error_msg : string option }
 
-(* 
+(*
  * External functions are stubbed out since we don't have Ctypes available yet.
  * These will be properly implemented later.
  *)
@@ -24,11 +21,8 @@ type ffi_validation_result = {
 let resource_to_ssz _resource =
   { success = false; data = None; error_msg = Some "FFI not implemented yet" }
 
-let ssz_to_resource _bytes _len =
-  failwith "FFI not implemented yet"
-
-let resource_free _resource =
-  ()
+let ssz_to_resource _bytes _len = failwith "FFI not implemented yet"
+let resource_free _resource = ()
 
 let validate_resource_bytes _bytes _len =
   { valid = false; error_msg = Some "FFI not implemented yet" }
@@ -37,11 +31,8 @@ let validate_resource_bytes _bytes _len =
 let effect_to_ssz _effect =
   { success = false; data = None; error_msg = Some "FFI not implemented yet" }
 
-let ssz_to_effect _bytes _len =
-  failwith "FFI not implemented yet"
-
-let effect_free _effect =
-  ()
+let ssz_to_effect _bytes _len = failwith "FFI not implemented yet"
+let effect_free _effect = ()
 
 let validate_effect_bytes _bytes _len =
   { valid = false; error_msg = Some "FFI not implemented yet" }
@@ -49,12 +40,9 @@ let validate_effect_bytes _bytes _len =
 (* Handler serialization/deserialization *)
 let handler_to_ssz _handler =
   { success = false; data = None; error_msg = Some "FFI not implemented yet" }
-  
-let ssz_to_handler _bytes _len =
-  failwith "FFI not implemented yet"
 
-let handler_free _handler =
-  ()
+let ssz_to_handler _bytes _len = failwith "FFI not implemented yet"
+let handler_free _handler = ()
 
 let validate_handler_bytes _bytes _len =
   { valid = false; error_msg = Some "FFI not implemented yet" }
@@ -63,29 +51,24 @@ let validate_handler_bytes _bytes _len =
 let edge_to_ssz _edge =
   { success = false; data = None; error_msg = Some "FFI not implemented yet" }
 
-let ssz_to_edge _bytes _len =
-  failwith "FFI not implemented yet"
-
-let edge_free _edge =
-  ()
+let ssz_to_edge _bytes _len = failwith "FFI not implemented yet"
+let edge_free _edge = ()
 
 let validate_edge_bytes _bytes _len =
   { valid = false; error_msg = Some "FFI not implemented yet" }
 
 (* FFI result management *)
-let free_ssz_result _result =
-  ()
-
-let free_validation_result _result =
-  ()
+let free_ssz_result _result = ()
+let free_validation_result _result = ()
 
 (* Helper functions for safely handling FFI results *)
 
 let unwrap_ssz_result result =
   match result.data with
   | Some data -> data
-  | None -> 
-      let error = match result.error_msg with
+  | None ->
+      let error =
+        match result.error_msg with
         | Some msg -> msg
         | None -> "Unknown error in SSZ serialization"
       in
@@ -171,4 +154,4 @@ let is_valid_edge_bytes bytes =
   let result = validate_edge_bytes bytes (String.length bytes) in
   let valid = result.valid in
   free_validation_result result;
-  valid 
+  valid

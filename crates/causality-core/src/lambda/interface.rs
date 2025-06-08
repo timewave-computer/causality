@@ -21,6 +21,12 @@ pub struct CompilationContext {
     instructions: Vec<Instruction>,
 }
 
+impl Default for CompilationContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompilationContext {
     /// Create a new compilation context
     pub fn new() -> Self {
@@ -124,7 +130,7 @@ fn compile_term_to_register(
             
             ctx.emit(Instruction::Apply {
                 fn_reg: func_reg,
-                arg_reg: arg_reg,
+                arg_reg,
                 out_reg: result_reg,
             });
             
@@ -138,7 +144,7 @@ fn compile_term_to_register(
             let result_reg = ctx.fresh_register();
             
             ctx.emit(Instruction::Alloc {
-                type_reg: type_reg,
+                type_reg,
                 val_reg: value_reg,
                 out_reg: result_reg,
             });
@@ -152,7 +158,7 @@ fn compile_term_to_register(
             let result_reg = ctx.fresh_register();
             
             ctx.emit(Instruction::Consume {
-                resource_reg: resource_reg,
+                resource_reg,
                 out_reg: result_reg,
             });
             

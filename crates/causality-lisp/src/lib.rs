@@ -6,6 +6,8 @@
 //! This implementation contains exactly the 11 core Layer 1 primitives with syntactic
 //! sugar support for higher-level convenience forms that desugar to the core primitives.
 
+#![allow(clippy::result_large_err)]
+
 pub mod ast;
 pub mod compiler;
 pub mod desugar;

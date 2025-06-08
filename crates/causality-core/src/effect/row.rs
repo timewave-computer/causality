@@ -607,6 +607,12 @@ impl DecodeWithRemainder for RecordType {
     }
 }
 
+impl Default for RecordType {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RecordType {
     /// Create a new empty record type
     pub fn new() -> Self {

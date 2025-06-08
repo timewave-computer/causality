@@ -15,7 +15,7 @@ use causality_core::{
 /// Result type for parsing operations
 pub type ParseResult<T> = Result<T, ParseError>;
 
-/// Token types for the lexer
+/// Token types for the lexer with position information
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     LeftParen,
@@ -28,7 +28,37 @@ pub enum Token {
     EOF,
 }
 
-/// Lexer for tokenizing Lisp input
+/// Token with position information for better error reporting
+#[derive(Debug, Clone)]
+pub struct PositionedToken {
+    pub token: Token,
+    pub line: usize,
+    pub column: usize,
+    pub start_pos: usize,
+    pub end_pos: usize,
+}
+
+impl PositionedToken {
+    pub fn new(token: Token, line: usize, column: usize, start_pos: usize, end_pos: usize) -> Self {
+        Self { token, line, column, start_pos, end_pos }
+    }
+    
+    /// Format token for error messages
+    pub fn format_for_error(&self) -> String {
+        match &self.token {
+            Token::LeftParen => "'('".to_string(),
+            Token::RightParen => "')'".to_string(),
+            Token::Symbol(s) => format!("symbol '{}'", s),
+            Token::Number(n) => format!("number {}", n),
+            Token::Float(f) => format!("float {}", f),
+            Token::String(s) => format!("string \"{}\"", s),
+            Token::Bool(b) => format!("boolean {}", b),
+            Token::EOF => "end of input".to_string(),
+        }
+    }
+}
+
+/// Lexer for tokenizing Lisp input with enhanced position tracking
 pub struct Lexer {
     input: String,
     position: usize,
@@ -46,7 +76,7 @@ impl Lexer {
         }
     }
     
-    pub fn tokenize(&mut self) -> ParseResult<Vec<Token>> {
+    pub fn tokenize(&mut self) -> ParseResult<Vec<PositionedToken>> {
         let mut tokens = Vec::new();
         
         while self.position < self.input.len() {
@@ -56,26 +86,46 @@ impl Lexer {
                 break;
             }
             
+            let start_line = self.line;
+            let start_column = self.column;
+            let start_pos = self.position;
+            
             match self.current_char()? {
                 '(' => {
-                    tokens.push(Token::LeftParen);
                     self.advance();
+                    tokens.push(PositionedToken::new(
+                        Token::LeftParen, start_line, start_column, start_pos, self.position
+                    ));
                 }
                 ')' => {
-                    tokens.push(Token::RightParen);
                     self.advance();
+                    tokens.push(PositionedToken::new(
+                        Token::RightParen, start_line, start_column, start_pos, self.position
+                    ));
                 }
                 '"' => {
-                    tokens.push(self.read_string()?);
+                    let token = self.read_string()?;
+                    tokens.push(PositionedToken::new(
+                        token, start_line, start_column, start_pos, self.position
+                    ));
                 }
                 ch if ch.is_ascii_digit() || ch == '-' => {
-                    tokens.push(self.read_number()?);
+                    let token = self.read_number()?;
+                    tokens.push(PositionedToken::new(
+                        token, start_line, start_column, start_pos, self.position
+                    ));
                 }
                 '#' => {
-                    tokens.push(self.read_boolean()?);
+                    let token = self.read_boolean()?;
+                    tokens.push(PositionedToken::new(
+                        token, start_line, start_column, start_pos, self.position
+                    ));
                 }
                 ch if ch.is_alphabetic() || ch == '+' || ch == '*' || ch == '/' || ch == '=' || ch == '<' || ch == '>' => {
-                    tokens.push(self.read_symbol()?);
+                    let token = self.read_symbol()?;
+                    tokens.push(PositionedToken::new(
+                        token, start_line, start_column, start_pos, self.position
+                    ));
                 }
                 _ => {
                     return Err(ParseError::UnexpectedChar(
@@ -87,7 +137,9 @@ impl Lexer {
             }
         }
         
-        tokens.push(Token::EOF);
+        tokens.push(PositionedToken::new(
+            Token::EOF, self.line, self.column, self.position, self.position
+        ));
         Ok(tokens)
     }
     
@@ -158,20 +210,35 @@ impl Lexer {
     fn read_number(&mut self) -> ParseResult<Token> {
         let mut value = String::new();
         let mut is_float = false;
+        let start_line = self.line;
+        let start_column = self.column;
         
         // Handle negative numbers
         if self.current_char()? == '-' {
             value.push('-');
             self.advance();
+            
+            // Check if there's a digit after the minus sign
+            if self.position >= self.input.len() || !self.current_char()?.is_ascii_digit() {
+                // This is not a number, it's likely a symbol starting with -
+                // Backtrack and let it be handled as a symbol
+                self.position -= 1;
+                self.column -= 1;
+                return self.read_symbol();
+            }
         }
+        
+        // Must have at least one digit
+        let mut has_digits = false;
         
         while self.position < self.input.len() {
             match self.current_char() {
                 Ok(ch) if ch.is_ascii_digit() => {
+                    has_digits = true;
                     value.push(ch);
                     self.advance();
                 }
-                Ok('.') if !is_float => {
+                Ok('.') if !is_float && has_digits => {
                     is_float = true;
                     value.push('.');
                     self.advance();
@@ -180,14 +247,18 @@ impl Lexer {
             }
         }
         
+        if !has_digits {
+            return Err(ParseError::InvalidNumber(value.clone(), start_line, start_column));
+        }
+        
         if is_float {
             let float_val = value.parse::<f64>().map_err(|_| {
-                ParseError::InvalidNumber(value.clone(), self.line, self.column)
+                ParseError::InvalidNumber(value.clone(), start_line, start_column)
             })?;
             Ok(Token::Float(float_val))
         } else {
             let int_val = value.parse::<i64>().map_err(|_| {
-                ParseError::InvalidNumber(value.clone(), self.line, self.column)
+                ParseError::InvalidNumber(value.clone(), start_line, start_column)
             })?;
             Ok(Token::Number(int_val))
         }
@@ -231,9 +302,9 @@ impl Lexer {
     }
 }
 
-/// Parser for Causality Lisp expressions
+/// Parser for Causality Lisp expressions with enhanced error reporting
 pub struct LispParser {
-    tokens: Vec<Token>,
+    tokens: Vec<PositionedToken>,
     position: usize,
 }
 
@@ -253,8 +324,18 @@ impl LispParser {
         self.parse_expression()
     }
     
-    fn current_token(&self) -> &Token {
-        self.tokens.get(self.position).unwrap_or(&Token::EOF)
+    fn current_token(&self) -> &PositionedToken {
+        self.tokens.get(self.position).unwrap_or_else(|| {
+            // Return a dummy EOF token if we're past the end
+            static EOF_TOKEN: PositionedToken = PositionedToken {
+                token: Token::EOF,
+                line: 0,
+                column: 0,
+                start_pos: 0,
+                end_pos: 0,
+            };
+            &EOF_TOKEN
+        })
     }
     
     fn advance(&mut self) {
@@ -264,7 +345,8 @@ impl LispParser {
     }
     
     fn parse_expression(&mut self) -> ParseResult<Expr> {
-        match self.current_token() {
+        let current = self.current_token();
+        match &current.token {
             Token::LeftParen => self.parse_list_or_special_form(),
             Token::Number(n) => {
                 let value = *n;
@@ -291,87 +373,195 @@ impl LispParser {
                 self.advance();
                 Ok(Expr::variable(symbol))
             }
-            _ => Err(ParseError::UnexpectedEof),
+            Token::RightParen => {
+                Err(ParseError::InvalidTokenSequence {
+                    context: "unexpected closing parenthesis".to_string(),
+                    suggestion: "remove the extra ')' or add an opening '(' before it".to_string(),
+                    line: current.line,
+                    column: current.column,
+                })
+            }
+            Token::EOF => {
+                Err(ParseError::UnexpectedEofInConstruct {
+                    construct: "expression".to_string(),
+                    hint: "add a complete expression before the end of input".to_string(),
+                })
+            }
         }
     }
     
     fn parse_list_or_special_form(&mut self) -> ParseResult<Expr> {
+        let opening_paren = self.current_token().clone();
         self.advance(); // Skip '('
         
+        // Check for empty list
+        if matches!(self.current_token().token, Token::RightParen) {
+            self.advance(); // Skip ')'
+            return Ok(Expr::list(Vec::new()));
+        }
+        
         // Check if first token is a symbol and get its name
-        let symbol_name = if let Token::Symbol(name) = self.current_token() {
+        let symbol_name = if let Token::Symbol(name) = &self.current_token().token {
             Some(name.to_string())
         } else {
             None
         };
         
         if let Some(name) = symbol_name {
-            let first = self.parse_expression()?;
-            self.parse_special_form_or_call(name, first)
+            // Check for reserved special forms
+            match name.as_str() {
+                "lambda" | "let-tensor" | "case" | "tensor" | "inl" | "inr" | "alloc" | "consume" | "unit" | "let-unit" => {
+                    self.parse_special_form(&name)
+                }
+                _ => {
+                    // Parse as function call
+                    let first = self.parse_expression()?;
+                    self.parse_function_call(first)
+                }
+            }
         } else {
             // Parse as regular list
             let mut elements = Vec::new();
-            while !matches!(self.current_token(), Token::RightParen | Token::EOF) {
+            while !matches!(self.current_token().token, Token::RightParen | Token::EOF) {
                 elements.push(self.parse_expression()?);
             }
             
-            if matches!(self.current_token(), Token::RightParen) {
+            if matches!(self.current_token().token, Token::RightParen) {
                 self.advance(); // Skip ')'
             } else {
-                return Err(ParseError::UnclosedParen(0, 0)); // TODO: proper line/column
+                return Err(ParseError::IncompleteConstruct {
+                    construct: "list".to_string(),
+                    expected: "closing parenthesis ')'".to_string(),
+                    hint: format!("add ')' to close the list opened at line {}, column {}", opening_paren.line, opening_paren.column),
+                    line: opening_paren.line,
+                    column: opening_paren.column,
+                });
             }
             
             Ok(Expr::list(elements))
         }
     }
     
-    fn parse_special_form_or_call(&mut self, name: String, first: Expr) -> ParseResult<Expr> {
-        match name.as_str() {
-            "lambda" => self.parse_lambda(),
-            "let-tensor" => self.parse_let_tensor(),
-            "case" => self.parse_case(),
-            "tensor" => self.parse_tensor(),
-            "inl" => self.parse_inl(),
-            "inr" => self.parse_inr(),
-            "alloc" => self.parse_alloc(),
-            "consume" => self.parse_consume(),
-            "unit" => self.parse_unit(),
-            "let-unit" => self.parse_let_unit(),
-            _ => self.parse_function_call(first),
+    fn parse_special_form(&mut self, form_name: &str) -> ParseResult<Expr> {
+        let form_token = self.current_token().clone();
+        self.advance(); // Skip the form name
+        
+        match form_name {
+            "lambda" => self.parse_lambda(&form_token),
+            "let-tensor" => self.parse_let_tensor(&form_token),
+            "case" => self.parse_case(&form_token),
+            "tensor" => self.parse_tensor(&form_token),
+            "inl" => self.parse_inl(&form_token),
+            "inr" => self.parse_inr(&form_token),
+            "alloc" => self.parse_alloc(&form_token),
+            "consume" => self.parse_consume(&form_token),
+            "unit" => self.parse_unit(&form_token),
+            "let-unit" => self.parse_let_unit(&form_token),
+            _ => {
+                Err(ParseError::InvalidSpecialForm {
+                    form: form_name.to_string(),
+                    hint: "check the Causality Lisp documentation for valid special forms".to_string(),
+                    line: form_token.line,
+                    column: form_token.column,
+                })
+            }
         }
     }
     
-    fn parse_lambda(&mut self) -> ParseResult<Expr> {
+    fn parse_lambda(&mut self, form_token: &PositionedToken) -> ParseResult<Expr> {
         // Parse parameter list
-        self.expect_left_paren()?;
+        self.expect_left_paren("lambda parameter list")?;
         let mut params = Vec::new();
-        while !matches!(self.current_token(), Token::RightParen) {
-            let param_name = self.expect_symbol()?;
+        
+        while !matches!(self.current_token().token, Token::RightParen) {
+            if matches!(self.current_token().token, Token::EOF) {
+                return Err(ParseError::IncompleteConstruct {
+                    construct: "lambda parameter list".to_string(),
+                    expected: "parameters followed by ')'".to_string(),
+                    hint: "parameter names should be symbols like 'x' or 'value'".to_string(),
+                    line: form_token.line,
+                    column: form_token.column,
+                });
+            }
+            
+            let param_name = self.expect_symbol("lambda parameter")?;
             params.push(Param::new(Symbol::new(&param_name)));
         }
-        self.expect_right_paren()?;
+        self.expect_right_paren("lambda parameter list")?;
         
         // Parse body
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "lambda expression".to_string(),
+                expected: "body expression".to_string(),
+                hint: "add an expression after the parameter list".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let body = self.parse_expression()?;
-        self.expect_right_paren()?;
+        self.expect_right_paren("lambda expression")?;
         
         Ok(Expr::lambda(params, body))
     }
     
-    fn parse_let_unit(&mut self) -> ParseResult<Expr> {
+    fn parse_let_unit(&mut self, form_token: &PositionedToken) -> ParseResult<Expr> {
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "let-unit expression".to_string(),
+                expected: "unit expression and body".to_string(),
+                hint: "let-unit requires two expressions: (let-unit unit-expr body-expr)".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let unit_expr = self.parse_expression()?;
+        
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "let-unit expression".to_string(),
+                expected: "body expression".to_string(),
+                hint: "let-unit requires a body expression after the unit expression".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let body = self.parse_expression()?;
-        self.expect_right_paren()?;
+        self.expect_right_paren("let-unit expression")?;
         
         Ok(Expr::let_unit(unit_expr, body))
     }
     
-    fn parse_let_tensor(&mut self) -> ParseResult<Expr> {
+    fn parse_let_tensor(&mut self, form_token: &PositionedToken) -> ParseResult<Expr> {
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "let-tensor expression".to_string(),
+                expected: "tensor expression, variable names, and body".to_string(),
+                hint: "let-tensor requires: (let-tensor tensor-expr left-var right-var body-expr)".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let tensor_expr = self.parse_expression()?;
-        let left_var = self.expect_symbol()?;
-        let right_var = self.expect_symbol()?;
+        let left_var = self.expect_symbol("left variable in let-tensor")?;
+        let right_var = self.expect_symbol("right variable in let-tensor")?;
+        
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "let-tensor expression".to_string(),
+                expected: "body expression".to_string(),
+                hint: "let-tensor requires a body expression after the variable bindings".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let body = self.parse_expression()?;
-        self.expect_right_paren()?;
+        self.expect_right_paren("let-tensor expression")?;
         
         Ok(Expr::new(ExprKind::LetTensor(
             Box::new(tensor_expr),
@@ -381,13 +571,23 @@ impl LispParser {
         )))
     }
     
-    fn parse_case(&mut self) -> ParseResult<Expr> {
+    fn parse_case(&mut self, form_token: &PositionedToken) -> ParseResult<Expr> {
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "case expression".to_string(),
+                expected: "sum expression and branch handlers".to_string(),
+                hint: "case requires: (case sum-expr left-var left-branch right-var right-branch)".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let sum_expr = self.parse_expression()?;
-        let left_var = self.expect_symbol()?;
+        let left_var = self.expect_symbol("left variable in case expression")?;
         let left_branch = self.parse_expression()?;
-        let right_var = self.expect_symbol()?;
+        let right_var = self.expect_symbol("right variable in case expression")?;
         let right_branch = self.parse_expression()?;
-        self.expect_right_paren()?;
+        self.expect_right_paren("case expression")?;
         
         Ok(Expr::case(
             sum_expr,
@@ -398,87 +598,184 @@ impl LispParser {
         ))
     }
     
-    fn parse_tensor(&mut self) -> ParseResult<Expr> {
+    fn parse_tensor(&mut self, form_token: &PositionedToken) -> ParseResult<Expr> {
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "tensor expression".to_string(),
+                expected: "two expressions to combine".to_string(),
+                hint: "tensor requires exactly two expressions: (tensor left-expr right-expr)".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let left = self.parse_expression()?;
+        
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "tensor expression".to_string(),
+                expected: "second expression".to_string(),
+                hint: "tensor requires exactly two expressions".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let right = self.parse_expression()?;
-        self.expect_right_paren()?;
+        self.expect_right_paren("tensor expression")?;
         
         Ok(Expr::tensor(left, right))
     }
     
-    fn parse_inl(&mut self) -> ParseResult<Expr> {
+    fn parse_inl(&mut self, form_token: &PositionedToken) -> ParseResult<Expr> {
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "inl expression".to_string(),
+                expected: "value expression".to_string(),
+                hint: "inl requires one expression: (inl value-expr)".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let value = self.parse_expression()?;
-        self.expect_right_paren()?;
+        self.expect_right_paren("inl expression")?;
         
         Ok(Expr::new(ExprKind::Inl(Box::new(value))))
     }
     
-    fn parse_inr(&mut self) -> ParseResult<Expr> {
+    fn parse_inr(&mut self, form_token: &PositionedToken) -> ParseResult<Expr> {
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "inr expression".to_string(),
+                expected: "value expression".to_string(),
+                hint: "inr requires one expression: (inr value-expr)".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let value = self.parse_expression()?;
-        self.expect_right_paren()?;
+        self.expect_right_paren("inr expression")?;
         
         Ok(Expr::new(ExprKind::Inr(Box::new(value))))
     }
     
-    fn parse_alloc(&mut self) -> ParseResult<Expr> {
+    fn parse_alloc(&mut self, form_token: &PositionedToken) -> ParseResult<Expr> {
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "alloc expression".to_string(),
+                expected: "value expression to allocate".to_string(),
+                hint: "alloc requires one expression: (alloc value-expr)".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let value = self.parse_expression()?;
-        self.expect_right_paren()?;
+        self.expect_right_paren("alloc expression")?;
         
         Ok(Expr::new(ExprKind::Alloc(Box::new(value))))
     }
     
-    fn parse_consume(&mut self) -> ParseResult<Expr> {
+    fn parse_consume(&mut self, form_token: &PositionedToken) -> ParseResult<Expr> {
+        if matches!(self.current_token().token, Token::RightParen | Token::EOF) {
+            return Err(ParseError::IncompleteConstruct {
+                construct: "consume expression".to_string(),
+                expected: "resource expression to consume".to_string(),
+                hint: "consume requires one expression: (consume resource-expr)".to_string(),
+                line: form_token.line,
+                column: form_token.column,
+            });
+        }
+        
         let resource = self.parse_expression()?;
-        self.expect_right_paren()?;
+        self.expect_right_paren("consume expression")?;
         
         Ok(Expr::new(ExprKind::Consume(Box::new(resource))))
     }
     
-    fn parse_unit(&mut self) -> ParseResult<Expr> {
-        self.expect_right_paren()?;
-        
+    fn parse_unit(&mut self, _form_token: &PositionedToken) -> ParseResult<Expr> {
+        self.expect_right_paren("unit expression")?;
         Ok(Expr::new(ExprKind::UnitVal))
     }
     
     fn parse_function_call(&mut self, func: Expr) -> ParseResult<Expr> {
         let mut args = Vec::new();
         
-        while !matches!(self.current_token(), Token::RightParen) {
+        while !matches!(self.current_token().token, Token::RightParen | Token::EOF) {
             args.push(self.parse_expression()?);
         }
-        self.expect_right_paren()?;
         
+        if matches!(self.current_token().token, Token::EOF) {
+            return Err(ParseError::UnexpectedEofInConstruct {
+                construct: "function call".to_string(),
+                hint: "add ')' to close the function call".to_string(),
+            });
+        }
+        
+        self.expect_right_paren("function call")?;
         Ok(Expr::apply(func, args))
     }
     
-    fn expect_symbol(&mut self) -> ParseResult<String> {
-        match self.current_token() {
+    fn expect_symbol(&mut self, context: &str) -> ParseResult<String> {
+        let current = self.current_token();
+        match &current.token {
             Token::Symbol(sym) => {
                 let name = sym.to_string();
                 self.advance();
                 Ok(name)
             }
-            _ => Err(ParseError::InvalidSyntax("Expected symbol".to_string())),
+            _ => {
+                Err(ParseError::expected_symbol_for(
+                    context,
+                    &current.format_for_error(),
+                    current.line,
+                    current.column,
+                ))
+            }
         }
     }
     
-    fn expect_left_paren(&mut self) -> ParseResult<()> {
-        match self.current_token() {
+    fn expect_left_paren(&mut self, _context: &str) -> ParseResult<()> {
+        let current = self.current_token();
+        match &current.token {
             Token::LeftParen => {
                 self.advance();
                 Ok(())
             }
-            _ => Err(ParseError::InvalidSyntax("Expected '('".to_string())),
+            _ => {
+                Err(ParseError::expected_token(
+                    "'('",
+                    &current.format_for_error(),
+                    current.line,
+                    current.column,
+                ))
+            }
         }
     }
     
-    fn expect_right_paren(&mut self) -> ParseResult<()> {
-        match self.current_token() {
+    fn expect_right_paren(&mut self, context: &str) -> ParseResult<()> {
+        let current = self.current_token();
+        match &current.token {
             Token::RightParen => {
                 self.advance();
                 Ok(())
             }
-            _ => Err(ParseError::InvalidSyntax("Expected ')'".to_string())),
+            Token::EOF => {
+                Err(ParseError::UnexpectedEofInConstruct {
+                    construct: context.to_string(),
+                    hint: "add ')' to close the expression".to_string(),
+                })
+            }
+            _ => {
+                Err(ParseError::expected_token(
+                    "')'",
+                    &current.format_for_error(),
+                    current.line,
+                    current.column,
+                ))
+            }
         }
     }
 }
@@ -526,5 +823,32 @@ mod tests {
             }
             _ => panic!("Expected function application"),
         }
+    }
+    
+    #[test]
+    fn test_helpful_error_messages() {
+        let mut parser = LispParser::new();
+        
+        // Test unclosed parenthesis
+        let result = parser.parse("(+ 1 2");
+        assert!(result.is_err());
+        let error_msg = format!("{}", result.unwrap_err());
+        assert!(error_msg.contains("function call"));
+        assert!(error_msg.contains("add ')'"));
+        
+        // Test incomplete lambda
+        parser = LispParser::new();
+        let result = parser.parse("(lambda ())");
+        assert!(result.is_err());
+        let error_msg = format!("{}", result.unwrap_err());
+        assert!(error_msg.contains("lambda expression"));
+        assert!(error_msg.contains("body expression"));
+        
+        // Test unexpected closing paren
+        parser = LispParser::new();
+        let result = parser.parse(")");
+        assert!(result.is_err());
+        let error_msg = format!("{}", result.unwrap_err());
+        assert!(error_msg.contains("unexpected closing parenthesis"));
     }
 } 

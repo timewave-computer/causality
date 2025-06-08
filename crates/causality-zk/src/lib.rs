@@ -4,19 +4,42 @@
 //! for register machine execution with SP1/Risc0 backend support, including
 //! cross-domain proof composition and verification.
 
+#![allow(clippy::result_large_err)]
+
 pub mod backends;
 pub mod error;
 pub mod cross_domain;
+pub mod proof_generation;
+pub mod verification;
+pub mod circuit;
+pub mod storage_proof;
 
 // Re-export core types
 pub use backends::{ZkBackend, BackendType};
 pub use error::{ZkError, CircuitError, ProofError, VerificationError};
-pub use cross_domain::{CrossDomainZkManager, DomainProof, CompositeProof, DomainPartition};
+pub use cross_domain::{CrossDomainZkManager, DomainProof, CompositeProof, DomainPartition, DomainCoordinationResult};
+
+// Re-export key types from their respective modules
+pub use proof_generation::{ZkProofGenerator, ZkProof, ZkWitness};
+pub use verification::{ZkVerifier, VerificationKey};
+pub use circuit::CircuitCompiler;
+pub use error::ProofResult;
+
+// Re-export storage proof types
+pub use storage_proof::{
+    StorageProofGenerator, StorageProofConfig, StorageCircuit, StorageZkProof,
+    StorageCircuitType, OptimizationLevel, EthereumKeyResolver, ContractAbi,
+    StorageVariable, StorageVariableType, StaticKeyPath, LayoutCommitment,
+    KeyDerivationStep, DerivationStepType, StorageProofFetcher, RpcClientConfig,
+    RawStorageProof, ValidatedStorageProof, ProofValidation, MerklePatriciaVerifier,
+    CoprocessorWitnessCreator, WitnessCreationConfig, CoprocessorWitness,
+    WitnessMetadata, WitnessType, WitnessVerificationData, VerificationConstraint,
+    ConstraintType, BatchStorageRequest, BatchStorageResult, BatchVerificationMetrics
+};
 
 use causality_core::machine::instruction::Instruction;
 use serde::{Serialize, Deserialize};
 use std::str;
-use hex;
 
 /// Circuit identifier using content addressing (simplified as string)
 pub type CircuitId = String;
@@ -52,44 +75,6 @@ pub struct ZkCircuit {
     
     /// Private inputs (register IDs that are secret)
     pub private_inputs: Vec<u32>,
-    
-    /// Creation timestamp (simplified as string)
-    pub timestamp: String,
-}
-
-/// ZK proof artifact
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ZkProof {
-    /// Unique identifier for this proof (content-addressed)
-    pub id: ProofId,
-    
-    /// Circuit this proof validates
-    pub circuit_id: CircuitId,
-    
-    /// Binary proof data (backend-specific)
-    pub proof_data: Vec<u8>,
-    
-    /// Public inputs used in the proof
-    pub public_inputs: Vec<u8>,
-    
-    /// Generation timestamp (simplified as string)
-    pub timestamp: String,
-}
-
-/// ZK witness for proof generation
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ZkWitness {
-    /// Unique identifier for this witness (content-addressed)
-    pub id: WitnessId,
-    
-    /// Circuit this witness is for
-    pub circuit_id: CircuitId,
-    
-    /// Private inputs (secret witness data)
-    pub private_inputs: Vec<u8>,
-    
-    /// Execution trace
-    pub execution_trace: Vec<u8>,
     
     /// Creation timestamp (simplified as string)
     pub timestamp: String,
@@ -154,73 +139,6 @@ impl ZkCircuit {
         
         let hash = hasher.finalize();
         format!("circuit_{}", hex::encode(&hash[..8]))
-    }
-}
-
-impl ZkProof {
-    /// Create a new ZK proof
-    pub fn new(circuit_id: CircuitId, proof_data: Vec<u8>, public_inputs: Vec<u8>) -> Self {
-        let timestamp = chrono::Utc::now().to_rfc3339();
-        
-        let mut proof = Self {
-            id: String::new(), // Will be computed below
-            circuit_id,
-            proof_data,
-            public_inputs,
-            timestamp,
-        };
-        
-        // Compute content-based ID
-        proof.id = proof.compute_content_id();
-        proof
-    }
-    
-    /// Compute a content-based identifier for this proof
-    pub fn compute_content_id(&self) -> String {
-        use sha2::{Sha256, Digest};
-        let mut hasher = Sha256::new();
-        
-        hasher.update(self.circuit_id.as_bytes());
-        hasher.update(&self.proof_data);
-        // Use bincode for Vec<u8> serialization
-        let public_inputs_bytes = bincode::serialize(&self.public_inputs).unwrap_or_default();
-        hasher.update(&public_inputs_bytes);
-        
-        let hash = hasher.finalize();
-        format!("proof_{}", hex::encode(&hash[..8]))
-    }
-}
-
-impl ZkWitness {
-    /// Create a new ZK witness
-    pub fn new(circuit_id: CircuitId, private_inputs: Vec<u8>, execution_trace: Vec<u8>) -> Self {
-        let timestamp = chrono::Utc::now().to_rfc3339();
-        
-        let mut witness = Self {
-            id: String::new(), // Will be computed below
-            circuit_id,
-            private_inputs,
-            execution_trace,
-            timestamp,
-        };
-        
-        // Compute content-based ID
-        witness.id = witness.compute_content_id();
-        witness
-    }
-    
-    /// Compute a content-based identifier for this witness
-    pub fn compute_content_id(&self) -> String {
-        use sha2::{Sha256, Digest};
-        let mut hasher = Sha256::new();
-        hasher.update(self.circuit_id.as_bytes());
-        // Use bincode for Vec<u8> serialization
-        let private_inputs_bytes = bincode::serialize(&self.private_inputs).unwrap_or_default();
-        hasher.update(&private_inputs_bytes);
-        hasher.update(&self.execution_trace);
-        
-        let hash = hasher.finalize();
-        format!("witness_{}", hex::encode(&hash[..8]))
     }
 }
 
@@ -289,11 +207,11 @@ mod zk_compilation_tests {
         "#;
         
         let instructions = compile_to_vm_instructions(simple_program).expect("Should compile");
-        assert!(instructions.len() > 0, "Should generate VM instructions");
+        assert!(!instructions.is_empty(), "Should generate VM instructions");
         
         // Test ZK circuit generation
         let circuit = generate_zk_circuit(&instructions).expect("Should generate circuit");
-        assert!(circuit.len() > 0, "Should generate circuit constraints");
+        assert!(!circuit.is_empty(), "Should generate circuit constraints");
         
         // Test runtime verification
         let proof = generate_proof(&circuit, &instructions).expect("Should generate proof");
@@ -311,7 +229,7 @@ mod zk_compilation_tests {
         let domains = vec!["ethereum", "polygon", "arbitrum"];
         let effect_combinations = generate_cross_domain_combinations(&domains);
         
-        assert!(effect_combinations.len() > 0, "Should generate combinations");
+        assert!(!effect_combinations.is_empty(), "Should generate combinations");
         
         // Test domain isolation
         for combo in &effect_combinations {

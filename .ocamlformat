@@ -1,0 +1,9 @@
+version = 0.27.0
+profile = conventional
+margin = 80
+indicate-nested-or-patterns = unsafe-no
+break-separators = before
+space-around-arrays = true
+space-around-lists = true
+space-around-records = true
+space-around-variants = true 
