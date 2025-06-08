@@ -7,16 +7,19 @@
  (name test_interop)
  (libraries ssz)
  (modules test_interop)
- (flags (:standard -w -27)))
+ (flags
+  (:standard -w -27)))
 
 (test
  (name test_ffi_roundtrip)
  (modules test_ffi_roundtrip)
  (libraries ssz)
- (flags (:standard -w -27)))
+ (flags
+  (:standard -w -27)))
 
 (test
  (name test_comprehensive_roundtrip)
  (modules test_comprehensive_roundtrip)
  (libraries ssz)
- (flags (:standard -w -27))) 
+ (flags
+  (:standard -w -27)))

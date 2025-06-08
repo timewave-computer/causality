@@ -3,6 +3,7 @@
 use crate::{
     engine::SimulationEngine,
     snapshot::{SnapshotManager, SnapshotId},
+    MockEffect,
 };
 
 use serde::{Serialize, Deserialize};
@@ -41,6 +42,12 @@ pub enum MockStrategy {
 #[derive(Debug, Clone)]
 pub struct MockGenerator;
 
+impl Default for MockGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockGenerator {
     pub fn new() -> Self {
         Self
@@ -75,7 +82,7 @@ pub struct TestValue {
 }
 
 impl TestValue {
-    pub fn String(s: String) -> Self {
+    pub fn string(s: String) -> Self {
         Self { value: s }
     }
 }
@@ -138,54 +145,86 @@ pub struct CompositionSuccess {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct TestSetup {
     pub setup_operations: Vec<String>,
 }
 
-impl Default for TestSetup {
+
+/// Configuration for effect testing
+#[derive(Debug, Clone)]
+pub struct TestConfig {
+    /// Maximum number of effects to test
+    pub max_effects: usize,
+    /// Timeout for individual tests
+    pub timeout_ms: u64,
+    /// Whether to run tests in parallel
+    pub parallel_execution: bool,
+    /// Enable time travel debugging
+    pub enable_time_travel: bool,
+    /// Enable branching for parallel tests
+    pub enable_branching: bool,
+    /// Maximum parallel branches
+    pub max_branches: u32,
+    /// Test timeout duration
+    pub test_timeout: std::time::Duration,
+}
+
+impl Default for TestConfig {
     fn default() -> Self {
         Self {
-            setup_operations: Vec::new(),
+            max_effects: 100,
+            timeout_ms: 5000,
+            parallel_execution: true,
+            enable_time_travel: true,
+            enable_branching: true,
+            max_branches: 8,
+            test_timeout: Duration::from_secs(30),
         }
     }
 }
 
+/// Mock effect handler for testing
+pub trait MockEffectHandler: Send + Sync {
+    /// Handle a mock effect
+    fn handle_effect(&self, effect: &MockEffect) -> Result<TestValue>;
+}
+
+/// Test configuration for effect testing
+
 /// Effect test runner with simulation engine integration
 pub struct EffectTestRunner {
-    /// Simulation engine for realistic testing
-    engine: SimulationEngine,
+    /// Test configuration
+    config: TestConfig,
     
-    /// Mock generator for creating effect handlers
-    mock_generator: MockGenerator,
+    /// Mock effect generator
+    _mock_generator: MockGenerator,
     
-    /// Snapshot manager for time travel debugging
-    snapshot_manager: SnapshotManager,
+    /// Snapshot manager for test state
+    _snapshot_manager: SnapshotManager,
     
     /// Mock handler registry
     mock_registry: MockHandlerRegistry,
     
-    /// Test execution state
-    execution_state: TestExecutionState,
+    /// Current execution state
+    execution_state: ExecutionState,
     
-    /// Configuration for test runner
-    config: TestRunnerConfig,
+    /// Simulation engine for test execution
+    engine: crate::engine::SimulationEngine,
 }
 
 /// Mock handler registry for effect implementations
 pub struct MockHandlerRegistry {
-    /// Registered mock handlers by effect name
-    handlers: HashMap<String, Box<dyn EffectHandler>>,
-    
-    /// Mock strategies by effect name
-    strategies: HashMap<String, MockStrategy>,
+    /// Mock handlers for different effect types
+    handlers: HashMap<String, Box<dyn MockEffectHandler>>,
     
     /// Blockchain simulation mocks
-    blockchain_mocks: HashMap<String, BlockchainSimulationMock>,
+    _blockchain_mocks: HashMap<String, BlockchainSimulationMock>,
 }
 
 /// Test execution state tracking
 #[derive(Debug, Clone)]
-pub struct TestExecutionState {
+pub struct ExecutionState {
     /// Current test being executed
     pub current_test: Option<String>,
     
@@ -197,37 +236,6 @@ pub struct TestExecutionState {
     
     /// Branching state for parallel test execution
     pub branches: HashMap<String, ExecutionBranch>,
-}
-
-/// Configuration for effect test runner
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestRunnerConfig {
-    /// Enable deterministic randomness
-    pub deterministic_randomness: bool,
-    
-    /// Random seed for deterministic execution
-    pub random_seed: u64,
-    
-    /// Enable time travel debugging
-    pub enable_time_travel: bool,
-    
-    /// Snapshot frequency for time travel
-    pub snapshot_frequency: Duration,
-    
-    /// Simulation speed multiplier
-    pub simulation_speed: f64,
-    
-    /// Enable branching for parallel tests
-    pub enable_branching: bool,
-    
-    /// Maximum parallel branches
-    pub max_branches: u32,
-    
-    /// Test timeout duration
-    pub test_timeout: Duration,
-    
-    /// Enable detailed performance metrics
-    pub enable_metrics: bool,
 }
 
 /// Test execution record
@@ -422,21 +430,27 @@ pub trait EffectHandler: Send + Sync {
     fn mock_strategy(&self) -> &MockStrategy;
 }
 
+impl Default for EffectTestRunner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EffectTestRunner {
     /// Create new effect test runner
     pub fn new() -> Self {
         Self {
-            engine: SimulationEngine::new(),
-            mock_generator: MockGenerator::new(),
-            snapshot_manager: SnapshotManager::new(100), // Keep 100 snapshots
+            config: TestConfig::default(),
+            _mock_generator: MockGenerator::new(),
+            _snapshot_manager: SnapshotManager::new(100), // Keep 100 snapshots
             mock_registry: MockHandlerRegistry::new(),
-            execution_state: TestExecutionState::new(),
-            config: TestRunnerConfig::default(),
+            execution_state: ExecutionState::new(),
+            engine: SimulationEngine::new(),
         }
     }
     
     /// Create effect test runner with configuration
-    pub fn with_config(config: TestRunnerConfig) -> Self {
+    pub fn with_config(config: TestConfig) -> Self {
         let mut runner = Self::new();
         runner.config = config;
         runner
@@ -640,8 +654,8 @@ impl EffectTestRunner {
         Ok(PropertyTestResult {
             status: PropertyStatus::all_passed(),
             coverage: PropertyCoverage {
-                total_properties: property_test.test_cases.len() as usize,
-                verified_properties: property_test.test_cases.len() as usize,
+                total_properties: property_test.test_cases.len(),
+                verified_properties: property_test.test_cases.len(),
             },
             execution_time_ms: 0,
             test_scenarios: Vec::new(),
@@ -669,7 +683,7 @@ impl EffectTestRunner {
         // 3. Compare result with expected outcome
         // 4. Handle mock failures and timeouts
         
-        Ok(EffectTestResult::Success(TestValue::String("test_success".to_string())))
+        Ok(EffectTestResult::Success(TestValue::string("test_success".to_string())))
     }
     
     async fn setup_test_environment(&mut self, _setup: &TestSetup) -> Result<()> {
@@ -737,40 +751,55 @@ pub struct TestSuiteResult {
 
 // Implementation of helper types and traits...
 
+impl Default for MockHandlerRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockHandlerRegistry {
     pub fn new() -> Self {
         MockHandlerRegistry {
             handlers: HashMap::new(),
-            strategies: HashMap::new(),
-            blockchain_mocks: HashMap::new(),
+            _blockchain_mocks: HashMap::new(),
         }
     }
     
-    pub fn register_handler(&mut self, effect_name: String, handler: Box<dyn EffectHandler>, strategy: MockStrategy) -> Result<()> {
+    pub fn register_handler(&mut self, effect_name: String, handler: Box<dyn MockEffectHandler>, _strategy: MockStrategy) -> Result<()> {
         self.handlers.insert(effect_name.clone(), handler);
-        self.strategies.insert(effect_name, strategy);
         Ok(())
     }
     
     /// Simplified handler registration for MVP
-    pub fn register_handler_simple(&mut self, effect_name: String, _schema: EffectSchema, strategy: MockStrategy) -> Result<()> {
-        self.strategies.insert(effect_name, strategy);
+    pub fn register_mock_handler(&mut self, _effect_name: String, _schema: EffectSchema, _strategy: MockStrategy) -> Result<()> {
         Ok(())
     }
     
-    pub fn get_handler(&self, effect_name: &str) -> Option<&dyn EffectHandler> {
+    pub fn get_handler(&self, effect_name: &str) -> Option<&dyn MockEffectHandler> {
         self.handlers.get(effect_name).map(|h| h.as_ref())
     }
 }
 
-impl TestExecutionState {
+impl Default for ExecutionState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ExecutionState {
     pub fn new() -> Self {
-        TestExecutionState {
+        ExecutionState {
             current_test: None,
             execution_history: Vec::new(),
             metrics: TestMetrics::new(),
             branches: HashMap::new(),
         }
+    }
+}
+
+impl Default for TestMetrics {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -806,6 +835,12 @@ impl TestMetrics {
     }
 }
 
+impl Default for MemoryMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryMetrics {
     pub fn new() -> Self {
         MemoryMetrics {
@@ -813,22 +848,6 @@ impl MemoryMetrics {
             average_memory: 0,
             snapshots_created: 0,
             snapshot_storage_size: 0,
-        }
-    }
-}
-
-impl Default for TestRunnerConfig {
-    fn default() -> Self {
-        TestRunnerConfig {
-            deterministic_randomness: true,
-            random_seed: 42,
-            enable_time_travel: true,
-            snapshot_frequency: Duration::from_secs(10),
-            simulation_speed: 1.0,
-            enable_branching: true,
-            max_branches: 8,
-            test_timeout: Duration::from_secs(30),
-            enable_metrics: true,
         }
     }
 }
@@ -841,21 +860,25 @@ mod tests {
     async fn test_effect_runner_creation() {
         let runner = EffectTestRunner::new();
         // Constructor doesn't return Result anymore
-        assert_eq!(runner.config.random_seed, 42);
+        assert_eq!(runner.config.max_effects, 100);
     }
     
     #[tokio::test]
     async fn test_effect_runner_with_config() {
-        let config = TestRunnerConfig {
-            deterministic_randomness: true,
-            random_seed: 12345,
+        let config = TestConfig {
+            max_effects: 50,
+            timeout_ms: 10000,
+            parallel_execution: false,
             enable_time_travel: false,
-            ..TestRunnerConfig::default()
+            enable_branching: false,
+            max_branches: 4,
+            test_timeout: Duration::from_secs(60),
         };
         
         let runner = EffectTestRunner::with_config(config);
         assert!(!runner.config.enable_time_travel);
-        assert_eq!(runner.config.random_seed, 12345);
+        assert!(!runner.config.enable_branching);
+        assert_eq!(runner.config.max_effects, 50);
     }
     
     #[test]
@@ -870,7 +893,7 @@ mod tests {
                 mock_strategy: None,
                 setup: TestSetup::default(),
             },
-            result: EffectTestResult::Success(TestValue::String("success".to_string())),
+            result: EffectTestResult::Success(TestValue::string("success".to_string())),
             expected: ExpectedOutcome::Success,
             execution_time: Duration::from_millis(100),
             pre_snapshot: None,
@@ -894,12 +917,11 @@ mod tests {
     fn test_mock_registry() {
         let registry = MockHandlerRegistry::new();
         assert_eq!(registry.handlers.len(), 0);
-        assert_eq!(registry.strategies.len(), 0);
     }
     
     #[test]
     fn test_execution_state() {
-        let state = TestExecutionState::new();
+        let state = ExecutionState::new();
         assert!(state.current_test.is_none());
         assert_eq!(state.execution_history.len(), 0);
         assert_eq!(state.branches.len(), 0);

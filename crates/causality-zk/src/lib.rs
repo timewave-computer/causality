@@ -4,6 +4,8 @@
 //! for register machine execution with SP1/Risc0 backend support, including
 //! cross-domain proof composition and verification.
 
+#![allow(clippy::result_large_err)]
+
 pub mod backends;
 pub mod error;
 pub mod cross_domain;
@@ -38,7 +40,6 @@ pub use storage_proof::{
 use causality_core::machine::instruction::Instruction;
 use serde::{Serialize, Deserialize};
 use std::str;
-use hex;
 
 /// Circuit identifier using content addressing (simplified as string)
 pub type CircuitId = String;
@@ -206,11 +207,11 @@ mod zk_compilation_tests {
         "#;
         
         let instructions = compile_to_vm_instructions(simple_program).expect("Should compile");
-        assert!(instructions.len() > 0, "Should generate VM instructions");
+        assert!(!instructions.is_empty(), "Should generate VM instructions");
         
         // Test ZK circuit generation
         let circuit = generate_zk_circuit(&instructions).expect("Should generate circuit");
-        assert!(circuit.len() > 0, "Should generate circuit constraints");
+        assert!(!circuit.is_empty(), "Should generate circuit constraints");
         
         // Test runtime verification
         let proof = generate_proof(&circuit, &instructions).expect("Should generate proof");
@@ -228,7 +229,7 @@ mod zk_compilation_tests {
         let domains = vec!["ethereum", "polygon", "arbitrum"];
         let effect_combinations = generate_cross_domain_combinations(&domains);
         
-        assert!(effect_combinations.len() > 0, "Should generate combinations");
+        assert!(!effect_combinations.is_empty(), "Should generate combinations");
         
         // Test domain isolation
         for combo in &effect_combinations {

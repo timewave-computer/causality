@@ -93,6 +93,12 @@ impl Default for InstructionCosts {
     }
 }
 
+impl Default for Metering {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Metering {
     /// Create a new metering system
     pub fn new() -> Self {

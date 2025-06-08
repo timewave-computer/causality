@@ -5,4 +5,5 @@
  (foreign_stubs
   (language c)
   (names ffi_stub))
- (c_library_flags (-L../../target/debug -lcausality_ffi))) 
+ (c_library_flags
+  (-L../../target/debug -lcausality_ffi)))

@@ -4,10 +4,14 @@
 //! without compromising privacy or immutability. Resources remain immutable,
 //! and consumption is tracked via cryptographic nullifiers.
 
-use crate::system::content_addressing::{NullifierId, ResourceId, Timestamp};
+use crate::system::content_addressing::EntityId;
+use crate::system::Timestamp;
 use crate::{Sha256Hasher, Hasher};
 use ssz::{Encode, Decode};
 use std::collections::HashSet;
+
+pub type ResourceId = EntityId;
+pub type NullifierId = EntityId;
 
 /// A cryptographic nullifier that proves a resource has been consumed
 /// without revealing which specific resource was consumed
@@ -73,7 +77,7 @@ impl Nullifier {
         
         // Generate deterministic nullifier ID
         let hash = Sha256Hasher::hash(&input_data);
-        let id = NullifierId::from_bytes(hash.into());
+        let id = NullifierId::from_bytes(hash);
         
         Self {
             id,
@@ -96,11 +100,25 @@ impl Nullifier {
         Self::generate(resource_id, operation, Some(&secret_material))
     }
     
-    /// Verify that this nullifier was correctly generated for a resource
+    /// Verify that this nullifier was generated from the given inputs
     pub fn verify(&self, resource_id: ResourceId, operation: &str, secret: Option<&[u8]>) -> bool {
-        let expected = Self::generate(resource_id, operation, secret);
-        // Note: We only check the ID, not timestamp since that varies
-        self.id == expected.id
+        // Recreate the input data using the same algorithm as generate()
+        let mut input_data = Vec::new();
+        input_data.extend_from_slice(resource_id.as_bytes());
+        input_data.extend_from_slice(operation.as_bytes());
+        input_data.extend_from_slice(&self.timestamp.as_millis().to_le_bytes());
+        
+        // Add secret material if provided (same logic as generate())
+        if let Some(secret_bytes) = secret {
+            input_data.extend_from_slice(secret_bytes);
+        }
+        
+        // Generate expected nullifier ID using the same hasher as generate()
+        let hash = Sha256Hasher::hash(&input_data);
+        let expected_id = NullifierId::from_bytes(hash);
+        
+        // Compare the IDs
+        self.id == expected_id
     }
 }
 

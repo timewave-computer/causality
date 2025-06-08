@@ -1,5 +1,3 @@
 (library
  (name ocaml_causality_lang)
- (libraries
-  ocaml_causality_core
-  ocaml_causality_interop)) 
+ (libraries ocaml_causality_core ocaml_causality_interop))

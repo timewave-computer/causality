@@ -5,19 +5,15 @@ open Ocaml_causality_core
 
 (* ------------ API CONFIGURATION ------------ *)
 
+type api_endpoint = { url : string; auth_token : string option; timeout : int }
 (** External API endpoint configuration *)
-type api_endpoint = {
-  url: string;
-  auth_token: string option;
-  timeout: int;
-}
 
-(** Service configuration *)
 type service_config = {
-  name: str_t;
-  endpoints: api_endpoint list;
-  domain_id: domain_id;
+    name : str_t
+  ; endpoints : api_endpoint list
+  ; domain_id : domain_id
 }
+(** Service configuration *)
 
 (* ------------ HTTP CLIENT ------------ *)
 
@@ -25,23 +21,23 @@ type service_config = {
 type http_method = GET | POST | PUT | DELETE
 
 (** Basic HTTP request function *)
-let make_request (method_type: http_method) (url: string) (body: string option) : string =
+let make_request (method_type : http_method) (url : string)
+    (body : string option) : string =
   (* Mock HTTP client implementation - in production would use actual HTTP library *)
-  let method_str = match method_type with
+  let method_str =
+    match method_type with
     | GET -> "GET"
-    | POST -> "POST" 
+    | POST -> "POST"
     | PUT -> "PUT"
     | DELETE -> "DELETE"
   in
-  let body_str = match body with
-    | Some b -> " with body: " ^ b
-    | None -> ""
-  in
+  let body_str = match body with Some b -> " with body: " ^ b | None -> "" in
   Printf.sprintf "HTTP %s %s%s -> mock_response" method_str url body_str
 
 (** HTTP request with authentication *)
 let make_authenticated_request endpoint method_type body =
-  let auth_header = match endpoint.auth_token with
+  let auth_header =
+    match endpoint.auth_token with
     | Some token -> " (auth: " ^ token ^ ")"
     | None -> ""
   in
@@ -50,13 +46,11 @@ let make_authenticated_request endpoint method_type body =
 
 (** HTTP request with timeout handling *)
 let make_request_with_timeout endpoint method_type body =
-  let start_time = 1640995200.0 in (* Fixed timestamp for mock *)
+  let start_time = 1640995200.0 in
+  (* Fixed timestamp for mock *)
   let response = make_authenticated_request endpoint method_type body in
   let elapsed = 1640995200.0 -. start_time in
-  if elapsed > float_of_int endpoint.timeout then
-    "timeout_error"
-  else
-    response
+  if elapsed > float_of_int endpoint.timeout then "timeout_error" else response
 
 (* ------------ SERVICE INTEGRATION ------------ *)
 
@@ -66,7 +60,9 @@ let make_request_with_timeout endpoint method_type body =
 let query_oracle_service config asset currency =
   match config.endpoints with
   | endpoint :: _ ->
-      let query_body = Printf.sprintf "{\"asset\":\"%s\",\"currency\":\"%s\"}" asset currency in
+      let query_body =
+        Printf.sprintf "{\"asset\":\"%s\",\"currency\":\"%s\"}" asset currency
+      in
       make_request_with_timeout endpoint POST (Some query_body)
   | [] -> "no_endpoints_configured"
 
@@ -109,18 +105,11 @@ let query_pool_info config pool_id =
 (** API utility functions *)
 
 (** Create service configuration *)
-let create_service_config name endpoints domain_id = {
-  name;
-  endpoints;
-  domain_id;
-}
+let create_service_config name endpoints domain_id =
+  { name; endpoints; domain_id }
 
 (** Create API endpoint *)
-let create_endpoint url auth_token timeout = {
-  url;
-  auth_token;
-  timeout;
-}
+let create_endpoint url auth_token timeout = { url; auth_token; timeout }
 
 (** Validate service configuration *)
 let validate_service_config config =
@@ -141,10 +130,8 @@ let get_service_status config =
 (** Parse JSON response *)
 let parse_json_response response =
   (* Simple JSON parsing - in production would use proper JSON library *)
-  if String.contains response '{' then
-    Ok ("parsed_json: " ^ response)
-  else
-    Error ("invalid_json: " ^ response)
+  if String.contains response '{' then Ok ("parsed_json: " ^ response)
+  else Error ("invalid_json: " ^ response)
 
 (** Format API error *)
 let format_api_error service_name error_msg =
@@ -158,16 +145,15 @@ let retry_request endpoint method_type body max_retries =
       let response = make_request_with_timeout endpoint method_type body in
       if String.contains response 'e' then (* Check for 'error' or 'timeout' *)
         attempt (n - 1)
-      else
-        response
+      else response
   in
   attempt max_retries
 
 (** Batch API requests *)
 let batch_requests endpoints method_type bodies =
-  List.map2 (fun endpoint body ->
-    make_request_with_timeout endpoint method_type body
-  ) endpoints bodies
+  List.map2
+    (fun endpoint body -> make_request_with_timeout endpoint method_type body)
+    endpoints bodies
 
 (** Service registry *)
 module ServiceRegistry = struct
@@ -178,19 +164,15 @@ module ServiceRegistry = struct
   let register registry name config =
     if validate_service_config config then (
       registry := (name, config) :: !registry;
-      Ok ()
-    ) else
-      Error "invalid_service_config"
+      Ok ())
+    else Error "invalid_service_config"
 
-  let lookup registry name =
-    List.assoc_opt name !registry
-
-  let list_services registry =
-    List.map fst !registry
+  let lookup registry name = List.assoc_opt name !registry
+  let list_services registry = List.map fst !registry
 
   let remove_service registry name =
     registry := List.filter (fun (n, _) -> n <> name) !registry
 end
 
 (* Default service registry *)
-let default_service_registry : ServiceRegistry.t = ServiceRegistry.create () 
+let default_service_registry : ServiceRegistry.t = ServiceRegistry.create ()

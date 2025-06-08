@@ -21,4 +21,4 @@
 (executable
  (public_name test_ffi_roundtrip)
  (name test_ffi_roundtrip)
- (libraries ocaml_causality_interop unix)) 
+ (libraries ocaml_causality_interop unix))

@@ -61,6 +61,12 @@ pub struct ExecutionState {
     pub effect_history: Vec<EngineEffectExecution>,
 }
 
+impl Default for ExecutionState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExecutionState {
     /// Create a new execution state
     pub fn new() -> Self {
@@ -113,7 +119,7 @@ pub struct SimulationEngine {
     clock: SimulatedClock,
     
     /// Snapshot manager for creating execution checkpoints
-    snapshot_manager: SnapshotManager,
+    _snapshot_manager: SnapshotManager,
     
     /// Current program to execute
     program: Vec<Instruction>,
@@ -210,6 +216,12 @@ pub struct ExecutionMetrics {
     pub execution_time_ms: u64,
 }
 
+impl Default for SimulationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SimulationEngine {
     /// Create a new simulation engine
     pub fn new() -> Self {
@@ -217,7 +229,7 @@ impl SimulationEngine {
             state: SimulationState::Created,
             config: SimulationConfig::default(),
             clock: SimulatedClock::new(SimulatedTimestamp::new(0)),
-            snapshot_manager: SnapshotManager::new(10),
+            _snapshot_manager: SnapshotManager::new(10),
             program: Vec::new(),
             pc: 0,
             state_progression: StateProgression::default(),
@@ -238,7 +250,7 @@ impl SimulationEngine {
             state: SimulationState::Created,
             config,
             clock: SimulatedClock::new(SimulatedTimestamp::new(0)),
-            snapshot_manager: SnapshotManager::new(10),
+            _snapshot_manager: SnapshotManager::new(10),
             program: Vec::new(),
             pc: 0,
             state_progression: StateProgression::default(),
@@ -382,10 +394,8 @@ impl SimulationEngine {
         }
         
         // Simulate failure rate for network effects
-        if effect_type == "network" {
-            if rand::random::<f64>() < 0.05 { // 5% failure rate
-                return Err(SimulationError::EffectExecutionError("Network timeout".to_string()));
-            }
+        if effect_type == "network" && rand::random::<f64>() < 0.05 { // 5% failure rate
+            return Err(SimulationError::EffectExecutionError("Network timeout".to_string()));
         }
         
         // Add effect to machine state
@@ -585,7 +595,7 @@ impl Clone for SimulationEngine {
             state: self.state.clone(),
             config: self.config.clone(),
             clock: self.clock.clone(),
-            snapshot_manager: SnapshotManager::new(10), // Create new snapshot manager
+            _snapshot_manager: SnapshotManager::new(10), // Create new snapshot manager
             program: self.program.clone(),
             pc: self.pc,
             state_progression: self.state_progression.clone(),
@@ -605,7 +615,7 @@ impl Clone for SimulationEngine {
 mod tests {
     use super::*;
     use std::time::Duration;
-    use tokio::test as tokio_test;
+    
     use causality_core::machine::instruction::RegisterId;
     
     #[tokio::test]

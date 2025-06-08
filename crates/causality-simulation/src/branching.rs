@@ -116,8 +116,10 @@ impl Default for BranchMetadata {
 
 /// Status of a simulation branch
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Default)]
 pub enum BranchStatus {
     /// Branch is actively being executed
+    #[default]
     Active,
     
     /// Branch execution completed successfully
@@ -133,11 +135,6 @@ pub enum BranchStatus {
     Paused,
 }
 
-impl Default for BranchStatus {
-    fn default() -> Self {
-        BranchStatus::Active
-    }
-}
 
 /// Information about a simulation branch
 #[derive(Debug, Clone)]
@@ -365,7 +362,7 @@ impl BranchingManager {
         let execution_state = if let Some(active_id) = &self.active_branch_id {
             self.branches.get(active_id)
                 .map(|b| b.execution_state.clone())
-                .unwrap_or_else(ExecutionState::new)
+                .unwrap_or_default()
         } else {
             ExecutionState::new()
         };
@@ -412,7 +409,7 @@ pub struct BranchSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::SimulationConfig;
+    
     
     #[test]
     fn test_branch_id_generation() {

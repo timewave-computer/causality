@@ -17,12 +17,11 @@ impl ProofChecker {
         }
     }
     
-    /// Verify a proof for a given value
-    pub fn verify_proof(&mut self, id: EntityId, value: &Value) -> Result<bool> {
-        // Mock verification - always returns true for now
-        let is_valid = true;
-        self.verified_proofs.insert(id, is_valid);
-        Ok(is_valid)
+    /// Verify a proof against a value
+    pub fn verify_proof(&mut self, id: EntityId, _value: &Value) -> Result<bool> {
+        // TODO: Implement actual proof verification
+        self.verified_proofs.insert(id, true);
+        Ok(true)
     }
     
     /// Check if a proof has been verified

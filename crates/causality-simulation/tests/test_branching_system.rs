@@ -8,12 +8,11 @@
 
 use anyhow::Result;
 use causality_simulation::{
-    SimulationEngine, SimulationConfig,
+    SimulationEngine,
     BranchingManager, BranchingConfig,
-    branching::{BranchId, BranchInfo, BranchStatus, BranchMetadata},
+    branching::BranchStatus,
     engine::ExecutionState,
 };
-use causality_core::machine::{Instruction, RegisterId};
 use std::collections::HashMap;
 use tokio::test as tokio_test;
 
@@ -138,10 +137,8 @@ async fn test_branch_forking_scenarios() -> Result<()> {
     println!("✓ Deep branching hierarchy created: {} levels", branch_depth.len());
     
     // Test branch forking from arbitrary points
-    let fork_branches = vec![
-        manager.fork_branch("Fork A from current".to_string())?,
-        manager.fork_branch("Fork B from current".to_string())?,
-    ];
+    let fork_branches = [manager.fork_branch("Fork A from current".to_string())?,
+        manager.fork_branch("Fork B from current".to_string())?];
     
     for (i, fork_id) in fork_branches.iter().enumerate() {
         let fork_info = manager.get_branch_info(&fork_id.0).unwrap();

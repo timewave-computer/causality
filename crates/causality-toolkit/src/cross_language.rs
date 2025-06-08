@@ -1,30 +1,35 @@
-//! Cross-language interoperability utilities for the Causality toolkit.
+//! Cross-Language Integration Tools
+//!
+//! This module provides utilities for integrating with other programming languages
+//! and runtime environments.
 
-use causality_core::{Value, EntityId};
+use causality_core::Value;
 use anyhow::Result;
 
-/// Helper for cross-language interoperability
+/// Cross-language value converter for interfacing with other programming languages
 #[derive(Debug, Clone)]
-pub struct InteropHelper {
-    language_mappings: std::collections::HashMap<String, String>,
+pub struct CrossLanguageConverter {
+    /// Supported target languages
+    supported_languages: Vec<String>,
 }
 
-impl InteropHelper {
-    /// Create a new interop helper
+impl CrossLanguageConverter {
+    /// Create a new cross-language converter
     pub fn new() -> Self {
         Self {
-            language_mappings: std::collections::HashMap::new(),
+            supported_languages: vec![
+                "python".to_string(),
+                "javascript".to_string(),
+                "go".to_string(),
+                "java".to_string(),
+            ],
         }
     }
     
-    /// Add a language mapping
-    pub fn add_mapping(&mut self, from_lang: String, to_lang: String) {
-        self.language_mappings.insert(from_lang, to_lang);
-    }
-    
-    /// Convert a value between languages
-    pub fn convert_value(&self, value: &Value, target_lang: &str) -> Result<Value> {
-        // Mock conversion - just returns the same value for now
+    /// Convert a causality value to another language representation
+    pub fn convert_value(&self, value: &Value, _target_lang: &str) -> Result<Value> {
+        // TODO: Implement actual cross-language conversion
+        // For now, return a copy of the input value
         Ok(value.clone())
     }
     
@@ -52,21 +57,16 @@ impl InteropHelper {
     
     /// Get supported languages
     pub fn supported_languages(&self) -> Vec<String> {
-        let mut langs: Vec<String> = self.language_mappings.keys().cloned().collect();
-        langs.extend(self.language_mappings.values().cloned());
-        langs.sort();
-        langs.dedup();
-        langs
+        self.supported_languages.clone()
     }
     
     /// Check if a language is supported
     pub fn supports_language(&self, lang: &str) -> bool {
-        self.language_mappings.contains_key(lang) || 
-        self.language_mappings.values().any(|v| v == lang)
+        self.supported_languages.iter().any(|s| s == lang)
     }
 }
 
-impl Default for InteropHelper {
+impl Default for CrossLanguageConverter {
     fn default() -> Self {
         Self::new()
     }

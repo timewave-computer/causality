@@ -812,14 +812,14 @@ impl TemporalEffectGraph {
         for (node_id, node) in &self.nodes {
             let node_label = match &node.effect.kind {
                 crate::effect::EffectExprKind::Perform { effect_tag, .. } => {
-                    format!("{}[{}]", node_id.to_hex()[..8].to_string(), effect_tag)
+                    format!("{}[{}]", &node_id.to_hex()[..8], effect_tag)
                 }
-                _ => format!("{}[Effect]", node_id.to_hex()[..8].to_string()),
+                _ => format!("{}[Effect]", &node_id.to_hex()[..8]),
             };
             mermaid.push_str(&format!("    {}\n", node_label));
         }
         
-        mermaid.push_str("\n");
+        mermaid.push('\n');
         
         // Add edges
         for edge in &self.edges {
@@ -827,23 +827,23 @@ impl TemporalEffectGraph {
                 EffectEdge::CausalityLink { from, to, .. } => {
                     mermaid.push_str(&format!(
                         "    {} --> {}\n",
-                        from.to_hex()[..8].to_string(),
-                        to.to_hex()[..8].to_string()
+                        &from.to_hex()[..8],
+                        &to.to_hex()[..8]
                     ));
                 }
                 EffectEdge::ResourceLink { from, to, resource } => {
                     mermaid.push_str(&format!(
                         "    {} -->|{}| {}\n",
-                        from.to_hex()[..8].to_string(),
+                        &from.to_hex()[..8],
                         resource,
-                        to.to_hex()[..8].to_string()
+                        &to.to_hex()[..8]
                     ));
                 }
                 EffectEdge::ControlLink { from, to, .. } => {
                     mermaid.push_str(&format!(
                         "    {} -.-> {}\n",
-                        from.to_hex()[..8].to_string(),
-                        to.to_hex()[..8].to_string()
+                        &from.to_hex()[..8],
+                        &to.to_hex()[..8]
                     ));
                 }
             }
@@ -853,7 +853,6 @@ impl TemporalEffectGraph {
     }
     
     /// Advanced performance optimization algorithms
-    
     /// Optimize the graph for better cache locality and memory access patterns
     pub fn optimize_cache_locality(&mut self) -> Result<(), TegError> {
         // Reorder nodes to improve spatial locality
@@ -1147,12 +1146,9 @@ impl TemporalEffectGraph {
         
         // Analyze transitions between dependent nodes
         for edge in &self.edges {
-            match edge {
-                EffectEdge::ResourceLink { .. } => {
-                    // Resource dependencies benefit from cache locality
-                    locality_score += 1.0;
-                }
-                _ => {}
+            if let EffectEdge::ResourceLink { .. } = edge {
+                // Resource dependencies benefit from cache locality
+                locality_score += 1.0;
             }
             total_transitions += 1;
         }
@@ -1208,7 +1204,7 @@ impl TemporalEffectGraph {
         let mut batchable_groups = Vec::new();
         let mut processed = std::collections::HashSet::new();
         
-        for (node_id, _node) in &self.nodes {
+        for node_id in self.nodes.keys() {
             if processed.contains(node_id) {
                 continue;
             }
@@ -1382,7 +1378,6 @@ impl TemporalEffectGraph {
     }
     
     /// Storage proof-specific scheduling optimizations
-    
     /// Optimize storage proof effect scheduling for better performance
     pub fn optimize_storage_proof_scheduling(&mut self) -> Result<(), TegError> {
         // Group storage proof effects by blockchain domain for batching
@@ -1424,7 +1419,7 @@ impl TemporalEffectGraph {
                 };
                 
                 if let Some(domain_name) = domain {
-                    domain_groups.entry(domain_name).or_insert_with(Vec::new).push(*node_id);
+                    domain_groups.entry(domain_name).or_default().push(*node_id);
                 }
             }
         }
@@ -1727,6 +1722,12 @@ pub enum OptimizationComplexity {
     High,
 }
 
+impl Default for ExecutionHistory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExecutionHistory {
     /// Create new empty execution history
     pub fn new() -> Self {
@@ -2022,7 +2023,7 @@ mod tests {
         assert!(result.is_ok());
         
         let teg = result.unwrap();
-        assert!(teg.nodes.len() > 0);
+        assert!(!teg.nodes.is_empty());
         assert_eq!(teg.metadata.source_intent, Some(intent.id));
     }
 

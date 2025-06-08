@@ -4,6 +4,8 @@
 //! Compiles Lisp source code through S-expressions and lambda calculus
 //! to verifiable register machine instructions.
 
+#![allow(clippy::result_large_err)]
+
 pub mod error;
 pub mod pipeline;
 pub mod checker;

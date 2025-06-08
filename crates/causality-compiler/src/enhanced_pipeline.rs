@@ -282,6 +282,12 @@ pub struct CodeGenerator {
     label_counter: u32,
 }
 
+impl Default for CodeGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CodeGenerator {
     pub fn new() -> Self {
         Self {
@@ -330,8 +336,8 @@ impl CodeGenerator {
             
             // Tensor Product (Monoidal Product ⊗)
             ExprKind::Tensor(left, right) => {
-                let left_reg = self.gen_expr_ast(left)?;
-                let right_reg = self.gen_expr_ast(right)?;
+                let _left_reg = self.gen_expr_ast(left)?;
+                let _right_reg = self.gen_expr_ast(right)?;
                 let result_reg = self.allocator.alloc();
                 
                 // Use witness to create a pair - simplified for now
@@ -339,7 +345,7 @@ impl CodeGenerator {
                 Ok(result_reg)
             }
             ExprKind::LetTensor(tensor_expr, left_name, right_name, body) => {
-                let tensor_reg = self.gen_expr_ast(tensor_expr)?;
+                let _tensor_reg = self.gen_expr_ast(tensor_expr)?;
                 
                 // Allocate registers for the components
                 let left_reg = self.allocator.alloc();
@@ -364,7 +370,7 @@ impl CodeGenerator {
             
             // Sum Type (Coproduct ⊕)
             ExprKind::Inl(value) => {
-                let value_reg = self.gen_expr_ast(value)?;
+                let _value_reg = self.gen_expr_ast(value)?;
                 let result_reg = self.allocator.alloc();
                 
                 // Create left injection (simplified)
@@ -372,7 +378,7 @@ impl CodeGenerator {
                 Ok(result_reg)
             }
             ExprKind::Inr(value) => {
-                let value_reg = self.gen_expr_ast(value)?;
+                let _value_reg = self.gen_expr_ast(value)?;
                 let result_reg = self.allocator.alloc();
                 
                 // Create right injection (simplified)
@@ -657,6 +663,12 @@ pub struct RegisterAllocator {
     next_id: u32,
 }
 
+impl Default for RegisterAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RegisterAllocator {
     pub fn new() -> Self {
         Self { next_id: 1 } // Start from 1, reserve 0 for constants
@@ -699,6 +711,12 @@ struct LivenessInfo {
     defined_registers: std::collections::HashSet<RegisterId>,
     /// Registers that are used at this point
     used_registers: std::collections::HashSet<RegisterId>,
+}
+
+impl Default for InstructionOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InstructionOptimizer {
@@ -1091,7 +1109,7 @@ mod tests {
         // but the result should be successful compilation
         // For unit, we might end up with no instructions if optimized away
         // This is actually correct behavior
-        assert!(instructions.len() >= 0); // Always true, but documents the expectation
+        assert!(!instructions.is_empty()); // Ensure we generated at least one instruction
     }
 
     #[test]

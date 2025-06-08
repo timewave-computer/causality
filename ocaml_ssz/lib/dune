@@ -1,4 +1,14 @@
 (library
  (name ssz)
- (modules basic collections container ffi file_io merkle serialize ssz_ffi tel types)
+ (modules
+  basic
+  collections
+  container
+  ffi
+  file_io
+  merkle
+  serialize
+  ssz_ffi
+  tel
+  types)
  (libraries digestif bytes))

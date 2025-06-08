@@ -270,6 +270,12 @@ pub enum EdgeCondition {
     Custom(String),
 }
 
+impl Default for CrossChainBridgeOrchestrator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CrossChainBridgeOrchestrator {
     pub fn new() -> Self {
         let mut chains = HashMap::new();

@@ -155,7 +155,7 @@ impl ZkProofGenerator {
     /// Generate a witness for the given circuit and inputs
     pub fn generate_witness(
         &self,
-        circuit: &ZkCircuit,
+        _circuit: &crate::circuit::ZkCircuit,
         private_inputs: &[u32],
         public_inputs: &[u32],
     ) -> Result<ZkWitness, crate::error::ZkError> {
@@ -164,7 +164,7 @@ impl ZkProofGenerator {
         // 2. Capture all intermediate values
         // 3. Verify the computation is correct
         
-        println!("Generating witness for circuit with {} gates", circuit.gate_count);
+        println!("Generating witness for circuit with {} gates", _circuit.gate_count);
         
         let mut execution_trace = Vec::new();
         let mut gate_values = Vec::new();
@@ -180,8 +180,8 @@ impl ZkProofGenerator {
         witness_values.extend_from_slice(public_inputs);
         
         // Execute circuit gates to generate witness
-        for gate_idx in 0..circuit.gate_count {
-            let gate_value = self.execute_gate(gate_idx, &witness_values, circuit)?;
+        for gate_idx in 0.._circuit.gate_count {
+            let gate_value = self.execute_gate(gate_idx, &witness_values, _circuit)?;
             gate_values.push(gate_value);
             witness_values.push(gate_value);
             
@@ -190,17 +190,17 @@ impl ZkProofGenerator {
         }
         
         // Verify circuit constraints are satisfied
-        self.verify_circuit_constraints(circuit, &witness_values)?;
+        self.verify_circuit_constraints(_circuit, &witness_values)?;
         
         Ok(ZkWitness::new(
-            circuit.circuit_name.clone(),
+            _circuit.circuit_name.clone(),
             private_inputs_bytes,
             execution_trace,
         ))
     }
     
     /// Execute a single gate in the circuit
-    fn execute_gate(&self, gate_idx: usize, witness_values: &[u32], circuit: &ZkCircuit) -> Result<u32, crate::error::ZkError> {
+    fn execute_gate(&self, gate_idx: usize, witness_values: &[u32], _circuit: &ZkCircuit) -> Result<u32, crate::error::ZkError> {
         // Simulate different gate types based on position and circuit structure
         match gate_idx % 5 {
             0 => {
@@ -235,7 +235,7 @@ impl ZkProofGenerator {
             },
             3 => {
                 // Constraint gate: ensure value is in range
-                if witness_values.len() >= 1 {
+                if !witness_values.is_empty() {
                     let val = witness_values[witness_values.len() - 1];
                     Ok(val % 1000) // Constrain to 0-999
                 } else {
@@ -244,7 +244,7 @@ impl ZkProofGenerator {
             },
             _ => {
                 // Copy gate: copy previous value
-                if witness_values.len() >= 1 {
+                if !witness_values.is_empty() {
                     Ok(witness_values[witness_values.len() - 1])
                 } else {
                     Ok(gate_idx as u32)
@@ -440,10 +440,20 @@ impl ZkProofGenerator {
         
         format!("{:x}", hasher.finish())
     }
+
+    fn calculate_circuit_complexity(&self, _public_inputs: &[u32], _circuit: &ZkCircuit) -> Result<u32, crate::error::ZkError> {
+        // Implementation of calculate_circuit_complexity function
+        Ok(0) // Placeholder return, actual implementation needed
+    }
 }
 
 impl Default for ZkProofGenerator {
     fn default() -> Self {
         Self::new()
     }
+}
+
+pub fn estimate_proof_complexity(_public_inputs: &[u32], _circuit: &ZkCircuit) -> Result<u32, crate::error::ZkError> {
+    // Implementation of estimate_proof_complexity function
+    Ok(0) // Placeholder return, actual implementation needed
 } 

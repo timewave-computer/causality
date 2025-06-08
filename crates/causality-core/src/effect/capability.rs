@@ -37,6 +37,12 @@ impl std::hash::Hash for RecordSchema {
     }
 }
 
+impl Default for RecordSchema {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RecordSchema {
     /// Create a new record schema
     pub fn new() -> Self {

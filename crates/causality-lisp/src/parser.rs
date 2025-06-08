@@ -411,12 +411,12 @@ impl LispParser {
             // Check for reserved special forms
             match name.as_str() {
                 "lambda" | "let-tensor" | "case" | "tensor" | "inl" | "inr" | "alloc" | "consume" | "unit" | "let-unit" => {
-                    return self.parse_special_form(&name);
+                    self.parse_special_form(&name)
                 }
                 _ => {
                     // Parse as function call
                     let first = self.parse_expression()?;
-                    return self.parse_function_call(first);
+                    self.parse_function_call(first)
                 }
             }
         } else {
@@ -737,7 +737,7 @@ impl LispParser {
         }
     }
     
-    fn expect_left_paren(&mut self, context: &str) -> ParseResult<()> {
+    fn expect_left_paren(&mut self, _context: &str) -> ParseResult<()> {
         let current = self.current_token();
         match &current.token {
             Token::LeftParen => {

@@ -8,16 +8,29 @@
 open Ocaml_causality_core
 
 type atomic_combinator =
-  | List | MakeMap | GetField | Length
-  | Eq | Lt | Gt | Add | Sub | Mul | Div
-  | And | Or | Not | If | Let | Define
-  | Quote | Cons | Car | Cdr
+  | List
+  | MakeMap
+  | GetField
+  | Length
+  | Eq
+  | Lt
+  | Gt
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | And
+  | Or
+  | Not
+  | If
+  | Let
+  | Define
+  | Quote
+  | Cons
+  | Car
+  | Cdr
 
-type atom =
-  | AInt of int64
-  | AString of str_t
-  | ABoolean of bool
-  | ANil
+type atom = AInt of int64 | AString of str_t | ABoolean of bool | ANil
 
 (* ------------ VALUE TYPES ------------ *)
 
@@ -36,8 +49,8 @@ type value_expr =
 type combinator_arity = int
 
 let combinator_arity = function
-  | List -> 0  (* Variable arity *)
-  | MakeMap -> 0  (* Variable arity *)
+  | List -> 0 (* Variable arity *)
+  | MakeMap -> 0 (* Variable arity *)
   | GetField -> 2
   | Length -> 1
   | Eq | Lt | Gt -> 2
@@ -89,26 +102,26 @@ let rec fold_value_expr f acc = function
   | VConst v -> f acc (VConst v)
   | VAtom a -> f acc (VAtom a)
   | VCombinator c -> f acc (VCombinator c)
-  | VList exprs -> 
+  | VList exprs ->
       let acc' = f acc (VList []) in
       List.fold_left (fold_value_expr f) acc' exprs
   | VSymbol s -> f acc (VSymbol s)
-  | VQuote expr -> 
+  | VQuote expr ->
       let acc' = f acc (VQuote (VConst Unit)) in
       fold_value_expr f acc' expr
 
 let rec collect_symbols = function
   | VConst _ | VAtom _ | VCombinator _ -> []
-  | VSymbol s -> [s]
+  | VSymbol s -> [ s ]
   | VList exprs -> List.concat_map collect_symbols exprs
   | VQuote expr -> collect_symbols expr
 
 let rec collect_constants = function
-  | VConst v -> [v]
-  | VAtom (AInt i) -> [Int i]
-  | VAtom (AString s) -> [String s]
-  | VAtom (ABoolean b) -> [Bool b]
-  | VAtom ANil -> [Unit]
+  | VConst v -> [ v ]
+  | VAtom (AInt i) -> [ Int i ]
+  | VAtom (AString s) -> [ String s ]
+  | VAtom (ABoolean b) -> [ Bool b ]
+  | VAtom ANil -> [ Unit ]
   | VCombinator _ | VSymbol _ -> []
   | VList exprs -> List.concat_map collect_constants exprs
   | VQuote expr -> collect_constants expr
@@ -124,15 +137,15 @@ let rec substitute_symbol target replacement = function
 
 let rec count_nodes = function
   | VConst _ | VAtom _ | VCombinator _ | VSymbol _ -> 1
-  | VList exprs -> 1 + List.fold_left (+) 0 (List.map count_nodes exprs)
+  | VList exprs -> 1 + List.fold_left ( + ) 0 (List.map count_nodes exprs)
   | VQuote expr -> 1 + count_nodes expr
 
 let rec depth = function
   | VConst _ | VAtom _ | VCombinator _ | VSymbol _ -> 1
-  | VList exprs -> 
-      (match exprs with
-       | [] -> 1
-       | _ -> 1 + List.fold_left max 0 (List.map depth exprs))
+  | VList exprs -> (
+      match exprs with
+      | [] -> 1
+      | _ -> 1 + List.fold_left max 0 (List.map depth exprs))
   | VQuote expr -> 1 + depth expr
 
 (* AST validation *)
@@ -166,10 +179,10 @@ let rec infer_value_expr_type = function
   | VConst (Int _) -> TInt
   | VConst (String _) -> TString
   | VConst (Symbol _) -> TSymbol
-  | VConst (List values) ->
-      (match values with
-       | [] -> TList TUnknown
-       | v :: _ -> TList (infer_lisp_value_type v))
+  | VConst (List values) -> (
+      match values with
+      | [] -> TList TUnknown
+      | v :: _ -> TList (infer_lisp_value_type v))
   | VConst _ -> TUnknown
   | VAtom (AInt _) -> TInt
   | VAtom (AString _) -> TString
@@ -177,10 +190,10 @@ let rec infer_value_expr_type = function
   | VAtom ANil -> TUnit
   | VCombinator _ -> TCombinator
   | VSymbol _ -> TSymbol
-  | VList exprs ->
-      (match exprs with
-       | [] -> TList TUnknown
-       | expr :: _ -> TList (infer_value_expr_type expr))
+  | VList exprs -> (
+      match exprs with
+      | [] -> TList TUnknown
+      | expr :: _ -> TList (infer_value_expr_type expr))
   | VQuote _ -> TSymbol
 
 and infer_lisp_value_type = function
@@ -189,14 +202,14 @@ and infer_lisp_value_type = function
   | Int _ -> TInt
   | String _ -> TString
   | Symbol _ -> TSymbol
-  | List values ->
-      (match values with
-       | [] -> TList TUnknown
-       | v :: _ -> TList (infer_lisp_value_type v))
+  | List values -> (
+      match values with
+      | [] -> TList TUnknown
+      | v :: _ -> TList (infer_lisp_value_type v))
   | ResourceId _ | ExprId _ | Bytes _ -> TUnknown
 
 let rec type_compatible t1 t2 =
-  match t1, t2 with
+  match (t1, t2) with
   | TUnit, TUnit -> true
   | TBool, TBool -> true
   | TInt, TInt -> true
@@ -213,34 +226,35 @@ let type_check_value_expr expr expected_type =
 
 (* Type checking for combinator applications *)
 let type_check_combinator_application combinator args =
-  match combinator, args with
-  | Add, [arg1; arg2] | Sub, [arg1; arg2] | Mul, [arg1; arg2] | Div, [arg1; arg2] ->
+  match (combinator, args) with
+  | Add, [ arg1; arg2 ]
+  | Sub, [ arg1; arg2 ]
+  | Mul, [ arg1; arg2 ]
+  | Div, [ arg1; arg2 ] ->
       type_check_value_expr arg1 TInt && type_check_value_expr arg2 TInt
-  | Eq, [arg1; arg2] | Lt, [arg1; arg2] | Gt, [arg1; arg2] ->
+  | Eq, [ arg1; arg2 ] | Lt, [ arg1; arg2 ] | Gt, [ arg1; arg2 ] ->
       let t1 = infer_value_expr_type arg1 in
       let t2 = infer_value_expr_type arg2 in
       type_compatible t1 t2
-  | And, [arg1; arg2] | Or, [arg1; arg2] ->
+  | And, [ arg1; arg2 ] | Or, [ arg1; arg2 ] ->
       type_check_value_expr arg1 TBool && type_check_value_expr arg2 TBool
-  | Not, [arg] ->
-      type_check_value_expr arg TBool
-  | Length, [arg] ->
-      (match infer_value_expr_type arg with
-       | TList _ | TString -> true
-       | _ -> false)
-  | Car, [arg] | Cdr, [arg] ->
-      (match infer_value_expr_type arg with
-       | TList _ -> true
-       | _ -> false)
-  | Cons, [_; _] -> true  (* Cons can work with any types *)
-  | If, [condition; then_expr; else_expr] ->
-      type_check_value_expr condition TBool &&
+  | Not, [ arg ] -> type_check_value_expr arg TBool
+  | Length, [ arg ] -> (
+      match infer_value_expr_type arg with
+      | TList _ | TString -> true
+      | _ -> false)
+  | Car, [ arg ] | Cdr, [ arg ] -> (
+      match infer_value_expr_type arg with TList _ -> true | _ -> false)
+  | Cons, [ _; _ ] -> true (* Cons can work with any types *)
+  | If, [ condition; then_expr; else_expr ] ->
+      type_check_value_expr condition TBool
+      &&
       let t1 = infer_value_expr_type then_expr in
       let t2 = infer_value_expr_type else_expr in
       type_compatible t1 t2
-  | Quote, [_] -> true  (* Quote can work with any expression *)
-  | List, _ -> true  (* List can contain any types *)
-  | _, _ -> false  (* Arity mismatch or unsupported combinator *)
+  | Quote, [ _ ] -> true (* Quote can work with any expression *)
+  | List, _ -> true (* List can contain any types *)
+  | _, _ -> false (* Arity mismatch or unsupported combinator *)
 
 (* Conversion functions *)
 let atom_to_lisp_value = function
@@ -262,7 +276,7 @@ let rec value_expr_to_lisp_value = function
   | VCombinator c -> Symbol (combinator_to_string c)
   | VSymbol s -> Symbol s
   | VList exprs -> List (List.map value_expr_to_lisp_value exprs)
-  | VQuote expr -> List [Symbol "quote"; value_expr_to_lisp_value expr]
+  | VQuote expr -> List [ Symbol "quote"; value_expr_to_lisp_value expr ]
 
 (* Pretty printing *)
 let rec value_expr_to_string = function
@@ -272,17 +286,22 @@ let rec value_expr_to_string = function
   | VConst (Int i) -> Int64.to_string i
   | VConst (String s) -> "\"" ^ s ^ "\""
   | VConst (Symbol s) -> s
-  | VConst (List values) -> 
-      "(" ^ String.concat " " (List.map (fun v -> 
-        match lisp_value_to_atom v with
-        | Some a -> atom_to_string a
-        | None -> "?"
-      ) values) ^ ")"
+  | VConst (List values) ->
+      "("
+      ^ String.concat " "
+          (List.map
+             (fun v ->
+               match lisp_value_to_atom v with
+               | Some a -> atom_to_string a
+               | None -> "?")
+             values)
+      ^ ")"
   | VConst _ -> "?"
   | VAtom a -> atom_to_string a
   | VCombinator c -> combinator_to_string c
   | VSymbol s -> s
-  | VList exprs -> "(" ^ String.concat " " (List.map value_expr_to_string exprs) ^ ")"
+  | VList exprs ->
+      "(" ^ String.concat " " (List.map value_expr_to_string exprs) ^ ")"
   | VQuote expr -> "'" ^ value_expr_to_string expr
 
 and atom_to_string = function
@@ -300,19 +319,14 @@ let make_nil = VAtom ANil
 let make_symbol s = VSymbol s
 let make_list exprs = VList exprs
 let make_quote expr = VQuote expr
-
-let make_combinator_call combinator args =
-  VList (VCombinator combinator :: args)
+let make_combinator_call combinator args = VList (VCombinator combinator :: args)
 
 (* Common AST patterns *)
 let make_if condition then_expr else_expr =
-  make_combinator_call If [condition; then_expr; else_expr]
+  make_combinator_call If [ condition; then_expr; else_expr ]
 
 let make_let var value body =
-  make_combinator_call Let [VSymbol var; value; body]
+  make_combinator_call Let [ VSymbol var; value; body ]
 
-let make_arithmetic_op op left right =
-  make_combinator_call op [left; right]
-
-let make_comparison op left right =
-  make_combinator_call op [left; right] 
+let make_arithmetic_op op left right = make_combinator_call op [ left; right ]
+let make_comparison op left right = make_combinator_call op [ left; right ]

@@ -3,4 +3,4 @@
 
 module Content_addressing = Content_addressing
 module Merkle = Merkle
-module Ssz_compat = Ssz_compat 
+module Ssz_compat = Ssz_compat

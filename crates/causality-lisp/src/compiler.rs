@@ -572,7 +572,7 @@ mod tests {
         let result = compiler.compile(&expr);
         assert!(result.is_ok());
         let (instructions, _reg) = result.unwrap();
-        assert!(instructions.len() > 0);
+        assert!(!instructions.is_empty());
     }
 
     #[test]
@@ -583,7 +583,7 @@ mod tests {
         let result = compiler.compile(&expr);
         assert!(result.is_ok());
         let (instructions, _reg) = result.unwrap();
-        assert!(instructions.len() > 0);
+        assert!(!instructions.is_empty());
     }
 
     #[test]

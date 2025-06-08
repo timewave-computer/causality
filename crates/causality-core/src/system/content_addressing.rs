@@ -49,7 +49,7 @@ impl EntityId {
     
     /// Convert to a hex string for debugging/display
     pub fn to_hex(&self) -> String {
-        hex::encode(&self.bytes)
+        hex::encode(self.bytes)
     }
     
     /// Create from hex string (for testing/debugging)
@@ -68,7 +68,8 @@ impl EntityId {
         Self::from_bytes(bytes)
     }
     
-    /// Create a default EntityId (all zeros)
+    /// Get the default instance of ContentId
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
         Self::from_bytes([0u8; 32])
     }

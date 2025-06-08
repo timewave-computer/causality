@@ -23,7 +23,7 @@ fn test_linear_traits() {
     
     // Must be consumed
     assert!(!linear.check_used());
-    let _ = SingleUse::consume(linear).unwrap();
+    SingleUse::consume(linear).unwrap();
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn test_affine_traits() {
     Droppable::drop_unused(affine1).unwrap();
     
     // Or can be consumed once
-    let _ = SingleUse::consume(affine2).unwrap();
+    SingleUse::consume(affine2).unwrap();
 }
 
 #[test]

@@ -5,14 +5,16 @@
 //! and handlers.
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use crate::{
-    effect::{
-        intent::{Intent, IntentError},
-        synthesis::{FlowSynthesizer, SynthesisError},
-        handler_registry::{EffectHandlerRegistry, EffectExecutionError},
-    },
     lambda::base::Value,
     system::error::Result,
+};
+use crate::effect::{
+    handler_registry::{EffectHandlerRegistry, EffectExecutionError},
+    synthesis::FlowSynthesizer,
+    intent::{Intent, IntentError},
+    synthesis::SynthesisError,
 };
 
 /// Result type for intent evaluation
@@ -70,13 +72,13 @@ impl Default for IntentEvaluationConfig {
 /// Main intent evaluator that orchestrates intent evaluation
 pub struct IntentEvaluator {
     /// Flow synthesizer for converting intents to effect sequences
-    synthesizer: FlowSynthesizer,
+    _synthesizer: FlowSynthesizer,
     
-    /// Handler registry for executing effects
-    handler_registry: EffectHandlerRegistry,
+    /// Handler registry for effect execution
+    handler_registry: Arc<Mutex<EffectHandlerRegistry>>,
     
-    /// Evaluation configuration
-    config: IntentEvaluationConfig,
+    /// Intent evaluation configuration
+    _config: IntentEvaluationConfig,
     
     /// Context for evaluation (resources, capabilities, etc.)
     context: EvaluationContext,
@@ -99,9 +101,9 @@ impl IntentEvaluator {
     /// Create a new intent evaluator
     pub fn new(synthesizer: FlowSynthesizer, handler_registry: EffectHandlerRegistry) -> Self {
         Self {
-            synthesizer,
-            handler_registry,
-            config: IntentEvaluationConfig::default(),
+            _synthesizer: synthesizer,
+            handler_registry: Arc::new(Mutex::new(handler_registry)),
+            _config: IntentEvaluationConfig::default(),
             context: EvaluationContext::default(),
         }
     }
@@ -113,9 +115,9 @@ impl IntentEvaluator {
         config: IntentEvaluationConfig,
     ) -> Self {
         Self {
-            synthesizer,
-            handler_registry,
-            config,
+            _synthesizer: synthesizer,
+            handler_registry: Arc::new(Mutex::new(handler_registry)),
+            _config: config,
             context: EvaluationContext::default(),
         }
     }
@@ -134,17 +136,17 @@ impl IntentEvaluator {
     }
     
     /// Get the handler registry for external configuration
-    pub fn handler_registry(&self) -> &EffectHandlerRegistry {
-        &self.handler_registry
+    pub fn handler_registry(&self) -> Arc<Mutex<EffectHandlerRegistry>> {
+        Arc::clone(&self.handler_registry)
     }
     
     /// Get a mutable reference to the handler registry
-    pub fn handler_registry_mut(&mut self) -> &mut EffectHandlerRegistry {
-        &mut self.handler_registry
+    pub fn handler_registry_mut(&mut self) -> Arc<Mutex<EffectHandlerRegistry>> {
+        Arc::clone(&self.handler_registry)
     }
     
     /// Helper method to evaluate literal values
-    fn evaluate_literal(&self, lit: &crate::lambda::Literal) -> Result<Value> {
+    fn _evaluate_literal(&self, lit: &crate::lambda::Literal) -> Result<Value> {
         match lit {
             crate::lambda::Literal::Bool(b) => Ok(Value::Bool(*b)),
             crate::lambda::Literal::Int(i) => Ok(Value::Int(*i)),
@@ -154,9 +156,9 @@ impl IntentEvaluator {
     }
     
     /// Helper method to evaluate term expressions
-    fn evaluate_term(&self, term: &crate::lambda::Term) -> Result<Value> {
+    fn _evaluate_term(&self, term: &crate::lambda::Term) -> Result<Value> {
         match &term.kind {
-            crate::lambda::TermKind::Literal(lit) => self.evaluate_literal(lit),
+            crate::lambda::TermKind::Literal(lit) => self._evaluate_literal(lit),
             crate::lambda::TermKind::Var(name) => {
                 // Look up variable in context
                 self.context.resources.get(name)
@@ -220,7 +222,7 @@ mod tests {
     fn test_intent_evaluator_creation() {
         let evaluator = create_test_evaluator();
         // Check that the evaluator was created successfully
-        assert!(evaluator.handler_registry().list_effects().is_empty());
+        assert!(evaluator.handler_registry().lock().unwrap().list_effects().is_empty());
     }
     
     #[test]

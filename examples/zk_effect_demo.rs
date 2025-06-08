@@ -16,7 +16,6 @@ use causality_core::{
         error::Result,
     },
 };
-use causality_zk::backends::mock_backend::MockBackend;
 use std::sync::Arc;
 
 /// Example effect handler for secure computation

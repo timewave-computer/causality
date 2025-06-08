@@ -11,9 +11,7 @@ use anyhow::Result;
 use causality_simulation::{
     SimulationEngine,
 };
-use causality_core::machine::{Instruction, RegisterId};
 use std::collections::HashMap;
-use std::time::Duration;
 use tokio::test as tokio_test;
 
 // Mock optimization types for testing
@@ -206,7 +204,7 @@ async fn test_balanced_optimization_strategy() -> Result<()> {
     println!("=== Testing Balanced Optimization Strategy ===");
     
     let optimizer = MockOptimizer::new(OptimizationStrategy::BalancedApproach);
-    let mut engine = SimulationEngine::new();
+    let engine = SimulationEngine::new();
     
     // Test programs for balanced optimization
     let balanced_programs = vec![
@@ -247,7 +245,7 @@ async fn test_parallelization_optimization() -> Result<()> {
     println!("=== Testing Parallelization Optimization ===");
     
     let optimizer = MockOptimizer::new(OptimizationStrategy::ParallelizationFocus);
-    let mut engine = SimulationEngine::new();
+    let engine = SimulationEngine::new();
     
     // Test programs suitable for parallelization
     let parallelizable_programs = vec![
@@ -397,7 +395,7 @@ async fn test_optimization_strategy_comparison() -> Result<()> {
 async fn test_optimization_with_constraints() -> Result<()> {
     println!("=== Testing Optimization with Constraints ===");
     
-    let mut engine = SimulationEngine::new();
+    let engine = SimulationEngine::new();
     
     // Define optimization constraints
     struct OptimizationConstraints {
@@ -465,7 +463,7 @@ async fn test_optimization_with_constraints() -> Result<()> {
 async fn test_adaptive_optimization() -> Result<()> {
     println!("=== Testing Adaptive Optimization ===");
     
-    let mut engine = SimulationEngine::new();
+    let engine = SimulationEngine::new();
     
     // Simulate adaptive optimization that learns from program characteristics
     struct AdaptiveOptimizer {
@@ -502,13 +500,11 @@ async fn test_adaptive_optimization() -> Result<()> {
     
     let mut adaptive_optimizer = AdaptiveOptimizer::new();
     
-    let adaptive_test_programs = vec![
-        "(alloc 100)",
+    let adaptive_test_programs = ["(alloc 100)",
         "(consume (alloc 200))",
         "(tensor (alloc 50) (alloc 75) (alloc 100))",
         "(consume (tensor (alloc 100) (alloc 200)))",
-        "(tensor (consume (alloc 150)) (consume (alloc 250)) (alloc 300))",
-    ];
+        "(tensor (consume (alloc 150)) (consume (alloc 250)) (alloc 300))"];
     
     let mut learning_results = Vec::new();
     

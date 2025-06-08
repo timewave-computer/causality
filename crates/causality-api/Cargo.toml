@@ -10,15 +10,15 @@ description = "API interface management and domain mocking for Causality"
 [dependencies]
 # Core causality dependencies
 causality-core = { path = "../causality-core" }
-causality-runtime = { path = "../causality-runtime" }
 causality-compiler = { path = "../causality-compiler" }
+causality-runtime = { path = "../causality-runtime" }
 causality-toolkit = { path = "../causality-toolkit" }
 
 # Core async runtime
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["full", "macros"] }
 
 # Serialization
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 
 # HTTP client/server
@@ -31,24 +31,27 @@ thiserror = { workspace = true }
 # Utilities
 uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { workspace = true, features = ["serde"] }
-colored = { version = "2.0" }
-base64 = { version = "0.21" }
-hex = { version = "0.4" }
-rand = { version = "0.8" }
+colored = "2.0"
+base64 = "0.21"
+hex = { workspace = true }
+rand = { workspace = true }
 
 # Standard Rust crates
 async-trait = { workspace = true }
 log = { workspace = true }
 
 # Blockchain client library
-valence-domain-clients = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310", default-features = false, features = ["ethereum", "neutron"] }
 valence-core = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310" }
-valence-evm = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310" }
+valence-domain-clients = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310", default-features = false, features = ["ethereum", "neutron"] }
 valence-cosmos = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310" }
+valence-evm = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310" }
 valence-coprocessor-client = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310" }
 
 # Alloy for Ethereum types
 alloy = { version = "0.9", features = ["full"] }
+
+# Additional dependencies
+env_logger = "0.10"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "macros", "test-util"] }

@@ -1,8 +1,11 @@
-//! Zero-knowledge proof verification module.
+//! Zero-knowledge proof verification functionality
+//!
+//! This module provides comprehensive verification capabilities for ZK proofs.
 
 use serde::{Serialize, Deserialize};
 use crate::error::ZkError;
-use crate::proof_generation::ZkProof;
+use crate::{ZkProof, ZkCircuit};
+use crate::error::{VerificationResult, BatchVerificationResult};
 
 /// Verification key for ZK proofs
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -301,7 +304,7 @@ impl ZkVerifier {
         b: u64,
         c: u64,
         verification_key: &VerificationKey,
-        public_inputs: &[u32],
+        _public_inputs: &[u32],
     ) -> Result<bool, ZkError> {
         // Simplified Groth16 verification for mock implementation
         // In a real implementation, this would perform pairing checks
@@ -320,7 +323,7 @@ impl ZkVerifier {
         // and consistent with the verification key and public inputs
         
         // Simple consistency check: ensure proof components are related to inputs
-        let expected_a = verification_key.key_data.get(0).unwrap_or(&1);
+        let expected_a = verification_key.key_data.first().unwrap_or(&1);
         let expected_b = verification_key.key_data.get(1).unwrap_or(&1);
         
         // Allow for some variation in the mock implementation
@@ -337,7 +340,7 @@ impl ZkVerifier {
         commitments: &[u64],
         evaluations: &[u32],
         verification_key: &VerificationKey,
-        public_inputs: &[u32],
+        _public_inputs: &[u32],
     ) -> Result<bool, ZkError> {
         // Verify polynomial commitments and evaluations
         for (i, &commitment) in commitments.iter().enumerate() {
@@ -348,7 +351,7 @@ impl ZkVerifier {
         
         // Verify evaluation consistency
         for (i, &evaluation) in evaluations.iter().enumerate() {
-            if !self.verify_evaluation(evaluation, i, public_inputs) {
+            if !self.verify_evaluation(evaluation, i, _public_inputs) {
                 return Ok(false);
             }
         }
@@ -385,7 +388,7 @@ impl ZkVerifier {
         &self,
         components: &[u32],
         verification_key: &VerificationKey,
-        public_inputs: &[u32],
+        _public_inputs: &[u32],
     ) -> Result<bool, ZkError> {
         // Basic structural verification
         if components.is_empty() {
@@ -445,31 +448,23 @@ impl ZkVerifier {
         }).collect()
     }
     
-    fn simulate_pairing(&self, a: u64, b: u64) -> u64 {
-        a.wrapping_mul(b).wrapping_add(0x1337)
-    }
-    
-    fn calculate_public_input_contribution(&self, public_inputs: &[u32], verification_key: &VerificationKey) -> u64 {
-        let mut contribution = 0u64;
-        for (i, &input) in public_inputs.iter().enumerate() {
-            let key_value = verification_key.key_data.get(i).unwrap_or(&0);
-            contribution = contribution.wrapping_add((input as u64).wrapping_mul(*key_value as u64));
-        }
-        contribution
-    }
-    
-    fn verify_commitment(&self, commitment: u64, index: usize, verification_key: &VerificationKey) -> bool {
+    fn verify_commitment(&self, commitment: u64, index: usize, _verification_key: &VerificationKey) -> bool {
         let expected = (index as u64).wrapping_mul(0x4141).wrapping_add(commitment % 1000);
         commitment >= expected
     }
     
-    fn verify_evaluation(&self, evaluation: u32, index: usize, public_inputs: &[u32]) -> bool {
-        let expected = if index < public_inputs.len() {
-            public_inputs[index].wrapping_mul(index as u32 + 1)
+    fn verify_evaluation(&self, evaluation: u32, index: usize, _public_inputs: &[u32]) -> bool {
+        let expected = if index < _public_inputs.len() {
+            _public_inputs[index].wrapping_mul(index as u32 + 1)
         } else {
             index as u32
         };
         evaluation.wrapping_sub(expected) < 1000 // Allow some tolerance
+    }
+    
+    fn verify_fri_layer(&self, layer: &FriLayer, _layer_index: usize) -> bool {
+        // Verify that commitments and final values are consistent
+        !layer.commitments.is_empty() && !layer.final_values.is_empty()
     }
     
     fn calculate_expected_merkle_root(&self, verification_key: &VerificationKey, public_inputs: &[u32]) -> u64 {
@@ -482,27 +477,11 @@ impl ZkVerifier {
         hasher.finish()
     }
     
-    fn verify_fri_layer(&self, layer: &FriLayer, layer_index: usize) -> bool {
-        // Verify that commitments and final values are consistent
-        !layer.commitments.is_empty() && !layer.final_values.is_empty()
-    }
-    
-    fn calculate_expected_component_checksum(&self, verification_key: &VerificationKey, public_inputs: &[u32]) -> u32 {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        
-        let mut hasher = DefaultHasher::new();
-        verification_key.circuit_hash.hash(&mut hasher);
-        public_inputs.hash(&mut hasher);
-        (hasher.finish() & 0xFFFFFFFF) as u32
-    }
-    
-    fn calculate_component_checksum(&self, components: &[u32]) -> u32 {
-        components.iter().fold(0u32, |acc, &x| acc.wrapping_add(x))
-    }
-    
     /// Validate a verification key
-    pub fn validate_verification_key(&self, verification_key: &VerificationKey) -> Result<(), ZkError> {
+    pub fn validate_verification_key(
+        &self,
+        verification_key: &VerificationKey,
+    ) -> Result<bool, crate::error::ZkError> {
         if verification_key.circuit_hash.is_empty() {
             return Err(ZkError::InvalidVerificationKey("Empty circuit hash".to_string()));
         }
@@ -511,12 +490,53 @@ impl ZkVerifier {
             return Err(ZkError::UnsupportedProofSystem(verification_key.proof_system.clone()));
         }
         
-        Ok(())
+        Ok(true)
     }
     
     /// Check if a proof system is supported
     fn is_supported_proof_system(&self, proof_system: &str) -> bool {
         matches!(proof_system, "groth16" | "plonk" | "stark" | "snark")
+    }
+
+    pub fn verify_batch_proofs(
+        &self,
+        proofs: Vec<&ZkProof>,
+        public_inputs: Vec<Vec<u8>>,
+    ) -> VerificationResult<BatchVerificationResult> {
+        if proofs.len() != public_inputs.len() {
+            return Err(crate::error::VerificationError::PublicInputMismatch(
+                format!("Number of proofs ({}) does not match number of public input sets ({})", 
+                       proofs.len(), public_inputs.len())
+            ));
+        }
+        
+        let mut individual_results = Vec::new();
+        
+        for (proof, inputs) in proofs.iter().zip(public_inputs.iter()) {
+            // Convert Vec<u8> to Vec<u32> for compatibility
+            let u32_inputs: Vec<u32> = inputs.chunks_exact(4)
+                .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                .collect();
+                
+            match self.verify_proof(proof, &u32_inputs) {
+                Ok(result) => individual_results.push(result),
+                Err(_) => individual_results.push(false),
+            }
+        }
+        
+        Ok(BatchVerificationResult::new(individual_results))
+    }
+
+    pub fn verify_proof_with_constraints(
+        &self,
+        proof: &ZkProof,
+        public_inputs: &[u32],
+        _circuit: &ZkCircuit,
+    ) -> Result<bool, crate::error::ZkError> {
+        // For now, just delegate to the regular verify_proof method
+        // In a full implementation, this would also verify that the proof
+        // satisfies the specific circuit constraints
+        self.verify_proof(proof, public_inputs)
     }
 }
 

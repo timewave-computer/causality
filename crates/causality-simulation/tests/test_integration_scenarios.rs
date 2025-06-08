@@ -8,15 +8,9 @@
 //! - Real-world use case validation
 
 use anyhow::Result;
-use causality_simulation::{
-    SimulationEngine, SimulationConfig,
-    BranchingManager, BranchingConfig,
-    clock::{SimulatedClock, SimulatedTimestamp},
-    engine::ExecutionState,
-};
-use causality_core::machine::{Instruction, RegisterId};
+use causality_simulation::SimulationEngine;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::test as tokio_test;
 
 #[tokio_test]
@@ -45,11 +39,9 @@ async fn test_complete_development_lifecycle() -> Result<()> {
     engine.switch_to_branch(&opt_branch).await?;
     
     // Try different optimization approaches
-    let optimizations = vec![
-        "(consume (alloc 150))",
+    let optimizations = ["(consume (alloc 150))",
         "(tensor (consume (alloc 100)) (consume (alloc 200)))",
-        "(alloc 500)",
-    ];
+        "(alloc 500)"];
     
     let mut optimization_results = Vec::new();
     for (i, opt_program) in optimizations.iter().enumerate() {
@@ -565,15 +557,13 @@ async fn test_real_world_use_case_simulation() -> Result<()> {
 async fn test_comprehensive_integration_suite() -> Result<()> {
     println!("=== Running Comprehensive Integration Test Suite ===");
     
-    let integration_tests = vec![
-        "complete_development_lifecycle",
+    let integration_tests = ["complete_development_lifecycle",
         "multi_branch_scenario_analysis", 
         "time_travel_debugging_workflow",
         "performance_scaling_analysis",
         "fault_tolerance_and_recovery",
         "concurrent_simulation_coordination",
-        "real_world_use_case_simulation",
-    ];
+        "real_world_use_case_simulation"];
     
     println!("  Integration test coverage: {} test scenarios", integration_tests.len());
     

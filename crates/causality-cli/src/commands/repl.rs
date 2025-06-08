@@ -97,7 +97,7 @@ impl ReplState {
     fn handle_repl_command(&mut self, input: &str) -> Result<String, anyhow::Error> {
         let parts: Vec<&str> = input[1..].split_whitespace().collect();
         
-        match parts.get(0) {
+        match parts.first() {
             Some(&"help") | Some(&"h") => Ok(self.print_help()),
             Some(&"debug") => {
                 self.config.debug = !self.config.debug;

@@ -5,16 +5,11 @@ open Ocaml_causality_core
 open Ocaml_causality_lang
 open Ocaml_causality_serialization
 open Ocaml_causality_interop
-
 module LispValue = Value.LispValue
 module Expr = Expr.Expr
 
+type test_result = { name : string; passed : bool; error_msg : string option }
 (** Test result tracking *)
-type test_result = {
-  name: string;
-  passed: bool;
-  error_msg: string option;
-}
 
 let test_results = ref []
 
@@ -25,38 +20,33 @@ let run_test name test_fn =
   try
     let result = test_fn () in
     add_test_result name result None;
-    if result then
-      Printf.printf "✅ %s\n" name
-    else
-      Printf.printf "❌ %s\n" name
-  with
-  | exn ->
+    if result then Printf.printf "✅ %s\n" name else Printf.printf "❌ %s\n" name
+  with exn ->
     let error_msg = Printexc.to_string exn in
     add_test_result name false (Some error_msg);
     Printf.printf "❌ %s: %s\n" name error_msg
 
 (** Test FFI initialization *)
 let test_ffi_initialization () =
-  match Ffi.initialize_ffi () with
-  | Ok () -> true
-  | Error _ -> false
+  match Ffi.initialize_ffi () with Ok () -> true | Error _ -> false
 
 (** Test resource creation and linearity *)
 let test_resource_linearity () =
-  let domain_id = 
+  let domain_id =
     let base = "test_domain" in
     let padded = base ^ String.make (32 - String.length base) '\000' in
-    Bytes.of_string padded in
+    Bytes.of_string padded
+  in
   match Ffi.safe_create_resource "test_token" domain_id 100L with
-  | Ok (Some resource_id) ->
-    (* First consumption should succeed *)
-    (match Ffi.safe_consume_resource_by_id resource_id with
-     | Ok true ->
-       (* Second consumption should fail *)
-       (match Ffi.safe_consume_resource_by_id resource_id with
-        | Ok false | Error (InvalidResource _) -> true
-        | _ -> false)
-     | _ -> false)
+  | Ok (Some resource_id) -> (
+      (* First consumption should succeed *)
+      match Ffi.safe_consume_resource_by_id resource_id with
+      | Ok true -> (
+          (* Second consumption should fail *)
+          match Ffi.safe_consume_resource_by_id resource_id with
+          | Ok false | Error (InvalidResource _) -> true
+          | _ -> false)
+      | _ -> false)
   | _ -> false
 
 (** Test expression compilation *)
@@ -105,15 +95,13 @@ let test_lisp_value_serialization () =
 let test_expression_evaluation () =
   let ctx = Expr.empty_context in
   let expr = Expr.const (LispValue.int 42L) in
-  match Expr.eval_expr ctx expr with
-  | Ok (Int 42L) -> true
-  | _ -> false
+  match Expr.eval_expr ctx expr with Ok (Int 42L) -> true | _ -> false
 
 (** Test complex expression *)
 let test_complex_expression () =
-  let lambda_expr = Expr.lambda 
-    [LispValue.symbol "x"] 
-    (Expr.const (LispValue.symbol "x")) in
+  let lambda_expr =
+    Expr.lambda [ LispValue.symbol "x" ] (Expr.const (LispValue.symbol "x"))
+  in
   match Expr.compile_and_register_expr lambda_expr with
   | Ok _expr_id -> true
   | Error _ -> false
@@ -143,28 +131,31 @@ let run_integration_tests () =
 
   Printf.printf "\n📊 Test Results Summary\n";
   Printf.printf "=======================\n";
-  
+
   let total_tests = List.length !test_results in
-  let passed_tests = List.length (List.filter (fun r -> r.passed) !test_results) in
+  let passed_tests =
+    List.length (List.filter (fun r -> r.passed) !test_results)
+  in
   let failed_tests = total_tests - passed_tests in
-  
+
   Printf.printf "Total tests: %d\n" total_tests;
   Printf.printf "Passed: %d\n" passed_tests;
   Printf.printf "Failed: %d\n" failed_tests;
-  Printf.printf "Success rate: %.1f%%\n" (float_of_int passed_tests /. float_of_int total_tests *. 100.0);
-  
+  Printf.printf "Success rate: %.1f%%\n"
+    (float_of_int passed_tests /. float_of_int total_tests *. 100.0);
+
   if failed_tests > 0 then (
     Printf.printf "\n❌ Failed tests:\n";
-    List.iter (fun result ->
-      if not result.passed then
-        match result.error_msg with
-        | Some msg -> Printf.printf "  • %s: %s\n" result.name msg
-        | None -> Printf.printf "  • %s\n" result.name
-    ) !test_results
-  );
-  
-  Printf.printf "\n%s All integration tests completed!\n" 
+    List.iter
+      (fun result ->
+        if not result.passed then
+          match result.error_msg with
+          | Some msg -> Printf.printf "  • %s: %s\n" result.name msg
+          | None -> Printf.printf "  • %s\n" result.name)
+      !test_results);
+
+  Printf.printf "\n%s All integration tests completed!\n"
     (if failed_tests = 0 then "✅" else "⚠️")
 
 (* Run tests if this file is executed directly *)
-let () = run_integration_tests () 
+let () = run_integration_tests ()

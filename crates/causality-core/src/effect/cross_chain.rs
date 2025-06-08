@@ -460,7 +460,7 @@ impl CrossChainCoordinator {
     }
     
     /// Execute a single cross-chain operation
-    fn execute_cross_chain_operation(&mut self, operation: &mut CrossChainEffect) -> Result<CrossChainExecutionResult> {
+    fn _execute_cross_chain_operation(&mut self, operation: &mut CrossChainEffect) -> Result<CrossChainExecutionResult> {
         match &operation.state {
             CrossChainTxState::Preparing => {
                 // Execute source effect and generate proofs
@@ -553,13 +553,10 @@ impl CrossChainCoordinator {
                 operation.source_domain, operation.source_effect);
         
         // Simulate some processing time and potential failure
-        match &operation.source_effect.kind {
-            EffectExprKind::Perform { effect_tag, .. } => {
-                if effect_tag == "failing_effect" {
-                    return Err(Error::serialization("Source effect execution failed"));
-                }
+        if let EffectExprKind::Perform { effect_tag, .. } = &operation.source_effect.kind {
+            if effect_tag == "failing_effect" {
+                return Err(Error::serialization("Source effect execution failed"));
             }
-            _ => {}
         }
         
         Ok(())
@@ -953,7 +950,7 @@ mod tests {
 
     #[test]
     fn test_cross_chain_effect_validation() {
-        let mut coordinator = CrossChainCoordinator::new();
+        let coordinator = CrossChainCoordinator::new();
         
         // Valid cross-chain effect
         let valid_effect = CrossChainEffect::new(

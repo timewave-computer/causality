@@ -168,7 +168,7 @@ impl CircuitCompiler {
         if program.contains("lambda") {
             operations.push(Operation::Lambda { 
                 param_count: 1,
-                body: "x".to_string(),
+                #[allow(dead_code)] body: "x".to_string(),
             });
         }
         
@@ -252,7 +252,7 @@ impl CircuitCompiler {
                 });
                 *wire_counter += 1;
             }
-            Operation::Lambda { param_count, body: _ } => {
+            Operation::Lambda { param_count, #[allow(dead_code)] body: _ } => {
                 // Lambda creates a function gate
                 gates.push(CircuitGate {
                     gate_type: "function".to_string(),
@@ -371,7 +371,7 @@ struct ParsedProgram {
 enum Operation {
     Alloc { size: u32 },
     Consume { resource_id: u32 },
-    Lambda { param_count: usize, body: String },
+    Lambda { param_count: usize, #[allow(dead_code)] body: String },
     Tensor { dimensions: Vec<u32> },
     Compute { operation: String },
 }

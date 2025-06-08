@@ -1,6 +1,8 @@
 # Causality
 
-A programming environment for verifiable distributed programs using a linear resource model.
+Linear resource programming for distributed verifiable computation.
+
+*This project is at an exterimental stage and changing rapidly.*
 
 ![](./causality.png)
 

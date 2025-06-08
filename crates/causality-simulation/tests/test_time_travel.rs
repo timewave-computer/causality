@@ -7,13 +7,7 @@
 //! - What-if analysis scenarios
 
 use anyhow::Result;
-use causality_simulation::{
-    SimulationEngine, SimulationConfig,
-    clock::{SimulatedClock, SimulatedTimestamp},
-    snapshot::{SnapshotManager, SnapshotId},
-};
-use causality_core::machine::{Instruction, RegisterId};
-use std::time::Duration;
+use causality_simulation::SimulationEngine;
 use std::collections::HashMap;
 use tokio::test as tokio_test;
 

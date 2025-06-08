@@ -23,6 +23,12 @@ pub struct CompilerBenchmark {
     results: Vec<BenchmarkResult>,
 }
 
+impl Default for CompilerBenchmark {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompilerBenchmark {
     pub fn new() -> Self {
         Self {

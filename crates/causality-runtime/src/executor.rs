@@ -36,7 +36,7 @@ impl Executor {
         
         // Execute each instruction in sequence
         while self.pc < self.instructions.len() {
-            if let Some(_) = self.step()? {
+            if (self.step()?).is_some() {
                 // Continue execution
             } else {
                 break;

@@ -2,7 +2,6 @@
  (public_name ocaml-causality.system)
  (name causality_system)
  (libraries unix)
- (modules 
-  system_content_addressing
-  system_errors)
- (preprocess (pps ppx_deriving.show ppx_deriving.eq))) 
+ (modules system_content_addressing system_errors)
+ (preprocess
+  (pps ppx_deriving.show ppx_deriving.eq)))

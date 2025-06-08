@@ -3,9 +3,8 @@
 //! This module provides optimization strategies for reordering and scheduling
 //! effects to minimize execution cost and maximize parallelization opportunities.
 
+use crate::MockEffect;
 use std::collections::HashMap;
-use crate::engine::MockEffect;
-use causality_core::machine::instruction::RegisterId;
 
 /// Cost metric for effect execution
 #[derive(Debug, Clone, PartialEq)]
@@ -224,7 +223,7 @@ impl SimulationOptimizer {
     }
     
     /// Optimize for parallelism (internal method for balanced optimization)
-    fn optimize_for_parallelism(&self, program: &str) -> String {
+    fn _optimize_for_parallelism(&self, program: &str) -> String {
         // Mock parallelism optimization
         // In reality, this would:
         // - Identify independent operations
@@ -391,7 +390,7 @@ impl EffectOptimizer {
             execution_order,
             parallel_batches,
             cost_savings,
-            strategy_used: self.config.strategy.clone(),
+            strategy_used: self.config.strategy,
         }
     }
     
@@ -432,7 +431,7 @@ impl EffectOptimizer {
         db.insert("network_download".to_string(), EffectCost::new(6, 150, 1024, 4096));
         
         // Transfer effects
-        let transfer_effect = MockEffect {
+        let _transfer_effect = MockEffect {
             call: crate::engine::MockEffectCall {
                 tag: "transfer".to_string(),
                 args: vec!["sender".to_string(), "receiver".to_string(), "100".to_string()],
@@ -590,7 +589,7 @@ pub struct CustomOptimizationWeights {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_core::machine::instruction::RegisterId;
+    
     
     fn create_test_effect(tag: &str, gas: u64, time: u64, parallelizable: bool) -> OptimizableEffect {
         OptimizableEffect {

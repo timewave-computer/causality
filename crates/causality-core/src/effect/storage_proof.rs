@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use crate::lambda::base::Value;
-use crate::{EntityId, ExprId};
 use crate::effect::handler_registry::{EffectHandler, EffectResult};
 use crate::effect::cross_chain::{BlockchainDomain, DomainConfig};
 use hex;
@@ -641,16 +640,16 @@ pub struct StorageProofHandlerConfig {
 #[derive(Debug, Clone)]
 struct StorageProofRequest {
     /// Request identifier
-    pub id: String,
+    pub _id: String,
     
     /// Associated storage proof effect
-    pub effect: StorageProofEffect,
+    pub _effect: StorageProofEffect,
     
     /// Request status
     pub status: RequestStatus,
     
     /// Creation timestamp
-    pub created_at: u64,
+    pub _created_at: u64,
     
     /// Number of retry attempts
     pub retry_count: u32,
@@ -661,16 +660,17 @@ struct StorageProofRequest {
 
 /// Storage proof request status
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // These variants will be used in future implementations
 enum RequestStatus {
-    /// Request is pending
+    /// Request is waiting to be picked up by a processor
     Pending,
-    /// Request is being processed
+    /// Request is currently being processed
     Processing,
-    /// Request completed successfully
+    /// Request has been completed successfully
     Completed,
-    /// Request failed
+    /// Request failed with an error
     Failed,
-    /// Request was cancelled
+    /// Request was cancelled before completion
     Cancelled,
 }
 
@@ -705,10 +705,10 @@ impl StorageProofEffectHandler {
                 .as_millis());
         
         let request = StorageProofRequest {
-            id: request_id.clone(),
-            effect: effect.clone(),
+            _id: request_id.clone(),
+            _effect: effect.clone(),
             status: RequestStatus::Pending,
-            created_at: std::time::SystemTime::now()
+            _created_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
@@ -1119,7 +1119,7 @@ impl EffectHandler for StorageProofEffectHandler {
             match serde_json::from_str::<StorageProofEffect>(effect_json.as_str()) {
                 Ok(_effect) => {
                     // For now, just return a mock result to avoid recursion
-                    return Ok(Value::Symbol(crate::system::Str::from("cached_result".to_string())));
+                    Ok(Value::Symbol(crate::system::Str::from("cached_result".to_string())))
                 }
                 Err(e) => Err(crate::system::error::Error::serialization(format!("Failed to parse storage proof effect: {}", e))),
             }
@@ -1152,6 +1152,16 @@ impl std::fmt::Display for StorageProofEffect {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::effect::cross_chain::BlockchainDomain;
+
+    fn create_test_effect() -> StorageProofEffect {
+        StorageProofEffect::new(
+            "test-effect".to_string(),
+            "Test storage proof effect".to_string(),
+            vec![],
+            vec![BlockchainDomain::Ethereum { chain_id: 1 }],
+        )
+    }
 
     #[test]
     fn test_storage_proof_effect_creation() {

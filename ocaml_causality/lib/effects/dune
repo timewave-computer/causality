@@ -1,7 +1,3 @@
 (library
  (name ocaml_causality_effects)
- (libraries
-  causality_lambda
-  causality_machine
-  causality_system
-  unix)) 
+ (libraries causality_lambda causality_machine causality_system unix))

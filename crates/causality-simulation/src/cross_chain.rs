@@ -11,9 +11,6 @@ use std::{
 };
 use serde::{Serialize, Deserialize};
 use uuid;
-use crate::engine::SimulationEngine;
-use anyhow::Result;
-use rand::prelude::*;
 
 /// Simple test suite for cross-chain testing
 #[derive(Debug, Clone)]
@@ -183,7 +180,7 @@ pub struct CrossChainTestExecutor {
     clock: SimulatedClock,
     
     /// Cross-chain snapshot manager
-    snapshot_manager: SnapshotManager,
+    _snapshot_manager: SnapshotManager,
 }
 
 /// Single chain executor for cross-chain scenarios
@@ -425,7 +422,7 @@ impl CrossChainTestExecutor {
             chain_executors: HashMap::new(),
             message_relay: MessageRelay::new(),
             clock,
-            snapshot_manager: SnapshotManager::default(),
+            _snapshot_manager: SnapshotManager::default(),
         }
     }
     
@@ -520,7 +517,7 @@ impl CrossChainTestExecutor {
     }
     
     /// Process messages in transit
-    async fn process_messages(&mut self) -> SimulationResult<()> {
+    async fn _process_messages(&mut self) -> SimulationResult<()> {
         let current_time = self.clock.now();
         let mut delivered_messages = Vec::new();
         
@@ -580,7 +577,7 @@ impl CrossChainTestExecutor {
     }
     
     /// Handle scenario timeout
-    async fn handle_scenario_timeout(&mut self, scenario: &CrossChainTestScenario) -> SimulationResult<CrossChainTestResult> {
+    async fn _handle_scenario_timeout(&mut self, scenario: &CrossChainTestScenario) -> SimulationResult<CrossChainTestResult> {
         // Mark all running chains as timed out
         for executor in self.chain_executors.values_mut() {
             if executor.status == ChainExecutorStatus::Running {
@@ -670,7 +667,7 @@ impl CrossChainTestExecutor {
         let mut chain_results = HashMap::new();
         
         // Execute each chain according to dependencies
-        for (chain_id, _config) in &scenario.chain_configs {
+        for chain_id in scenario.chain_configs.keys() {
             if let Some(executor) = self.chain_executors.get_mut(chain_id) {
                 // Set up chain for execution
                 executor.status = ChainExecutorStatus::Running;
@@ -754,6 +751,12 @@ impl CrossChainTestExecutor {
     }
 }
 
+impl Default for MessageRelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MessageRelay {
     /// Create a new message relay
     pub fn new() -> Self {
@@ -818,6 +821,12 @@ pub struct CrossChainResult {
 #[derive(Debug, Clone)]
 pub struct ResourceManager {
     resources: HashMap<String, u64>,
+}
+
+impl Default for ResourceManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ResourceManager {

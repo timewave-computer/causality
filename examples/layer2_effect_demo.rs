@@ -120,7 +120,7 @@ fn main() -> Result<()> {
     // 3. Set up intent evaluator
     println!("3. Setting up intent evaluator...");
     let domain_id = DomainId::default();
-    let synthesizer = FlowSynthesizer::new(domain_id.clone());
+    let synthesizer = FlowSynthesizer::new(domain_id);
     let evaluator = IntentEvaluator::new(synthesizer, registry);
     
     // 4. Create and evaluate simple intents

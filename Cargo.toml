@@ -11,6 +11,7 @@ members = [
   "crates/causality-lisp",
   "crates/causality-ffi",  # Re-enabled for FFI support
   "e2e",
+  "e2e/cli",
 ]
 resolver = "2"
 
@@ -35,6 +36,9 @@ chrono = { version = "0.4.34", features = ["serde"] }
 rand = "0.8.5"
 tokio-test = "0.4.3"
 tempfile = "3.8.1"
+
+# Causality crates for integration
+causality-core = { path = "../../crates/causality-core" }
 
 [workspace.lints.rust]
 unsafe_code = "warn"

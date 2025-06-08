@@ -220,7 +220,7 @@ impl SnapshotManager {
     }
     
     /// Helper method to calculate checksum
-    fn calculate_checksum(&self, data: &str) -> String {
+    fn _calculate_checksum(&self, data: &str) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         

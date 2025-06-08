@@ -3,6 +3,8 @@
 //! This module provides types for tracking and verifying blockchain storage state
 //! using content addressing and cryptographic commitments.
 
+#![allow(clippy::result_large_err)]
+
 use crate::system::{EntityId, Str, ContentAddressable, Error, Result};
 use crate::system::serialization::ToBytes;
 use serde::{Deserialize, Serialize};
@@ -81,7 +83,7 @@ impl StorageCommitment {
         let mut hasher = Sha256::new();
         hasher.update(value);
         let computed_hash = hasher.finalize();
-        computed_hash.as_slice() == &self.value_hash
+        computed_hash.as_slice() == self.value_hash
     }
 }
 
@@ -155,21 +157,21 @@ impl StorageKeyDerivation {
                 StorageKeyComponent::Address(addr) => {
                     let mut padded = [0u8; 32];
                     padded[12..].copy_from_slice(addr);
-                    hasher.update(&padded);
+                    hasher.update(padded);
                 }
                 StorageKeyComponent::Uint256(value) => hasher.update(value),
                 StorageKeyComponent::String(s) => hasher.update(s.value.as_bytes()),
                 StorageKeyComponent::ArrayIndex(idx) => {
                     let mut bytes = [0u8; 32];
                     bytes[24..].copy_from_slice(&idx.to_be_bytes());
-                    hasher.update(&bytes);
+                    hasher.update(bytes);
                 }
             }
         }
         
         let mut base_bytes = [0u8; 32];
         base_bytes[24..].copy_from_slice(&self.base_slot.to_be_bytes());
-        hasher.update(&base_bytes);
+        hasher.update(base_bytes);
         
         let result = hasher.finalize();
         self.derived_key = Str::from(format!("0x{}", hex::encode(result)));
@@ -249,8 +251,8 @@ impl StorageCommitmentBatch {
             .iter()
             .map(|c| {
                 let mut hasher = Sha256::new();
-                hasher.update(&c.id.to_bytes());
-                hasher.update(&c.value_hash);
+                hasher.update(c.id.to_bytes());
+                hasher.update(c.value_hash);
                 let result = hasher.finalize();
                 let mut hash = [0u8; 32];
                 hash.copy_from_slice(&result);
@@ -263,11 +265,11 @@ impl StorageCommitmentBatch {
             
             for chunk in hashes.chunks(2) {
                 let mut hasher = Sha256::new();
-                hasher.update(&chunk[0]);
+                hasher.update(chunk[0]);
                 if chunk.len() > 1 {
-                    hasher.update(&chunk[1]);
+                    hasher.update(chunk[1]);
                 } else {
-                    hasher.update(&chunk[0]);
+                    hasher.update(chunk[0]);
                 }
                 let result = hasher.finalize();
                 let mut hash = [0u8; 32];

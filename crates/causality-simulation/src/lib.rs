@@ -36,8 +36,8 @@ pub use fault_injection::*;
 pub use snapshot::*;
 pub use visualization::*;
 pub use error::*;
-pub use effect_runner::*;
-pub use cross_chain::*;
+pub use effect_runner::{EffectTestRunner, MockGenerator, MockHandlerRegistry, TestValue, EffectTestResult, ExpectedOutcome};
+pub use cross_chain::{CrossChainTestExecutor, CrossChainTestScenario, TestSuite as CrossChainTestSuite};
 pub use branching::*;
 pub use time_travel::*;
 pub use optimizer::*;
@@ -53,7 +53,6 @@ pub type BranchManager = branching::BranchingManager;
 
 // Re-export specific types that the e2e test expects
 pub use cross_chain::TestExecution;
-pub use effect_runner::MockGenerator;
 
 // Simulation engine for testing algebraic effects
 //
@@ -125,11 +124,11 @@ mod integration_tests {
     #[test]
     fn test_cli_api_commands_work() {
         // Verify CLI commands can be constructed properly
-        let cli_test_command = format!("causality test-effects discover --category defi");
+        let cli_test_command = "causality test-effects discover --category defi".to_string();
         assert!(cli_test_command.contains("test-effects"));
         
         // Verify API endpoints can be constructed properly  
-        let api_endpoint = format!("/effects/discover?category=defi&detailed=true");
+        let api_endpoint = "/effects/discover?category=defi&detailed=true".to_string();
         assert!(api_endpoint.contains("/effects/"));
         
         // These would be tested with actual CLI/API in a full integration test

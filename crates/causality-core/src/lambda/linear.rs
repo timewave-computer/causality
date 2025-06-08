@@ -165,7 +165,7 @@ impl<T: Clone> LinearResource<T, Relevant> {
 /// Semantic aliases:
 /// - must_use() = !CAN_DROP (Linear & Relevant)
 /// - use_once() = !CAN_COPY (Linear & Affine)
-
+///
 /// Trait for single-use consumption (Linear and Affine)
 pub trait SingleUse: Sized {
     /// Consume the value exactly once

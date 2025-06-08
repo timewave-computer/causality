@@ -6,7 +6,6 @@
 
 // use causality_types::core::contextual_error::DefaultErrorContext; // Unused
 use clap::{Parser, Subcommand, Args};
-use std::process;
 use std::sync::Arc;
 
 mod commands;
@@ -41,7 +40,7 @@ use error::CliErrorHandler;
 )]
 struct Cli {
     /// Enable verbose output globally
-    #[arg(short, long, global = true, help = "Enable detailed output for debugging")]
+    #[arg(long, global = true, help = "Enable detailed output for debugging")]
     verbose: bool,
 
     /// Suppress non-essential output
@@ -75,13 +74,6 @@ enum Command {
     Repl {
         #[command(flatten)]
         repl_args: ReplArgs,
-    },
-
-    /// 📚 Help system and guided tutorials  
-    #[command(name = "help", alias = "h")]
-    Help {
-        #[command(subcommand)]
-        topic: Option<HelpTopic>,
     },
 
     /// 🏗️ Project management and scaffolding
@@ -176,27 +168,6 @@ struct ReplArgs {
 }
 
 #[derive(Debug, Subcommand)]
-enum HelpTopic {
-    /// Framework overview and core concepts
-    Tutorial,
-    
-    /// Step-by-step guides for common tasks
-    Guides,
-    
-    /// Language reference and syntax
-    Reference,
-    
-    /// Example projects and code snippets
-    Examples,
-    
-    /// API documentation
-    Api,
-    
-    /// Troubleshooting and FAQ
-    Troubleshooting,
-}
-
-#[derive(Debug, Subcommand)]
 enum ProjectAction {
     /// Create a new Causality project
     #[command(name = "new", alias = "n")]
@@ -267,7 +238,7 @@ enum ProjectAction {
         package: String,
         
         /// Package version
-        #[arg(short, long, help = "Specify version requirement")]
+        #[arg(long, help = "Specify version requirement")]
         version: Option<String>,
     },
 }
@@ -509,7 +480,7 @@ enum DeployAction {
         proof: String,
         
         /// Target chains
-        #[arg(short, long)]
+        #[arg(long)]
         chains: String,
         
         /// Dry run only
@@ -653,7 +624,7 @@ enum TestAction {
         pattern: Option<String>,
         
         /// Property-based testing
-        #[arg(short, long)]
+        #[arg(long)]
         property_based: bool,
         
         /// Number of test cases
@@ -886,10 +857,6 @@ async fn main() -> anyhow::Result<()> {
             handle_repl_command(config, error_handler.clone()).await
         }
         
-        Command::Help { topic } => {
-            handle_help_command(topic, error_handler.clone()).await
-        }
-        
         Command::Project { action } => {
             handle_project_command(action, error_handler.clone()).await
         }
@@ -940,63 +907,6 @@ async fn main() -> anyhow::Result<()> {
 //-----------------------------------------------------------------------------
 // Command Handlers
 //-----------------------------------------------------------------------------
-
-async fn handle_help_command(
-    topic: Option<HelpTopic>,
-    _error_handler: Arc<CliErrorHandler>,
-) -> anyhow::Result<()> {
-    use colored::Colorize;
-    
-    match topic {
-        Some(HelpTopic::Tutorial) => {
-            println!("{}", "🎓 Causality Framework Tutorial".cyan().bold());
-            println!("\n{}", "Core Concepts:".yellow());
-            println!("  {} Three-layer architecture (Layer 0: Register Machine, Layer 1: Lisp, Layer 2: Effects)", "•".blue());
-            println!("  {} Resource-based programming with linear types", "•".blue());
-            println!("  {} Zero-knowledge proof integration", "•".blue());
-            println!("  {} Cross-chain deployment capabilities", "•".blue());
-            
-            println!("\n{}", "Quick Start:".yellow());
-            println!("  {} Start the REPL: causality repl", "1.".green());
-            println!("  {} Create a project: causality project new my-app", "2.".green());
-            println!("  {} Compile code: causality dev compile -i src/main.lisp -o build/", "3.".green());
-            println!("  {} Run tests: causality test unit", "4.".green());
-        }
-        Some(HelpTopic::Guides) => {
-            println!("{}", "📚 Step-by-Step Guides".cyan().bold());
-            println!("\n{}", "Available Guides:".yellow());
-            println!("  {} Getting Started with the REPL", "•".blue());
-            println!("  {} Building Your First DeFi Application", "•".blue());
-            println!("  {} Zero-Knowledge Proof Development", "•".blue());
-            println!("  {} Cross-Chain Deployment", "•".blue());
-            println!("  {} Testing and Debugging Strategies", "•".blue());
-        }
-        Some(HelpTopic::Reference) => {
-            println!("{}", "📖 Language Reference".cyan().bold());
-            println!("\n{}", "Causality Lisp Syntax:".yellow());
-            println!("  {} (alloc <value>)           - Allocate a resource", "•".blue());
-            println!("  {} (consume <resource>)      - Consume a resource", "•".blue());
-            println!("  {} (tensor <left> <right>)   - Create tensor pair", "•".blue());
-            println!("  {} (lambda (<param>) <body>) - Define function", "•".blue());
-            println!("  {} (let-tensor <expr> <l> <r> <body>) - Tensor binding", "•".blue());
-        }
-        Some(HelpTopic::Examples) => {
-            println!("{}", "💡 Example Projects".cyan().bold());
-            println!("\n{}", "Project Templates:".yellow());
-            println!("  {} causality project new --template defi", "•".blue());
-            println!("  {} causality project new --template privacy", "•".blue());
-            println!("  {} causality project new --template zk", "•".blue());
-        }
-        _ => {
-            println!("{}", "🚀 Causality CLI Help".cyan().bold());
-            println!("\nUse 'causality help <topic>' for specific topics:");
-            println!("  {} Tutorial, Guides, Reference, Examples, API, Troubleshooting", "Topics:".yellow());
-            println!("\nOr use 'causality <command> --help' for command-specific help.");
-        }
-    }
-    
-    Ok(())
-}
 
 async fn handle_dev_command(
     action: DevAction,
@@ -1162,7 +1072,7 @@ async fn handle_deploy_command(
             };
             simulate_command.execute().await
         }
-        DeployAction::Submit { circuit, proof, chains, dry_run, max_gas_price: _ } => {
+        DeployAction::Submit { circuit, proof, chains, dry_run, max_gas_price } => {
             handle_submit_transaction_command(circuit, proof, chains, dry_run, false, error_handler).await
         }
         DeployAction::Report { scenario, output, include_proofs, include_gas, include_privacy } => {
@@ -1449,7 +1359,7 @@ async fn handle_execute_command(
     
     println!("{}", "⚡ Executing Causality program...".cyan().bold());
     
-    let source_code = get_source_input(file, source)?;
+    let _source_code = get_source_input(file, source)?;
     
     if trace {
         println!("   Execution trace enabled");

@@ -1,14 +1,14 @@
-//! Cross-domain ZK proof composition and verification
+//! Cross-domain zero-knowledge proof coordination
 //!
-//! This module provides functionality to split computations across multiple domains,
-//! generate proofs for each domain, and compose them into a single verifiable proof.
+//! This module manages ZK proof generation and verification across multiple
+//! computational domains with different resource constraints and requirements.
 
-use crate::{ZkCircuit, ZkProof, ZkWitness, backends::ZkBackend};
-use crate::backends::mock_backend::MockBackend;
-use crate::error::{ProofResult, ProofError};
+use crate::{ZkBackend, ZkCircuit, ZkProof, ZkWitness, ProofResult, ProofError};
 use causality_core::machine::instruction::Instruction;
-use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
+use sha2::{Sha256, Digest};
+use chrono;
+use serde::{Serialize, Deserialize};
 
 /// Domain identifier for effect isolation
 pub type DomainId = String;
@@ -53,8 +53,10 @@ pub struct CompositeProof {
 
 /// Domain partition strategy for splitting computations
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum DomainPartition {
     /// Partition by effect type (e.g., DeFi, gaming, messaging)
+    #[default]
     ByEffectType,
     
     /// Partition by computational complexity
@@ -70,22 +72,72 @@ pub enum DomainPartition {
     ByCircuitSize { threshold: usize },
 }
 
-impl Default for DomainPartition {
+
+/// Mock backend for testing
+#[derive(Debug)]
+pub struct MockBackend {
+    name: String,
+}
+
+impl Default for MockBackend {
     fn default() -> Self {
-        DomainPartition::ByEffectType
+        Self::new()
     }
 }
 
-/// Cross-domain ZK proof manager
+impl MockBackend {
+    pub fn new() -> Self {
+        Self {
+            name: "mock".to_string(),
+        }
+    }
+}
+
+impl ZkBackend for MockBackend {
+    fn generate_proof(&self, _circuit: &ZkCircuit, _witness: &ZkWitness) -> ProofResult<ZkProof> {
+        Ok(ZkProof::new(
+            "mock_circuit".to_string(),
+            vec![1, 2, 3, 4],
+            vec![5, 6, 7, 8],
+        ))
+    }
+    
+    fn verify_proof(&self, _proof: &ZkProof, _public_inputs: &[i64]) -> Result<bool, crate::error::VerificationError> {
+        Ok(true)
+    }
+    
+    fn backend_name(&self) -> &'static str {
+        "mock"
+    }
+    
+    fn is_available(&self) -> bool {
+        true
+    }
+}
+
+/// Cross-domain zero-knowledge coordination manager
 pub struct CrossDomainZkManager {
-    /// Available ZK backends for different domains
-    backends: HashMap<DomainId, Box<dyn ZkBackend>>,
+    /// Domain-specific ZK backends
+    backends: HashMap<String, Box<dyn ZkBackend>>,
+    
+    /// Cross-domain proof aggregation
+    aggregator: ProofAggregator,
+    
+    /// Verification coordination
+    verification_coordinator: VerificationCoordinator,
+    
+    /// Circuit cache for reusing compiled circuits
+    #[allow(dead_code)]
+    circuit_cache: HashMap<String, ZkCircuit>,
     
     /// Domain partition strategy
     partition_strategy: DomainPartition,
-    
-    /// Circuit cache for reuse across domains
-    circuit_cache: HashMap<String, ZkCircuit>,
+}
+
+impl Default for CrossDomainZkManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CrossDomainZkManager {
@@ -98,8 +150,10 @@ impl CrossDomainZkManager {
     pub fn new_with_partition(partition_strategy: DomainPartition) -> Self {
         Self {
             backends: HashMap::new(),
-            partition_strategy,
+            aggregator: ProofAggregator::new(),
+            verification_coordinator: VerificationCoordinator::new(),
             circuit_cache: HashMap::new(),
+            partition_strategy,
         }
     }
     
@@ -251,7 +305,6 @@ impl CrossDomainZkManager {
         }
         
         // Simple hash-based consistency proof
-        use sha2::{Sha256, Digest};
         let mut hasher = Sha256::new();
         hasher.update(&consistency_data);
         let consistency_proof = hasher.finalize().to_vec();
@@ -391,6 +444,7 @@ impl CrossDomainZkManager {
     }
     
     /// Calculate a simple hash of witness data
+    #[allow(dead_code)]
     fn calculate_witness_hash(&self, witness_data: &[u8]) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -459,6 +513,48 @@ pub struct DomainCoordinationResult {
     pub partition_strategy: String,
 }
 
+/// Cross-domain proof aggregation manager
+#[derive(Debug, Clone)]
+pub struct ProofAggregator {
+    /// Maximum proofs per batch
+    max_batch_size: usize,
+}
+
+impl Default for ProofAggregator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ProofAggregator {
+    pub fn new() -> Self {
+        Self {
+            max_batch_size: 1000,
+        }
+    }
+}
+
+/// Verification coordination manager
+#[derive(Debug, Clone)]
+pub struct VerificationCoordinator {
+    /// Coordinator endpoint
+    endpoint: String,
+}
+
+impl Default for VerificationCoordinator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl VerificationCoordinator {
+    pub fn new() -> Self {
+        Self {
+            endpoint: "http://coordinator.timewave.computer:8080".to_string(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -523,9 +619,9 @@ mod tests {
         let mut manager = CrossDomainZkManager::new_with_partition(DomainPartition::ByEffectType);
         
         // Register mock backends for different domains
-        manager.register_backend("resource".to_string(), create_backend(crate::BackendType::Valence));
-        manager.register_backend("computation".to_string(), create_backend(crate::BackendType::Valence));
-        manager.register_backend("data".to_string(), create_backend(crate::BackendType::Valence));
+        manager.register_backend("resource".to_string(), create_backend(crate::BackendType::Mock));
+        manager.register_backend("computation".to_string(), create_backend(crate::BackendType::Mock));
+        manager.register_backend("data".to_string(), create_backend(crate::BackendType::Mock));
         
         let instructions = vec![
             Instruction::Alloc { 
@@ -541,15 +637,19 @@ mod tests {
             vec![5, 6, 7, 8],
         );
         
-        // Note: This test will fail in practice since we're using real backends
-        // In a real test, we'd use mock backends that don't actually generate proofs
-        let result = manager.generate_cross_domain_proof(instructions, witness);
+        // Test partitioning functionality without actually generating proofs
+        let partitions = manager.partition_instructions(&instructions);
+        assert!(!partitions.is_empty());
         
-        // For now, we just check that the function runs without panicking
-        // In practice, we'd need mock backends for proper testing
-        match result {
-            Ok(_) => println!("✓ Cross-domain proof generation completed"),
-            Err(e) => println!("⚠ Cross-domain proof generation failed (expected): {:?}", e),
-        }
+        // Verify that the instruction was properly classified
+        let alloc_domain = manager.classify_instruction_domain(&instructions[0]);
+        assert_eq!(alloc_domain, "resource");
+        
+        // Test that we have backends registered for the domains we need
+        assert!(manager.backends.contains_key("resource"));
+        assert!(manager.backends.contains_key("computation"));
+        assert!(manager.backends.contains_key("data"));
+        
+        println!("✓ Cross-domain proof generation setup completed successfully");
     }
 } 

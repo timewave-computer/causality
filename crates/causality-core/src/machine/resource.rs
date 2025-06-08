@@ -1,7 +1,10 @@
-//! Resource management and heap operations
+//! Resource management for the register machine
 //!
-//! This module implements linear resource management with heap allocation,
-//! consumption tracking, and ownership semantics for the register machine.
+//! This module handles linear and affine resources in the register machine,
+//! ensuring proper resource consumption and preventing use-after-free.
+
+#![allow(clippy::result_large_err)]
+#![allow(clippy::too_many_arguments)]
 
 use crate::{
     system::{
@@ -319,7 +322,7 @@ impl Resource {
             Value::Unit => MachineValue::Unit,
             Value::Bool(b) => MachineValue::Bool(*b),
             Value::Int(i) => MachineValue::Int(*i),
-            Value::Symbol(s) => MachineValue::Symbol(Symbol::new(&s.as_str())),
+            Value::Symbol(s) => MachineValue::Symbol(Symbol::new(s.as_str())),
             _ => MachineValue::Unit, // Fallback for complex types
         }
     }

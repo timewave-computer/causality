@@ -2,46 +2,41 @@
 (* Purpose: Merkle tree construction from hash values *)
 
 type hash = string
+type merkle_tree = Leaf of hash | Node of hash * merkle_tree * merkle_tree
 
-type merkle_tree = 
-  | Leaf of hash
-  | Node of hash * merkle_tree * merkle_tree
-
-let hash_combine (left : hash) (right : hash) : hash = 
+let hash_combine (left : hash) (right : hash) : hash =
   (* Simple hash combination - in practice would use proper SHA256 *)
   Digest.to_hex (Digest.string (left ^ right))
 
 let merkle_root = function
   | [] -> Digest.to_hex (Digest.string "")
-  | [h] -> h
-  | hashes -> 
-    let rec build_level level =
-      match level with
-      | [] -> []
-      | [h] -> [h]
-      | h1 :: h2 :: rest ->
-        let combined = hash_combine h1 h2 in
-        combined :: build_level rest
-    in
-    let rec build_tree level =
-      match level with
-      | [root] -> root
-      | _ -> build_tree (build_level level)
-    in
-    build_tree hashes
+  | [ h ] -> h
+  | hashes ->
+      let rec build_level level =
+        match level with
+        | [] -> []
+        | [ h ] -> [ h ]
+        | h1 :: h2 :: rest ->
+            let combined = hash_combine h1 h2 in
+            combined :: build_level rest
+      in
+      let rec build_tree level =
+        match level with
+        | [ root ] -> root
+        | _ -> build_tree (build_level level)
+      in
+      build_tree hashes
 
 (* ------------ MERKLE TREE TYPES ------------ *)
 
 (** Merkle tree node *)
-type merkle_node =
-  | Leaf of bytes
-  | Node of merkle_node * merkle_node * bytes
+type merkle_node = Leaf of bytes | Node of merkle_node * merkle_node * bytes
 
-(** Merkle proof *)
 type merkle_proof = {
-  leaf_hash: bytes;
-  path: (bool * bytes) list; (* (is_right, sibling_hash) *)
+    leaf_hash : bytes
+  ; path : (bool * bytes) list (* (is_right, sibling_hash) *)
 }
+(** Merkle proof *)
 
 (* ------------ TREE OPERATIONS ------------ *)
 
@@ -74,4 +69,4 @@ type merkle_proof = {
 
 (* ------------ UTILITIES ------------ *)
 
-(* TODO: Add SMT utilities and helper functions *) 
+(* TODO: Add SMT utilities and helper functions *)

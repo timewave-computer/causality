@@ -8,12 +8,7 @@
 //! - Fuzzing integration for edge case discovery
 
 use anyhow::Result;
-use causality_simulation::{
-    SimulationEngine, SimulationConfig,
-    engine::ExecutionState,
-};
-use causality_core::machine::{Instruction, RegisterId};
-use std::collections::HashMap;
+use causality_simulation::SimulationEngine;
 use rand::Rng;
 use tokio::test as tokio_test;
 
@@ -100,11 +95,9 @@ impl ProgramGenerator {
     }
     
     fn generate_complex_program() -> String {
-        let programs = vec![
-            Self::generate_alloc_program(),
+        let programs = [Self::generate_alloc_program(),
             Self::generate_consume_program(), 
-            Self::generate_tensor_program(),
-        ];
+            Self::generate_tensor_program()];
         programs[rand::thread_rng().gen_range(0..programs.len())].clone()
     }
 }
@@ -163,7 +156,7 @@ async fn test_linearity_properties() -> Result<()> {
     // Property: Linear resources cannot be used multiple times
     let linearity_test = PropertyTest::new(
         "linearity_enforcement",
-        || ProgramGenerator::generate_consume_program(),
+        ProgramGenerator::generate_consume_program,
         |program| {
             tokio::runtime::Handle::current().block_on(async {
                 let mut engine = SimulationEngine::new();
@@ -194,7 +187,7 @@ async fn test_state_consistency_properties() -> Result<()> {
     // Property: State should remain consistent across all operations
     let consistency_test = PropertyTest::new(
         "state_consistency",
-        || ProgramGenerator::generate_complex_program(),
+        ProgramGenerator::generate_complex_program,
         |program| {
             tokio::runtime::Handle::current().block_on(async {
                 let mut engine = SimulationEngine::new();
@@ -238,7 +231,7 @@ async fn test_determinism_properties() -> Result<()> {
     // Property: Same program should produce identical results
     let determinism_test = PropertyTest::new(
         "deterministic_execution",
-        || ProgramGenerator::generate_complex_program(),
+        ProgramGenerator::generate_complex_program,
         |program| {
             tokio::runtime::Handle::current().block_on(async {
                 // Execute same program multiple times
@@ -436,7 +429,7 @@ async fn test_invariant_preservation() -> Result<()> {
     // Test that key system invariants are preserved across operations
     let invariant_test = PropertyTest::new(
         "system_invariants",
-        || ProgramGenerator::generate_complex_program(),
+        ProgramGenerator::generate_complex_program,
         |program| {
             tokio::runtime::Handle::current().block_on(async {
                 let mut engine = SimulationEngine::new();
@@ -522,7 +515,7 @@ async fn test_comprehensive_property_suite() -> Result<()> {
     // Combine multiple properties into a comprehensive test
     let comprehensive_test = PropertyTest::new(
         "comprehensive_properties",
-        || ProgramGenerator::generate_complex_program(),
+        ProgramGenerator::generate_complex_program,
         |program| {
             tokio::runtime::Handle::current().block_on(async {
                 let mut engine = SimulationEngine::new();

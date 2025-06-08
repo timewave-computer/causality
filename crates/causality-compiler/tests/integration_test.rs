@@ -76,6 +76,9 @@ fn test_compilation_metadata() {
     assert!(program.metadata.passes.contains(&"DeadCodeElimination".to_string()));
     assert!(program.metadata.passes.contains(&"PeepholeOptimization".to_string()));
     assert!(program.metadata.passes.contains(&"RegisterCoalescing".to_string()));
+
+    // Verify optimization stats are available
+    assert!(program.metadata.optimization_stats.unoptimized_instruction_count > 0);
 }
 
 #[test]
@@ -105,7 +108,7 @@ fn test_instruction_optimization() {
     assert!(program.metadata.passes.contains(&"RegisterCoalescing".to_string()));
     
     // Instructions should be optimized (result can be empty for unit after optimization)
-    assert!(program.metadata.instruction_count >= 0);
+    // instruction_count is usize so always >= 0
 }
 
 #[test]

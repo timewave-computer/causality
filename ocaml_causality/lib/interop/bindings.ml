@@ -31,9 +31,9 @@ module LispValue = struct
     | Symbol s -> s
     | List [] -> "()"
     | List l -> "(" ^ String.concat " " (List.map to_string_debug l) ^ ")"
-    | ResourceId rid -> "#<resource:" ^ (Bytes.to_string rid) ^ ">"
-    | ExprId eid -> "#<expr:" ^ (Bytes.to_string eid) ^ ">"
-    | Bytes b -> "#<bytes:" ^ (Bytes.to_string b) ^ ">"
+    | ResourceId rid -> "#<resource:" ^ Bytes.to_string rid ^ ">"
+    | ExprId eid -> "#<expr:" ^ Bytes.to_string eid ^ ">"
+    | Bytes b -> "#<bytes:" ^ Bytes.to_string b ^ ">"
 
   (* Type predicates *)
   let is_unit = function Unit -> true | _ -> false
@@ -104,7 +104,7 @@ module Expr = struct
   let const_int i = Const (LispValue.int i)
   let const_string s = Const (LispValue.string s)
   let const_bool b = Const (LispValue.bool b)
-  let const_unit = Const (LispValue.unit)
+  let const_unit = Const LispValue.unit
 
   (* Expression utilities *)
   let rec to_string = function
@@ -120,21 +120,23 @@ module Expr = struct
     | Let (name, value, body) ->
         "(let ((" ^ name ^ " " ^ to_string value ^ ")) " ^ to_string body ^ ")"
     | If (cond, then_expr, else_expr) ->
-        "(if " ^ to_string cond ^ " " ^ to_string then_expr ^ " " ^ to_string else_expr ^ ")"
+        "(if " ^ to_string cond ^ " " ^ to_string then_expr ^ " "
+        ^ to_string else_expr ^ ")"
     | Sequence exprs ->
         "(begin " ^ String.concat " " (List.map to_string exprs) ^ ")"
 
   (* Compilation to expr_id - would interface with Rust FFI *)
-  let compile_and_register_expr (expr: t) : (expr_id, causality_error) result =
+  let compile_and_register_expr (expr : t) : (expr_id, causality_error) result =
     let expr_str = to_string expr in
     let expr_bytes = Bytes.of_string expr_str in
     Ok expr_bytes
 
   (* Predefined expression lookup *)
-  let get_predefined_expr_id (name: string) : expr_id option =
+  let get_predefined_expr_id (name : string) : expr_id option =
     match name with
     | "issue_ticket_logic" -> Some (Bytes.of_string "issue_ticket_expr_id")
-    | "transfer_ticket_logic" -> Some (Bytes.of_string "transfer_ticket_expr_id")
+    | "transfer_ticket_logic" ->
+        Some (Bytes.of_string "transfer_ticket_expr_id")
     | _ -> None
 end
 
@@ -144,24 +146,25 @@ end
 
 module Intent = struct
   type t = {
-    mutable name: str_t;
-    mutable domain_id: str_t;
-    mutable input_resources: resource_id list;
-    mutable parameters: lisp_value list;
-    mutable lisp_logic: expr_id option;
-    mutable priority: int;
-    mutable outputs: resource_flow list;
+      mutable name : str_t
+    ; mutable domain_id : str_t
+    ; mutable input_resources : resource_id list
+    ; mutable parameters : lisp_value list
+    ; mutable lisp_logic : expr_id option
+    ; mutable priority : int
+    ; mutable outputs : resource_flow list
   }
 
-  let create ~name ~domain_id = {
-    name;
-    domain_id;
-    input_resources = [];
-    parameters = [];
-    lisp_logic = None;
-    priority = 0;
-    outputs = [];
-  }
+  let create ~name ~domain_id =
+    {
+      name
+    ; domain_id
+    ; input_resources = []
+    ; parameters = []
+    ; lisp_logic = None
+    ; priority = 0
+    ; outputs = []
+    }
 
   let add_input_resource intent resource_id =
     intent.input_resources <- resource_id :: intent.input_resources
@@ -169,22 +172,17 @@ module Intent = struct
   let add_parameter intent param =
     intent.parameters <- param :: intent.parameters
 
-  let set_lisp_logic intent expr_id =
-    intent.lisp_logic <- Some expr_id
-
-  let set_priority intent priority =
-    intent.priority <- priority
-
-  let add_output intent output =
-    intent.outputs <- output :: intent.outputs
+  let set_lisp_logic intent expr_id = intent.lisp_logic <- Some expr_id
+  let set_priority intent priority = intent.priority <- priority
+  let add_output intent output = intent.outputs <- output :: intent.outputs
 
   let submit intent : (unit, causality_error) result =
     try
-      Printf.printf "Submitting intent: %s to domain %s\n" 
-        intent.name intent.domain_id;
+      Printf.printf "Submitting intent: %s to domain %s\n" intent.name
+        intent.domain_id;
       Ok ()
-    with
-    | exn -> Error (FFIError ("Failed to submit intent: " ^ Printexc.to_string exn))
+    with exn ->
+      Error (FFIError ("Failed to submit intent: " ^ Printexc.to_string exn))
 end
 
 (* ========================================= *)
@@ -195,12 +193,14 @@ module System = struct
   let get_last_produced_resource_id () : resource_id =
     Bytes.of_string "last_resource_id"
 
-  let get_resource_by_id (_id: resource_id) : (resource option, causality_error) result =
+  let get_resource_by_id (_id : resource_id) :
+      (resource option, causality_error) result =
     Ok None
 
-  let get_domain_info (_domain_id: domain_id) : (typed_domain option, causality_error) result =
+  let get_domain_info (_domain_id : domain_id) :
+      (typed_domain option, causality_error) result =
     Ok None
 
   let get_system_metrics () : (str_t, causality_error) result =
     Ok "System metrics placeholder"
-end 
+end

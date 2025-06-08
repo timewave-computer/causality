@@ -8,7 +8,6 @@ use causality_simulation::{
     SimulationEngine, 
     SimulationConfig,
     BranchingManager,
-    BranchingConfig,
 };
 
 #[tokio::test]

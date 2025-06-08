@@ -160,6 +160,40 @@ pub type VerificationResult<T> = Result<T, VerificationError>;
 /// Result type for witness operations
 pub type WitnessResult<T> = Result<T, WitnessError>;
 
+/// Result type for batch verification operations
+#[derive(Debug, Clone)]
+pub struct BatchVerificationResult {
+    /// Total number of proofs verified
+    pub total_proofs: usize,
+    /// Number of successful verifications
+    pub successful_verifications: usize,
+    /// Number of failed verifications
+    pub failed_verifications: usize,
+    /// Individual verification results
+    pub individual_results: Vec<bool>,
+}
+
+impl BatchVerificationResult {
+    /// Create a new batch verification result
+    pub fn new(individual_results: Vec<bool>) -> Self {
+        let total_proofs = individual_results.len();
+        let successful_verifications = individual_results.iter().filter(|&&r| r).count();
+        let failed_verifications = total_proofs - successful_verifications;
+        
+        Self {
+            total_proofs,
+            successful_verifications,
+            failed_verifications,
+            individual_results,
+        }
+    }
+    
+    /// Check if all proofs were successfully verified
+    pub fn all_verified(&self) -> bool {
+        self.failed_verifications == 0
+    }
+}
+
 // Error conversions
 impl From<ZkError> for ProofError {
     fn from(err: ZkError) -> Self {

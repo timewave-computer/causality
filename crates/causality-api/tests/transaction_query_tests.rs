@@ -69,5 +69,5 @@ fn test_compile_only() {
     // This test doesn't actually test any chain functionality
     // It just verifies that the test file compiles correctly
     println!("Transaction query tests compile successfully!");
-    assert!(true);
+    // Test passes if we reach this point without compilation errors
 }

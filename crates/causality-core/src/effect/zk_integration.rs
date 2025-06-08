@@ -96,17 +96,17 @@ impl ZkProof {
         
         // 2. Generate deterministic mock proof components (A, B, C) using effect hash
         let mut hasher_a = Sha256::new();
-        hasher_a.update(&effect_hash.hash);
+        hasher_a.update(effect_hash.hash);
         hasher_a.update(b"component_a");
         let component_a = hasher_a.finalize();
         
         let mut hasher_b = Sha256::new();
-        hasher_b.update(&effect_hash.hash);
+        hasher_b.update(effect_hash.hash);
         hasher_b.update(b"component_b");
         let component_b = hasher_b.finalize();
         
         let mut hasher_c = Sha256::new();
-        hasher_c.update(&effect_hash.hash);
+        hasher_c.update(effect_hash.hash);
         hasher_c.update(b"component_c");
         let component_c = hasher_c.finalize();
         
@@ -116,10 +116,10 @@ impl ZkProof {
         
         // 3. Generate commitment hash
         let mut hasher = Sha256::new();
-        hasher.update(&component_a);
-        hasher.update(&component_b);
-        hasher.update(&component_c);
-        hasher.update(&effect_hash.hash);
+        hasher.update(component_a);
+        hasher.update(component_b);
+        hasher.update(component_c);
+        hasher.update(effect_hash.hash);
         let commitment = hasher.finalize();
         
         // 4. Add commitment to end of proof
@@ -172,7 +172,7 @@ impl ZkProof {
         hasher.update(component_a);
         hasher.update(component_b);
         hasher.update(component_c);
-        hasher.update(&self.effect_hash.hash);
+        hasher.update(self.effect_hash.hash);
         
         let commitment = hasher.finalize();
         

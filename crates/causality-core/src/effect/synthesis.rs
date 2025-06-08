@@ -382,7 +382,7 @@ impl FlowSynthesizer {
                     match effect_tag.as_str() {
                         "transfer" | "load_resource" | "produce_resource" => {
                             let transformation = self.extract_transformation_from_effect(effect_tag, args)
-                                .map_err(|e| ValidationError::InvalidSequence(e))?;
+                                .map_err(ValidationError::InvalidSequence)?;
                             transformations.push(transformation);
                         }
                         _ => {} // Other effects don't create resource transformations
@@ -479,9 +479,9 @@ impl ConstraintSolver {
     }
 }
 
-impl EffectLibrary {
+impl Default for EffectLibrary {
     /// Create an effect library with default templates
-    pub fn default() -> Self {
+    fn default() -> Self {
         let mut templates = HashMap::new();
         
         // Basic transfer template
@@ -702,135 +702,17 @@ impl EffectLibrary {
             ],
             implementation: EffectExpr::new(EffectExprKind::Perform {
                 effect_tag: "remove_liquidity".to_string(),
-                args: vec![Term::var("lp_tokens"), Term::var("pool"), Term::var("min_tokens")],
+                args: vec![Term::var("lp_tokens"), Term::var("pool")],
             }),
-            cost: 280,
-        });
-        
-        // Staking template
-        templates.insert("stake".to_string(), EffectTemplate {
-            name: "stake".to_string(),
-            inputs: vec![
-                ResourcePattern {
-                    resource_type: "Token".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: None,
-                    required_capabilities: vec!["read".to_string()],
-                },
-                ResourcePattern {
-                    resource_type: "StakingPool".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: Some(1),
-                    required_capabilities: vec!["write".to_string()],
-                }
-            ],
-            outputs: vec![
-                ResourcePattern {
-                    resource_type: "StakeToken".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: None,
-                    required_capabilities: vec![],
-                },
-                ResourcePattern {
-                    resource_type: "StakingPool".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: Some(1),
-                    required_capabilities: vec![],
-                }
-            ],
-            implementation: EffectExpr::new(EffectExprKind::Perform {
-                effect_tag: "stake".to_string(),
-                args: vec![Term::var("tokens"), Term::var("pool"), Term::var("duration")],
-            }),
-            cost: 180,
-        });
-        
-        // Lending template
-        templates.insert("lend".to_string(), EffectTemplate {
-            name: "lend".to_string(),
-            inputs: vec![
-                ResourcePattern {
-                    resource_type: "Token".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: None,
-                    required_capabilities: vec!["read".to_string()],
-                },
-                ResourcePattern {
-                    resource_type: "LendingPool".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: Some(1),
-                    required_capabilities: vec!["write".to_string()],
-                }
-            ],
-            outputs: vec![
-                ResourcePattern {
-                    resource_type: "DepositToken".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: None,
-                    required_capabilities: vec![],
-                },
-                ResourcePattern {
-                    resource_type: "LendingPool".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: Some(1),
-                    required_capabilities: vec![],
-                }
-            ],
-            implementation: EffectExpr::new(EffectExprKind::Perform {
-                effect_tag: "lend".to_string(),
-                args: vec![Term::var("tokens"), Term::var("pool"), Term::var("rate")],
-            }),
-            cost: 200,
-        });
-        
-        // Borrowing template
-        templates.insert("borrow".to_string(), EffectTemplate {
-            name: "borrow".to_string(),
-            inputs: vec![
-                ResourcePattern {
-                    resource_type: "Collateral".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: None,
-                    required_capabilities: vec!["read".to_string()],
-                },
-                ResourcePattern {
-                    resource_type: "LendingPool".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: Some(1),
-                    required_capabilities: vec!["write".to_string()],
-                }
-            ],
-            outputs: vec![
-                ResourcePattern {
-                    resource_type: "Token".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: None,
-                    required_capabilities: vec![],
-                },
-                ResourcePattern {
-                    resource_type: "DebtToken".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: None,
-                    required_capabilities: vec![],
-                },
-                ResourcePattern {
-                    resource_type: "LendingPool".to_string(),
-                    min_quantity: Some(1),
-                    max_quantity: Some(1),
-                    required_capabilities: vec![],
-                }
-            ],
-            implementation: EffectExpr::new(EffectExprKind::Perform {
-                effect_tag: "borrow".to_string(),
-                args: vec![Term::var("collateral"), Term::var("pool"), Term::var("amount")],
-            }),
-            cost: 350,
+            cost: 220,
         });
         
         Self { templates }
     }
-    
-    /// Add a new effect template
+}
+
+impl EffectLibrary {
+    /// Add a new effect template to the library
     pub fn add_template(&mut self, template: EffectTemplate) {
         self.templates.insert(template.name.clone(), template);
     }

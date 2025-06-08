@@ -655,7 +655,7 @@ mod tests {
     #[test]
     fn test_zk_executor_creation() {
         let executor = ZkExecutor::new(Arc::new(MockBackend::new()));
-        assert!(true);
+        // Test passes if we reach this point without compilation errors
     }
 
     #[test]
@@ -671,7 +671,7 @@ mod tests {
         
         // This test would require a working executor implementation
         // For now, we just verify the structure compiles
-        assert!(true);
+        // Test passes if we reach this point without compilation errors
     }
 
     #[test]
