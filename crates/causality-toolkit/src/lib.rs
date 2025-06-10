@@ -11,7 +11,6 @@ pub mod utils;
 // Re-exports
 pub use causality_core::{Value, Effect, EffectExpr, EntityId};
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 
 /// Main toolkit interface for building Causality applications
 pub struct CausalityToolkit {
@@ -155,6 +154,7 @@ pub fn toolkit_verbose() -> CausalityToolkit {
 mod tests {
     use super::*;
     use crate::primitives::DeFiPrimitive;
+    use std::collections::HashMap;
 
     #[test]
     fn test_toolkit_creation() {

@@ -7,10 +7,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use assert_cmd::Command as AssertCommand;
-use assert_fs::TempDir;
-use predicates::prelude::*;
+use tempfile::TempDir;
 use serde::{Deserialize, Serialize};
-use tempfile::TempDir as StdTempDir;
 use tracing::{debug, info, warn};
 
 use crate::TestConfig;
@@ -20,7 +18,7 @@ pub struct TestEnvironment {
     /// Configuration for the test run
     pub config: TestConfig,
     /// Temporary directory for test artifacts
-    pub temp_dir: TempDir,
+    _temp_dir: TempDir,
     /// Working directory for tests
     pub work_dir: PathBuf,
     /// Environment variables for CLI commands
@@ -116,27 +114,30 @@ impl TestEnvironment {
         
         Ok(Self {
             config,
-            temp_dir,
+            _temp_dir: temp_dir,
             work_dir,
             env_vars,
         })
     }
 
     /// Get the temporary directory path
+    #[allow(dead_code)]
     pub fn temp_path(&self) -> &Path {
-        self.temp_dir.path()
+        self._temp_dir.path()
     }
 
     /// Get the working directory path
+    #[allow(dead_code)]
     pub fn work_path(&self) -> &Path {
         &self.work_dir
     }
 
     /// Create a project directory for testing
+    #[allow(dead_code)]
     pub fn create_project_dir(&self, name: &str) -> Result<PathBuf> {
         let project_dir = self.work_dir.join(name);
         std::fs::create_dir_all(&project_dir)
-            .context("Failed to create project directory")?;
+            .with_context(|| format!("Failed to create project directory: {}", name))?;
         Ok(project_dir)
     }
 
@@ -381,6 +382,7 @@ impl TestRunner {
     }
 
     /// Get all test results
+    #[allow(dead_code)]
     pub fn results(&self) -> &[TestResult] {
         &self.results
     }
@@ -393,6 +395,7 @@ impl TestRunner {
     }
 
     /// Create a project directory for testing
+    #[allow(dead_code)]
     pub fn create_project_dir(&self, name: &str) -> Result<PathBuf> {
         self.env.create_project_dir(name)
     }
@@ -448,12 +451,14 @@ impl CommandTest {
     }
 
     /// Set working directory
+    #[allow(dead_code)]
     pub fn in_dir(mut self, dir: PathBuf) -> Self {
         self.working_dir = Some(dir);
         self
     }
 
     /// Add environment variable
+    #[allow(dead_code)]
     pub fn with_env(mut self, key: &str, value: &str) -> Self {
         self.env_vars.insert(key.to_string(), value.to_string());
         self
@@ -479,12 +484,14 @@ impl CommandTest {
     }
 
     /// Add setup command
+    #[allow(dead_code)]
     pub fn with_setup(mut self, command: Vec<String>) -> Self {
         self.setup_commands.push(command);
         self
     }
 
     /// Add cleanup command
+    #[allow(dead_code)]
     pub fn with_cleanup(mut self, command: Vec<String>) -> Self {
         self.cleanup_commands.push(command);
         self

@@ -56,7 +56,7 @@ impl<T> PropertyTest<T> {
         }
         
         Ok(PropertyTestResult {
-            name: self.name.clone(),
+            _name: self.name.clone(),
             total_tests: self.max_tests,
             passed,
             failed,
@@ -66,7 +66,7 @@ impl<T> PropertyTest<T> {
 }
 
 struct PropertyTestResult {
-    name: String,
+    _name: String,
     total_tests: usize,
     passed: usize,
     failed: usize,
@@ -117,7 +117,7 @@ async fn test_resource_conservation_properties() -> Result<()> {
             // Test that alloc-consume maintains conservation
             tokio::runtime::Handle::current().block_on(async {
                 let mut engine = SimulationEngine::new();
-                let result = engine.execute_program(program).await?;
+                let _result = engine.execute_program(program).await?;
                 
                 let progression = engine.state_progression();
                 
@@ -524,7 +524,7 @@ async fn test_comprehensive_property_suite() -> Result<()> {
                 let initial_state = engine.execution_state().clone();
                 let initial_metrics = engine.metrics().clone();
                 
-                let result = engine.execute_program(program).await?;
+                let _result = engine.execute_program(program).await?;
                 
                 let final_state = engine.execution_state();
                 let final_metrics = engine.metrics().clone();
@@ -532,7 +532,7 @@ async fn test_comprehensive_property_suite() -> Result<()> {
                 // Comprehensive property checks:
                 let state_progressed = final_state.instruction_pointer >= initial_state.instruction_pointer;
                 let metrics_increased = final_metrics.effects_executed >= initial_metrics.effects_executed;
-                let valid_result = result.step_count > 0;
+                let valid_result = _result.step_count > 0;
                 let no_state_corruption = final_state.registers.len() >= initial_state.registers.len();
                 
                 Ok(state_progressed && metrics_increased && valid_result && no_state_corruption)

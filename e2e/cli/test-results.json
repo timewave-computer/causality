@@ -1,20 +1,20 @@
 {
   "metadata": {
-    "start_time": "2025-06-08T23:14:13.335134Z",
-    "end_time": "2025-06-08T23:14:15.837311Z",
+    "start_time": "2025-06-10T17:41:34.337800Z",
+    "end_time": "2025-06-10T17:41:35.419971Z",
     "duration": {
-      "secs": 2,
-      "nanos": 502177000
+      "secs": 1,
+      "nanos": 82171000
     },
     "environment": {
       "os": "macos",
       "arch": "aarch64",
       "cli_version": null,
       "tools": {
-        "rustc": "rustc 1.87.0 (17067e9ac 2025-05-09)",
-        "cargo": "cargo 1.87.0 (99624be96 2025-05-06)",
-        "ocaml": "The OCaml toplevel, version 5.1.1",
         "dune": "3.18.2",
+        "cargo": "cargo 1.87.0 (99624be96 2025-05-06)",
+        "rustc": "rustc 1.87.0 (17067e9ac 2025-05-09)",
+        "ocaml": "The OCaml toplevel, version 5.1.1",
         "git": "git version 2.49.0"
       }
     },
@@ -39,27 +39,7 @@
       "skipped": 0,
       "duration": {
         "secs": 0,
-        "nanos": 396392000
-      }
-    },
-    "deploy": {
-      "name": "deploy",
-      "passed": 5,
-      "failed": 0,
-      "skipped": 0,
-      "duration": {
-        "secs": 0,
-        "nanos": 67788000
-      }
-    },
-    "analyze": {
-      "name": "analyze",
-      "passed": 10,
-      "failed": 0,
-      "skipped": 0,
-      "duration": {
-        "secs": 0,
-        "nanos": 120725959
+        "nanos": 155719292
       }
     },
     "repl": {
@@ -69,67 +49,7 @@
       "skipped": 0,
       "duration": {
         "secs": 0,
-        "nanos": 247806209
-      }
-    },
-    "project": {
-      "name": "project",
-      "passed": 25,
-      "failed": 0,
-      "skipped": 0,
-      "duration": {
-        "secs": 0,
-        "nanos": 476179708
-      }
-    },
-    "help": {
-      "name": "help",
-      "passed": 29,
-      "failed": 0,
-      "skipped": 6,
-      "duration": {
-        "secs": 0,
-        "nanos": 542136667
-      }
-    },
-    "test": {
-      "name": "test",
-      "passed": 11,
-      "failed": 0,
-      "skipped": 0,
-      "duration": {
-        "secs": 0,
-        "nanos": 201591750
-      }
-    },
-    "inspect": {
-      "name": "inspect",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 0,
-      "duration": {
-        "secs": 0,
-        "nanos": 36688041
-      }
-    },
-    "viz": {
-      "name": "viz",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 0,
-      "duration": {
-        "secs": 0,
-        "nanos": 21443375
-      }
-    },
-    "config": {
-      "name": "config",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 0,
-      "duration": {
-        "secs": 0,
-        "nanos": 18638334
+        "nanos": 85451292
       }
     },
     "dev": {
@@ -139,7 +59,87 @@
       "skipped": 13,
       "duration": {
         "secs": 0,
-        "nanos": 124392042
+        "nanos": 73175584
+      }
+    },
+    "deploy": {
+      "name": "deploy",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "duration": {
+        "secs": 0,
+        "nanos": 32024666
+      }
+    },
+    "analyze": {
+      "name": "analyze",
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "duration": {
+        "secs": 0,
+        "nanos": 146274417
+      }
+    },
+    "project": {
+      "name": "project",
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0,
+      "duration": {
+        "secs": 0,
+        "nanos": 188988042
+      }
+    },
+    "help": {
+      "name": "help",
+      "passed": 29,
+      "failed": 0,
+      "skipped": 6,
+      "duration": {
+        "secs": 0,
+        "nanos": 218348208
+      }
+    },
+    "inspect": {
+      "name": "inspect",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "duration": {
+        "secs": 0,
+        "nanos": 11218167
+      }
+    },
+    "viz": {
+      "name": "viz",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "duration": {
+        "secs": 0,
+        "nanos": 13639875
+      }
+    },
+    "config": {
+      "name": "config",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "duration": {
+        "secs": 0,
+        "nanos": 9750042
+      }
+    },
+    "test": {
+      "name": "test",
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "duration": {
+        "secs": 0,
+        "nanos": 74777542
       }
     }
   },
@@ -152,7 +152,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 36654333
+        "nanos": 10988167
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -168,7 +168,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 16592500
+        "nanos": 4585250
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -184,7 +184,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 29114959
+        "nanos": 7935791
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -200,7 +200,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 12848084
+        "nanos": 7842458
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -216,7 +216,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 12970625
+        "nanos": 8551666
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -232,7 +232,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 13803834
+        "nanos": 4567125
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -248,7 +248,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 26900125
+        "nanos": 4530125
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -264,7 +264,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 25458000
+        "nanos": 10024958
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -280,7 +280,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 20697625
+        "nanos": 6936250
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -296,7 +296,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 18958500
+        "nanos": 7965958
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -312,7 +312,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 17068917
+        "nanos": 5622000
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -328,7 +328,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 16220750
+        "nanos": 5631041
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -344,7 +344,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 15833208
+        "nanos": 8759084
       },
       "stdout": "The Causality CLI provides a comprehensive suite of tools for building privacy-preserving, cross-chain applications.\n\nUsage: causality [OPTIONS] <COMMAND>\n\nCommands:\n  repl     🎯 Interactive development environment and tutorials\n  project  🏗️ Project management and scaffolding\n  dev      ⚡ Development workflow commands\n  zk       🔐 Zero-knowledge proof operations\n  deploy   🌐 Cross-chain deployment and transactions\n  analyze  📊 Analysis and diagnostics\n  test     🧪 Testing and validation\n  inspect  🔍 System inspection and debugging\n  viz      📈 Visualization and reporting\n  config   ⚙️ Configuration and system management\n  help     Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n\n  -V, --version\n          Print version\n\nFor more information, visit: https://docs.causality.xyz\n",
       "stderr": "",
@@ -360,7 +360,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 26109875
+        "nanos": 7598917
       },
       "stdout": "🚀 Gateway to the Causality Framework\n\nUsage: causality [OPTIONS] <COMMAND>\n\nCommands:\n  repl     🎯 Interactive development environment and tutorials\n  project  🏗️ Project management and scaffolding\n  dev      ⚡ Development workflow commands\n  zk       🔐 Zero-knowledge proof operations\n  deploy   🌐 Cross-chain deployment and transactions\n  analyze  📊 Analysis and diagnostics\n  test     🧪 Testing and validation\n  inspect  🔍 System inspection and debugging\n  viz      📈 Visualization and reporting\n  config   ⚙️ Configuration and system management\n  help     Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose          Enable detailed output for debugging\n  -q, --quiet            Minimize output to essentials only\n      --format <FORMAT>  Output format for structured data [possible values: pretty, json, yaml, plain]\n  -h, --help             Print help (see more with '--help')\n  -V, --version          Print version\n\nFor more information, visit: https://docs.causality.xyz\n",
       "stderr": "",
@@ -376,7 +376,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 42563167
+        "nanos": 9115625
       },
       "stdout": "The Causality CLI provides a comprehensive suite of tools for building privacy-preserving, cross-chain applications.\n\nUsage: causality [OPTIONS] <COMMAND>\n\nCommands:\n  repl     🎯 Interactive development environment and tutorials\n  project  🏗️ Project management and scaffolding\n  dev      ⚡ Development workflow commands\n  zk       🔐 Zero-knowledge proof operations\n  deploy   🌐 Cross-chain deployment and transactions\n  analyze  📊 Analysis and diagnostics\n  test     🧪 Testing and validation\n  inspect  🔍 System inspection and debugging\n  viz      📈 Visualization and reporting\n  config   ⚙️ Configuration and system management\n  help     Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n\n  -V, --version\n          Print version\n\nFor more information, visit: https://docs.causality.xyz\n",
       "stderr": "",
@@ -488,7 +488,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 23057875
+        "nanos": 6337042
       },
       "stdout": "🎯 Interactive development environment and tutorials\n\nUsage: causality repl [OPTIONS]\n\nOptions:\n  -d, --debug\n          Show detailed execution information\n\n      --verbose\n          Enable detailed output for debugging\n\n  -m, --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -s, --show-state\n          Display machine state after operations\n\n  -l, --load-tutorial <LOAD_TUTORIAL>\n          Load tutorial: basic, effects, zk, defi\n\n      --auto-save\n          Automatically save REPL session\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -504,7 +504,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 14966000
+        "nanos": 7060875
       },
       "stdout": "🏗️ Project management and scaffolding\n\nUsage: causality project [OPTIONS] <COMMAND>\n\nCommands:\n  new     Create a new Causality project\n  init    Initialize current directory as project\n  build   Build the current project\n  clean   Clean build artifacts\n  status  Show project status and health\n  add     Add dependencies to project\n  help    Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -520,7 +520,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 20183416
+        "nanos": 6392333
       },
       "stdout": "⚡ Development workflow commands\n\nUsage: causality dev [OPTIONS] <COMMAND>\n\nCommands:\n  compile  Compile source code to various formats\n  run      Execute compiled programs\n  serve    Start development server with hot reload\n  fmt      Format source code\n  help     Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -536,7 +536,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 19099083
+        "nanos": 9067750
       },
       "stdout": "🔐 Zero-knowledge proof operations\n\nUsage: causality zk [OPTIONS] <COMMAND>\n\nCommands:\n  compile  Compile code to ZK circuit\n  prove    Generate ZK proof\n  verify   Verify ZK proof\n  setup    Setup trusted setup ceremony\n  help     Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -552,7 +552,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 31904708
+        "nanos": 4783959
       },
       "stdout": "🌐 Cross-chain deployment and transactions\n\nUsage: causality deploy [OPTIONS] <COMMAND>\n\nCommands:\n  simulate  Simulate deployment and execution\n  submit    Submit transactions to target chains\n  report    Generate deployment report\n  help      Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -568,7 +568,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 26465875
+        "nanos": 8072125
       },
       "stdout": "📊 Analysis and diagnostics\n\nUsage: causality analyze [OPTIONS] <COMMAND>\n\nCommands:\n  code       Perform static code analysis\n  resources  Analyze resource usage and lifecycle\n  effects    Analyze effect dependencies and composition\n  security   Security analysis\n  help       Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -584,7 +584,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 12599750
+        "nanos": 6416583
       },
       "stdout": "🧪 Testing and validation\n\nUsage: causality test [OPTIONS] <COMMAND>\n\nCommands:\n  unit         Run unit tests\n  effects      Test algebraic effects\n  integration  Integration tests\n  e2e          End-to-end tests\n  help         Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -600,7 +600,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 17301792
+        "nanos": 7078541
       },
       "stdout": "🔍 System inspection and debugging\n\nUsage: causality inspect [OPTIONS] <COMMAND>\n\nCommands:\n  system     System health and diagnostics\n  artifacts  Inspect compiled artifacts\n  runtime    Inspect runtime state\n  help       Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -616,7 +616,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 13437333
+        "nanos": 8133541
       },
       "stdout": "📈 Visualization and reporting\n\nUsage: causality viz [OPTIONS] <COMMAND>\n\nCommands:\n  effects       Visualize effect execution flows\n  resources     Visualize resource dependencies\n  architecture  System architecture overview\n  help          Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -632,7 +632,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 15509667
+        "nanos": 11132959
       },
       "stdout": "⚙️ Configuration and system management\n\nUsage: causality config [OPTIONS] <COMMAND>\n\nCommands:\n  show   Show current configuration\n  set    Set configuration value\n  unset  Remove configuration key\n  reset  Reset configuration to defaults\n  help   Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -648,7 +648,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 14317625
+        "nanos": 9131750
       },
       "stdout": "Create a new Causality project\n\nUsage: causality project new [OPTIONS] <NAME>\n\nArguments:\n  <NAME>\n          Project name\n\nOptions:\n  -t, --template <TEMPLATE>\n          Project template\n          \n          [default: basic]\n\n          Possible values:\n          - basic:    Basic project structure\n          - defi:     Cross-chain DeFi application\n          - privacy:  Privacy-focused application\n          - zk:       zkSNARK circuit development\n          - library:  Library/package development\n          - advanced: Advanced multi-chain setup\n\n      --verbose\n          Enable detailed output for debugging\n\n      --git\n          Initialize git repository\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -d, --description <DESCRIPTION>\n          Brief project description\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -664,7 +664,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 31896666
+        "nanos": 10254375
       },
       "stdout": "Build the current project\n\nUsage: causality project build [OPTIONS]\n\nOptions:\n  -r, --release\n          Build with optimizations\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -t, --target <TARGET>\n          Specify build target\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --timings\n          Display detailed build timing\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -680,7 +680,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 9615959
+        "nanos": 5412375
       },
       "stdout": "Show project status and health\n\nUsage: causality project status [OPTIONS]\n\nOptions:\n  -d, --deps\n          Include dependency status\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -696,9 +696,9 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 15316750
+        "nanos": 6901125
       },
-      "stdout": "Compile source code to various formats\n\nUsage: causality dev compile [OPTIONS] --input <INPUT> --output <OUTPUT>\n\nOptions:\n  -i, --input <INPUT>\n          Source file to compile\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output file path\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -f, --format <FORMAT>\n          Output format\n          \n          [default: intermediate]\n\n          Possible values:\n          - intermediate: Intermediate representation\n          - bytecode:     Platform bytecode\n          - native:       Native executable\n          - wasm:         WebAssembly\n          - js:           JavaScript\n\n      --optimize\n          Apply optimization passes\n\n      --show-stages\n          Display compilation pipeline stages\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
+      "stdout": "Compile source code to various formats\n\nUsage: causality dev compile [OPTIONS] --input <INPUT> --output <OUTPUT>\n\nOptions:\n  -i, --input <INPUT>\n          Source file to compile\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output file path\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --output-format <OUTPUT_FORMAT>\n          Output format\n          \n          [default: intermediate]\n\n          Possible values:\n          - intermediate: Intermediate representation\n          - bytecode:     Platform bytecode\n          - native:       Native executable\n          - wasm:         WebAssembly\n          - js:           JavaScript\n\n      --optimize\n          Apply optimization passes\n\n      --show-stages\n          Display compilation pipeline stages\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
       "exit_code": 0,
       "error": null,
@@ -712,7 +712,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 14815125
+        "nanos": 12125875
       },
       "stdout": "Execute compiled programs\n\nUsage: causality dev run [OPTIONS]\n\nOptions:\n  -f, --file <FILE>\n          File to execute\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -s, --source <SOURCE>\n          Execute source code directly\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -t, --trace\n          Display execution trace\n\n      --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -728,7 +728,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 18146458
+        "nanos": 6385500
       },
       "stdout": "Start development server with hot reload\n\nUsage: causality dev serve [OPTIONS]\n\nOptions:\n  -p, --port <PORT>\n          Port to serve on\n          \n          [default: 3000]\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -w, --watch\n          Watch files for changes\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --open\n          Open browser on startup\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -744,7 +744,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 16424333
+        "nanos": 5574708
       },
       "stdout": "Compile code to ZK circuit\n\nUsage: causality zk compile [OPTIONS] --input <INPUT> --output <OUTPUT>\n\nOptions:\n  -i, --input <INPUT>\n          Input intermediate representation\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output circuit file\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -p, --privacy-level <PRIVACY_LEVEL>\n          Privacy level\n          \n          [default: medium]\n          [possible values: low, medium, high, maximum]\n\n  -s, --proof-system <PROOF_SYSTEM>\n          Proof system\n          \n          [default: groth16]\n          [possible values: groth16, plonk, stark, marlin]\n\n      --stats\n          Display circuit size and complexity\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -760,7 +760,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 14694458
+        "nanos": 6243375
       },
       "stdout": "Generate ZK proof\n\nUsage: causality zk prove [OPTIONS] --circuit <CIRCUIT> --witness <WITNESS> --output <OUTPUT>\n\nOptions:\n  -c, --circuit <CIRCUIT>\n          Circuit file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -w, --witness <WITNESS>\n          Witness data\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -o, --output <OUTPUT>\n          Output proof file\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -776,7 +776,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 15043584
+        "nanos": 4887667
       },
       "stdout": "Verify ZK proof\n\nUsage: causality zk verify [OPTIONS] --circuit <CIRCUIT> --proof <PROOF>\n\nOptions:\n  -c, --circuit <CIRCUIT>\n          Circuit file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -p, --proof <PROOF>\n          Proof file\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -i, --public-inputs <PUBLIC_INPUTS>\n          Public inputs\n\n      --mock\n          Use mock runtime for testing\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -792,7 +792,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 16934875
+        "nanos": 6234208
       },
       "stdout": "Simulate deployment and execution\n\nUsage: causality deploy simulate [OPTIONS] --input <INPUT> --chains <CHAINS>\n\nOptions:\n  -i, --input <INPUT>\n          Input file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -c, --chains <CHAINS>\n          Comma-separated list of chains\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -g, --gas-price <GAS_PRICE>\n          Gas price for cost estimation\n\n      --cost-analysis\n          Perform detailed cost analysis\n\n  -s, --scenarios <SCENARIOS>\n          Run specific scenarios\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -808,7 +808,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 21116084
+        "nanos": 4568708
       },
       "stdout": "Submit transactions to target chains\n\nUsage: causality deploy submit [OPTIONS] --circuit <CIRCUIT> --proof <PROOF> --chains <CHAINS>\n\nOptions:\n  -c, --circuit <CIRCUIT>\n          Circuit file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -p, --proof <PROOF>\n          Proof file\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --chains <CHAINS>\n          Target chains\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --dry-run\n          Simulate without actual submission\n\n      --max-gas-price <MAX_GAS_PRICE>\n          Maximum acceptable gas price\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -824,7 +824,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 13568000
+        "nanos": 8390916
       },
       "stdout": "Perform static code analysis\n\nUsage: causality analyze code [OPTIONS] [FILES]...\n\nArguments:\n  [FILES]...\n          Files to analyze\n\nOptions:\n  -d, --depth <DEPTH>\n          Analysis depth\n          \n          [default: standard]\n          [possible values: surface, standard, deep, comprehensive]\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output report file\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -840,7 +840,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10457166
+        "nanos": 5292042
       },
       "stdout": "Analyze resource usage and lifecycle\n\nUsage: causality analyze resources [OPTIONS] --file <FILE>\n\nOptions:\n  -f, --file <FILE>\n          Source file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -d, --detailed\n          Show detailed lifetime analysis\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --check-leaks\n          Detect potential resource leaks\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -856,7 +856,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 20807208
+        "nanos": 14303250
       },
       "stdout": "Run unit tests\n\nUsage: causality test unit [OPTIONS]\n\nOptions:\n  -f, --filter <FILTER>\n          Test pattern filter\n\n      --verbose\n          Enable detailed output for debugging\n\n  -p, --parallel\n          Run tests in parallel\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -c, --coverage\n          Show test coverage\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -872,7 +872,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 16723000
+        "nanos": 5658375
       },
       "stdout": "End-to-end tests\n\nUsage: causality test e2e [OPTIONS]\n\nOptions:\n  -s, --suite <SUITE>\n          Test suite to run\n\n      --verbose\n          Enable detailed output for debugging\n\n  -c, --chains <CHAINS>\n          Target chains for testing\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --testnet\n          Use testnet instead of local\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -888,7 +888,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10872875
+        "nanos": 6428875
       },
       "stdout": "",
       "stderr": "error: unrecognized subcommand 'nonexistent'\n\nUsage: causality [OPTIONS] <COMMAND>\n\nFor more information, try '--help'.\n",
@@ -904,7 +904,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 15507042
+        "nanos": 8139625
       },
       "stdout": "🏗️ Project management and scaffolding\n\nUsage: causality project [OPTIONS] <COMMAND>\n\nCommands:\n  new     Create a new Causality project\n  init    Initialize current directory as project\n  build   Build the current project\n  clean   Clean build artifacts\n  status  Show project status and health\n  add     Add dependencies to project\n  help    Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -920,7 +920,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 11085459
+        "nanos": 11542292
       },
       "stdout": "🏗️ Project management and scaffolding\n\nUsage: causality project [OPTIONS] <COMMAND>\n\nCommands:\n  new     Create a new Causality project\n  init    Initialize current directory as project\n  build   Build the current project\n  clean   Clean build artifacts\n  status  Show project status and health\n  add     Add dependencies to project\n  help    Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -936,7 +936,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 16615625
+        "nanos": 6294708
       },
       "stdout": "Create a new Causality project\n\nUsage: causality project new [OPTIONS] <NAME>\n\nArguments:\n  <NAME>\n          Project name\n\nOptions:\n  -t, --template <TEMPLATE>\n          Project template\n          \n          [default: basic]\n\n          Possible values:\n          - basic:    Basic project structure\n          - defi:     Cross-chain DeFi application\n          - privacy:  Privacy-focused application\n          - zk:       zkSNARK circuit development\n          - library:  Library/package development\n          - advanced: Advanced multi-chain setup\n\n      --verbose\n          Enable detailed output for debugging\n\n      --git\n          Initialize git repository\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -d, --description <DESCRIPTION>\n          Brief project description\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -952,7 +952,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 37090834
+        "nanos": 7442667
       },
       "stdout": "🏗️ Creating new project 'test-basic-project'\n   Template: Basic\n✅ Project 'test-basic-project' created successfully\n",
       "stderr": "",
@@ -968,7 +968,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 24931708
+        "nanos": 13237833
       },
       "stdout": "🏗️ Creating new project 'test-defi-project'\n   Template: Defi\n✅ Project 'test-defi-project' created successfully\n",
       "stderr": "",
@@ -984,7 +984,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 29742834
+        "nanos": 8386042
       },
       "stdout": "🏗️ Creating new project 'test-privacy-project'\n   Template: Privacy\n✅ Project 'test-privacy-project' created successfully\n",
       "stderr": "",
@@ -1000,7 +1000,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 31567416
+        "nanos": 11658917
       },
       "stdout": "🏗️ Creating new project 'test-zk-project'\n   Template: Zk\n✅ Project 'test-zk-project' created successfully\n",
       "stderr": "",
@@ -1016,7 +1016,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 29598292
+        "nanos": 6407834
       },
       "stdout": "🏗️ Creating new project 'test-library-project'\n   Template: Library\n✅ Project 'test-library-project' created successfully\n",
       "stderr": "",
@@ -1032,7 +1032,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 20779708
+        "nanos": 8191959
       },
       "stdout": "🏗️ Creating new project 'test-advanced-project'\n   Template: Advanced\n✅ Project 'test-advanced-project' created successfully\n",
       "stderr": "",
@@ -1048,7 +1048,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 21824792
+        "nanos": 8010583
       },
       "stdout": "🏗️ Creating new project 'git-test-project'\n   Template: Basic\n   Git repository: enabled\n✅ Project 'git-test-project' created successfully\n",
       "stderr": "",
@@ -1064,7 +1064,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 27918583
+        "nanos": 8739208
       },
       "stdout": "🏗️ Creating new project 'desc-test-project'\n   Template: Basic\n   Description: A test project with description\n✅ Project 'desc-test-project' created successfully\n",
       "stderr": "",
@@ -1080,7 +1080,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 19846417
+        "nanos": 6735833
       },
       "stdout": "Initialize current directory as project\n\nUsage: causality project init [OPTIONS] [NAME]\n\nArguments:\n  [NAME]\n          Project name (defaults to directory name)\n\nOptions:\n  -f, --force\n          Force initialization in non-empty directory\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1096,7 +1096,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 30841875
+        "nanos": 7287916
       },
       "stdout": "🏗️ Initializing project 'causality-project'\n✅ Project initialized\n",
       "stderr": "",
@@ -1112,7 +1112,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 19847334
+        "nanos": 6939333
       },
       "stdout": "🏗️ Initializing project 'causality-project'\n   Force mode enabled\n✅ Project initialized\n",
       "stderr": "",
@@ -1128,7 +1128,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 14527208
+        "nanos": 7348250
       },
       "stdout": "Build the current project\n\nUsage: causality project build [OPTIONS]\n\nOptions:\n  -r, --release\n          Build with optimizations\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -t, --target <TARGET>\n          Specify build target\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --timings\n          Display detailed build timing\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1144,7 +1144,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 19472375
+        "nanos": 5320208
       },
       "stdout": "Build the current project\n\nUsage: causality project build [OPTIONS]\n\nOptions:\n  -r, --release\n          Build with optimizations\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -t, --target <TARGET>\n          Specify build target\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --timings\n          Display detailed build timing\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1160,7 +1160,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 11525458
+        "nanos": 7718750
       },
       "stdout": "Build the current project\n\nUsage: causality project build [OPTIONS]\n\nOptions:\n  -r, --release\n          Build with optimizations\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -t, --target <TARGET>\n          Specify build target\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --timings\n          Display detailed build timing\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1176,7 +1176,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 13847500
+        "nanos": 6947458
       },
       "stdout": "Build the current project\n\nUsage: causality project build [OPTIONS]\n\nOptions:\n  -r, --release\n          Build with optimizations\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -t, --target <TARGET>\n          Specify build target\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --timings\n          Display detailed build timing\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1192,7 +1192,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 11670542
+        "nanos": 6955125
       },
       "stdout": "Clean build artifacts\n\nUsage: causality project clean [OPTIONS]\n\nOptions:\n      --deep\n          Deep clean including cached dependencies\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1208,7 +1208,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10489333
+        "nanos": 7080958
       },
       "stdout": "Clean build artifacts\n\nUsage: causality project clean [OPTIONS]\n\nOptions:\n      --deep\n          Deep clean including cached dependencies\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1224,7 +1224,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 13039292
+        "nanos": 5461459
       },
       "stdout": "Show project status and health\n\nUsage: causality project status [OPTIONS]\n\nOptions:\n  -d, --deps\n          Include dependency status\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1240,7 +1240,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 9420750
+        "nanos": 6266583
       },
       "stdout": "Show project status and health\n\nUsage: causality project status [OPTIONS]\n\nOptions:\n  -d, --deps\n          Include dependency status\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1256,7 +1256,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 12869750
+        "nanos": 5494750
       },
       "stdout": "Show project status and health\n\nUsage: causality project status [OPTIONS]\n\nOptions:\n  -d, --deps\n          Include dependency status\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1272,7 +1272,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10944208
+        "nanos": 5539959
       },
       "stdout": "Add dependencies to project\n\nUsage: causality project add [OPTIONS] <PACKAGE>\n\nArguments:\n  <PACKAGE>\n          Package name\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n      --version <VERSION>\n          Specify version requirement\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1288,7 +1288,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10704792
+        "nanos": 5346083
       },
       "stdout": "Add dependencies to project\n\nUsage: causality project add [OPTIONS] <PACKAGE>\n\nArguments:\n  <PACKAGE>\n          Package name\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n      --version <VERSION>\n          Specify version requirement\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1304,7 +1304,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 13620708
+        "nanos": 6940459
       },
       "stdout": "⚡ Development workflow commands\n\nUsage: causality dev [OPTIONS] <COMMAND>\n\nCommands:\n  compile  Compile source code to various formats\n  run      Execute compiled programs\n  serve    Start development server with hot reload\n  fmt      Format source code\n  help     Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1320,7 +1320,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 9257458
+        "nanos": 5615042
       },
       "stdout": "⚡ Development workflow commands\n\nUsage: causality dev [OPTIONS] <COMMAND>\n\nCommands:\n  compile  Compile source code to various formats\n  run      Execute compiled programs\n  serve    Start development server with hot reload\n  fmt      Format source code\n  help     Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1336,9 +1336,9 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 8605958
+        "nanos": 5304334
       },
-      "stdout": "Compile source code to various formats\n\nUsage: causality dev compile [OPTIONS] --input <INPUT> --output <OUTPUT>\n\nOptions:\n  -i, --input <INPUT>\n          Source file to compile\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output file path\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -f, --format <FORMAT>\n          Output format\n          \n          [default: intermediate]\n\n          Possible values:\n          - intermediate: Intermediate representation\n          - bytecode:     Platform bytecode\n          - native:       Native executable\n          - wasm:         WebAssembly\n          - js:           JavaScript\n\n      --optimize\n          Apply optimization passes\n\n      --show-stages\n          Display compilation pipeline stages\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
+      "stdout": "Compile source code to various formats\n\nUsage: causality dev compile [OPTIONS] --input <INPUT> --output <OUTPUT>\n\nOptions:\n  -i, --input <INPUT>\n          Source file to compile\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output file path\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --output-format <OUTPUT_FORMAT>\n          Output format\n          \n          [default: intermediate]\n\n          Possible values:\n          - intermediate: Intermediate representation\n          - bytecode:     Platform bytecode\n          - native:       Native executable\n          - wasm:         WebAssembly\n          - js:           JavaScript\n\n      --optimize\n          Apply optimization passes\n\n      --show-stages\n          Display compilation pipeline stages\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
       "exit_code": 0,
       "error": null,
@@ -1352,9 +1352,9 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10770958
+        "nanos": 6553791
       },
-      "stdout": "Compile source code to various formats\n\nUsage: causality dev compile [OPTIONS] --input <INPUT> --output <OUTPUT>\n\nOptions:\n  -i, --input <INPUT>\n          Source file to compile\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output file path\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -f, --format <FORMAT>\n          Output format\n          \n          [default: intermediate]\n\n          Possible values:\n          - intermediate: Intermediate representation\n          - bytecode:     Platform bytecode\n          - native:       Native executable\n          - wasm:         WebAssembly\n          - js:           JavaScript\n\n      --optimize\n          Apply optimization passes\n\n      --show-stages\n          Display compilation pipeline stages\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
+      "stdout": "Compile source code to various formats\n\nUsage: causality dev compile [OPTIONS] --input <INPUT> --output <OUTPUT>\n\nOptions:\n  -i, --input <INPUT>\n          Source file to compile\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output file path\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --output-format <OUTPUT_FORMAT>\n          Output format\n          \n          [default: intermediate]\n\n          Possible values:\n          - intermediate: Intermediate representation\n          - bytecode:     Platform bytecode\n          - native:       Native executable\n          - wasm:         WebAssembly\n          - js:           JavaScript\n\n      --optimize\n          Apply optimization passes\n\n      --show-stages\n          Display compilation pipeline stages\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
       "exit_code": 0,
       "error": null,
@@ -1480,7 +1480,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10710208
+        "nanos": 6769750
       },
       "stdout": "Execute compiled programs\n\nUsage: causality dev run [OPTIONS]\n\nOptions:\n  -f, --file <FILE>\n          File to execute\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -s, --source <SOURCE>\n          Execute source code directly\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -t, --trace\n          Display execution trace\n\n      --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1496,7 +1496,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 12805458
+        "nanos": 7701583
       },
       "stdout": "Execute compiled programs\n\nUsage: causality dev run [OPTIONS]\n\nOptions:\n  -f, --file <FILE>\n          File to execute\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -s, --source <SOURCE>\n          Execute source code directly\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -t, --trace\n          Display execution trace\n\n      --max-steps <MAX_STEPS>\n          Set execution step limit\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1576,7 +1576,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10546500
+        "nanos": 7297084
       },
       "stdout": "Start development server with hot reload\n\nUsage: causality dev serve [OPTIONS]\n\nOptions:\n  -p, --port <PORT>\n          Port to serve on\n          \n          [default: 3000]\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -w, --watch\n          Watch files for changes\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --open\n          Open browser on startup\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1592,7 +1592,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10224042
+        "nanos": 8552958
       },
       "stdout": "Start development server with hot reload\n\nUsage: causality dev serve [OPTIONS]\n\nOptions:\n  -p, --port <PORT>\n          Port to serve on\n          \n          [default: 3000]\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -w, --watch\n          Watch files for changes\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --open\n          Open browser on startup\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1608,7 +1608,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 8922333
+        "nanos": 6110375
       },
       "stdout": "Start development server with hot reload\n\nUsage: causality dev serve [OPTIONS]\n\nOptions:\n  -p, --port <PORT>\n          Port to serve on\n          \n          [default: 3000]\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -w, --watch\n          Watch files for changes\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --open\n          Open browser on startup\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1624,7 +1624,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 12827916
+        "nanos": 5242208
       },
       "stdout": "Start development server with hot reload\n\nUsage: causality dev serve [OPTIONS]\n\nOptions:\n  -p, --port <PORT>\n          Port to serve on\n          \n          [default: 3000]\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -w, --watch\n          Watch files for changes\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --open\n          Open browser on startup\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1640,7 +1640,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 15478500
+        "nanos": 6332291
       },
       "stdout": "Format source code\n\nUsage: causality dev fmt [OPTIONS] [FILES]...\n\nArguments:\n  [FILES]...\n          Files to format (defaults to all)\n\nOptions:\n      --check\n          Check formatting only\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1688,7 +1688,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 19504750
+        "nanos": 9713708
       },
       "stdout": "🔐 Zero-knowledge proof operations\n\nUsage: causality zk [OPTIONS] <COMMAND>\n\nCommands:\n  compile  Compile code to ZK circuit\n  prove    Generate ZK proof\n  verify   Verify ZK proof\n  setup    Setup trusted setup ceremony\n  help     Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1704,7 +1704,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 23402875
+        "nanos": 5192667
       },
       "stdout": "Compile code to ZK circuit\n\nUsage: causality zk compile [OPTIONS] --input <INPUT> --output <OUTPUT>\n\nOptions:\n  -i, --input <INPUT>\n          Input intermediate representation\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output circuit file\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -p, --privacy-level <PRIVACY_LEVEL>\n          Privacy level\n          \n          [default: medium]\n          [possible values: low, medium, high, maximum]\n\n  -s, --proof-system <PROOF_SYSTEM>\n          Proof system\n          \n          [default: groth16]\n          [possible values: groth16, plonk, stark, marlin]\n\n      --stats\n          Display circuit size and complexity\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1720,7 +1720,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 13989459
+        "nanos": 5707792
       },
       "stdout": "Compile code to ZK circuit\n\nUsage: causality zk compile [OPTIONS] --input <INPUT> --output <OUTPUT>\n\nOptions:\n  -i, --input <INPUT>\n          Input intermediate representation\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output circuit file\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -p, --privacy-level <PRIVACY_LEVEL>\n          Privacy level\n          \n          [default: medium]\n          [possible values: low, medium, high, maximum]\n\n  -s, --proof-system <PROOF_SYSTEM>\n          Proof system\n          \n          [default: groth16]\n          [possible values: groth16, plonk, stark, marlin]\n\n      --stats\n          Display circuit size and complexity\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1736,7 +1736,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 21639292
+        "nanos": 5915166
       },
       "stdout": "🔐 Compiling to ZK circuit...\n   Input: test.ir\n   Output: test_low.zk\n   Privacy level: low\n   Proof system: groth16\n✅ ZK circuit compiled successfully\n",
       "stderr": "",
@@ -1752,7 +1752,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 13919459
+        "nanos": 6737834
       },
       "stdout": "🔐 Compiling to ZK circuit...\n   Input: test.ir\n   Output: test_medium.zk\n   Privacy level: medium\n   Proof system: groth16\n✅ ZK circuit compiled successfully\n",
       "stderr": "",
@@ -1768,7 +1768,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 19632417
+        "nanos": 8218959
       },
       "stdout": "🔐 Compiling to ZK circuit...\n   Input: test.ir\n   Output: test_high.zk\n   Privacy level: high\n   Proof system: groth16\n✅ ZK circuit compiled successfully\n",
       "stderr": "",
@@ -1784,7 +1784,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 19914292
+        "nanos": 10681291
       },
       "stdout": "🔐 Compiling to ZK circuit...\n   Input: test.ir\n   Output: test_maximum.zk\n   Privacy level: maximum\n   Proof system: groth16\n✅ ZK circuit compiled successfully\n",
       "stderr": "",
@@ -1800,7 +1800,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 18677916
+        "nanos": 9893667
       },
       "stdout": "🔐 Compiling to ZK circuit...\n   Input: test.ir\n   Output: test_groth16.zk\n   Privacy level: medium\n   Proof system: groth16\n✅ ZK circuit compiled successfully\n",
       "stderr": "",
@@ -1816,7 +1816,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 12080541
+        "nanos": 6232208
       },
       "stdout": "🔐 Compiling to ZK circuit...\n   Input: test.ir\n   Output: test_plonk.zk\n   Privacy level: medium\n   Proof system: plonk\n✅ ZK circuit compiled successfully\n",
       "stderr": "",
@@ -1832,7 +1832,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 35292958
+        "nanos": 8724416
       },
       "stdout": "🔐 Compiling to ZK circuit...\n   Input: test.ir\n   Output: test_stark.zk\n   Privacy level: medium\n   Proof system: stark\n✅ ZK circuit compiled successfully\n",
       "stderr": "",
@@ -1848,7 +1848,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 16479334
+        "nanos": 7021917
       },
       "stdout": "🔐 Compiling to ZK circuit...\n   Input: test.ir\n   Output: test_marlin.zk\n   Privacy level: medium\n   Proof system: marlin\n✅ ZK circuit compiled successfully\n",
       "stderr": "",
@@ -1864,7 +1864,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 22000666
+        "nanos": 7303375
       },
       "stdout": "🔐 Compiling to ZK circuit...\n   Input: test.ir\n   Output: test_stats.zk\n   Privacy level: medium\n   Proof system: groth16\n   Circuit stats: 1000 gates, 500 constraints\n✅ ZK circuit compiled successfully\n",
       "stderr": "",
@@ -1880,7 +1880,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 11951541
+        "nanos": 7859459
       },
       "stdout": "Generate ZK proof\n\nUsage: causality zk prove [OPTIONS] --circuit <CIRCUIT> --witness <WITNESS> --output <OUTPUT>\n\nOptions:\n  -c, --circuit <CIRCUIT>\n          Circuit file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -w, --witness <WITNESS>\n          Witness data\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -o, --output <OUTPUT>\n          Output proof file\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1896,7 +1896,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 19637000
+        "nanos": 6596708
       },
       "stdout": "🔐 Generating ZK proof...\n  Circuit: test.zk\n  Witness: witness.json\n  Output: proof.zk\n✅ ZK proof generated successfully\n",
       "stderr": "",
@@ -1912,7 +1912,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 11395125
+        "nanos": 5671792
       },
       "stdout": "Verify ZK proof\n\nUsage: causality zk verify [OPTIONS] --circuit <CIRCUIT> --proof <PROOF>\n\nOptions:\n  -c, --circuit <CIRCUIT>\n          Circuit file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -p, --proof <PROOF>\n          Proof file\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -i, --public-inputs <PUBLIC_INPUTS>\n          Public inputs\n\n      --mock\n          Use mock runtime for testing\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1928,7 +1928,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 23146042
+        "nanos": 6009791
       },
       "stdout": "🔍 Verifying ZK proof...\n   Circuit: test.zk\n   Proof: proof.zk\n✅ ZK proof verification successful\n",
       "stderr": "",
@@ -1944,7 +1944,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 23715416
+        "nanos": 7245542
       },
       "stdout": "🔍 Verifying ZK proof...\n   Circuit: test.zk\n   Proof: proof.zk\n   Public inputs provided\n✅ ZK proof verification successful\n",
       "stderr": "",
@@ -1960,7 +1960,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 14452750
+        "nanos": 7663167
       },
       "stdout": "🔍 Verifying ZK proof...\n   Circuit: test.zk\n   Proof: proof.zk\n   Using mock runtime\n✅ ZK proof verification successful\n",
       "stderr": "",
@@ -1976,7 +1976,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 9343709
+        "nanos": 7639208
       },
       "stdout": "Setup trusted setup ceremony\n\nUsage: causality zk setup [OPTIONS] --circuit <CIRCUIT> --output-dir <OUTPUT_DIR>\n\nOptions:\n  -c, --circuit <CIRCUIT>\n          Circuit file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output-dir <OUTPUT_DIR>\n          Output directory for setup files\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -p, --participants <PARTICIPANTS>\n          Number of participants\n          \n          [default: 1]\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -1992,7 +1992,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 25067709
+        "nanos": 7280875
       },
       "stdout": "🔧 Setting up trusted setup ceremony...\n  Circuit: test.zk\n  Output directory: setup_output\n  Participants: 1\n✅ Trusted setup completed\n",
       "stderr": "",
@@ -2008,7 +2008,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 20332791
+        "nanos": 7391125
       },
       "stdout": "🔧 Setting up trusted setup ceremony...\n  Circuit: test.zk\n  Output directory: setup_multi\n  Participants: 3\n✅ Trusted setup completed\n",
       "stderr": "",
@@ -2024,7 +2024,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 14798459
+        "nanos": 5275791
       },
       "stdout": "🌐 Cross-chain deployment and transactions\n\nUsage: causality deploy [OPTIONS] <COMMAND>\n\nCommands:\n  simulate  Simulate deployment and execution\n  submit    Submit transactions to target chains\n  report    Generate deployment report\n  help      Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2040,7 +2040,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 8608834
+        "nanos": 6956583
       },
       "stdout": "Simulate deployment and execution\n\nUsage: causality deploy simulate [OPTIONS] --input <INPUT> --chains <CHAINS>\n\nOptions:\n  -i, --input <INPUT>\n          Input file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -c, --chains <CHAINS>\n          Comma-separated list of chains\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -g, --gas-price <GAS_PRICE>\n          Gas price for cost estimation\n\n      --cost-analysis\n          Perform detailed cost analysis\n\n  -s, --scenarios <SCENARIOS>\n          Run specific scenarios\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2056,7 +2056,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 12689750
+        "nanos": 7220042
       },
       "stdout": "Submit transactions to target chains\n\nUsage: causality deploy submit [OPTIONS] --circuit <CIRCUIT> --proof <PROOF> --chains <CHAINS>\n\nOptions:\n  -c, --circuit <CIRCUIT>\n          Circuit file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -p, --proof <PROOF>\n          Proof file\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --chains <CHAINS>\n          Target chains\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --dry-run\n          Simulate without actual submission\n\n      --max-gas-price <MAX_GAS_PRICE>\n          Maximum acceptable gas price\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2072,7 +2072,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10793959
+        "nanos": 4991458
       },
       "stdout": "Generate deployment report\n\nUsage: causality deploy report [OPTIONS] --scenario <SCENARIO> --output <OUTPUT>\n\nOptions:\n  -s, --scenario <SCENARIO>\n          Scenario identifier\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output file\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --include-proofs\n          Include ZK proof information\n\n      --include-gas\n          Include gas usage analysis\n\n      --include-privacy\n          Include privacy assessment\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2088,7 +2088,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 17341000
+        "nanos": 6964042
       },
       "stdout": "Total gas cost: 450000 wei\nExecution time: 250 ms\nSuccess probability: 0.980\nBridge time estimate: 300 seconds\nVault APY estimate: 8.5%\n",
       "stderr": "",
@@ -2104,7 +2104,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 12947000
+        "nanos": 11234500
       },
       "stdout": "📊 Analysis and diagnostics\n\nUsage: causality analyze [OPTIONS] <COMMAND>\n\nCommands:\n  code       Perform static code analysis\n  resources  Analyze resource usage and lifecycle\n  effects    Analyze effect dependencies and composition\n  security   Security analysis\n  help       Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2120,7 +2120,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 7331791
+        "nanos": 4571875
       },
       "stdout": "Perform static code analysis\n\nUsage: causality analyze code [OPTIONS] [FILES]...\n\nArguments:\n  [FILES]...\n          Files to analyze\n\nOptions:\n  -d, --depth <DEPTH>\n          Analysis depth\n          \n          [default: standard]\n          [possible values: surface, standard, deep, comprehensive]\n\n      --verbose\n          Enable detailed output for debugging\n\n  -o, --output <OUTPUT>\n          Output report file\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2136,7 +2136,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 9033750
+        "nanos": 6026000
       },
       "stdout": "Analyze resource usage and lifecycle\n\nUsage: causality analyze resources [OPTIONS] --file <FILE>\n\nOptions:\n  -f, --file <FILE>\n          Source file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -d, --detailed\n          Show detailed lifetime analysis\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --check-leaks\n          Detect potential resource leaks\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2152,7 +2152,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 7976167
+        "nanos": 7374625
       },
       "stdout": "Analyze effect dependencies and composition\n\nUsage: causality analyze effects [OPTIONS] --file <FILE>\n\nOptions:\n  -f, --file <FILE>\n          Source file\n\n      --verbose\n          Enable detailed output for debugging\n\n  -d, --dependencies\n          Show dependency graph\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -c, --composability\n          Analyze composability\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2168,7 +2168,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10469750
+        "nanos": 10664583
       },
       "stdout": "Security analysis\n\nUsage: causality analyze security [OPTIONS] [FILES]...\n\nArguments:\n  [FILES]...\n          Files to analyze\n\nOptions:\n  -l, --level <LEVEL>\n          Security level\n          \n          [default: standard]\n          [possible values: basic, standard, strict, paranoid]\n\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -r, --report <REPORT>\n          Generate security report\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2184,7 +2184,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 8487958
+        "nanos": 7110375
       },
       "stdout": "📊 Analysis and diagnostics\n\nUsage: causality analyze [OPTIONS] <COMMAND>\n\nCommands:\n  code       Perform static code analysis\n  resources  Analyze resource usage and lifecycle\n  effects    Analyze effect dependencies and composition\n  security   Security analysis\n  help       Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2200,7 +2200,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10249167
+        "nanos": 75759958
       },
       "stdout": "🔍 Analyzing 1 files at Standard depth\n✅ Analysis complete\n",
       "stderr": "",
@@ -2216,7 +2216,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 9967083
+        "nanos": 6936708
       },
       "stdout": "🔍 Analyzing resource usage in test.lisp\n✅ Analysis complete\n",
       "stderr": "",
@@ -2232,7 +2232,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 9521875
+        "nanos": 8123042
       },
       "stdout": "🔍 Analyzing effects in test.lisp\n✅ Analysis complete\n",
       "stderr": "",
@@ -2248,7 +2248,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 34327417
+        "nanos": 7952375
       },
       "stdout": "🔍 Security analysis at Standard level\n  Files: [\".\"]\n✅ Analysis complete\n",
       "stderr": "",
@@ -2264,7 +2264,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 13846875
+        "nanos": 6074458
       },
       "stdout": "🧪 Testing and validation\n\nUsage: causality test [OPTIONS] <COMMAND>\n\nCommands:\n  unit         Run unit tests\n  effects      Test algebraic effects\n  integration  Integration tests\n  e2e          End-to-end tests\n  help         Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2280,7 +2280,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 16053000
+        "nanos": 6387834
       },
       "stdout": "🧪 Testing and validation\n\nUsage: causality test [OPTIONS] <COMMAND>\n\nCommands:\n  unit         Run unit tests\n  effects      Test algebraic effects\n  integration  Integration tests\n  e2e          End-to-end tests\n  help         Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2296,7 +2296,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10454958
+        "nanos": 10751625
       },
       "stdout": "Run unit tests\n\nUsage: causality test unit [OPTIONS]\n\nOptions:\n  -f, --filter <FILTER>\n          Test pattern filter\n\n      --verbose\n          Enable detailed output for debugging\n\n  -p, --parallel\n          Run tests in parallel\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -c, --coverage\n          Show test coverage\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2312,7 +2312,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 22962959
+        "nanos": 6364291
       },
       "stdout": "Test algebraic effects\n\nUsage: causality test effects [OPTIONS]\n\nOptions:\n  -p, --pattern <PATTERN>\n          Effect pattern to test\n\n      --verbose\n          Enable detailed output for debugging\n\n      --property-based\n          Property-based testing\n\n  -q, --quiet\n          Minimize output to essentials only\n\n  -c, --cases <CASES>\n          Number of test cases\n          \n          [default: 100]\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2328,7 +2328,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 21669250
+        "nanos": 5450208
       },
       "stdout": "Integration tests\n\nUsage: causality test integration [OPTIONS]\n\nOptions:\n  -e, --env <ENV>\n          Test environment\n          \n          [default: local]\n          [possible values: local, docker, testnet, staging]\n\n      --verbose\n          Enable detailed output for debugging\n\n      --network\n          Include network tests\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2344,7 +2344,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 18220333
+        "nanos": 6612125
       },
       "stdout": "End-to-end tests\n\nUsage: causality test e2e [OPTIONS]\n\nOptions:\n  -s, --suite <SUITE>\n          Test suite to run\n\n      --verbose\n          Enable detailed output for debugging\n\n  -c, --chains <CHAINS>\n          Target chains for testing\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n      --testnet\n          Use testnet instead of local\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2360,7 +2360,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 16569292
+        "nanos": 5128708
       },
       "stdout": "Integration tests\n\nUsage: causality test integration [OPTIONS]\n\nOptions:\n  -e, --env <ENV>\n          Test environment\n          \n          [default: local]\n          [possible values: local, docker, testnet, staging]\n\n      --verbose\n          Enable detailed output for debugging\n\n      --network\n          Include network tests\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2376,7 +2376,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 35987875
+        "nanos": 6652041
       },
       "stdout": "🧪 Running unit tests\n✅ All tests passed\n",
       "stderr": "",
@@ -2392,7 +2392,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10536833
+        "nanos": 5760875
       },
       "stdout": "🧪 Running unit tests\n  Coverage enabled\n✅ All tests passed\n",
       "stderr": "",
@@ -2408,7 +2408,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 24150541
+        "nanos": 6842458
       },
       "stdout": "🧪 Testing algebraic effects\n  Property-based testing with 100 cases\n✅ All tests passed\n",
       "stderr": "",
@@ -2424,7 +2424,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10880292
+        "nanos": 8577083
       },
       "stdout": "🧪 Running end-to-end tests\n  Chains: ethereum,polygon\n✅ All tests passed\n",
       "stderr": "",
@@ -2440,7 +2440,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 13600042
+        "nanos": 6698625
       },
       "stdout": "🔍 System inspection and debugging\n\nUsage: causality inspect [OPTIONS] <COMMAND>\n\nCommands:\n  system     System health and diagnostics\n  artifacts  Inspect compiled artifacts\n  runtime    Inspect runtime state\n  help       Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2456,7 +2456,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 23048000
+        "nanos": 4478041
       },
       "stdout": "🔍 System inspection and debugging\n\nUsage: causality inspect [OPTIONS] <COMMAND>\n\nCommands:\n  system     System health and diagnostics\n  artifacts  Inspect compiled artifacts\n  runtime    Inspect runtime state\n  help       Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2472,7 +2472,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 12584708
+        "nanos": 6304500
       },
       "stdout": "📈 Visualization and reporting\n\nUsage: causality viz [OPTIONS] <COMMAND>\n\nCommands:\n  effects       Visualize effect execution flows\n  resources     Visualize resource dependencies\n  architecture  System architecture overview\n  help          Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2488,7 +2488,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 8825791
+        "nanos": 7307209
       },
       "stdout": "📈 Visualization and reporting\n\nUsage: causality viz [OPTIONS] <COMMAND>\n\nCommands:\n  effects       Visualize effect execution flows\n  resources     Visualize resource dependencies\n  architecture  System architecture overview\n  help          Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2504,7 +2504,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 10709333
+        "nanos": 4563000
       },
       "stdout": "⚙️ Configuration and system management\n\nUsage: causality config [OPTIONS] <COMMAND>\n\nCommands:\n  show   Show current configuration\n  set    Set configuration value\n  unset  Remove configuration key\n  reset  Reset configuration to defaults\n  help   Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2520,7 +2520,7 @@
       "skipped": false,
       "duration": {
         "secs": 0,
-        "nanos": 7899083
+        "nanos": 5143125
       },
       "stdout": "⚙️ Configuration and system management\n\nUsage: causality config [OPTIONS] <COMMAND>\n\nCommands:\n  show   Show current configuration\n  set    Set configuration value\n  unset  Remove configuration key\n  reset  Reset configuration to defaults\n  help   Print this message or the help of the given subcommand(s)\n\nOptions:\n      --verbose\n          Enable detailed output for debugging\n\n  -q, --quiet\n          Minimize output to essentials only\n\n      --format <FORMAT>\n          Output format for structured data\n\n          Possible values:\n          - pretty: Human-readable output with colors and formatting\n          - json:   JSON output for programmatic use\n          - yaml:   YAML output for configuration files\n          - plain:  Plain text output\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
       "stderr": "",
@@ -2536,12 +2536,12 @@
     "skipped": 19,
     "success_rate": 87.24832214765101,
     "total_duration": {
-      "secs": 2,
-      "nanos": 502177000
+      "secs": 1,
+      "nanos": 82171000
     },
     "avg_test_time": {
       "secs": 0,
-      "nanos": 16793134
+      "nanos": 7262892
     }
   }
 }

@@ -10,6 +10,7 @@ use causality_core::system::serialization::{SszEncode, SszDecode};
 use causality_core::{EntityId, ExprId, Hasher};
 use causality_core::machine::Resource;
 use crate::{FfiErrorCode};
+use serde_json;
 
 // Re-export common types for convenience
 pub use causality_core::lambda::base::Value as CausalityValueRust;
@@ -33,6 +34,30 @@ pub struct CausalityResource {
 /// Opaque handle to a Causality expression for C interface
 #[repr(C)]
 pub struct CausalityExpr {
+    _private: [u8; 0],
+}
+
+/// Opaque handle to a Causality type
+#[repr(C)]
+pub struct CausalityType {
+    _private: [u8; 0],
+}
+
+/// Opaque handle to a Causality instruction
+#[repr(C)]
+pub struct CausalityInstruction {
+    _private: [u8; 0],
+}
+
+/// Opaque handle to a storage proof effect
+#[repr(C)]
+pub struct CausalityStorageProofEffect {
+    _private: [u8; 0],
+}
+
+/// Opaque handle to a machine state
+#[repr(C)]
+pub struct CausalityMachineState {
     _private: [u8; 0],
 }
 
@@ -63,7 +88,7 @@ pub extern "C" fn causality_value_int(i: c_uint) -> *mut CausalityValue {
 
 /// Create a string value
 #[no_mangle]
-pub extern "C" fn causality_value_string(s: *const c_char) -> *mut CausalityValue {
+pub unsafe extern "C" fn causality_value_string(s: *const c_char) -> *mut CausalityValue {
     if s.is_null() {
         return std::ptr::null_mut();
     }
@@ -80,7 +105,7 @@ pub extern "C" fn causality_value_string(s: *const c_char) -> *mut CausalityValu
 
 /// Create a symbol value
 #[no_mangle]
-pub extern "C" fn causality_value_symbol(s: *const c_char) -> *mut CausalityValue {
+pub unsafe extern "C" fn causality_value_symbol(s: *const c_char) -> *mut CausalityValue {
     if s.is_null() {
         return std::ptr::null_mut();
     }
@@ -118,7 +143,7 @@ struct ResourceWrapper {
 
 /// Create a resource
 #[no_mangle]
-pub extern "C" fn causality_create_resource(
+pub unsafe extern "C" fn causality_create_resource(
     resource_type: *const c_char,
     domain_id: *const u8,
     quantity: u64,
@@ -218,7 +243,7 @@ pub extern "C" fn causality_resource_id(resource: *const CausalityResource) -> *
 
 /// Compile an expression from string
 #[no_mangle]
-pub extern "C" fn causality_compile_expr(expr_string: *const c_char) -> *mut CausalityExpr {
+pub unsafe extern "C" fn causality_compile_expr(expr_string: *const c_char) -> *mut CausalityExpr {
     if expr_string.is_null() {
         return std::ptr::null_mut();
     }
@@ -271,9 +296,9 @@ pub extern "C" fn causality_expr_free(expr: *mut CausalityExpr) {
     }
 }
 
-/// Submit an intent
+/// Submit an intent to the Causality system
 #[no_mangle]
-pub extern "C" fn causality_submit_intent(
+pub unsafe extern "C" fn causality_submit_intent(
     name: *const c_char,
     domain_id: *const u8,
     expr_string: *const c_char,
@@ -364,16 +389,16 @@ pub extern "C" fn causality_value_serialize(value: *const CausalityValue) -> Ser
     SerializationResult::success(bytes)
 }
 
-/// Deserialize bytes to a Causality value
+/// Deserialize a value from bytes
 #[no_mangle]
-pub extern "C" fn causality_value_deserialize(
+pub unsafe extern "C" fn causality_value_deserialize(
     data: *const u8,
     length: usize,
 ) -> *mut CausalityValue {
     if data.is_null() || length == 0 {
         return std::ptr::null_mut();
     }
-    
+
     let bytes = unsafe { std::slice::from_raw_parts(data, length) };
     
     match Value::from_ssz_bytes(bytes) {
@@ -385,19 +410,19 @@ pub extern "C" fn causality_value_deserialize(
     }
 }
 
-/// Free serialized data
+/// Free memory allocated for serialized data
 #[no_mangle]
-pub extern "C" fn causality_free_serialized_data(data: *mut u8, length: usize) {
+pub unsafe extern "C" fn causality_free_serialized_data(data: *mut u8, length: usize) {
     if !data.is_null() && length > 0 {
-        unsafe {
+        if length <= 1024 { // Basic safety check
             let _ = Box::from_raw(std::slice::from_raw_parts_mut(data, length));
         }
     }
 }
 
-/// Free error message
+/// Free memory allocated for error messages
 #[no_mangle]
-pub extern "C" fn causality_free_error_message(message: *mut c_char) {
+pub unsafe extern "C" fn causality_free_error_message(message: *mut c_char) {
     if !message.is_null() {
         unsafe {
             let _ = CString::from_raw(message);
@@ -504,9 +529,9 @@ pub extern "C" fn causality_value_as_string(value: *const CausalityValue) -> *mu
     }
 }
 
-/// Free a string returned by causality_value_as_string
+/// Free a string allocated by the library
 #[no_mangle]
-pub extern "C" fn causality_free_string(s: *mut c_char) {
+pub unsafe extern "C" fn causality_free_string(s: *mut c_char) {
     if !s.is_null() {
         unsafe {
             let _ = CString::from_raw(s);
@@ -663,5 +688,374 @@ impl CausalityFfi {
 impl Default for CausalityFfi {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Error codes for C interface
+pub const CAUSALITY_SUCCESS: c_int = 0;
+pub const CAUSALITY_ERROR_INVALID_PARAM: c_int = -1;
+pub const CAUSALITY_ERROR_PARSE: c_int = -2;
+pub const CAUSALITY_ERROR_MEMORY: c_int = -3;
+pub const CAUSALITY_ERROR_INTERNAL: c_int = -4;
+
+/// Create a new integer value
+#[no_mangle]
+pub extern "C" fn causality_value_new_int(value: i64) -> *mut CausalityValue {
+    let val = Value::Integer(value);
+    Box::into_raw(Box::new(val)) as *mut CausalityValue
+}
+
+/// Create a new string value
+#[no_mangle]
+pub unsafe extern "C" fn causality_value_new_string(s: *const c_char) -> *mut CausalityValue {
+    if s.is_null() {
+        return std::ptr::null_mut();
+    }
+    
+    let c_str = unsafe { CStr::from_ptr(s) };
+    let rust_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    
+    let val = Value::String(rust_str.to_string());
+    Box::into_raw(Box::new(val)) as *mut CausalityValue
+}
+
+/// Create a new boolean value
+#[no_mangle]
+pub unsafe extern "C" fn causality_value_new_bool(b: c_int) -> *mut CausalityValue {
+    let c_str = unsafe { CStr::from_ptr(b as *const c_char) };
+    let val = Value::Bool(b != 0);
+    Box::into_raw(Box::new(val)) as *mut CausalityValue
+}
+
+/// Serialize a value to JSON string
+#[no_mangle]
+pub extern "C" fn causality_value_to_json(value: *const CausalityValue) -> *mut c_char {
+    if value.is_null() {
+        return std::ptr::null_mut();
+    }
+    
+    let val = unsafe { &*(value as *const Value) };
+    match serde_json::to_string(val) {
+        Ok(json) => {
+            match CString::new(json) {
+                Ok(c_string) => c_string.into_raw(),
+                Err(_) => std::ptr::null_mut(),
+            }
+        }
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Create a storage proof effect
+#[no_mangle]
+pub unsafe extern "C" fn causality_storage_proof_effect_create(
+    resource_type: *const c_char,
+    domain_id: *const u8,
+    slot: c_uint,
+) -> *mut CausalityStorageProofEffect {
+    if resource_type.is_null() || domain_id.is_null() {
+        return std::ptr::null_mut();
+    }
+    
+    let resource_type_str = unsafe { CStr::from_ptr(resource_type) };
+    let resource_type_string = match resource_type_str.to_str() {
+        Ok(s) => s.to_string(),
+        Err(_) => return std::ptr::null_mut(),
+    };
+    
+    let domain_bytes = unsafe { std::slice::from_raw_parts(domain_id, 32) };
+    let domain = Domain::from_bytes(domain_bytes);
+    
+    let commitment = StorageCommitment {
+        domain: domain.clone(),
+        slot: slot as u64,
+        value_hash: [0u8; 32], // Placeholder
+    };
+    
+    let effect = StorageProofEffect::new(
+        EntityId::from_content(&resource_type_string.as_bytes().to_vec()),
+        commitment,
+        ProofType::EthereumMerklePatricia,
+    );
+    
+    Box::into_raw(Box::new(effect)) as *mut CausalityStorageProofEffect
+}
+
+/// Free a storage proof effect
+#[no_mangle]
+pub extern "C" fn causality_storage_proof_effect_free(effect: *mut CausalityStorageProofEffect) {
+    if !effect.is_null() {
+        unsafe {
+            let _ = Box::from_raw(effect as *mut StorageProofEffect);
+        }
+    }
+}
+
+/// Create a fungible token
+#[no_mangle]
+pub extern "C" fn causality_fungible_token_create(
+    name: *const c_char,
+    symbol: *const c_char,
+    decimals: c_uint,
+    total_supply: c_uint,
+) -> *mut CausalityValue {
+    if name.is_null() || symbol.is_null() {
+        return std::ptr::null_mut();
+    }
+    
+    let name_str = match unsafe { CStr::from_ptr(name) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    
+    let symbol_str = match unsafe { CStr::from_ptr(symbol) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    
+    let token = FungibleToken {
+        name: name_str.to_string(),
+        symbol: symbol_str.to_string(),
+        decimals,
+        total_supply: total_supply as u64,
+    };
+    
+    let val = Value::FungibleToken(token);
+    Box::into_raw(Box::new(val)) as *mut CausalityValue
+}
+
+/// Create a new machine state
+#[no_mangle]
+pub extern "C" fn causality_machine_state_create() -> *mut CausalityMachineState {
+    let state = MachineState::new();
+    Box::into_raw(Box::new(state)) as *mut CausalityMachineState
+}
+
+/// Free a machine state
+#[no_mangle]
+pub extern "C" fn causality_machine_state_free(state: *mut CausalityMachineState) {
+    if !state.is_null() {
+        unsafe {
+            let _ = Box::from_raw(state as *mut MachineState);
+        }
+    }
+}
+
+/// Parse a string expression
+#[no_mangle]
+pub unsafe extern "C" fn causality_parse_expression(expr_string: *const c_char) -> *mut CausalityValue {
+    if expr_string.is_null() {
+        return std::ptr::null_mut();
+    }
+    
+    let c_str = unsafe { CStr::from_ptr(expr_string) };
+    let expr_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    
+    // Simple parsing - in practice this would use the actual Causality parser
+    if expr_str.starts_with("(int ") && expr_str.ends_with(')') {
+        let num_str = &expr_str[5..expr_str.len()-1];
+        if let Ok(num) = num_str.parse::<i64>() {
+            let val = Value::Integer(num);
+            return Box::into_raw(Box::new(val)) as *mut CausalityValue;
+        }
+    }
+    
+    // Default to Unit if parsing fails
+    let val = Value::Unit;
+    Box::into_raw(Box::new(val)) as *mut CausalityValue
+}
+
+/// Get the Type registry
+#[no_mangle]
+pub extern "C" fn causality_type_registry_create() -> *mut TypeRegistry {
+    let registry = TypeRegistry::new();
+    Box::into_raw(Box::new(registry))
+}
+
+/// Free the type registry
+#[no_mangle]
+pub extern "C" fn causality_type_registry_free(registry: *mut TypeRegistry) {
+    if !registry.is_null() {
+        unsafe {
+            let _ = Box::from_raw(registry);
+        }
+    }
+}
+
+/// Register a new type in the registry
+#[no_mangle]
+pub unsafe extern "C" fn causality_type_registry_register(
+    registry: *mut TypeRegistry,
+    name: *const c_char,
+    expr_string: *const c_char,
+) -> c_int {
+    if registry.is_null() || name.is_null() || expr_string.is_null() {
+        return CAUSALITY_ERROR_INVALID_PARAM;
+    }
+    
+    let name_str = unsafe { CStr::from_ptr(name) };
+    let expr_str = unsafe { CStr::from_ptr(expr_string) };
+    
+    let name_string = match name_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return CAUSALITY_ERROR_PARSE,
+    };
+    
+    let expr_string = match expr_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return CAUSALITY_ERROR_PARSE,
+    };
+    
+    let registry_ref = unsafe { &mut *registry };
+    
+    // Create a simple type based on the expression
+    let type_obj = if expr_string.contains("int") {
+        Type::Integer
+    } else if expr_string.contains("string") {
+        Type::String
+    } else if expr_string.contains("bool") {
+        Type::Bool
+    } else {
+        Type::Unit
+    };
+    
+    if registry_ref.register_type(name_string.to_string(), type_obj).is_ok() {
+        CAUSALITY_SUCCESS
+    } else {
+        CAUSALITY_ERROR_INTERNAL
+    }
+}
+
+/// Utility functions for handling C strings and memory
+/// 
+/// # Safety
+/// These functions are unsafe because they work with raw pointers.
+/// The caller must ensure:
+/// - Pointers are valid and properly aligned
+/// - Memory regions don't overlap inappropriately  
+/// - Lifetimes are managed correctly
+
+/// Allocate memory for C interface
+#[no_mangle]
+pub extern "C" fn causality_alloc(size: usize) -> *mut u8 {
+    if size == 0 {
+        return std::ptr::null_mut();
+    }
+    
+    let layout = std::alloc::Layout::from_size_align(size, 1).unwrap();
+    unsafe { std::alloc::alloc(layout) }
+}
+
+/// Free memory allocated by causality_alloc
+#[no_mangle]
+pub unsafe extern "C" fn causality_free(data: *mut u8, length: usize) {
+    if !data.is_null() && length > 0 {
+        if length <= 1024 { // Basic safety check
+            let _ = Box::from_raw(std::slice::from_raw_parts_mut(data, length));
+        }
+    }
+}
+
+/// Get the last error message (thread-local)
+thread_local! {
+    static LAST_ERROR: std::cell::RefCell<String> = std::cell::RefCell::new(String::new());
+}
+
+/// Set the last error message
+fn set_last_error(msg: &str) {
+    LAST_ERROR.with(|e| {
+        *e.borrow_mut() = msg.to_string();
+    });
+}
+
+/// Get the last error message
+#[no_mangle]
+pub extern "C" fn causality_get_last_error() -> *mut c_char {
+    LAST_ERROR.with(|e| {
+        let error = e.borrow();
+        if error.is_empty() {
+            std::ptr::null_mut()
+        } else {
+            match CString::new(error.clone()) {
+                Ok(c_string) => c_string.into_raw(),
+                Err(_) => std::ptr::null_mut(),
+            }
+        }
+    })
+}
+
+/// Clear the last error
+#[no_mangle]
+pub extern "C" fn causality_clear_last_error() {
+    LAST_ERROR.with(|e| {
+        e.borrow_mut().clear();
+    });
+}
+
+/// Utility function to copy string to C-allocated buffer
+#[no_mangle]
+pub extern "C" fn causality_copy_string(src: *const c_char, dest: *mut c_char, max_len: usize) -> c_int {
+    if src.is_null() || dest.is_null() || max_len == 0 {
+        return CAUSALITY_ERROR_INVALID_PARAM;
+    }
+    
+    let src_str = unsafe { CStr::from_ptr(src) };
+    let bytes = src_str.to_bytes();
+    
+    if bytes.len() >= max_len {
+        return CAUSALITY_ERROR_MEMORY;
+    }
+    
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), dest as *mut u8, bytes.len());
+        *dest.add(bytes.len()) = 0; // Null terminate
+    }
+    
+    CAUSALITY_SUCCESS
+}
+
+/// Get version information
+#[no_mangle]
+pub extern "C" fn causality_version() -> *mut c_char {
+    let version = "0.1.0";
+    match CString::new(version) {
+        Ok(c_string) => c_string.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Check if a pointer is valid (basic sanity check)
+#[no_mangle]
+pub extern "C" fn causality_is_valid_ptr(ptr: *const std::ffi::c_void) -> c_int {
+    if ptr.is_null() {
+        0
+    } else {
+        1
+    }
+}
+
+/// Cleanup function to be called when unloading the library
+#[no_mangle]
+pub extern "C" fn causality_cleanup() {
+    LAST_ERROR.with(|e| {
+        e.borrow_mut().clear();
+    });
+}
+
+/// Get string length
+#[no_mangle]
+pub unsafe extern "C" fn causality_string_len(s: *const c_char) -> usize {
+    if s.is_null() {
+        return 0;
+    }
+    
+    unsafe {
+        CStr::from_ptr(s).to_bytes().len()
     }
 } 

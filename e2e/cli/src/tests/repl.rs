@@ -10,7 +10,7 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use crate::test_utils::{CommandTest, TestResult, TestRunner};
+use crate::test_utils::{TestResult, TestRunner};
 use crate::cmd_test;
 
 /// Run all REPL command tests

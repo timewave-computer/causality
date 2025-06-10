@@ -42,12 +42,11 @@ struct InteropHelper;
 impl InteropHelper {
     fn new() -> Self { InteropHelper }
     
-    fn marshal_for_ffi(&self, value: &Value) -> Result<Vec<u8>> {
-        // Mock implementation
+    fn marshal_for_ffi(&self, _value: &Value) -> Result<Vec<u8>> {
         Ok(b"marshaled".to_vec())
     }
     
-    fn unmarshal_from_ffi(&self, data: &[u8]) -> Result<Value> {
+    fn unmarshal_from_ffi(&self, _data: &[u8]) -> Result<Value> {
         Ok(Value::Unit)
     }
     
@@ -60,13 +59,19 @@ impl InteropHelper {
     }
 }
 
-struct ResourceManager;
+struct ResourceManager {
+    // Remove counter for true content addressing
+}
 
 impl ResourceManager {
-    fn new() -> Self { ResourceManager }
+    fn new() -> Self { 
+        ResourceManager { }
+    }
     
-    fn create_resource(&mut self, _name: &str, _amount: u32) -> EntityId {
-        EntityId::default()
+    fn create_resource(&mut self, name: &str, amount: u32) -> EntityId {
+        // Generate deterministic EntityId based only on content (name + amount)
+        let content = format!("{}:{}", name, amount);
+        EntityId::from_content(&content.as_bytes().to_vec())
     }
     
     fn get_resource_balance(&self, _id: &EntityId) -> Option<u32> {
@@ -213,7 +218,7 @@ async fn test_cross_language_interop() -> Result<()> {
         
         // Test FFI marshalling round-trip
         let marshalled = interop_helper.marshal_for_ffi(value)?;
-        let unmarshalled = interop_helper.unmarshal_from_ffi(&marshalled)?;
+        let _unmarshalled = interop_helper.unmarshal_from_ffi(&marshalled)?;
         
         // For mock implementation, we just verify the process works
         println!("     ✓ Round-trip successful ({} bytes)", marshalled.len());
@@ -310,7 +315,7 @@ async fn test_integrated_workflow() -> Result<()> {
     // Test FFI round-trip
     let test_value = Value::Int(1000);
     let marshalled = interop_helper.marshal_for_ffi(&test_value)?;
-    let unmarshalled = interop_helper.unmarshal_from_ffi(&marshalled)?;
+    let _unmarshalled = interop_helper.unmarshal_from_ffi(&marshalled)?;
     println!("   ✓ FFI round-trip successful");
     
     // Test domain coordination

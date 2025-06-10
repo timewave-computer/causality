@@ -106,6 +106,14 @@ pub struct EngineEffectExecution {
     pub result: Option<String>,
 }
 
+/// Execution metrics
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct ExecutionMetrics {
+    pub effects_executed: u64,
+    pub total_gas_consumed: u64,
+    pub execution_time_ms: u64,
+}
+
 /// Simulation engine for running Causality programs in a controlled environment
 #[derive(Debug)]
 pub struct SimulationEngine {
@@ -206,14 +214,6 @@ pub struct ExecutionStep {
     pub resources_allocated: Vec<String>,
     pub resources_consumed: Vec<String>,
     pub gas_consumed: u64,
-}
-
-/// Execution metrics
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct ExecutionMetrics {
-    pub effects_executed: u64,
-    pub total_gas_consumed: u64,
-    pub execution_time_ms: u64,
 }
 
 impl Default for SimulationEngine {
@@ -383,15 +383,32 @@ impl SimulationEngine {
             "generic"
         };
         
-        // Simulate gas consumption for compute effects
-        if effect_type == "compute" {
-            if self.machine.gas < 10 {
+        // Simulate gas consumption for different effect types
+        let gas_consumed = if effect_type == "compute" {
+            let gas_needed = 10;
+            if self.machine.gas < gas_needed {
                 return Err(SimulationError::EffectExecutionError(
-                    format!("Insufficient gas: required 10, available {}", self.machine.gas)
+                    format!("Insufficient gas: required {}, available {}", gas_needed, self.machine.gas)
                 ));
             }
-            self.machine.gas -= 10;
-        }
+            self.machine.gas -= gas_needed;
+            gas_needed
+        } else if effect_type == "storage" {
+            let gas_needed = 5;
+            self.machine.gas = self.machine.gas.saturating_sub(gas_needed);
+            gas_needed
+        } else if effect_type == "transfer" {
+            let gas_needed = 3;
+            self.machine.gas = self.machine.gas.saturating_sub(gas_needed);
+            gas_needed
+        } else {
+            let gas_needed = 1; // Default gas cost for other operations
+            self.machine.gas = self.machine.gas.saturating_sub(gas_needed);
+            gas_needed
+        };
+        
+        // Add consumed gas to metrics
+        self.metrics.total_gas_consumed += gas_consumed;
         
         // Simulate failure rate for network effects
         if effect_type == "network" && rand::random::<f64>() < 0.05 { // 5% failure rate

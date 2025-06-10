@@ -273,8 +273,8 @@ enum DevAction {
         output: std::path::PathBuf,
         
         /// Output format
-        #[arg(short, long, value_enum, default_value = "intermediate")]
-        format: CompileFormat,
+        #[arg(long = "output-format", value_enum, default_value = "intermediate")]
+        output_format: CompileFormat,
         
         /// Enable optimizations
         #[arg(long, help = "Apply optimization passes")]
@@ -913,8 +913,8 @@ async fn handle_dev_command(
     error_handler: Arc<CliErrorHandler>,
 ) -> anyhow::Result<()> {
     match action {
-        DevAction::Compile { input, output, format, optimize, show_stages } => {
-            handle_compile_command_new(input, output, format, optimize, show_stages, error_handler).await
+        DevAction::Compile { input, output, output_format, optimize, show_stages } => {
+            handle_compile_command_new(input, output, output_format, optimize, show_stages, error_handler).await
         }
         DevAction::Run { file, source, trace, max_steps } => {
             handle_execute_command(file, source, trace, max_steps, error_handler).await
@@ -931,7 +931,7 @@ async fn handle_dev_command(
 async fn handle_compile_command_new(
     input: std::path::PathBuf,
     output: std::path::PathBuf,
-    format: CompileFormat,
+    output_format: CompileFormat,
     optimize: bool,
     show_stages: bool,
     _error_handler: Arc<CliErrorHandler>,
@@ -957,13 +957,13 @@ async fn handle_compile_command_new(
     }
     
     // Write output based on format
-    match format {
+    match output_format {
         CompileFormat::Intermediate => {
             std::fs::write(&output, format!("{:#?}", compiled.instructions))?;
             println!("{} Compiled to {}", "✅".green(), output.display());
         }
         _ => {
-            println!("{} {} format not yet implemented", "⚠️".yellow(), format_display(&format));
+            println!("{} {} format not yet implemented", "⚠️".yellow(), format_display(&output_format));
         }
     }
     
@@ -1072,7 +1072,7 @@ async fn handle_deploy_command(
             };
             simulate_command.execute().await
         }
-        DeployAction::Submit { circuit, proof, chains, dry_run, max_gas_price } => {
+        DeployAction::Submit { circuit, proof, chains, dry_run, max_gas_price: _ } => {
             handle_submit_transaction_command(circuit, proof, chains, dry_run, false, error_handler).await
         }
         DeployAction::Report { scenario, output, include_proofs, include_gas, include_privacy } => {
@@ -1310,6 +1310,7 @@ fn format_display(format: &CompileFormat) -> &str {
 }
 
 /// Handle compile command (legacy compatibility)
+#[allow(dead_code)]
 async fn handle_compile_command(
     file: Option<String>,
     source: Option<String>,

@@ -35,6 +35,7 @@ pub struct CompileCommand {
 }
 
 impl CompileCommand {
+    #[allow(dead_code)]
     pub async fn execute(&self) -> Result<()> {
         if self.verbose {
             println!("🔧 Starting DSL compilation process...");
@@ -132,7 +133,7 @@ impl CompileCommand {
         Ok(())
     }
 
-    /// Convert DSL to Causality Lisp
+    #[allow(dead_code)]
     fn dsl_to_lisp(&self, dsl_code: &str) -> Result<String> {
         // For now, we'll assume the DSL is already in Lisp format
         // In a real implementation, this would parse the custom DSL syntax
@@ -147,7 +148,7 @@ impl CompileCommand {
         }
     }
 
-    /// Parse custom DSL syntax and convert to Causality Lisp
+    #[allow(dead_code)]
     fn parse_custom_dsl(&self, dsl_code: &str) -> Result<String> {
         // This is a simplified parser for the bridge-vault DSL
         let mut lisp_code = String::new();
@@ -178,7 +179,7 @@ impl CompileCommand {
         Ok(lisp_code)
     }
 
-    /// Serialize IR to JSON format
+    #[allow(dead_code)]
     fn serialize_ir(&self, program: &causality_compiler::CompiledProgram) -> Result<String> {
         let ir_json = serde_json::json!({
             "format": "causality-ir-v1",
@@ -197,19 +198,19 @@ impl CompileCommand {
         Ok(serde_json::to_string_pretty(&ir_json)?)
     }
 
-    /// Serialize to bytecode format
+    #[allow(dead_code)]
     fn serialize_bytecode(&self, _program: &causality_compiler::CompiledProgram) -> Result<String> {
         // Mock bytecode serialization
         Ok("CAUSALITY_BYTECODE_V1\n# Bytecode representation (mock)\n".to_string())
     }
 
-    /// Serialize to native code format
+    #[allow(dead_code)]
     fn serialize_native(&self, _program: &causality_compiler::CompiledProgram) -> Result<String> {
         // Mock native code serialization
         Ok("CAUSALITY_NATIVE_V1\n# Native code representation (mock)\n".to_string())
     }
 
-    /// Print compilation summary
+    #[allow(dead_code)]
     async fn print_compilation_summary(&self) -> Result<()> {
         if self.verbose {
             println!("\n📋 Compilation Summary:");

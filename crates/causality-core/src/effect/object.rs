@@ -177,7 +177,8 @@ impl<T: Clone> Object<T, Unrestricted> {
 
 /// Capability-aware operations for objects
 impl<T, L: Linearity> Object<T, L> {
-    /// Perform an operation that requires specific capabilities
+    /// Perform an operation that requires a specific capability
+    #[allow(clippy::result_large_err)]
     pub fn with_capability_check<F, R>(
         &self,
         required_capability: &Capability,
@@ -191,12 +192,13 @@ impl<T, L: Linearity> Object<T, L> {
         } else {
             Err(CapabilityError::MissingCapability {
                 required: required_capability.clone(),
-                available: self.capabilities.clone(),
+                available: Box::new(self.capabilities.clone()),
             })
         }
     }
     
     /// Perform an operation that requires multiple capabilities
+    #[allow(clippy::result_large_err)]
     pub fn with_capabilities_check<F, R>(
         &self,
         required_capabilities: &[Capability],
@@ -209,7 +211,7 @@ impl<T, L: Linearity> Object<T, L> {
             if !self.has_capability(capability) {
                 return Err(CapabilityError::MissingCapability {
                     required: capability.clone(),
-                    available: self.capabilities.clone(),
+                    available: Box::new(self.capabilities.clone()),
                 });
             }
         }
@@ -223,7 +225,7 @@ pub enum CapabilityError {
     /// Required capability is missing
     MissingCapability {
         required: Capability,
-        available: HashSet<Capability>,
+        available: Box<HashSet<Capability>>,
     },
     
     /// Operation not permitted

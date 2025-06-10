@@ -88,8 +88,11 @@ impl EffectLibrary {
     }
 }
 
+#[allow(dead_code)]
 struct SimpleEffectHandler {
+    #[allow(dead_code)]
     name: String,
+    #[allow(dead_code)]
     handler: Box<dyn Fn(&[Value]) -> Result<Value> + Send + Sync>,
 }
 
@@ -105,7 +108,9 @@ impl SimpleEffectHandler {
     }
 }
 
+#[allow(dead_code)]
 struct MockEffectRegistry {
+    #[allow(dead_code)]
     registry: EffectHandlerRegistry,
 }
 
@@ -159,7 +164,7 @@ async fn test_comprehensive_compilation_workflow() -> Result<()> {
     let api_config = ApiConfig::default();
     let sessions: Arc<RwLock<HashMap<String, ExecutionSession>>> = Arc::new(RwLock::new(HashMap::new()));
     let api_handlers = ApiHandlers::new(sessions.clone());
-    let api = CausalityApi::new(api_config);
+    let _api = CausalityApi::new(api_config);
     
     println!("   ✓ Compiler pipeline initialized");
     println!("   ✓ Runtime executor ready");
@@ -205,7 +210,7 @@ async fn test_comprehensive_compilation_workflow() -> Result<()> {
         let ast = parser.parse(lisp_code).map_err(|e| anyhow::anyhow!("Parse error: {:?}", e))?;
         
         // Desugar to core primitives
-        let core_ast = desugar::desugar_expr(&ast)
+        let _core_ast = desugar::desugar_expr(&ast)
             .map_err(|e| anyhow::anyhow!("Desugar error: {:?}", e))?;
         
         // Type check (simplified - assume success for mock)

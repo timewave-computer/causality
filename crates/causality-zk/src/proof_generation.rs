@@ -441,7 +441,8 @@ impl ZkProofGenerator {
         format!("{:x}", hasher.finish())
     }
 
-    fn calculate_circuit_complexity(&self, _public_inputs: &[u32], _circuit: &ZkCircuit) -> Result<u32, crate::error::ZkError> {
+    #[allow(dead_code)]
+    fn calculate_circuit_complexity(&self, _public_inputs: &[u32], _circuit: &ZkCircuit) -> Result<u64, crate::error::ZkError> {
         // Implementation of calculate_circuit_complexity function
         Ok(0) // Placeholder return, actual implementation needed
     }

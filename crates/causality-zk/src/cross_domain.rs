@@ -76,6 +76,7 @@ pub enum DomainPartition {
 /// Mock backend for testing
 #[derive(Debug)]
 pub struct MockBackend {
+    #[allow(dead_code)]
     name: String,
 }
 
@@ -121,9 +122,11 @@ pub struct CrossDomainZkManager {
     backends: HashMap<String, Box<dyn ZkBackend>>,
     
     /// Cross-domain proof aggregation
+    #[allow(dead_code)]
     aggregator: ProofAggregator,
     
     /// Verification coordination
+    #[allow(dead_code)]
     verification_coordinator: VerificationCoordinator,
     
     /// Circuit cache for reusing compiled circuits
@@ -247,7 +250,7 @@ impl CrossDomainZkManager {
             let circuit = ZkCircuit::new(domain_instructions, vec![]); // Public inputs TBD
             
             // Create domain-specific witness (simplified)
-            let domain_witness = ZkWitness::new(
+            let _witness = ZkWitness::new(
                 circuit.id.clone(),
                 global_witness.private_inputs.clone(),
                 global_witness.execution_trace.clone(),
@@ -255,7 +258,7 @@ impl CrossDomainZkManager {
             
             // Generate proof for this domain
             if let Some(backend) = self.backends.get(&domain_id) {
-                let proof = backend.generate_proof(&circuit, &domain_witness)?;
+                let proof = backend.generate_proof(&circuit, &_witness)?;
                 
                 let domain_proof = DomainProof {
                     domain_id: domain_id.clone(),
@@ -517,6 +520,7 @@ pub struct DomainCoordinationResult {
 #[derive(Debug, Clone)]
 pub struct ProofAggregator {
     /// Maximum proofs per batch
+    #[allow(dead_code)]
     max_batch_size: usize,
 }
 
@@ -538,6 +542,7 @@ impl ProofAggregator {
 #[derive(Debug, Clone)]
 pub struct VerificationCoordinator {
     /// Coordinator endpoint
+    #[allow(dead_code)]
     endpoint: String,
 }
 
@@ -631,7 +636,7 @@ mod tests {
             },
         ];
         
-        let witness = ZkWitness::new(
+        let _witness = ZkWitness::new(
             "test_circuit".to_string(),
             vec![1, 2, 3, 4],
             vec![5, 6, 7, 8],

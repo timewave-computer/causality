@@ -11,12 +11,12 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info, warn, debug};
+use tracing::{info, warn};
 
 mod tests;
 mod test_utils;
 
-use test_utils::{TestEnvironment, TestResult, TestRunner, CommandTest};
+use test_utils::{TestEnvironment, TestResult, TestRunner};
 
 /// Configuration for the test runner
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -397,7 +397,7 @@ async fn gather_environment_info() -> Result<EnvironmentInfo> {
 }
 
 /// Generate comprehensive test reports
-async fn generate_reports(results: &TestSuiteResults, config: &TestConfig) -> Result<()> {
+async fn generate_reports(results: &TestSuiteResults, _config: &TestConfig) -> Result<()> {
     info!("📊 Generating test reports");
 
     // Console report
@@ -516,7 +516,7 @@ async fn generate_markdown_report(results: &TestSuiteResults) -> Result<()> {
                 test.name, 
                 test.error.as_deref().unwrap_or("Unknown error")));
         }
-        content.push_str("\n");
+        content.push('\n');
     }
     
     // Environment Information
@@ -536,7 +536,7 @@ async fn generate_markdown_report(results: &TestSuiteResults) -> Result<()> {
     
     // All Test Results
     content.push_str("\n## 📝 Detailed Test Results\n\n");
-    for (category_name, _) in &results.category_results {
+    for category_name in results.category_results.keys() {
         let category_tests: Vec<_> = results.test_results.iter()
             .filter(|t| t.category == *category_name)
             .collect();
@@ -558,7 +558,7 @@ async fn generate_markdown_report(results: &TestSuiteResults) -> Result<()> {
                 content.push_str(&format!("| {} | {} | {:.2?} | `{}` |\n",
                     test.name, status, test.duration, test.command));
             }
-            content.push_str("\n");
+            content.push('\n');
         }
     }
 
