@@ -9,7 +9,7 @@ pub async fn run_deploy_tests(runner: &mut TestRunner) -> Result<Vec<TestResult>
     let mut results = Vec::new();
 
     // Basic help tests
-    for (name, cmd, subcmd) in [
+    for (name, _cmd, subcmd) in [
         ("deploy_help", "deploy", "--help"),
         ("deploy_simulate_help", "deploy", "simulate"),
         ("deploy_submit_help", "deploy", "submit"), 

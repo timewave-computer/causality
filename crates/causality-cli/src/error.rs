@@ -89,12 +89,14 @@ impl CliErrorHandler {
     }
 
     // Helper method to create a standardized error
+    #[allow(dead_code)]
     pub fn create_error(&self, message: impl Into<String>, category: impl Into<String>) -> anyhow::Error {
         anyhow!("{}: {}", category.into(), message.into())
     }
 }
 
 /// CLI result type alias
+#[allow(dead_code)]
 pub type CliResult<T> = Result<T>;
 
 /// Helper macro for creating CLI errors - simplified to use anyhow

@@ -277,6 +277,7 @@ impl Intent {
     }
     
     /// Recursively collect output names from constraint tree
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_output_names_recursive(&self, constraint: &Constraint, output_names: &mut std::collections::HashSet<String>) {
         match constraint {
             Constraint::And(constraints) | Constraint::Or(constraints) => {

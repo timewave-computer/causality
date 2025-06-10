@@ -64,18 +64,17 @@ impl Nullifier {
     ) -> Self {
         let timestamp = Timestamp::now();
         
-        // Combine inputs for nullifier derivation
+        // Combine inputs for nullifier derivation (deterministic hash)
         let mut input_data = Vec::new();
         input_data.extend_from_slice(resource_id.as_bytes());
         input_data.extend_from_slice(operation.as_bytes());
-        input_data.extend_from_slice(&timestamp.as_millis().to_le_bytes());
         
         // Add secret material if provided (for privacy)
         if let Some(secret) = secret {
             input_data.extend_from_slice(secret);
         }
         
-        // Generate deterministic nullifier ID
+        // Generate deterministic nullifier ID (timestamp not included in hash)
         let hash = Sha256Hasher::hash(&input_data);
         let id = NullifierId::from_bytes(hash);
         
@@ -106,7 +105,6 @@ impl Nullifier {
         let mut input_data = Vec::new();
         input_data.extend_from_slice(resource_id.as_bytes());
         input_data.extend_from_slice(operation.as_bytes());
-        input_data.extend_from_slice(&self.timestamp.as_millis().to_le_bytes());
         
         // Add secret material if provided (same logic as generate())
         if let Some(secret_bytes) = secret {

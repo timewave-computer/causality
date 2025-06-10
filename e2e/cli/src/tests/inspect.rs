@@ -1,7 +1,6 @@
 //! Tests for system inspection commands
 
 use anyhow::Result;
-use std::time::Duration;
 use crate::test_utils::{TestResult, TestRunner};
 use crate::cmd_test;
 

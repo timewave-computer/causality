@@ -9,7 +9,7 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use crate::test_utils::{CommandTest, TestResult, TestRunner};
+use crate::test_utils::{TestResult, TestRunner};
 use crate::cmd_test;
 
 /// Run all development workflow command tests
@@ -62,7 +62,7 @@ pub async fn run_dev_tests(runner: &mut TestRunner) -> Result<Vec<TestResult>> {
   (lambda (x)
     (+ x 1)))
 "#;
-    let test_file = runner.create_test_file("test.lisp", lisp_content)?;
+    let _test_file = runner.create_test_file("test.lisp", lisp_content)?;
 
     // Test dev compile with different formats
     let formats = vec!["intermediate", "bytecode", "native", "wasm", "js"];

@@ -84,7 +84,7 @@ async fn test_timeline_management() -> Result<()> {
     println!("✓ Timeline created with {} checkpoints", timeline_checkpoints.len());
     
     // Test timeline navigation - jump to middle
-    let (middle_phase, middle_checkpoint, expected_steps) = &timeline_checkpoints[1];
+    let (middle_phase, middle_checkpoint, _expected_steps) = &timeline_checkpoints[1];
     engine.rewind_to_checkpoint(middle_checkpoint).await?;
     println!("✓ Navigated to timeline point: {}", middle_phase);
     
@@ -110,7 +110,7 @@ async fn test_iterative_debugging_workflow() -> Result<()> {
     let mut engine = SimulationEngine::new();
     
     // Simulate debugging scenario: finding optimal parameters
-    let base_program = "(consume (alloc 1000))";
+    let _base_program = "(consume (alloc 1000))";
     
     // Create checkpoint before optimization attempts
     let debug_checkpoint = engine.create_checkpoint("debug_start").await?;
@@ -289,7 +289,7 @@ async fn test_checkpoint_metadata_and_labeling() -> Result<()> {
     println!("✓ Created {} labeled checkpoints", labeled_checkpoints.len());
     
     // Test checkpoint access by label
-    for (label, (checkpoint, description, expected_steps)) in &labeled_checkpoints {
+    for (label, (checkpoint, description, _expected_steps)) in &labeled_checkpoints {
         engine.rewind_to_checkpoint(checkpoint).await?;
         println!("  ✓ Successfully accessed checkpoint '{}': {}", label, description);
     }
@@ -392,7 +392,7 @@ async fn test_complex_time_travel_scenarios() -> Result<()> {
     let travel_pattern = vec![4, 1, 3, 0, 4]; // Indices into phase_checkpoints
     
     for &phase_index in &travel_pattern {
-        let (phase_name, checkpoint, expected_steps) = &phase_checkpoints[phase_index];
+        let (phase_name, checkpoint, _expected_steps) = &phase_checkpoints[phase_index];
         engine.rewind_to_checkpoint(checkpoint).await?;
         
         // Execute verification program to ensure state is correct
@@ -412,7 +412,7 @@ async fn test_complex_time_travel_scenarios() -> Result<()> {
     println!("  ✓ State modification from checkpoint: {} steps", modification_result.step_count);
     
     // Create new timeline branch
-    let new_timeline_checkpoint = engine.create_checkpoint("modified_timeline").await?;
+    let _new_timeline_checkpoint = engine.create_checkpoint("modified_timeline").await?;
     println!("  ✓ New timeline branch created");
     
     Ok(())

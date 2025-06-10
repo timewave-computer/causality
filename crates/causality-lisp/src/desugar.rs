@@ -204,6 +204,7 @@ impl SugarExpr {
     }
     
     /// Create a not expression
+    #[allow(clippy::should_implement_trait)]
     pub fn not(expr: SugarExpr) -> Self {
         SugarExpr::Not(Box::new(expr))
     }

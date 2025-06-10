@@ -28,7 +28,7 @@ use std::{
 
 // ===== DOMAIN DEFINITIONS =====
 
-/// Cross-chain bridge domain identifier
+#[allow(dead_code)]
 const BRIDGE_DOMAIN: &str = "cross_chain_defi_bridge";
 
 /// Chain identifiers

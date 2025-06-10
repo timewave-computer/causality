@@ -19,6 +19,7 @@ pub struct ReplCommand {
     pub debug: bool,
     
     /// Maximum execution steps before timeout
+    #[allow(dead_code)]
     pub max_steps: Option<usize>,
     
     /// Show machine state after each evaluation

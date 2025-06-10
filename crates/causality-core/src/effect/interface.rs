@@ -30,8 +30,8 @@ pub fn compile_effect(effect: &EffectExpr) -> Result<Term, EffectCompileError> {
             let handler = Term::var(format!("effect_{}", effect_tag));
             
             // Apply handler to each argument in sequence
-            args.iter().fold(Ok(handler), |acc, arg| {
-                acc.map(|f| Term::apply(f, arg.clone()))
+            args.iter().try_fold(handler, |acc, arg| {
+                Ok(Term::apply(acc, arg.clone()))
             })
         }
         

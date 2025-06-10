@@ -23,7 +23,7 @@ async fn test_complete_development_lifecycle() -> Result<()> {
     println!("  Phase 1: Initial Development");
     let initial_program = "(alloc 100)";
     let initial_result = engine.execute_program(initial_program).await?;
-    let dev_checkpoint = engine.create_checkpoint("initial_development").await?;
+    let _dev_checkpoint = engine.create_checkpoint("initial_development").await?;
     println!("    ✓ Initial implementation: {} steps", initial_result.step_count);
     
     // Phase 2: Feature Addition
@@ -58,7 +58,7 @@ async fn test_complete_development_lifecycle() -> Result<()> {
     
     // Phase 5: Production Deployment Simulation
     println!("  Phase 5: Production Deployment");
-    let production_checkpoint = engine.create_checkpoint("production_ready").await?;
+    let _production_checkpoint = engine.create_checkpoint("production_ready").await?;
     
     // Simulate production load
     for i in 1..=5 {
@@ -460,7 +460,7 @@ async fn test_real_world_use_case_simulation() -> Result<()> {
     println!("    Phase 1: Contract Initialization");
     let init_program = "(tensor (alloc 100) (alloc 200))"; // Initialize contract state
     let init_result = engine.execute_program(init_program).await?;
-    let init_checkpoint = engine.create_checkpoint("contract_initialized").await?;
+    let _init_checkpoint = engine.create_checkpoint("contract_initialized").await?;
     println!("      ✓ Contract initialized: {} steps", init_result.step_count);
     
     // Phase 2: User Interactions
@@ -603,7 +603,7 @@ async fn test_comprehensive_integration_suite() -> Result<()> {
             (1..=i).map(|j| format!("(alloc {})", j * 25)).collect::<Vec<_>>().join(" "));
         engine.execute_program(&program).await?;
         
-        let feature_checkpoint = engine.create_checkpoint(&format!("feature_{}_complete", i)).await?;
+        let _feature_checkpoint = engine.create_checkpoint(&format!("feature_{}_complete", i)).await?;
         println!("    ✓ Feature {} branch with checkpoint", i);
     }
     
@@ -620,7 +620,7 @@ async fn test_comprehensive_integration_suite() -> Result<()> {
     println!("    ✓ State progression validation passed");
     
     let execution_state = engine.execution_state();
-    assert!(execution_state.instruction_pointer >= 0);
+    assert!(!execution_state.effect_history.is_empty());
     println!("    ✓ Execution state validation passed");
     
     // Performance summary

@@ -20,9 +20,11 @@ pub enum TestEffectsAction {
     List,
 }
 
+#[allow(dead_code)]
 pub struct TestEffectsCommand;
 
 impl TestEffectsCommand {
+    #[allow(dead_code)]
     pub async fn execute(&self, action: TestEffectsAction) -> Result<()> {
         match action {
             TestEffectsAction::Run { effect_name, count } => {
@@ -34,6 +36,7 @@ impl TestEffectsCommand {
         }
     }
 
+    #[allow(dead_code)]
     async fn run_tests(&self, effect_name: String, count: usize) -> Result<()> {
         println!("{} Running tests for effect: {}", "🧪".blue(), effect_name.cyan());
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -64,6 +67,7 @@ impl TestEffectsCommand {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn list_effects(&self) -> Result<()> {
         println!("{} Available Effects for Testing", "📋".blue());
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

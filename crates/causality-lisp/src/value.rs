@@ -106,7 +106,7 @@ pub enum Arity {
 /// Built-in function type
 #[derive(Clone)]
 pub struct BuiltinFunc {
-    pub func: Rc<dyn Fn(&[Value]) -> Result<Value, crate::error::EvalError>>,
+    pub func: BuiltinFunction,
 }
 
 impl std::fmt::Debug for BuiltinFunc {
@@ -483,7 +483,7 @@ impl Value {
 
 /// Create a builtin function implementation
 fn create_builtin_function(name: &str) -> BuiltinFunc {
-    let func: Rc<dyn Fn(&[Value]) -> Result<Value, crate::error::EvalError>> = match name {
+    let func: BuiltinFunction = match name {
         "add" => Rc::new(|args| {
             if args.is_empty() {
                 return Ok(Value::int(0));
@@ -727,4 +727,13 @@ impl Environment {
             self.parent.as_mut().and_then(|parent| parent.lookup_mut(name))
         }
     }
+}
+
+/// Type alias for built-in function signatures to reduce complexity
+pub type BuiltinFunction = Rc<dyn Fn(&[Value]) -> Result<Value, EvalError>>;
+
+/// A callable value with parameter info
+pub struct CallableValue {
+    /// Function implementation
+    pub func: BuiltinFunction,
 } 

@@ -84,7 +84,7 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
     // Initialize ZK components (mock)
     let mock_backend = Arc::new(MockBackend::new());
     let mut proof_generator = MockProofGenerator::new(mock_backend.clone());
-    let circuit_compiler = MockCircuitCompiler::new("aggressive");
+    let _circuit_compiler = MockCircuitCompiler::new("aggressive");
     
     // Initialize cross-domain composer (mock)
     let mut cross_domain_composer = MockCrossDomainProofComposer::new();
@@ -536,7 +536,7 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
     println!("     Current step: {}", tt_stats.current_step);
     
     // ZK proof generation statistics (mock)
-    let zk_stats = proof_generator.get_statistics();
+    let zk_stats = proof_generator.stats();
     println!("\n   ZK Proof Statistics:");
     println!("     Total proofs generated: {}", zk_stats.total_proofs_generated);
     println!("     Total verification time: {:?}", zk_stats.total_verification_time);
@@ -572,9 +572,13 @@ impl MockZkCircuit {
     }
 }
 
+#[allow(dead_code)]
 struct MockZkWitness {
+    #[allow(dead_code)]
     circuit_id: String,
+    #[allow(dead_code)]
     private_inputs: Vec<u32>,
+    #[allow(dead_code)]
     execution_trace: Vec<u8>,
 }
 
@@ -590,10 +594,15 @@ impl MockZkWitness {
 
 struct MockProof {
     proof_data: Vec<u8>,
+    #[allow(dead_code)]
+    circuit_id: String,
 }
 
+#[allow(dead_code)]
 struct MockProofGenerator {
+    #[allow(dead_code)]
     backend: Arc<MockBackend>,
+    #[allow(dead_code)]
     stats: MockProofStats,
 }
 
@@ -604,15 +613,17 @@ impl MockProofGenerator {
             stats: MockProofStats::default(),
         }
     }
-    
+
     fn generate_proof(&mut self, _circuit: &MockZkCircuit, _witness: &MockZkWitness) -> Result<MockProof> {
         self.stats.total_proofs_generated += 1;
         Ok(MockProof {
             proof_data: vec![0u8; 256], // Mock proof data
+            circuit_id: "mock_circuit".to_string(),
         })
     }
-    
-    fn get_statistics(&self) -> &MockProofStats {
+
+    #[allow(dead_code)]
+    fn stats(&self) -> &MockProofStats {
         &self.stats
     }
 }
@@ -625,6 +636,7 @@ struct MockProofStats {
 }
 
 impl MockProofStats {
+    #[allow(dead_code)]
     fn new() -> Self {
         Self {
             total_proofs_generated: 0,
@@ -634,7 +646,9 @@ impl MockProofStats {
     }
 }
 
+#[allow(dead_code)]
 struct MockCircuitCompiler {
+    #[allow(dead_code)]
     optimization_level: String,
 }
 
@@ -675,9 +689,9 @@ impl MockCrossDomainProofComposer {
         Ok(MockCompositeProof {
             global_inputs: vec![0u8; 64],
             domain_proofs: vec![
-                MockProof { proof_data: vec![0u8; 128] },
-                MockProof { proof_data: vec![0u8; 128] },
-                MockProof { proof_data: vec![0u8; 128] },
+                MockProof { proof_data: vec![0u8; 128], circuit_id: "domain_1".to_string() },
+                MockProof { proof_data: vec![0u8; 128], circuit_id: "domain_2".to_string() },
+                MockProof { proof_data: vec![0u8; 128], circuit_id: "domain_3".to_string() },
             ],
             consistency_proof: vec![0u8; 256],
         })

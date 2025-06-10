@@ -1264,8 +1264,10 @@ mod tests {
         assert!(matches!(dependency.cache_policy, StorageCachePolicy::TimeToLive(3600)));
         assert!(!dependency.is_critical);
         
-        let mut proof_requirements = StorageProofRequirements::default();
-        proof_requirements.require_zk_proof = true;
+        let proof_requirements = StorageProofRequirements {
+            require_zk_proof: true,
+            ..Default::default()
+        };
         
         let storage_effect = StorageProofEffect::new(
             "test".to_string(),

@@ -13,6 +13,7 @@ use causality_simulation::{
 };
 use std::collections::HashMap;
 use tokio::test as tokio_test;
+use std::time::Duration;
 
 // Mock optimization types for testing
 #[derive(Debug, Clone)]
@@ -50,7 +51,7 @@ impl MockOptimizer {
         Self { strategy }
     }
     
-    pub fn optimize_program(&self, program: &str) -> OptimizationResult {
+    pub fn optimize_program(&self, _program: &str) -> OptimizationResult {
         // Simulate optimization based on strategy
         let original_cost = CostMetrics {
             gas_cost: 1000,
@@ -110,7 +111,7 @@ async fn test_gas_optimization_strategy() -> Result<()> {
     println!("=== Testing Gas Optimization Strategy ===");
     
     let optimizer = MockOptimizer::new(OptimizationStrategy::GasEfficiency);
-    let mut engine = SimulationEngine::new();
+    let mut _engine = SimulationEngine::new();
     
     // Test programs with different gas consumption patterns
     let test_programs = vec![
@@ -126,8 +127,8 @@ async fn test_gas_optimization_strategy() -> Result<()> {
         println!("  Optimizing program: {}", program_name);
         
         // Measure original performance
-        let original_result = engine.execute_program(program).await?;
-        let original_metrics = engine.metrics().clone();
+        let _original_result = _engine.execute_program(program).await?;
+        let _original_metrics = _engine.metrics().clone();
         
         // Apply gas optimization
         let optimization_result = optimizer.optimize_program(program);
@@ -156,7 +157,7 @@ async fn test_time_optimization_strategy() -> Result<()> {
     println!("=== Testing Time Optimization Strategy ===");
     
     let optimizer = MockOptimizer::new(OptimizationStrategy::TimeOptimization);
-    let mut engine = SimulationEngine::new();
+    let mut _engine = SimulationEngine::new();
     
     // Test time-critical programs
     let time_critical_programs = vec![
@@ -172,7 +173,7 @@ async fn test_time_optimization_strategy() -> Result<()> {
         
         // Measure execution time
         let start_time = std::time::Instant::now();
-        let result = engine.execute_program(program).await?;
+        let _result = _engine.execute_program(program).await?;
         let execution_time = start_time.elapsed();
         
         // Apply time optimization
@@ -204,7 +205,7 @@ async fn test_balanced_optimization_strategy() -> Result<()> {
     println!("=== Testing Balanced Optimization Strategy ===");
     
     let optimizer = MockOptimizer::new(OptimizationStrategy::BalancedApproach);
-    let engine = SimulationEngine::new();
+    let mut _engine = SimulationEngine::new();
     
     // Test programs for balanced optimization
     let balanced_programs = vec![
@@ -245,7 +246,7 @@ async fn test_parallelization_optimization() -> Result<()> {
     println!("=== Testing Parallelization Optimization ===");
     
     let optimizer = MockOptimizer::new(OptimizationStrategy::ParallelizationFocus);
-    let engine = SimulationEngine::new();
+    let mut _engine = SimulationEngine::new();
     
     // Test programs suitable for parallelization
     let parallelizable_programs = vec![
@@ -282,7 +283,7 @@ async fn test_parallelization_optimization() -> Result<()> {
 async fn test_dependency_analysis_optimization() -> Result<()> {
     println!("=== Testing Dependency Analysis Optimization ===");
     
-    let mut engine = SimulationEngine::new();
+    let mut _engine = SimulationEngine::new();
     
     // Programs with different dependency patterns
     let dependency_scenarios = vec![
@@ -298,8 +299,8 @@ async fn test_dependency_analysis_optimization() -> Result<()> {
         println!("  Analyzing dependencies: {} - {}", scenario_name, description);
         
         // Execute program and analyze dependencies
-        let result = engine.execute_program(program).await?;
-        let progression = engine.state_progression();
+        let _result = _engine.execute_program(program).await?;
+        let _progression = _engine.state_progression();
         
         // Simulate dependency analysis
         let dependency_count = match *scenario_name {
@@ -319,11 +320,11 @@ async fn test_dependency_analysis_optimization() -> Result<()> {
         dependency_analysis.insert(scenario_name.to_string(), (
             dependency_count,
             parallelization_potential,
-            result.step_count,
+            _result.step_count,
         ));
         
         println!("    ✓ Dependencies: {}, Parallelization potential: {}, Steps: {}", 
-                dependency_count, parallelization_potential, result.step_count);
+                dependency_count, parallelization_potential, _result.step_count);
     }
     
     // Verify dependency analysis insights
@@ -395,21 +396,21 @@ async fn test_optimization_strategy_comparison() -> Result<()> {
 async fn test_optimization_with_constraints() -> Result<()> {
     println!("=== Testing Optimization with Constraints ===");
     
-    let engine = SimulationEngine::new();
+    let mut _engine = SimulationEngine::new();
     
     // Define optimization constraints
     struct OptimizationConstraints {
         max_gas: u64,
-        max_time: u64,
-        max_memory: u64,
-        min_correctness: f64, // Percentage
+        max_time: Duration,
+        max_memory: usize,
+        _min_correctness: f64, // Percentage - unused for now
     }
     
     let constraints = OptimizationConstraints {
         max_gas: 800,
-        max_time: 80,
+        max_time: Duration::from_secs(80),
         max_memory: 45,
-        min_correctness: 95.0,
+        _min_correctness: 95.0,
     };
     
     let constrained_programs = vec![
@@ -438,8 +439,8 @@ async fn test_optimization_with_constraints() -> Result<()> {
             
             // Check if result meets constraints
             let meets_constraints = result.optimized_cost.gas_cost <= constraints.max_gas &&
-                                  result.optimized_cost.time_cost <= constraints.max_time &&
-                                  result.optimized_cost.memory_cost <= constraints.max_memory;
+                                  result.optimized_cost.time_cost <= constraints.max_time.as_millis() as u64 &&
+                                  result.optimized_cost.memory_cost <= constraints.max_memory as u64;
             
             if meets_constraints {
                 viable_strategies.push(strategy);
@@ -463,7 +464,7 @@ async fn test_optimization_with_constraints() -> Result<()> {
 async fn test_adaptive_optimization() -> Result<()> {
     println!("=== Testing Adaptive Optimization ===");
     
-    let engine = SimulationEngine::new();
+    let mut _engine = SimulationEngine::new();
     
     // Simulate adaptive optimization that learns from program characteristics
     struct AdaptiveOptimizer {

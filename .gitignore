@@ -68,6 +68,19 @@ valence-coprocessor/
 # Test and script outputs
 *.sh.log
 test_*.out
+test-results.json
+test-results.md
+
+# Temporary test files
+test.lisp
+*.test
+*.spec
+
+# Backup files from sed/edit operations
+*.bak
+
+# Disabled test files
+*.disabled
 
 # Working
 work/
@@ -76,3 +89,4 @@ ml_work/
 scripts/
 TODO.md
 _docs/
+src/

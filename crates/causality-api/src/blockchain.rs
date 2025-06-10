@@ -8,7 +8,6 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use base64::Engine;
-use log::{info, warn, error};
 
 // Import the actual client types from valence-domain-clients
 use valence_domain_clients::EthereumClient;

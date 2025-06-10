@@ -252,6 +252,7 @@ impl Interpreter {
     }
     
     /// Evaluate a constant value
+    #[allow(clippy::only_used_in_recursion)]
     fn eval_const(&self, value: &LispValue) -> EvalResult<Value> {
         match value {
             LispValue::Unit => Ok(Value::unit()),

@@ -1,15 +1,32 @@
-//! Layer 1 (Causality Lisp) bindings for OCaml FFI
-//!
-//! This module provides OCaml access to Causality Lisp functionality,
-//! including expression construction, compilation, and evaluation.
+//! Layer 1 (Core Causality) FFI interface for OCaml
 
-#[cfg(feature = "ocaml-ffi")]
-use crate::ocaml::{core_types::*, runtime::*};
-
-#[cfg(feature = "ocaml-ffi")]
-use ocaml::Value;
-#[cfg(feature = "ocaml-ffi")]
+use crate::ocaml::core_types::*;
+use causality_core::lambda::base::Value as CoreValue;
 use causality_lisp::ast::{LispValue as AstLispValue, Expr};
+
+/// Convert Core Value to AST LispValue for Layer 1 compatibility
+pub fn convert_core_value_to_ast(value: &CoreValue) -> Result<AstLispValue, String> {
+    match value {
+        CoreValue::Unit => Ok(AstLispValue::Unit),
+        CoreValue::Bool(b) => Ok(AstLispValue::Bool(*b)),
+        CoreValue::Int(i) => Ok(AstLispValue::Int(*i as i64)),
+        CoreValue::String(s) => Ok(AstLispValue::String(s.value.clone().into())),
+        CoreValue::Symbol(sym) => Ok(AstLispValue::Symbol(sym.clone().into())),
+        _ => Err(format!("Unsupported Core Value variant: {:?}", value)),
+    }
+}
+
+/// Convert AST LispValue to Core Value
+pub fn convert_ast_to_core_value(ast_value: &AstLispValue) -> Result<CoreValue, String> {
+    match ast_value {
+        AstLispValue::Unit => Ok(CoreValue::Unit),
+        AstLispValue::Bool(b) => Ok(CoreValue::Bool(*b)),
+        AstLispValue::Int(i) => Ok(CoreValue::Int(*i as u32)),
+        AstLispValue::String(s) => Ok(CoreValue::String(s.value.clone().into())),
+        AstLispValue::Symbol(sym) => Ok(CoreValue::Symbol(sym.value.clone().into())),
+        _ => Err(format!("Unsupported AST LispValue variant: {:?}", ast_value)),
+    }
+}
 
 /// Create a constant expression
 #[cfg(feature = "ocaml-ffi")]

@@ -139,8 +139,8 @@ pub enum MachineError {
     
     #[error("type mismatch: expected {expected:?}, found {found:?}")]
     TypeMismatch {
-        expected: TypeInner,
-        found: TypeInner,
+        expected: Box<TypeInner>,
+        found: Box<TypeInner>,
     },
     
     #[error("call stack overflow: maximum depth exceeded")]

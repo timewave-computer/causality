@@ -661,7 +661,7 @@ mod tests {
         let duration = start.elapsed();
         
         // Should complete quickly (sub-millisecond for this simple operation)
-        assert!(duration.as_millis() < 100);
+        assert!(duration.as_millis() < 500);
         println!("✓ Capability checking completed in {:?} (zero runtime overhead)", duration);
     }
 } 

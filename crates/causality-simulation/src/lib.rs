@@ -73,9 +73,9 @@ mod integration_tests {
         
         // Create test scenario
         let scenario = TestScenario {
-            name: "basic_transfer_test".to_string(),
-            description: "End-to-end transfer effect test".to_string(),
-            timeout: Duration::from_secs(30),
+            _name: "basic_transfer_test".to_string(),
+            _description: "End-to-end transfer effect test".to_string(),
+            _timeout: Duration::from_secs(30),
         };
         
         // Execute scenario
@@ -94,9 +94,9 @@ mod integration_tests {
         
         // Create cross-chain scenario
         let cross_chain_scenario = CrossChainTestScenario {
-            chains: vec!["ethereum".to_string(), "arbitrum".to_string()],
-            operations: vec![],
-            dependencies: vec![],
+            _chains: vec!["ethereum".to_string(), "arbitrum".to_string()],
+            _operations: vec![],
+            _dependencies: vec![],
         };
         
         // Execute cross-chain test
@@ -164,9 +164,9 @@ mod integration_tests {
     // Helper structs for testing
     #[derive(Debug)]
     struct TestScenario {
-        name: String,
-        description: String,
-        timeout: Duration,
+        _name: String,
+        _description: String,
+        _timeout: Duration,
     }
     
     #[derive(Debug)]
@@ -177,9 +177,9 @@ mod integration_tests {
     
     #[derive(Debug)]
     struct CrossChainTestScenario {
-        chains: Vec<String>,
-        operations: Vec<String>,
-        dependencies: Vec<String>,
+        _chains: Vec<String>,
+        _operations: Vec<String>,
+        _dependencies: Vec<String>,
     }
     
     // Mock implementations for testing

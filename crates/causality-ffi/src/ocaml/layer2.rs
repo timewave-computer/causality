@@ -1,11 +1,11 @@
-//! Layer 2 (Intents and Effects) bindings for OCaml FFI
+//! Layer 2 (Effect System) bindings for OCaml FFI
+//!
+//! This module provides OCaml access to the Causality effect system.
 
-#[cfg(feature = "ocaml-ffi")]
-use crate::ocaml::core_types::*;
+// use crate::ocaml::core_types::*;
 
 /// Placeholder for Layer 2 functionality
-#[cfg(feature = "ocaml-ffi")]
-#[ocaml::func]
-pub fn layer2_placeholder() -> String {
-    "Layer 2 OCaml FFI not yet implemented".to_string()
+/// This module will be implemented when the effect system bindings are needed
+pub fn placeholder() {
+    // This is a placeholder to avoid empty module warnings
 } 
