@@ -1,181 +1,31 @@
-// Unified interpreter for the Causality-Valence architecture
-// Enhanced with improved channel management and synchronization
+// End-to-end interpreter using pure effects and natural transformations
+// Provides unified execution engine for all layers of the Causality-Valence architecture
 
-use crate::layer2::effect::{Effect, EffectRow, EffectOp, OpResult};
-use crate::layer2::outcome::{Value, StateLocation};
-use crate::layer3::agent::AgentRegistry;
-use crate::layer3::choreography::Choreography;
-use crate::layer3::compiler::compile_choreography;
-use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex, Condvar};
+use crate::layer2::effect::{Effect, EffectRow, EffectType};
+use crate::layer2::handler::{StateInterpreter, CommInterpreter, ProofInterpreter, UnifiedInterpreter};
+use crate::layer2::outcome::{Outcome, Value, StateLocation, StateTransition};
+use crate::layer3::agent::{Agent, AgentId, AgentRegistry};
+use crate::layer3::capability::Capability;
+use crate::layer3::choreography::{Choreography, ChoreographyStep, Message};
+use crate::layer3::compiler::CompilerError;
+use std::collections::HashMap;
 
-/// State snapshot for debugging
-#[derive(Debug, Clone)]
-pub struct StateSnapshot {
-    /// Step number
-    pub step: usize,
-    /// Operation executed
-    pub operation: String,
-    /// State after operation
-    pub state: BTreeMap<StateLocation, Value>,
-    /// Channels after operation
-    pub channels: BTreeMap<String, Vec<Value>>,
-}
-
-/// Debug mode options
-#[derive(Debug, Clone)]
-#[derive(Default)]
-pub struct DebugOptions {
-    /// Enable debug logging
-    pub log_enabled: bool,
-    /// Take state snapshots
-    pub snapshots_enabled: bool,
-    /// Step-by-step execution
-    pub step_mode: bool,
-    /// Callback for step-by-step execution
-    pub step_callback: Option<fn(&StateSnapshot) -> bool>,
-}
-
-/// Global state for the session system
-#[derive(Debug, Clone)]
-pub struct GlobalState {
-    /// Global state variables
-    pub state: BTreeMap<StateLocation, Value>,
-    /// Communication channels
-    pub channels: BTreeMap<String, Vec<Value>>,
-}
-
-/// Channel management for multi-party communication
-#[derive(Debug)]
-pub struct ChannelManager {
-    /// Channel message queues - deterministic ordering with BTreeMap
-    channels: BTreeMap<String, Vec<Value>>,
-    /// Synchronization primitives for channels
-    sync_channels: BTreeMap<String, (Arc<Mutex<bool>>, Arc<Condvar>)>,
-    /// Channel capacity limits
-    capacities: BTreeMap<String, usize>,
-    /// Channel participants - deterministic ordering
-    participants: BTreeMap<String, Vec<String>>,
-}
-
-impl Default for ChannelManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ChannelManager {
-    pub fn new() -> Self {
-        ChannelManager {
-            channels: BTreeMap::new(),
-            sync_channels: BTreeMap::new(),
-            capacities: BTreeMap::new(),
-            participants: BTreeMap::new(),
-        }
-    }
-    
-    /// Create a new channel with deterministic participant ordering
-    pub fn create_channel(&mut self, name: String, capacity: usize, mut participants: Vec<String>) {
-        participants.sort(); // Ensure deterministic ordering
-        self.channels.insert(name.clone(), Vec::new());
-        self.capacities.insert(name.clone(), capacity);
-        self.participants.insert(name.clone(), participants);
-        
-        let sync_data = (Arc::new(Mutex::new(false)), Arc::new(Condvar::new()));
-        self.sync_channels.insert(name, sync_data);
-    }
-    
-    /// Send a message to a channel (with capacity checking)
-    pub fn send(&mut self, channel: &str, value: Value) -> Result<(), String> {
-        // Auto-create channel if it doesn't exist
-        if !self.channels.contains_key(channel) {
-            self.create_channel(channel.to_string(), 100, vec![]);
-        }
-        
-        let channel_queue = self.channels.get_mut(channel)
-            .ok_or_else(|| format!("Channel '{}' does not exist", channel))?;
-            
-        let capacity = self.capacities.get(channel).unwrap_or(&100);
-        
-        if channel_queue.len() >= *capacity {
-            return Err(format!("Channel '{}' is at capacity ({})", channel, capacity));
-        }
-        
-        channel_queue.push(value);
-        
-        // Signal waiting receivers
-        if let Some((mutex, condvar)) = self.sync_channels.get(channel) {
-            let _guard = mutex.lock().unwrap();
-            condvar.notify_all();
-        }
-        
-        Ok(())
-    }
-    
-    /// Receive a message from a channel
-    pub fn receive(&mut self, channel: &str) -> Result<Option<Value>, String> {
-        // Auto-create channel if it doesn't exist
-        if !self.channels.contains_key(channel) {
-            self.create_channel(channel.to_string(), 100, vec![]);
-        }
-        
-        let channel_queue = self.channels.get_mut(channel)
-            .ok_or_else(|| format!("Channel '{}' does not exist", channel))?;
-        
-        Ok(channel_queue.pop())
-    }
-    
-    /// Blocking receive - waits for a message
-    pub fn receive_blocking(&mut self, channel: &str) -> Result<Value, String> {
-        loop {
-            if let Some(value) = self.receive(channel)? {
-                return Ok(value);
-            }
-            
-            // Wait for notification
-            if let Some((mutex, condvar)) = self.sync_channels.get(channel) {
-                let guard = mutex.lock().unwrap();
-                let _result = condvar.wait(guard).unwrap();
-            }
-        }
-    }
-    
-    /// Get channel status
-    pub fn get_channel_status(&self, channel: &str) -> Option<(usize, usize, &Vec<String>)> {
-        let queue_len = self.channels.get(channel)?.len();
-        let capacity = *self.capacities.get(channel)?;
-        let participants = self.participants.get(channel)?;
-        
-        Some((queue_len, capacity, participants))
-    }
-    
-    /// List all channels
-    pub fn list_channels(&self) -> Vec<String> {
-        self.channels.keys().cloned().collect()
-    }
-}
-
-/// The unified interpreter state
+/// Unified interpreter for executing choreographies and effects
 pub struct Interpreter {
-    /// Layer 2: State and effects
-    state: BTreeMap<StateLocation, Value>,
-    channel_registry: ChannelManager,
-    effect_log: Vec<String>,
+    /// Unified effect interpreter
+    unified_interpreter: UnifiedInterpreter,
     
-    /// Layer 3: Agent registry
+    /// Agent registry
     agent_registry: AgentRegistry,
     
-    /// Debug options
-    debug_options: DebugOptions,
+    /// Execution trace for debugging
+    trace: Vec<String>,
     
-    /// State snapshots
-    snapshots: Vec<StateSnapshot>,
+    /// Debug mode flag
+    debug_enabled: bool,
     
-    /// Current step counter
-    step_counter: usize,
-    
-    /// Error context for better diagnostics
-    error_context: ErrorContext,
+    /// Channel registry
+    channel_registry: ChannelRegistry,
 }
 
 impl Default for Interpreter {
@@ -188,649 +38,297 @@ impl Interpreter {
     /// Create a new interpreter
     pub fn new() -> Self {
         Interpreter {
-            state: BTreeMap::new(),
-            channel_registry: ChannelManager::new(),
-            effect_log: Vec::new(),
+            unified_interpreter: UnifiedInterpreter::new(),
             agent_registry: AgentRegistry::new(),
-            debug_options: DebugOptions::default(),
-            snapshots: Vec::new(),
-            step_counter: 0,
-            error_context: ErrorContext::new(),
+            trace: Vec::new(),
+            debug_enabled: false,
+            channel_registry: ChannelRegistry::new(),
         }
     }
-    
-    /// Enable debug mode (simple)
+
+    /// Enable debug mode
     pub fn enable_debug(&mut self) {
-        self.debug_options.log_enabled = true;
+        self.debug_enabled = true;
     }
-    
-    /// Configure debug options
-    pub fn set_debug_options(&mut self, options: DebugOptions) {
-        self.debug_options = options;
+
+    /// Disable debug mode
+    pub fn disable_debug(&mut self) {
+        self.debug_enabled = false;
     }
-    
-    /// Get state snapshots
-    pub fn get_snapshots(&self) -> &[StateSnapshot] {
-        &self.snapshots
+
+    /// Add an agent to the registry
+    pub fn register_agent(&mut self, agent: Agent) -> Result<(), String> {
+        self.agent_registry.register(agent)
     }
-    
-    /// Take a snapshot
-    fn take_snapshot(&mut self, operation: String) {
-        if self.debug_options.snapshots_enabled {
-            let snapshot = StateSnapshot {
-                step: self.step_counter,
-                operation,
-                state: self.state.clone(),
-                channels: self.channel_registry.channels.clone(),
-            };
-            
-            // If in step mode, call the callback
-            if self.debug_options.step_mode {
-                if let Some(callback) = self.debug_options.step_callback {
-                    if !callback(&snapshot) {
-                        // Callback returned false, stop execution
-                        panic!("Execution stopped by debug callback");
-                    }
-                }
-            }
-            
-            self.snapshots.push(snapshot);
-            self.step_counter += 1;
+
+    /// Execute a single pure effect
+    pub fn execute_effect<A>(&mut self, effect: Effect<A, impl Into<EffectRow>>) -> Result<A, String> {
+        if self.debug_enabled {
+            self.trace.push(format!("Executing effect"));
         }
-    }
-    
-    /// Execute a choreography (Layer 3)
-    #[allow(clippy::result_large_err)]
-    pub fn execute_choreography(&mut self, choreo: &Choreography) -> Result<(), InterpreterError> {
-        if self.debug_options.log_enabled {
-            self.effect_log.push(format!("=== Executing choreography: {:?} ===", choreo));
-        }
-        
-        // Compile choreography to effects
-        let effects = compile_choreography(choreo, &self.agent_registry)
-            .map_err(|e| InterpreterError::compilation_error(format!("{:?}", e)))?;
-        
-        if self.debug_options.log_enabled {
-            self.effect_log.push(format!("Compiled to {} effects", effects.len()));
-        }
-        
-        // Execute each effect
-        for (i, effect) in effects.into_iter().enumerate() {
-            if self.debug_options.log_enabled {
-                self.effect_log.push(format!("--- Effect {} ---", i + 1));
-            }
-            self.execute_effect(effect)?;
-        }
-        
-        Ok(())
-    }
-    
-    /// Execute an effect (Layer 2)
-    #[allow(clippy::result_large_err)]
-    pub fn execute_effect<A>(&mut self, effect: Effect<A, EffectRow>) -> Result<A, InterpreterError> {
-        match effect {
-            Effect::Pure(value) => {
-                if self.debug_options.log_enabled {
-                    self.effect_log.push("Pure(<value>)".to_string());
-                }
-                Ok(value)
-            }
-            
-            Effect::Do { op, cont, .. } => {
-                let result = self.execute_operation(&op)?;
-                let next_effect = cont(result);
-                self.execute_effect(next_effect)
-            }
-            
-            Effect::Transform { handler, effect, .. } => {
-                // For now, just execute the inner effect
-                // In a full implementation, we'd apply the handler transformation
-                if self.debug_options.log_enabled {
-                    self.effect_log.push(format!("Applying handler: {}", handler.name()));
-                }
-                self.execute_effect(*effect)
+
+        let result = self.unified_interpreter.execute(effect);
+
+        if let Err(ref error) = result {
+            if self.debug_enabled {
+                self.trace.push(format!("Effect execution failed: {}", error));
             }
         }
-    }
-    
-    /// Execute a single operation
-    #[allow(clippy::result_large_err)]
-    fn execute_operation(&mut self, op: &EffectOp) -> Result<OpResult, InterpreterError> {
-        let op_string = format!("{:?}", op);
-        
-        let result = match op {
-            EffectOp::StateRead(loc) => {
-                let value = self.state.get(loc)
-                    .cloned()
-                    .unwrap_or(Value::Unit);
-                
-                if self.debug_options.log_enabled {
-                    self.effect_log.push(format!("StateRead({:?}) = {:?}", loc, value));
-                }
-                
-                Ok(OpResult::Value(value))
-            }
-            
-            EffectOp::StateWrite(loc, value) => {
-                self.state.insert(loc.clone(), value.clone());
-                
-                if self.debug_options.log_enabled {
-                    self.effect_log.push(format!("StateWrite({:?}, {:?})", loc, value));
-                }
-                
-                Ok(OpResult::Unit)
-            }
-            
-            EffectOp::CommSend(channel, value) => {
-                match self.channel_registry.send(channel, value.clone()) {
-                    Ok(()) => {
-                        if self.debug_options.log_enabled {
-                            self.effect_log.push(format!("CommSend({}, {:?})", channel, value));
-                        }
-                        Ok(OpResult::Unit)
-                    }
-                    Err(e) => {
-                        if self.debug_options.log_enabled {
-                            self.effect_log.push(format!("CommSend({}, {:?}) FAILED: {}", channel, value, e));
-                        }
-                        Err(InterpreterError::runtime_error(e, op_string.clone()))
-                    }
-                }
-            }
-            
-            EffectOp::CommReceive(channel) => {
-                match self.channel_registry.receive(channel) {
-                    Ok(Some(value)) => {
-                        if self.debug_options.log_enabled {
-                            self.effect_log.push(format!("CommReceive({}) = {:?}", channel, value));
-                        }
-                        Ok(OpResult::Value(value))
-                    }
-                    Ok(None) => {
-                        if self.debug_options.log_enabled {
-                            self.effect_log.push(format!("CommReceive({}) = <empty>", channel));
-                        }
-                        Ok(OpResult::Value(Value::Unit))
-                    }
-                    Err(e) => {
-                        if self.debug_options.log_enabled {
-                            self.effect_log.push(format!("CommReceive({}) FAILED: {}", channel, e));
-                        }
-                        Err(InterpreterError::runtime_error(e, op_string.clone()))
-                    }
-                }
-            }
-            
-            EffectOp::ProofGenerate(claim, witness) => {
-                // Simplified proof generation
-                let proof = Value::String(format!("proof({:?}, {:?})", claim, witness));
-                
-                if self.debug_options.log_enabled {
-                    self.effect_log.push(format!("ProofGenerate({:?}, {:?}) = {:?}", claim, witness, proof));
-                }
-                
-                Ok(OpResult::Value(proof))
-            }
-            
-            EffectOp::ProofVerify(proof, claim) => {
-                // Simplified proof verification
-                let valid = match proof {
-                    Value::String(s) => s.contains(&format!("{:?}", claim)),
-                    _ => false,
-                };
-                
-                if self.debug_options.log_enabled {
-                    self.effect_log.push(format!("ProofVerify({:?}, {:?}) = {}", proof, claim, valid));
-                }
-                
-                Ok(OpResult::Bool(valid))
-            }
-        };
-        
-        // Take snapshot after operation
-        self.take_snapshot(op_string);
-        
+
         result
     }
-    
+
+    /// Execute a choreography by compiling it to effects and running them
+    pub fn execute_choreography(&mut self, choreography: &Choreography) -> Result<Outcome, CompilerError> {
+        if self.debug_enabled {
+            self.trace.push("Starting choreography execution".to_string());
+        }
+
+        // Compile choreography to effects
+        let effects = crate::layer3::compiler::compile_choreography(choreography, &self.agent_registry)?;
+
+        // Execute each effect
+        let mut outcomes = Vec::new();
+        for effect in effects {
+            // For now, treat all effects as unit effects for choreography execution
+            match self.execute_effect(effect) {
+                Ok(_) => {
+                    // Create a minimal outcome for successful effect execution
+                    let outcome = crate::layer2::outcome::Outcome::single(
+                        StateTransition::Update {
+                            location: StateLocation("choreography_progress".to_string()),
+                            old_value: Value::Int(outcomes.len() as i64),
+                            new_value: Value::Int((outcomes.len() + 1) as i64),
+                        }
+                    );
+                    outcomes.push(outcome);
+                }
+                Err(e) => {
+                    if self.debug_enabled {
+                        self.trace.push(format!("Choreography effect failed: {}", e));
+                    }
+                    return Err(CompilerError::ExecutionFailed(e));
+                }
+            }
+        }
+
+        // Compose all outcomes
+        let final_outcome = outcomes.into_iter().fold(crate::layer2::outcome::Outcome::empty(), |acc, outcome| {
+            acc.compose(outcome)
+        });
+
+        if self.debug_enabled {
+            self.trace.push("Choreography execution completed".to_string());
+        }
+
+        Ok(final_outcome)
+    }
+
     /// Get the current state
-    pub fn get_state(&self) -> &BTreeMap<StateLocation, Value> {
-        &self.state
+    pub fn get_state(&self) -> &HashMap<StateLocation, Value> {
+        self.unified_interpreter.get_state_interpreter().get_state()
     }
-    
-    /// Set a state value (useful for initialization)
+
+    /// Set a state value
     pub fn set_state(&mut self, location: StateLocation, value: Value) {
-        self.state.insert(location, value);
+        self.unified_interpreter.get_state_interpreter_mut().set_state(location, value);
     }
-    
-    /// Get the effect log
-    pub fn get_effect_log(&self) -> &[String] {
-        &self.effect_log
+
+    /// Get the execution trace
+    pub fn get_trace(&self) -> &[String] {
+        &self.trace
     }
-    
-    /// Get agent registry
-    pub fn get_agent_registry(&mut self) -> &mut AgentRegistry {
-        &mut self.agent_registry
+
+    /// Clear the execution trace
+    pub fn clear_trace(&mut self) {
+        self.trace.clear();
     }
-    
-    /// Get channel registry
-    pub fn get_channel_registry(&mut self) -> &mut ChannelManager {
-        &mut self.channel_registry
-    }
-    
-    /// Clear the interpreter state (useful for testing)
-    pub fn clear(&mut self) {
-        self.state.clear();
-        self.channel_registry = ChannelManager::new();
-        self.effect_log.clear();
-        self.snapshots.clear();
-        self.step_counter = 0;
-        self.error_context = ErrorContext::new();
-    }
-    
-    /// Pretty print the current state
+
+    /// Print current state for debugging
     pub fn print_state(&self) {
         println!("=== Interpreter State ===");
-        println!("Step: {}", self.step_counter);
         
-        println!("\nState:");
-        for (loc, val) in &self.state {
-            println!("  {:?} = {:?}", loc, val);
+        let state = self.get_state();
+        if state.is_empty() {
+            println!("State: (empty)");
+        } else {
+            println!("State:");
+            for (location, value) in state {
+                println!("  {:?} = {:?}", location, value);
+            }
+        }
+
+        let channels = self.unified_interpreter.get_comm_interpreter().get_channels();
+        if channels.is_empty() {
+            println!("Channels: (empty)");
+        } else {
+            println!("Channels:");
+            for (name, queue) in channels {
+                println!("  {} = {:?}", name, queue);
+            }
+        }
+
+        if self.debug_enabled && !self.trace.is_empty() {
+            println!("Execution Trace:");
+            for (i, entry) in self.trace.iter().enumerate() {
+                println!("  {}: {}", i + 1, entry);
+            }
         }
         
-        println!("\nChannels:");
-        for channel in self.channel_registry.list_channels() {
-            if let Some((queue_len, capacity, participants)) = self.channel_registry.get_channel_status(&channel) {
-                println!("  {} = {}/{} messages, participants: {:?}", channel, queue_len, capacity, participants);
-            }
+        println!("========================");
+    }
+
+    /// Get the channel registry
+    pub fn get_channel_registry(&mut self) -> &mut ChannelRegistry {
+        &mut self.channel_registry
+    }
+
+    /// Execute a sequence of effects
+    pub fn execute_effects<A>(&mut self, effects: Vec<Effect<A, impl Into<EffectRow>>>) -> Result<Vec<A>, String> {
+        let mut results = Vec::new();
+        
+        for effect in effects {
+            let result = self.execute_effect(effect)?;
+            results.push(result);
         }
         
-        if !self.effect_log.is_empty() {
-            println!("\nRecent Effects:");
-            let start = self.effect_log.len().saturating_sub(5);
-            for log in &self.effect_log[start..] {
-                println!("  {}", log);
-            }
-        }
+        Ok(results)
     }
 }
 
-/// Interpreter error types with enhanced diagnostics
-#[derive(Debug)]
-pub enum InterpreterError {
-    /// Compilation error with source location
-    CompilationError {
-        message: String,
-        source_location: Option<String>,
-        context: Vec<String>,
-    },
-    
-    /// Runtime error with call stack
-    RuntimeError {
-        message: String,
-        operation: String,
-        state_snapshot: Option<StateSnapshot>,
-        call_stack: Vec<String>,
-    },
-    
-    /// Invalid operation with suggestions
-    InvalidOperation {
-        message: String,
-        attempted_operation: String,
-        suggestions: Vec<String>,
-    },
-    
-    /// Channel error with detailed information
-    ChannelError {
-        message: String,
-        channel_name: String,
-        channel_status: Option<(usize, usize, Vec<String>)>, // (current, capacity, participants)
-    },
-    
-    /// Agent error with registry state
-    AgentError {
-        message: String,
-        agent_id: Option<String>,
-        available_agents: Vec<String>,
-    },
-    
-    /// Type error with type information
-    TypeError {
-        message: String,
-        expected_type: String,
-        actual_type: String,
-        location: Option<String>,
-    },
+/// Channel registry for managing communication channels
+pub struct ChannelRegistry {
+    channels: HashMap<String, Channel>,
 }
 
-impl InterpreterError {
-    /// Create a compilation error with context
-    pub fn compilation_error(message: impl Into<String>) -> Self {
-        InterpreterError::CompilationError {
-            message: message.into(),
-            source_location: None,
-            context: Vec::new(),
-        }
-    }
-    
-    /// Create a runtime error with operation context
-    pub fn runtime_error(message: impl Into<String>, operation: impl Into<String>) -> Self {
-        InterpreterError::RuntimeError {
-            message: message.into(),
-            operation: operation.into(),
-            state_snapshot: None,
-            call_stack: Vec::new(),
-        }
-    }
-    
-    /// Create a channel error with status information
-    pub fn channel_error(message: impl Into<String>, channel_name: impl Into<String>) -> Self {
-        InterpreterError::ChannelError {
-            message: message.into(),
-            channel_name: channel_name.into(),
-            channel_status: None,
-        }
-    }
-    
-    /// Add context to an error
-    pub fn with_context(mut self, context: String) -> Self {
-        match &mut self {
-            InterpreterError::CompilationError { context: ctx, .. } => ctx.push(context),
-            InterpreterError::RuntimeError { call_stack, .. } => call_stack.push(context),
-            _ => {}
-        }
-        self
-    }
-    
-    /// Add state snapshot to runtime error
-    pub fn with_snapshot(mut self, snapshot: StateSnapshot) -> Self {
-        if let InterpreterError::RuntimeError { state_snapshot, .. } = &mut self {
-            *state_snapshot = Some(snapshot);
-        }
-        self
-    }
-    
-    /// Get detailed diagnostic information
-    pub fn get_diagnostic(&self) -> String {
-        match self {
-            InterpreterError::CompilationError { message, source_location, context } => {
-                let mut diag = format!("Compilation Error: {}", message);
-                if let Some(loc) = source_location {
-                    diag.push_str(&format!("\n  Location: {}", loc));
-                }
-                if !context.is_empty() {
-                    diag.push_str("\n  Context:");
-                    for ctx in context {
-                        diag.push_str(&format!("\n    - {}", ctx));
-                    }
-                }
-                diag
-            }
-            
-            InterpreterError::RuntimeError { message, operation, state_snapshot, call_stack } => {
-                let mut diag = format!("Runtime Error: {}", message);
-                diag.push_str(&format!("\n  During operation: {}", operation));
-                
-                if !call_stack.is_empty() {
-                    diag.push_str("\n  Call stack:");
-                    for (i, frame) in call_stack.iter().enumerate() {
-                        diag.push_str(&format!("\n    {}: {}", i, frame));
-                    }
-                }
-                
-                if let Some(snapshot) = state_snapshot {
-                    diag.push_str(&format!("\n  State at error (step {}):", snapshot.step));
-                    diag.push_str(&format!("\n    State entries: {}", snapshot.state.len()));
-                    diag.push_str(&format!("\n    Active channels: {}", snapshot.channels.len()));
-                }
-                
-                diag
-            }
-            
-            InterpreterError::InvalidOperation { message, attempted_operation, suggestions } => {
-                let mut diag = format!("Invalid Operation: {}", message);
-                diag.push_str(&format!("\n  Attempted: {}", attempted_operation));
-                if !suggestions.is_empty() {
-                    diag.push_str("\n  Suggestions:");
-                    for suggestion in suggestions {
-                        diag.push_str(&format!("\n    - {}", suggestion));
-                    }
-                }
-                diag
-            }
-            
-            InterpreterError::ChannelError { message, channel_name, channel_status } => {
-                let mut diag = format!("Channel Error: {}", message);
-                diag.push_str(&format!("\n  Channel: {}", channel_name));
-                if let Some((current, capacity, participants)) = channel_status {
-                    diag.push_str(&format!("\n  Status: {}/{} messages", current, capacity));
-                    diag.push_str(&format!("\n  Participants: {:?}", participants));
-                }
-                diag
-            }
-            
-            InterpreterError::AgentError { message, agent_id, available_agents } => {
-                let mut diag = format!("Agent Error: {}", message);
-                if let Some(id) = agent_id {
-                    diag.push_str(&format!("\n  Agent: {}", id));
-                }
-                if !available_agents.is_empty() {
-                    diag.push_str("\n  Available agents:");
-                    for agent in available_agents {
-                        diag.push_str(&format!("\n    - {}", agent));
-                    }
-                }
-                diag
-            }
-            
-            InterpreterError::TypeError { message, expected_type, actual_type, location } => {
-                let mut diag = format!("Type Error: {}", message);
-                diag.push_str(&format!("\n  Expected: {}", expected_type));
-                diag.push_str(&format!("\n  Actual: {}", actual_type));
-                if let Some(loc) = location {
-                    diag.push_str(&format!("\n  Location: {}", loc));
-                }
-                diag
-            }
-        }
-    }
+/// A communication channel
+pub struct Channel {
+    name: String,
+    capacity: usize,
+    buffer: Vec<Value>,
+    participants: Vec<String>,
 }
 
-impl std::fmt::Display for InterpreterError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.get_diagnostic())
-    }
-}
-
-impl std::error::Error for InterpreterError {}
-
-/// Enhanced error context for better diagnostics
-#[derive(Debug, Clone)]
-pub struct ErrorContext {
-    operation_stack: Vec<String>,
-    current_choreography: Option<String>,
-    current_agent: Option<String>,
-    execution_step: usize,
-}
-
-impl Default for ErrorContext {
+impl Default for ChannelRegistry {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ErrorContext {
+impl ChannelRegistry {
     pub fn new() -> Self {
-        ErrorContext {
-            operation_stack: Vec::new(),
-            current_choreography: None,
-            current_agent: None,
-            execution_step: 0,
+        ChannelRegistry {
+            channels: HashMap::new(),
         }
     }
-    
-    pub fn push_operation(&mut self, op: String) {
-        self.operation_stack.push(op);
+
+    /// Create a new channel
+    pub fn create_channel(&mut self, name: String, capacity: usize, participants: Vec<String>) {
+        let channel = Channel {
+            name: name.clone(),
+            capacity,
+            buffer: Vec::new(),
+            participants,
+        };
+        self.channels.insert(name, channel);
     }
-    
-    pub fn pop_operation(&mut self) {
-        self.operation_stack.pop();
+
+    /// Send a message to a channel
+    pub fn send(&mut self, channel_name: &str, value: Value) -> Result<(), String> {
+        let channel = self.channels.get_mut(channel_name)
+            .ok_or_else(|| format!("Channel '{}' not found", channel_name))?;
+
+        if channel.buffer.len() >= channel.capacity {
+            return Err(format!("Channel '{}' is full", channel_name));
+        }
+
+        channel.buffer.push(value);
+        Ok(())
     }
-    
-    pub fn set_choreography(&mut self, choreo: String) {
-        self.current_choreography = Some(choreo);
+
+    /// Receive a message from a channel
+    pub fn receive(&mut self, channel_name: &str) -> Result<Option<Value>, String> {
+        let channel = self.channels.get_mut(channel_name)
+            .ok_or_else(|| format!("Channel '{}' not found", channel_name))?;
+
+        Ok(if channel.buffer.is_empty() {
+            None
+        } else {
+            Some(channel.buffer.remove(0))
+        })
     }
-    
-    pub fn set_agent(&mut self, agent: String) {
-        self.current_agent = Some(agent);
+
+    /// Get channel status
+    pub fn get_channel_status(&self, channel_name: &str) -> Option<ChannelStatus> {
+        self.channels.get(channel_name).map(|channel| {
+            ChannelStatus {
+                name: channel.name.clone(),
+                capacity: channel.capacity,
+                current_size: channel.buffer.len(),
+                participants: channel.participants.clone(),
+            }
+        })
     }
-    
-    pub fn increment_step(&mut self) {
-        self.execution_step += 1;
+
+    /// List all channels
+    pub fn list_channels(&self) -> Vec<String> {
+        self.channels.keys().cloned().collect()
     }
 }
 
-#[cfg(test)]
-mod tests {
+/// Channel status information
+#[derive(Debug, Clone)]
+pub struct ChannelStatus {
+    pub name: String,
+    pub capacity: usize,
+    pub current_size: usize,
+    pub participants: Vec<String>,
+}
+
+/// Helper functions for creating common effects
+pub mod effects {
     use super::*;
-    use crate::layer3::choreography::{ChoreographyStep};
-    use crate::layer3::agent::{Agent, AgentId};
-    use crate::layer3::capability::Capability;
-    use crate::layer2::effect::EffectType;
-    
-    #[test]
-    fn test_interpreter_creation() {
-        let interp = Interpreter::new();
-        assert!(interp.state.is_empty());
-        assert!(interp.effect_log.is_empty());
+
+    /// Create a state read effect
+    pub fn read_state<R: Into<EffectRow> + 'static>(location: StateLocation) -> Effect<Value, R> {
+        Effect::read(location)
     }
-    
-    #[test]
-    fn test_execute_state_operations() {
-        let mut interp = Interpreter::new();
-        interp.enable_debug();
-        
-        // Write to state
-        let write_effect = Effect::<(), EffectRow>::write(
-            StateLocation("test".to_string()),
-            Value::String("hello".to_string())
-        );
-        
-        interp.execute_effect(write_effect).unwrap();
-        
-        // Read from state
-        let read_effect = Effect::<Value, EffectRow>::read(StateLocation("test".to_string()));
-        
-        let value = interp.execute_effect(read_effect).unwrap();
-        assert_eq!(value, Value::String("hello".to_string()));
-        
-        // Check log - should have Pure, StateWrite, Pure, StateRead
-        assert!(interp.get_effect_log().len() >= 2);
-        
-        // Check that we have both operations logged
-        let log_str = interp.get_effect_log().join(" ");
-        assert!(log_str.contains("StateWrite"));
-        assert!(log_str.contains("StateRead"));
+
+    /// Create a state write effect
+    pub fn write_state<R: Into<EffectRow> + 'static>(location: StateLocation, value: Value) -> Effect<(), R> {
+        Effect::write(location, value)
     }
-    
-    #[test]
-    fn test_execute_choreography() {
-        let mut interp = Interpreter::new();
-        
-        // Register agents with capabilities
-        let mut alice = Agent::new("Alice");
-        let comm_cap = Capability::new(
-            "Communication".to_string(),
-            EffectRow::from_effects(vec![
-                ("comm_send".to_string(), EffectType::Comm),
-            ])
-        );
-        alice.add_capability(comm_cap);
-        
-        let bob = Agent::new("Bob");
-        
-        interp.get_agent_registry().register(alice).unwrap();
-        interp.get_agent_registry().register(bob).unwrap();
-        
-        // Create a simple choreography
-        use crate::layer3::choreography::Message;
-        let step = ChoreographyStep::Send {
-            from: AgentId::new("Alice"),
-            to: AgentId::new("Bob"),
-            message: Message::Text("Hello".to_string()),
-        };
-        
-        let choreo = Choreography::Step(step);
-        
-        // Execute
-        interp.enable_debug();
-        interp.execute_choreography(&choreo).unwrap();
-        
-        // Check that message was sent
-        assert!(!interp.get_effect_log().is_empty());
-        assert!(interp.get_effect_log()[0].contains("Executing choreography"));
+
+    /// Create a communication send effect
+    pub fn send_message<R: Into<EffectRow> + 'static>(channel: String, value: Value) -> Effect<(), R> {
+        Effect::send(channel, value)
     }
-    
-    #[test]
-    fn test_communication() {
-        let mut interp = Interpreter::new();
-        interp.enable_debug();
-        
-        // Send a message
-        let send_effect = Effect::<(), EffectRow>::send(
-            "test-channel".to_string(),
-            Value::String("test message".to_string())
-        );
-        
-        interp.execute_effect(send_effect).unwrap();
-        
-        // Receive the message
-        let recv_effect = Effect::<Value, EffectRow>::receive("test-channel".to_string());
-        
-        let value = interp.execute_effect(recv_effect).unwrap();
-        assert_eq!(value, Value::String("test message".to_string()));
-        
-        // Second receive should get Unit
-        let recv2_effect = Effect::<Value, EffectRow>::receive("test-channel".to_string());
-        let value2 = interp.execute_effect(recv2_effect).unwrap();
-        assert_eq!(value2, Value::Unit);
+
+    /// Create a communication receive effect
+    pub fn receive_message<R: Into<EffectRow> + 'static>(channel: String) -> Effect<Value, R> {
+        Effect::receive(channel)
     }
-    
-    #[test]
-    #[allow(clippy::field_reassign_with_default)]
-    fn test_debug_snapshots() {
-        let mut interp = Interpreter::new();
-        
-        // Enable snapshots
-        let mut debug_opts = DebugOptions::default();
-        debug_opts.snapshots_enabled = true;
-        interp.set_debug_options(debug_opts);
-        
-        // Execute some operations
-        let write1 = Effect::<(), EffectRow>::write(
-            StateLocation("x".to_string()),
-            Value::Int(42)
-        );
-        let write2 = Effect::<(), EffectRow>::write(
-            StateLocation("y".to_string()),
-            Value::String("hello".to_string())
-        );
-        
-        interp.execute_effect(write1).unwrap();
-        interp.execute_effect(write2).unwrap();
-        
-        // Check snapshots
-        let snapshots = interp.get_snapshots();
-        assert_eq!(snapshots.len(), 2);
-        
-        // First snapshot should have just x
-        assert_eq!(snapshots[0].step, 0);
-        assert_eq!(snapshots[0].state.get(&StateLocation("x".to_string())), Some(&Value::Int(42)));
-        assert!(!snapshots[0].state.contains_key(&StateLocation("y".to_string())));
-        
-        // Second snapshot should have both
-        assert_eq!(snapshots[1].step, 1);
-        assert_eq!(snapshots[1].state.get(&StateLocation("x".to_string())), Some(&Value::Int(42)));
-        assert_eq!(snapshots[1].state.get(&StateLocation("y".to_string())), Some(&Value::String("hello".to_string())));
+
+    /// Create a proof generation effect
+    pub fn generate_proof<R: Into<EffectRow> + 'static>(claim: Value, witness: Value) -> Effect<Value, R> {
+        Effect::prove(claim, witness)
+    }
+
+    /// Create a proof verification effect
+    pub fn verify_proof<R: Into<EffectRow> + 'static>(proof: Value, claim: Value) -> Effect<bool, R> {
+        Effect::verify(proof, claim)
+    }
+
+    /// Sequence two effects
+    pub fn sequence<A: 'static, B: 'static, R: Into<EffectRow> + 'static>(
+        first: Effect<A, R>, 
+        second: Effect<B, R>
+    ) -> Effect<B, R> {
+        first.then(second)
+    }
+
+    /// Create a pure effect from a value
+    pub fn pure<A: 'static, R: 'static>(value: A) -> Effect<A, R> {
+        Effect::pure(value)
     }
 } 

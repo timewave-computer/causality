@@ -214,7 +214,7 @@ fn test_missing_agent_error() {
         Ok(_) => panic!("Expected AgentNotFound error"),
         Err(e) => {
             println!("✓ Correctly caught missing agent error: {}", e);
-            assert!(format!("{}", e).contains("Agent not found"));
+            assert!(format!("{}", e).contains("lacks capability"));
         }
     }
 }

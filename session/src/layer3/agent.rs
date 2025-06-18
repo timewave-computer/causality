@@ -13,6 +13,12 @@ impl AgentId {
     }
 }
 
+impl std::fmt::Display for AgentId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Agent lifecycle status
 #[derive(Debug, Clone, PartialEq)]
 pub enum AgentStatus {
@@ -150,6 +156,11 @@ impl AgentRegistry {
     /// Get an agent by ID
     pub fn get(&self, id: &AgentId) -> Option<&Agent> {
         self.agents.get(id)
+    }
+    
+    /// Lookup an agent by ID (alias for get)
+    pub fn lookup(&self, id: &AgentId) -> Option<&Agent> {
+        self.get(id)
     }
     
     /// Get a mutable reference to an agent

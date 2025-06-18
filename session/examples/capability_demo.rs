@@ -1,179 +1,121 @@
 // Example demonstrating type-level capabilities in the Causality-Valence architecture
 
-// Simulated imports (in real code these would come from the session crate)
-use std::marker::PhantomData;
-
-/// Effect row types (simplified)
-#[derive(Debug, Clone, PartialEq)]
-enum EffectRow {
-    Empty,
-    Extend(String, EffectType, Box<EffectRow>),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum EffectType {
-    State,
-    IO,
-    Comm,
-}
-
-/// Session types (simplified)
-#[derive(Debug, Clone, PartialEq)]
-enum SessionType {
-    ExternalChoice(Vec<(String, SessionType)>),
-    Receive(Box<SessionType>),
-    Send(Box<SessionType>),
-    End,
-}
-
-/// A capability is a session type that grants access to handlers
-#[derive(Debug, Clone)]
-struct Capability {
-    name: String,
-    session_type: SessionType,
-    allowed_effects: EffectRow,
-}
-
-impl Capability {
-    fn new(name: String, allowed_effects: EffectRow) -> Self {
-        // Capability protocol: receive effect, send transformed effect, or revoke
-        let session_type = SessionType::ExternalChoice(vec![
-            ("use_effect".to_string(), SessionType::Receive(
-                Box::new(SessionType::Send(
-                    Box::new(SessionType::End)
-                ))
-            )),
-            ("revoke".to_string(), SessionType::End),
-        ]);
-        
-        Self {
-            name,
-            session_type,
-            allowed_effects,
-        }
-    }
-    
-    /// Create a rate-limited API capability
-    fn rate_limited_api(max_calls: u32) -> Self {
-        let effects = EffectRow::Extend(
-            "api_call".to_string(),
-            EffectType::IO,
-            Box::new(EffectRow::Empty),
-        );
-        
-        Self::new(
-            format!("RateLimitedAPI({})", max_calls),
-            effects,
-        )
-    }
-    
-    /// Create a data access capability
-    fn data_access(allowed_tables: Vec<&str>, exclude_tables: Vec<&str>) -> Self {
-        let mut effects = EffectRow::Empty;
-        
-        // Build effect row for allowed operations
-        for table in allowed_tables {
-            if !exclude_tables.contains(&table) {
-                // Read effect
-                effects = EffectRow::Extend(
-                    format!("read_{}", table),
-                    EffectType::State,
-                    Box::new(effects),
-                );
-                
-                // Write effect (exclude sensitive tables)
-                if !["audit_log", "permissions"].contains(&table) {
-                    effects = EffectRow::Extend(
-                        format!("write_{}", table),
-                        EffectType::State,
-                        Box::new(effects),
-                    );
-                }
-            }
-        }
-        
-        Self::new("DataAccess".to_string(), effects)
-    }
-    
-    /// Check if capability allows an effect
-    fn allows_effect(&self, effect_name: &str) -> bool {
-        self.check_row(&self.allowed_effects, effect_name)
-    }
-    
-    fn check_row(&self, row: &EffectRow, name: &str) -> bool {
-        match row {
-            EffectRow::Empty => false,
-            EffectRow::Extend(label, _, rest) => {
-                label == name || self.check_row(rest, name)
-            }
-        }
-    }
-}
+use session::layer3::capability::Capability;
+use session::layer2::effect::{EffectRow, EffectType};
 
 fn main() {
     println!("=== Causality-Valence Type-Level Capability Demo ===\n");
     
     // Example 1: Rate-limited API capability
-    println!("1. Rate-Limited API Capability:");
-    let api_cap = Capability::rate_limited_api(100);
-    println!("   Name: {}", api_cap.name);
-    println!("   Allows 'api_call': {}", api_cap.allows_effect("api_call"));
-    println!("   Allows 'database_write': {}", api_cap.allows_effect("database_write"));
+    println!("1. Communication Capability:");
+    let comm_cap = Capability::new(
+        "Communication".to_string(),
+        EffectRow::from_effects(vec![
+            ("comm_send".to_string(), EffectType::Comm),
+            ("comm_receive".to_string(), EffectType::Comm),
+        ])
+    );
+    println!("   Name: {}", comm_cap.name);
+    println!("   Allows 'comm_send': {}", comm_cap.allowed_effects.has_effect("comm_send"));
+    println!("   Allows 'database_write': {}", comm_cap.allowed_effects.has_effect("database_write"));
     
-    // Example 2: Data access capability with table restrictions
+    // Example 2: Data access capability with state operations
     println!("\n2. Data Access Capability:");
-    let data_cap = Capability::data_access(
-        vec!["users", "orders", "products", "audit_log"],
-        vec!["audit_log"],
+    let data_cap = Capability::new(
+        "DataAccess".to_string(),
+        EffectRow::from_effects(vec![
+            ("state_read".to_string(), EffectType::State),
+            ("state_write".to_string(), EffectType::State),
+        ])
     );
     println!("   Name: {}", data_cap.name);
-    println!("   Allows 'read_users': {}", data_cap.allows_effect("read_users"));
-    println!("   Allows 'write_users': {}", data_cap.allows_effect("write_users"));
-    println!("   Allows 'read_audit_log': {}", data_cap.allows_effect("read_audit_log"));
-    println!("   Allows 'write_audit_log': {}", data_cap.allows_effect("write_audit_log"));
-    println!("   Allows 'write_permissions': {}", data_cap.allows_effect("write_permissions"));
+    println!("   Allows 'state_read': {}", data_cap.allowed_effects.has_effect("state_read"));
+    println!("   Allows 'state_write': {}", data_cap.allowed_effects.has_effect("state_write"));
+    println!("   Allows 'comm_send': {}", data_cap.allowed_effects.has_effect("comm_send"));
     
-    // Example 3: Composing capabilities
-    println!("\n3. Composed Capability:");
+    // Example 3: Proof generation capability
+    println!("\n3. Proof Generation Capability:");
+    let proof_cap = Capability::new(
+        "ProofGeneration".to_string(),
+        EffectRow::from_effects(vec![
+            ("proof_generate".to_string(), EffectType::Proof),
+            ("proof_verify".to_string(), EffectType::Proof),
+        ])
+    );
+    println!("   Name: {}", proof_cap.name);
+    println!("   Allows 'proof_generate': {}", proof_cap.allowed_effects.has_effect("proof_generate"));
+    println!("   Allows 'proof_verify': {}", proof_cap.allowed_effects.has_effect("proof_verify"));
     
-    // In the real system, this would use row type union
-    let mut combined_effects = api_cap.allowed_effects.clone();
-    
-    // Add data access effects
-    fn add_effects(base: EffectRow, to_add: &EffectRow) -> EffectRow {
-        match to_add {
-            EffectRow::Empty => base,
-            EffectRow::Extend(label, ty, rest) => {
-                let new_base = EffectRow::Extend(
-                    label.clone(),
-                    ty.clone(),
-                    Box::new(base),
-                );
-                add_effects(new_base, rest)
-            }
-        }
-    }
-    
-    combined_effects = add_effects(combined_effects, &data_cap.allowed_effects);
-    
-    let combined_cap = Capability::new(
-        format!("{} + {}", api_cap.name, data_cap.name),
-        combined_effects,
+    // Example 4: Full access capability
+    println!("\n4. Full Access Capability:");
+    let full_cap = Capability::new(
+        "FullAccess".to_string(),
+        EffectRow::from_effects(vec![
+            ("state_read".to_string(), EffectType::State),
+            ("state_write".to_string(), EffectType::State),
+            ("comm_send".to_string(), EffectType::Comm),
+            ("comm_receive".to_string(), EffectType::Comm),
+            ("proof_generate".to_string(), EffectType::Proof),
+            ("proof_verify".to_string(), EffectType::Proof),
+        ])
     );
     
-    println!("   Name: {}", combined_cap.name);
-    println!("   Allows 'api_call': {}", combined_cap.allows_effect("api_call"));
-    println!("   Allows 'read_users': {}", combined_cap.allows_effect("read_users"));
+    println!("   Name: {}", full_cap.name);
+    println!("   Allows 'state_read': {}", full_cap.allowed_effects.has_effect("state_read"));
+    println!("   Allows 'comm_send': {}", full_cap.allowed_effects.has_effect("comm_send"));
+    println!("   Allows 'proof_generate': {}", full_cap.allowed_effects.has_effect("proof_generate"));
+    println!("   Allows 'unauthorized_op': {}", full_cap.allowed_effects.has_effect("unauthorized_op"));
     
-    // Example 4: Session type protocol
-    println!("\n4. Capability Protocol:");
-    println!("   The capability uses a session type that allows:");
-    println!("   - 'use_effect': Transform an effect with constraints");
-    println!("   - 'revoke': End the capability session");
+    println!("\n=== Capability Composition Demo ===");
+    
+    // Show how capabilities restrict agent behavior
+    use session::layer3::agent::Agent;
+    
+    let mut restricted_agent = Agent::new("RestrictedAgent");
+    restricted_agent.add_capability(comm_cap.clone());
+    
+    let mut full_agent = Agent::new("FullAgent");
+    full_agent.add_capability(full_cap.clone());
+    
+    println!("\nRestricted Agent capabilities: {} total", restricted_agent.capabilities.len());
+    for cap in &restricted_agent.capabilities {
+        println!("  - {}", cap.name);
+    }
+    
+    println!("\nFull Agent capabilities: {} total", full_agent.capabilities.len());
+    for cap in &full_agent.capabilities {
+        println!("  - {}", cap.name);
+    }
     
     println!("\nKey insights:");
-    println!("- Capabilities are session types, not a separate system");
-    println!("- Effect constraints are expressed as row types");
+    println!("- Capabilities define what effects an agent can perform");
+    println!("- Effect rows specify precise permissions");
     println!("- Type system enforces constraints at compile time");
-    println!("- No need for runtime constraint checking");
+    println!("- Agents can have multiple capabilities for different operations");
+    println!("- Capability-based access control prevents unauthorized operations");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_capability_demo() {
+        // Test that the demo runs without panicking
+        main();
+    }
+    
+    #[test]
+    fn test_capability_creation() {
+        let cap = Capability::new(
+            "TestCapability".to_string(),
+            EffectRow::from_effects(vec![
+                ("test_effect".to_string(), EffectType::State),
+            ])
+        );
+        
+        assert_eq!(cap.name, "TestCapability");
+        assert!(cap.allowed_effects.has_effect("test_effect"));
+        assert!(!cap.allowed_effects.has_effect("nonexistent_effect"));
+    }
 } 

@@ -1,253 +1,248 @@
-// Layer 3 to Layer 2 compiler - translates choreographies to outcomes
+// Layer 3 → Layer 2 compiler: Choreographies to effects
+// Compiles choreographies to pure algebraic effects
 
-use crate::layer3::choreography::{Choreography, ChoreographyStep, Message, LocalAction};
-use crate::layer3::agent::{AgentId, AgentRegistry};
+use crate::layer2::effect::{Effect, EffectRow};
 use crate::layer2::outcome::{Value, StateLocation};
-use crate::layer2::effect::{Effect, EffectRow, EffectOp};
-use std::marker::PhantomData;
+use crate::layer3::agent::{AgentRegistry, AgentId};
+use crate::layer3::choreography::{Choreography, ChoreographyStep, Message};
+use thiserror::Error;
 
-/// Compile a choreography to a sequence of effects
+/// Compilation errors
+#[derive(Debug, Error)]
+pub enum CompilerError {
+    #[error("Agent not found: {0}")]
+    AgentNotFound(String),
+    
+    #[error("Agent {agent} lacks capability: {capability}")]
+    MissingCapability { agent: String, capability: String },
+    
+    #[error("Invalid choreography: {0}")]
+    InvalidChoreography(String),
+    
+    #[error("Execution failed: {0}")]
+    ExecutionFailed(String),
+}
+
+/// Compile a choreography to a list of effects
 pub fn compile_choreography(
-    choreo: &Choreography,
-    agents: &AgentRegistry,
-) -> Result<Vec<Effect<(), EffectRow>>, CompileError> {
-    match choreo {
-        Choreography::Step(step) => compile_step(step, agents),
+    choreography: &Choreography,
+    registry: &AgentRegistry,
+) -> Result<Vec<Effect<(), EffectRow>>, CompilerError> {
+    match choreography {
+        Choreography::Step(step) => {
+            let effect = compile_step(step, registry)?;
+            Ok(vec![effect])
+        }
         
         Choreography::Sequence(steps) => {
             let mut effects = Vec::new();
-            for sub_choreo in steps {
-                let sub_effects = compile_choreography(sub_choreo, agents)?;
-                effects.extend(sub_effects);
+            for choreo in steps {
+                let mut step_effects = compile_choreography(choreo, registry)?;
+                effects.append(&mut step_effects);
             }
             Ok(effects)
         }
         
-        Choreography::Parallel(branches) => {
-            // For now, compile parallel as sequence
-            let mut effects = Vec::new();
-            for branch in branches {
-                let branch_effects = compile_choreography(branch, agents)?;
-                effects.extend(branch_effects);
+        Choreography::Parallel(choreos) => {
+            let mut all_effects = Vec::new();
+            for choreo in choreos {
+                let mut choreo_effects = compile_choreography(choreo, registry)?;
+                all_effects.append(&mut choreo_effects);
             }
-            Ok(effects)
+            Ok(all_effects)
         }
         
-        Choreography::Choice { chooser: _, branches } => {
-            // For now, just compile the first branch
-            if let Some((_, first_branch)) = branches.first() {
-                compile_choreography(first_branch, agents)
+        Choreography::Choice(choreos) => {
+            // For now, just compile the first choice
+            if let Some(first) = choreos.first() {
+                compile_choreography(first, registry)
             } else {
                 Ok(vec![])
             }
         }
-        
-        Choreography::If { condition: _, then_branch, else_branch: _ } => {
-            // For now, always take the then branch
-            compile_choreography(then_branch, agents)
-        }
-        
-        Choreography::While { .. } => {
-            // Don't compile loops for now (could be infinite)
-            Err(CompileError::InvalidChoreography("While loops not supported".to_string()))
-        }
-        
-        Choreography::Empty => Ok(vec![]),
     }
 }
 
-/// Compile a single choreography step
+/// Compile a single choreography step to an effect
 fn compile_step(
     step: &ChoreographyStep,
-    agents: &AgentRegistry,
-) -> Result<Vec<Effect<(), EffectRow>>, CompileError> {
+    registry: &AgentRegistry,
+) -> Result<Effect<(), EffectRow>, CompilerError> {
     match step {
         ChoreographyStep::Send { from, to, message } => {
-            // Check if sender exists
-            let sender = agents.get(from)
-                .ok_or_else(|| CompileError::AgentNotFound(from.clone()))?;
-            
-            // Check if receiver exists
-            let _receiver = agents.get(to)
-                .ok_or_else(|| CompileError::AgentNotFound(to.clone()))?;
-            
-            // Check if sender has communication capability
-            if !sender.can_perform("comm_send") {
-                return Err(CompileError::MissingCapability {
-                    agent: from.clone(),
-                    required: "comm_send".to_string(),
+            // Validate sender has communication capability
+            let sender = registry.lookup(from)
+                .ok_or_else(|| CompilerError::AgentNotFound(from.to_string()))?;
+                
+            if !has_communication_capability(&sender) {
+                return Err(CompilerError::MissingCapability {
+                    agent: from.to_string(),
+                    capability: "Communication".to_string(),
                 });
             }
+            
+            // Validate receiver exists
+            let _receiver = registry.lookup(to)
+                .ok_or_else(|| CompilerError::AgentNotFound(to.to_string()))?;
             
             // Create communication effect
-            let channel = format!("{}→{}", from.0, to.0);
-            let value = Value::String(message_to_value(message));
+            let channel = format!("{}→{}", from, to);
+            let value = message_to_value(message);
             
-            let effect = Effect::<(), EffectRow>::Do {
-                op: EffectOp::CommSend(channel, value),
-                cont: Box::new(|_| Effect::Pure(())),
-                _phantom: PhantomData,
-            };
-            
-            Ok(vec![effect])
+            Ok(Effect::send(channel, value))
         }
         
-        ChoreographyStep::Local { agent, action } => {
-            // Check if agent exists
-            let _actor = agents.get(agent)
-                .ok_or_else(|| CompileError::AgentNotFound(agent.clone()))?;
-            
-            // Compile local action
-            compile_local_action(agent, action)
-        }
-        
-        ChoreographyStep::Spawn { creator, new_agent, agent_type } => {
-            // Check if spawner exists
-            let spawner = agents.get(creator)
-                .ok_or_else(|| CompileError::AgentNotFound(creator.clone()))?;
-            
-            // Check if spawner has spawn capability
-            if !spawner.can_perform("agent_spawn") {
-                return Err(CompileError::MissingCapability {
-                    agent: creator.clone(),
-                    required: "agent_spawn".to_string(),
+        ChoreographyStep::Spawn { parent, agent } => {
+            // Validate parent has spawning capability
+            let parent_agent = registry.lookup(parent)
+                .ok_or_else(|| CompilerError::AgentNotFound(parent.to_string()))?;
+                
+            if !has_spawning_capability(&parent_agent) {
+                return Err(CompilerError::MissingCapability {
+                    agent: parent.to_string(),
+                    capability: "AgentSpawning".to_string(),
                 });
             }
             
-            // Create state update effect for spawn
-            let location = StateLocation(format!("agent_spawn_{}_{}", new_agent.0, agent_type));
-            let value = Value::String(format!("spawned_by_{}", creator.0));
+            // Create agent spawning effect (as a state write)
+            let location = StateLocation(format!("agent_{}", agent.id));
+            let value = Value::String(agent.id.to_string());
             
-            let effect = Effect::<(), EffectRow>::Do {
-                op: EffectOp::StateWrite(location, value),
-                cont: Box::new(|_| Effect::Pure(())),
-                _phantom: PhantomData,
-            };
-            
-            Ok(vec![effect])
+            Ok(Effect::write(location, value))
         }
         
-        ChoreographyStep::Delegate { from, to, capability } => {
-            // Check if delegator exists
-            let _delegator = agents.get(from)
-                .ok_or_else(|| CompileError::AgentNotFound(from.clone()))?;
+        ChoreographyStep::Parallel(steps) => {
+            // Compile all parallel steps
+            let mut effects = Vec::new();
+            for step in steps {
+                let effect = compile_step(step, registry)?;
+                effects.push(effect);
+            }
             
-            // Check if delegate exists
-            let _delegate = agents.get(to)
-                .ok_or_else(|| CompileError::AgentNotFound(to.clone()))?;
+            // For now, just sequence them (true parallelism would require more complex effect handling)
+            if effects.is_empty() {
+                Ok(Effect::pure(()))
+            } else {
+                let mut result = effects.into_iter().next().unwrap();
+                // In a true parallel implementation, we'd compose effects in parallel
+                Ok(result)
+            }
+        }
+        
+        ChoreographyStep::Sequence(steps) => {
+            // Compile all sequential steps
+            let mut effects = Vec::new();
+            for step in steps {
+                let effect = compile_step(step, registry)?;
+                effects.push(effect);
+            }
             
-            // For now, delegation is just a state update
-            let location = StateLocation(format!("delegation_{}_{}", from.0, to.0));
-            let value = Value::String(capability.clone());
-            
-            let effect = Effect::<(), EffectRow>::Do {
-                op: EffectOp::StateWrite(location, value),
-                cont: Box::new(|_| Effect::Pure(())),
-                _phantom: PhantomData,
-            };
-            
-            Ok(vec![effect])
+            // Chain effects sequentially
+            if effects.is_empty() {
+                Ok(Effect::pure(()))
+            } else {
+                let mut iter = effects.into_iter();
+                let mut result = iter.next().unwrap();
+                for effect in iter {
+                    result = result.then(effect);
+                }
+                Ok(result)
+            }
         }
     }
 }
 
-/// Compile a local action
-fn compile_local_action(
-    agent: &AgentId,
-    action: &LocalAction,
-) -> Result<Vec<Effect<(), EffectRow>>, CompileError> {
-    match action {
-        LocalAction::UpdateState { key, value } => {
-            let location = StateLocation(format!("{}_{}", agent.0, key));
-            let state_value = Value::String(value.clone());
-            
-            let effect = Effect::<(), EffectRow>::Do {
-                op: EffectOp::StateWrite(location, state_value),
-                cont: Box::new(|_| Effect::Pure(())),
-                _phantom: PhantomData,
-            };
-            
-            Ok(vec![effect])
-        }
-        
-        LocalAction::Compute { operation, args } => {
-            // For now, computation is a no-op
-            println!("Agent {} computes {} with args {:?}", agent.0, operation, args);
-            Ok(vec![Effect::Pure(())])
-        }
-        
-        LocalAction::Validate { what } => {
-            // For now, validation always succeeds
-            println!("Agent {} validates {}", agent.0, what);
-            Ok(vec![Effect::Pure(())])
-        }
-        
-        LocalAction::Log(message) => {
-            // Log to state
-            let location = StateLocation(format!("{}_log", agent.0));
-            let log_value = Value::String(message.clone());
-            
-            let effect = Effect::<(), EffectRow>::Do {
-                op: EffectOp::StateWrite(location, log_value),
-                cont: Box::new(|_| Effect::Pure(())),
-                _phantom: PhantomData,
-            };
-            
-            Ok(vec![effect])
-        }
-    }
-}
-
-/// Convert message to string
-fn message_to_value(message: &Message) -> String {
+/// Convert a message to a value
+fn message_to_value(message: &Message) -> Value {
     match message {
-        Message::Text(text) => text.clone(),
-        Message::Typed { msg_type, value } => format!("{}:{:?}", msg_type, value),
-        Message::Request { request_type, payload } => {
-            format!("request:{}:{}", request_type, message_to_value(payload))
-        }
-        Message::Response { response_type, payload } => {
-            format!("response:{}:{}", response_type, message_to_value(payload))
-        }
+        Message::Text(text) => Value::String(text.clone()),
+        Message::Data(value) => value.clone(),
+        Message::Request(id, value) => Value::Struct(vec![
+            ("id".to_string(), Value::String(id.clone())),
+            ("value".to_string(), value.clone())
+        ]),
+        Message::Response(id, value) => Value::Struct(vec![
+            ("id".to_string(), Value::String(id.clone())),
+            ("value".to_string(), value.clone())
+        ]),
     }
 }
 
-/// Compilation error types
-#[derive(Debug)]
-pub enum CompileError {
-    /// Agent not found in registry
-    AgentNotFound(AgentId),
-    
-    /// Agent lacks required capability
-    MissingCapability {
-        agent: AgentId,
-        required: String,
-    },
-    
-    /// Invalid choreography
-    InvalidChoreography(String),
+/// Check if an agent has communication capability
+fn has_communication_capability(agent: &crate::layer3::agent::Agent) -> bool {
+    agent.capabilities.iter().any(|cap| {
+        cap.allowed_effects.has_effect("comm_send") || 
+        cap.allowed_effects.has_effect("communication")
+    })
 }
 
-impl std::fmt::Display for CompileError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CompileError::AgentNotFound(id) => write!(f, "Agent not found: {:?}", id),
-            CompileError::MissingCapability { agent, required } => {
-                write!(f, "Agent {:?} lacks capability: {}", agent, required)
+/// Check if an agent has spawning capability
+fn has_spawning_capability(agent: &crate::layer3::agent::Agent) -> bool {
+    agent.capabilities.iter().any(|cap| {
+        cap.allowed_effects.has_effect("agent_spawn") ||
+        cap.allowed_effects.has_effect("spawning")
+    })
+}
+
+/// Validate that a step can be executed by the given agents
+pub fn validate_step(
+    step: &ChoreographyStep,
+    registry: &AgentRegistry,
+) -> Result<(), CompilerError> {
+    match step {
+        ChoreographyStep::Send { from, to, .. } => {
+            // Check both agents exist and sender has capability
+            let sender = registry.lookup(from)
+                .ok_or_else(|| CompilerError::AgentNotFound(from.to_string()))?;
+            let _receiver = registry.lookup(to)
+                .ok_or_else(|| CompilerError::AgentNotFound(to.to_string()))?;
+                
+            if !has_communication_capability(&sender) {
+                return Err(CompilerError::MissingCapability {
+                    agent: from.to_string(),
+                    capability: "Communication".to_string(),
+                });
             }
-            CompileError::InvalidChoreography(reason) => {
-                write!(f, "Invalid choreography: {}", reason)
+            
+            Ok(())
+        }
+        
+        ChoreographyStep::Spawn { parent, .. } => {
+            let parent_agent = registry.lookup(parent)
+                .ok_or_else(|| CompilerError::AgentNotFound(parent.to_string()))?;
+                
+            if !has_spawning_capability(&parent_agent) {
+                return Err(CompilerError::MissingCapability {
+                    agent: parent.to_string(),
+                    capability: "AgentSpawning".to_string(),
+                });
             }
+            
+            Ok(())
+        }
+        
+        ChoreographyStep::Parallel(steps) => {
+            for step in steps {
+                validate_step(step, registry)?;
+            }
+            Ok(())
+        }
+        
+        ChoreographyStep::Sequence(steps) => {
+            for step in steps {
+                validate_step(step, registry)?;
+            }
+            Ok(())
         }
     }
 }
-
-impl std::error::Error for CompileError {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Agent, Capability};
+    use crate::layer3::agent::Agent;
+    use crate::layer3::capability::Capability;
+    use crate::layer2::effect::EffectType;
     
     #[test]
     fn test_compile_send() {
@@ -258,7 +253,7 @@ mod tests {
         let comm_cap = Capability::new(
             "Communication".to_string(),
             EffectRow::from_effects(vec![
-                ("comm_send".to_string(), crate::layer2::effect::EffectType::Comm),
+                ("comm_send".to_string(), EffectType::Comm),
             ])
         );
         alice.add_capability(comm_cap);
@@ -303,9 +298,9 @@ mod tests {
         assert!(result.is_err());
         
         match result {
-            Err(CompileError::MissingCapability { agent, required }) => {
-                assert_eq!(agent, AgentId::new("Alice"));
-                assert_eq!(required, "comm_send");
+            Err(CompilerError::MissingCapability { agent, capability }) => {
+                assert_eq!(agent, "Alice");
+                assert_eq!(capability, "Communication");
             }
             _ => panic!("Expected MissingCapability error"),
         }
@@ -320,17 +315,17 @@ mod tests {
         let spawn_cap = Capability::new(
             "Spawn".to_string(),
             EffectRow::from_effects(vec![
-                ("agent_spawn".to_string(), crate::layer2::effect::EffectType::State),
+                ("agent_spawn".to_string(), EffectType::State),
             ])
         );
         alice.add_capability(spawn_cap);
         
         registry.register(alice).unwrap();
         
+        let new_agent = Agent::new("Worker1");
         let step = ChoreographyStep::Spawn {
-            creator: AgentId::new("Alice"),
-            new_agent: AgentId::new("Worker1"),
-            agent_type: "Worker".to_string(),
+            parent: AgentId::new("Alice"),
+            agent: new_agent,
         };
         
         let choreo = Choreography::Step(step);
@@ -348,7 +343,7 @@ mod tests {
         let comm_cap = Capability::new(
             "Communication".to_string(),
             EffectRow::from_effects(vec![
-                ("comm_send".to_string(), crate::layer2::effect::EffectType::Comm),
+                ("comm_send".to_string(), EffectType::Comm),
             ])
         );
         alice.add_capability(comm_cap.clone());
@@ -365,10 +360,6 @@ mod tests {
                 to: AgentId::new("Bob"),
                 message: Message::Text("Request".to_string()),
             }),
-            Choreography::Step(ChoreographyStep::Local {
-                agent: AgentId::new("Bob"),
-                action: LocalAction::Validate { what: "request".to_string() },
-            }),
             Choreography::Step(ChoreographyStep::Send {
                 from: AgentId::new("Bob"),
                 to: AgentId::new("Alice"),
@@ -379,6 +370,6 @@ mod tests {
         let choreo = Choreography::Sequence(steps);
         
         let effects = compile_choreography(&choreo, &registry).unwrap();
-        assert_eq!(effects.len(), 3);
+        assert_eq!(effects.len(), 2);
     }
 }

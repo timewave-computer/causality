@@ -143,11 +143,36 @@ impl CapabilityHandler {
 impl<R: 'static> Handler<R> for CapabilityHandler {
     fn transform_op(&self, op: EffectOp) -> Effect<OpResult, R> {
         if self.capability.allows_operation(&op) {
-            // Allowed - pass through
-            Effect::Do {
-                op,
-                cont: Box::new(|result| Effect::Pure(result)),
-                _phantom: PhantomData,
+            // Allowed - convert operation to pure effect
+            match op {
+                EffectOp::StateRead(location) => Effect::StateRead {
+                    location,
+                    _result_type: PhantomData,
+                },
+                EffectOp::StateWrite(location, value) => Effect::StateWrite {
+                    location,
+                    value,
+                    _result_type: PhantomData,
+                },
+                EffectOp::CommSend(channel, value) => Effect::CommSend {
+                    channel,
+                    value,
+                    _result_type: PhantomData,
+                },
+                EffectOp::CommReceive(channel) => Effect::CommReceive {
+                    channel,
+                    _result_type: PhantomData,
+                },
+                EffectOp::ProofGenerate(claim, witness) => Effect::ProofGenerate {
+                    claim,
+                    witness,
+                    _result_type: PhantomData,
+                },
+                EffectOp::ProofVerify(proof, claim) => Effect::ProofVerify {
+                    proof,
+                    claim,
+                    _result_type: PhantomData,
+                },
             }
         } else {
             // Not allowed - return error

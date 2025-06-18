@@ -43,7 +43,7 @@ fn main() {
     ];
     
     for (location, value) in locations_values {
-        let write_effect = Effect::write(location, value);
+        let write_effect: Effect<(), EffectRow> = Effect::write(location, value);
         if let Err(e) = interpreter.execute_effect(write_effect) {
             println!("✗ Write failed: {}", e);
         }
@@ -69,6 +69,13 @@ fn main() {
     // Example 4: Communication effects
     println!("\n4. Communication effects:");
     
+    // First set up a channel for communication
+    interpreter.get_channel_registry().create_channel(
+        "test-channel".to_string(),
+        10,
+        vec!["system".to_string()],
+    );
+    
     // Send a message
     let send_effect = Effect::send("test-channel".to_string(), Value::String("Hello, World!".to_string()));
     match interpreter.execute_effect(send_effect) {
@@ -86,11 +93,68 @@ fn main() {
     println!("\nFinal interpreter state:");
     interpreter.print_state();
     
-    println!("\n=== Effect Log ===");
-    for (i, log_entry) in interpreter.get_effect_log().iter().enumerate() {
+    println!("\n=== Execution Trace ===");
+    for (i, log_entry) in interpreter.get_trace().iter().enumerate() {
         println!("  {}: {}", i + 1, log_entry);
     }
     
     println!("\n=== Example Complete ===");
     println!("Demonstrated natural transformation of effects through interpreter execution");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_effect_transform_demo() {
+        // Test that the demo runs without panicking
+        main();
+    }
+    
+    #[test]
+    fn test_individual_effects() {
+        let mut interpreter = Interpreter::new();
+        
+        // Test state effect
+        let loc = StateLocation("test".to_string());
+        let write_effect = Effect::write(loc.clone(), Value::Int(123));
+        assert!(interpreter.execute_effect(write_effect).is_ok());
+        
+        let read_effect = Effect::read(loc);
+        let result = interpreter.execute_effect(read_effect);
+        assert!(result.is_ok());
+        
+        if let Ok(Value::Int(value)) = result {
+            assert_eq!(value, 123);
+        } else {
+            panic!("Expected Int(123)");
+        }
+    }
+    
+    #[test]
+    fn test_communication_effects() {
+        let mut interpreter = Interpreter::new();
+        
+        // Set up channel
+        interpreter.get_channel_registry().create_channel(
+            "test".to_string(),
+            5,
+            vec!["system".to_string()],
+        );
+        
+        // Test send/receive
+        let send_effect = Effect::send("test".to_string(), Value::String("test message".to_string()));
+        assert!(interpreter.execute_effect(send_effect).is_ok());
+        
+        let receive_effect = Effect::receive("test".to_string());
+        let result = interpreter.execute_effect(receive_effect);
+        assert!(result.is_ok());
+        
+        if let Ok(Value::String(msg)) = result {
+            assert_eq!(msg, "test message");
+        } else {
+            panic!("Expected String(test message)");
+        }
+    }
 } 

@@ -98,25 +98,6 @@ impl CompositeInterpreter {
         (Outcome::empty(), valid)
     }
     
-    /// Apply a handler-transformed operation
-    fn interpret_transformed<R: 'static>(&mut self, transformed: Effect<OpResult, R>) -> (Outcome, OpResult) {
-        // Recursively interpret the transformed effect
-        match transformed {
-            Effect::Pure(result) => (Outcome::empty(), result),
-            Effect::Do { op, cont, .. } => {
-                // Execute the transformed operation
-                let (outcome, result) = self.execute_op(op);
-                // Continue with the result
-                let next_effect = cont(result.clone());
-                let (next_outcome, final_result) = self.interpret_transformed(next_effect);
-                (outcome.compose(next_outcome), final_result)
-            }
-            Effect::Transform { .. } => {
-                panic!("Nested transforms not yet supported")
-            }
-        }
-    }
-    
     /// Execute a single operation
     fn execute_op(&mut self, op: EffectOp) -> (Outcome, OpResult) {
         match op {
@@ -146,6 +127,39 @@ impl CompositeInterpreter {
             }
         }
     }
+    
+    /// Helper to interpret transformed effects (no longer needed but kept for compatibility)
+    fn interpret_transform_helper<T, R: 'static>(
+        &mut self, 
+        effect: Effect<T, R>,
+        handler: &dyn crate::layer2::effect::Handler<R>
+    ) -> (Outcome, T) {
+        let transformed = crate::layer2::effect::transform_effect_with_handler(effect, handler);
+        self.interpret(transformed)
+    }
+    
+    /// Apply a handler-transformed operation (simplified)
+    fn interpret_transformed<R: 'static>(&mut self, transformed: Effect<OpResult, R>) -> (Outcome, OpResult) {
+        // Recursively interpret the transformed effect
+        match transformed {
+            Effect::Pure(result) => (Outcome::empty(), result),
+            Effect::Op { op, .. } => {
+                self.execute_op(op)
+            }
+            Effect::Then { first, second } => {
+                let (first_outcome, _) = self.interpret(*first);
+                let (second_outcome, result) = self.interpret_transformed(*second);
+                (first_outcome.compose(second_outcome), result)
+            }
+            Effect::Map { op, mapper, .. } => {
+                let (outcome, result) = self.execute_op(op);
+                let final_result = mapper(result);
+                // Convert back to OpResult
+                let op_result = unsafe { std::mem::transmute_copy(&final_result) };
+                (outcome, op_result)
+            }
+        }
+    }
 }
 
 impl<R: 'static> Interpreter<R> for CompositeInterpreter {
@@ -153,59 +167,43 @@ impl<R: 'static> Interpreter<R> for CompositeInterpreter {
         match effect {
             Effect::Pure(value) => (Outcome::empty(), value),
             
-            Effect::Do { op, cont, .. } => {
+            Effect::Op { op, .. } => {
+                // Execute the operation directly
+                let (outcome, result) = self.execute_op(op);
+                // Convert OpResult to T - this is where type safety matters
+                let final_result = unsafe {
+                    // This transmute is safe because the operation types are designed 
+                    // to match the effect return types through the constructors
+                    std::mem::transmute_copy(&result)
+                };
+                (outcome, final_result)
+            }
+            
+            Effect::Then { first, second } => {
+                // Execute first effect
+                let (first_outcome, _) = self.interpret(*first);
+                
+                // Execute second effect
+                let (second_outcome, final_result) = self.interpret(*second);
+                
+                // Compose outcomes
+                (first_outcome.compose(second_outcome), final_result)
+            }
+            
+            Effect::Map { op, mapper, .. } => {
                 // Execute the operation
                 let (outcome, result) = self.execute_op(op);
                 
-                // Continue with the result
-                let next_effect = cont(result);
-                let (next_outcome, final_result) = self.interpret(next_effect);
+                // Apply the mapper to get the final result
+                let final_result = mapper(result);
                 
-                // Compose outcomes
-                (outcome.compose(next_outcome), final_result)
-            }
-            
-            Effect::Transform { handler, effect, .. } => {
-                // Apply transformation to the inner effect
-                self.interpret_transform_helper(*effect, &*handler)
+                (outcome, final_result)
             }
         }
     }
     
     fn name(&self) -> &str {
         "composite"
-    }
-}
-
-impl CompositeInterpreter {
-    /// Helper to interpret transformed effects
-    fn interpret_transform_helper<T, R: 'static>(
-        &mut self, 
-        effect: Effect<T, R>,
-        handler: &dyn crate::layer2::effect::Handler<R>
-    ) -> (Outcome, T) {
-        match effect {
-            Effect::Pure(value) => (Outcome::empty(), value),
-            
-            Effect::Do { op, cont, .. } => {
-                // Transform the operation using the handler
-                let transformed = handler.transform_op(op);
-                
-                // Interpret the transformed operation
-                let (outcome, result) = self.interpret_transformed(transformed);
-                
-                // Continue with the original continuation
-                let next_effect = cont(result);
-                let (next_outcome, final_result) = self.interpret_transform_helper(next_effect, handler);
-                
-                (outcome.compose(next_outcome), final_result)
-            }
-            
-            Effect::Transform { handler: _inner_handler, effect, .. } => {
-                // Compose handlers - for now just use the outer handler
-                self.interpret_transform_helper(*effect, handler)
-            }
-        }
     }
 }
 

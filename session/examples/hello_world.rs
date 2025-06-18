@@ -5,6 +5,7 @@ use session::layer3::agent::{Agent, AgentId};
 use session::layer3::capability::Capability;
 use session::layer3::choreography::{Choreography, ChoreographyStep, Message};
 use session::layer2::effect::{EffectRow, EffectType};
+use session::layer2::outcome::Value;
 use session::interpreter::Interpreter;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -44,9 +45,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bob.add_capability(comm_capability);
     
     // Register agents
-    let agent_registry = interpreter.get_agent_registry();
-    let _ = agent_registry.register(alice);
-    let _ = agent_registry.register(bob);
+    interpreter.register_agent(alice)?;
+    interpreter.register_agent(bob)?;
     
     // Create the choreography
     let choreography = Choreography::Sequence(vec![
@@ -72,15 +72,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Execute the choreography
     match interpreter.execute_choreography(&choreography) {
-        Ok(()) => {
+        Ok(outcome) => {
             println!("\n--- Execution completed successfully! ---");
+            println!("Outcome: {:?}", outcome);
             
             // Print final state
             interpreter.print_state();
             
             // Show effect log
             println!("\n--- Effect Log ---");
-            for effect in interpreter.get_effect_log() {
+            for effect in interpreter.get_trace() {
                 println!("  {}", effect);
             }
             
@@ -90,12 +91,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let alice_to_bob_status = channel_registry.get_channel_status("Alice→Bob");
             let bob_to_alice_status = channel_registry.get_channel_status("Bob→Alice");
                 
-            if let Some((queue_len, _, _)) = alice_to_bob_status {
-                println!("✓ Alice to Bob channel has {} message(s)", queue_len);
+            if let Some(status) = alice_to_bob_status {
+                println!("✓ Alice to Bob channel has {} message(s)", status.current_size);
             }
             
-            if let Some((queue_len, _, _)) = bob_to_alice_status {
-                println!("✓ Bob to Alice channel has {} message(s)", queue_len);
+            if let Some(status) = bob_to_alice_status {
+                println!("✓ Bob to Alice channel has {} message(s)", status.current_size);
             }
             
             println!("\n🎉 Hello World choreography executed successfully!");
@@ -104,10 +105,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => {
             println!("\n--- Execution failed ---");
             println!("Error: {}", e);
-            
-            // Print diagnostic information
-            println!("\n--- Diagnostics ---");
-            println!("{}", e.get_diagnostic());
             
             return Err(Box::new(e));
         }

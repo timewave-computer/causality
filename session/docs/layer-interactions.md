@@ -90,10 +90,15 @@ Each layer serves as both a compilation target and a compilation source, creatin
 | `Update` | `Location × Value × Value → StateTransition` | Change state value | Model state mutations |
 | `Create` | `Location × Value → StateTransition` | Create new state | Model resource creation |
 | `Delete` | `Location → StateTransition` | Remove state | Model resource deletion |
-| **Effects with Row Types** |
-| `Pure` | `A → Effect<A, ·>` | Pure value (no effects) | Monadic return for effect system |
-| `Do` | `Operation × (A → Effect<B, ε>) → Effect<B, ε>` | Perform operation | Monadic bind for effects |
-| `Transform` | `Handler<F,G> × Effect<A,F> → Effect<A,G>` | Apply handler transformation | Transform effect algebras |
+| **Pure Effects with Row Types** |
+| `Pure` | `A → Effect<A, ·>` | Pure value (no effects) | Identity element in effect algebra |
+| `StateRead` | `StateLocation → Effect<Value, StateRow>` | Read state operation | Structural state effect |
+| `StateWrite` | `StateLocation × Value → Effect<(), StateRow>` | Write state operation | Structural state effect |
+| `CommSend` | `String × Value → Effect<(), CommRow>` | Send message operation | Structural communication effect |
+| `CommReceive` | `String → Effect<Value, CommRow>` | Receive message operation | Structural communication effect |
+| `ProofGenerate` | `Value × Value → Effect<Value, ProofRow>` | Generate proof operation | Structural proof effect |
+| `ProofVerify` | `Value × Value → Effect<bool, ProofRow>` | Verify proof operation | Structural proof effect |
+| `Then` | `Effect<(), R> × Effect<A, R> → Effect<A, R>` | Sequential composition | Structural effect sequencing |
 | **Effect Rows** |
 | `State` | `EffectRow` | State read/write operations | Model stateful computations |
 | `Comm` | `EffectRow` | Communication operations | Model session-based communication |
