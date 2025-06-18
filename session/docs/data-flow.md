@@ -105,21 +105,21 @@ Linear Property Enforced:
 Agent Registration:
 ┌──────────────┐
 │ Agent Alice  │ ──register_agent()──→ ┌─────────────────┐
-│ Capabilities │                      │ Agent Registry  │
-│ [Comm,State] │                      │ State Storage   │
-└──────────────┘                      └─────────────────┘
+│ Capabilities │                       │ Agent Registry  │
+│ [Comm,State] │                       │ State Storage   │
+└──────────────┘                       └─────────────────┘
 
 State Operations:
 ┌──────────────┐ ──set_state()──→ ┌─────────────────┐
-│   Interpreter│                  │ State HashMap   │
+│ Interpreter  │                  │ State HashMap   │
 │              │ ←─get_state()──  │ AgentId → KV    │
 └──────────────┘                  └─────────────────┘
 
 State Effects:
-┌──────────────┐ ──Effect::Read──→ ┌─────────────────┐
-│ Effect System│                  │ State Interpreter│
-│              │ ←─StateTransition │ Outcome Gen     │
-└──────────────┘                  └─────────────────┘
+┌──────────────┐ ──Effect::Read──→ ┌──────────────────┐
+│ Effect System│                   │ State Interpreter│
+│              │ ←─StateTransition │ Outcome Gen      │
+└──────────────┘                   └──────────────────┘
 ```
 
 ### Channel State Evolution
@@ -139,9 +139,9 @@ Channel {
 Message Flow:
 Alice ──send──→ Channel ──receive──→ Bob
   ↓                ↓                 ↓
-Effect::Send → Queue.push() → Effect::Receive
+Effect::Send  → Queue.push()        → Effect::Receive
   ↓                ↓                 ↓  
-Outcome     → Channel State → Continuation
+Outcome       → Channel State       → Continuation
 ```
 
 ## Effect Propagation
@@ -270,12 +270,12 @@ Concurrent Session Execution:
 
 ```
 Message Content:
-┌─────────────────────────────────────┐
-│ MessageValue::Pair(                 │
-│   Box::new(MessageValue::Int(100)), │
+┌──────────────────────────────────────┐
+│ MessageValue::Pair(                  │
+│   Box::new(MessageValue::Int(100)),  │
 │   Box::new(MessageValue::from("USD"))│
-│ )                                   │
-└─────────────────────────────────────┘
+│ )                                    │
+└──────────────────────────────────────┘
     ↓ serialize_canonical()
 Canonical Bytes: [0x42, 0x64, 0x55, 0x53, 0x44, ...]
     ↓ SHA256::digest()
