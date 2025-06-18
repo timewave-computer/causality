@@ -10,6 +10,7 @@ use crate::{
 };
 use causality_core::{
     lambda::Symbol,
+    system::content_addressing,
 };
 use std::collections::HashMap;
 
@@ -245,6 +246,65 @@ impl Interpreter {
                     _ => Err(EvalError::TypeMismatch { 
                         expected: "Record".to_string(), 
                         found: "Other".to_string() 
+                    })
+                }
+            }
+
+            // Session types operations
+            ExprKind::SessionDeclaration { name, roles } => {
+                // Register the session declaration in the global environment
+                // For now, we'll just return a unit value
+                // In a full implementation, this would register the session in a global registry
+                Ok(Value::unit())
+            }
+
+            ExprKind::WithSession { session, role, body } => {
+                // Create a session context and evaluate the body
+                // For now, we'll just evaluate the body with the current context
+                // In a full implementation, this would set up session state
+                self.eval_with_context(body, context)
+            }
+
+            ExprKind::SessionSend { channel, value } => {
+                // Evaluate both the channel and value
+                let _channel_val = self.eval_with_context(channel, context)?;
+                let _value_val = self.eval_with_context(value, context)?;
+                
+                // For now, return unit (successful send)
+                // In a full implementation, this would perform the actual send operation
+                Ok(Value::unit())
+            }
+
+            ExprKind::SessionReceive { channel } => {
+                // Evaluate the channel
+                let _channel_val = self.eval_with_context(channel, context)?;
+                
+                // For now, return a placeholder value
+                // In a full implementation, this would receive from the actual channel
+                Ok(Value::string(causality_core::system::content_addressing::Str::new("received_value")))
+            }
+
+            ExprKind::SessionSelect { channel, choice } => {
+                // Evaluate the channel
+                let _channel_val = self.eval_with_context(channel, context)?;
+                
+                // For now, return unit (successful select)
+                // In a full implementation, this would perform the actual choice selection
+                Ok(Value::unit())
+            }
+
+            ExprKind::SessionCase { channel, branches } => {
+                // Evaluate the channel
+                let _channel_val = self.eval_with_context(channel, context)?;
+                
+                // For now, just evaluate the first branch if it exists
+                // In a full implementation, this would determine which branch based on the received choice
+                if let Some(first_branch) = branches.first() {
+                    self.eval_with_context(&first_branch.body, context)
+                } else {
+                    Err(EvalError::TypeMismatch {
+                        expected: "At least one branch".to_string(),
+                        found: "No branches".to_string(),
                     })
                 }
             }

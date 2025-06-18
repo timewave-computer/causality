@@ -417,6 +417,75 @@ impl TypeChecker {
                     })
                 }
             }
+
+            // Session types operations
+            ExprKind::SessionDeclaration { name, roles } => {
+                // For session declarations, we just return unit type
+                // In a full implementation, this would register the session type in the environment
+                Ok(TypeInner::Base(BaseType::Unit))
+            }
+
+            ExprKind::WithSession { session, role, body } => {
+                // For with-session, we type check the body
+                // In a full implementation, this would set up session channel types
+                self.check_expr(body)
+            }
+
+            ExprKind::SessionSend { channel, value } => {
+                // Type check both the channel and value
+                let _channel_type = self.check_expr(channel)?;
+                let _value_type = self.check_expr(value)?;
+                
+                // For now, return unit type (successful send)
+                // In a full implementation, this would check protocol compatibility
+                Ok(TypeInner::Base(BaseType::Unit))
+            }
+
+            ExprKind::SessionReceive { channel } => {
+                // Type check the channel
+                let _channel_type = self.check_expr(channel)?;
+                
+                // For now, return a generic symbol type
+                // In a full implementation, this would return the type specified by the protocol
+                Ok(TypeInner::Base(BaseType::Symbol))
+            }
+
+            ExprKind::SessionSelect { channel, choice } => {
+                // Type check the channel
+                let _channel_type = self.check_expr(channel)?;
+                
+                // For now, return unit type (successful select)
+                // In a full implementation, this would check choice validity
+                Ok(TypeInner::Base(BaseType::Unit))
+            }
+
+            ExprKind::SessionCase { channel, branches } => {
+                // Type check the channel
+                let _channel_type = self.check_expr(channel)?;
+                
+                // Type check all branches and ensure they have the same result type
+                if branches.is_empty() {
+                    return Err(TypeError::Mismatch {
+                        expected: "At least one branch".to_string(),
+                        found: "No branches".to_string(),
+                    });
+                }
+                
+                let first_branch_type = self.check_expr(&branches[0].body)?;
+                
+                // Check that all branches have the same type
+                for branch in &branches[1..] {
+                    let branch_type = self.check_expr(&branch.body)?;
+                    if branch_type != first_branch_type {
+                        return Err(TypeError::Mismatch {
+                            expected: format!("{:?}", first_branch_type),
+                            found: format!("{:?}", branch_type),
+                        });
+                    }
+                }
+                
+                Ok(first_branch_type)
+            }
         }
     }
 }

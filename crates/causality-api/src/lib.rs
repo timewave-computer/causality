@@ -20,6 +20,7 @@ pub mod types;
 
 // Blockchain integration modules
 pub mod blockchain;
+pub mod valence_integration;
 
 // Re-exports for convenience
 pub use client::CausalityClient;

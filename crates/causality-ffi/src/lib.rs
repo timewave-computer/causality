@@ -14,6 +14,10 @@ pub mod value;
 pub mod serialization;
 pub mod error;
 
+// Real integration modules
+pub mod valence_ffi;
+pub mod almanac_ffi;
+
 // C FFI modules (enabled by default)
 #[cfg(feature = "c-ffi")]
 pub mod c_interface;

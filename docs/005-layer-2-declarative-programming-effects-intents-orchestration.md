@@ -1,6 +1,6 @@
-# 005: Layer 2 - Declarative Programming, Effects, Intents & Orchestration
+# 005: Layer 2 - Declarative Programming, Effects, Intents, Sessions & Orchestration
 
-Layer 2 represents the highest abstraction level within the Causality architecture. This layer is where application developers primarily work, creating sophisticated domain-specific logic through a declarative programming model centered around **Effects**, **Intents**, **Capability-based Access Control**, and cross-domain orchestration capabilities.
+Layer 2 represents the highest abstraction level within the Causality architecture. This layer is where application developers primarily work, creating sophisticated domain-specific logic through a declarative programming model centered around **Effects**, **Intents**, **Session Types**, **Capability-based Access Control**, and cross-domain orchestration capabilities.
 
 Building upon the type-safe resource management of Layer 1 and the verifiable execution substrate of Layer 0, Layer 2 provides the tools needed to express complex business logic, coordinate multi-party interactions, and manage sophisticated resource transformations while maintaining the mathematical guarantees of the underlying system.
 
@@ -43,6 +43,14 @@ Capability := PowerSet(AccessRight) × ResourceSchema
 - Record-specific capabilities with field-level granularity
 
 ## 2. Core Layer 2 Components
+
+Layer 2 is built around three fundamental abstractions that work together to provide comprehensive declarative programming capabilities:
+
+1. **Effects** - Structured descriptions of operations to be performed
+2. **Intents** - Declarative specifications of desired outcomes  
+3. **Session Types** - Type-safe communication protocols with automatic duality
+
+These three pillars complement each other: Effects handle individual operations, Intents coordinate complex workflows, and Session Types ensure safe communication between parties.
 
 ### 2.1 Effects - Structured Side Effects
 
@@ -309,7 +317,150 @@ pub struct ResourceBinding {
 }
 ```
 
-### 2.6 Module Organization
+### 2.6 Session Types - Type-Safe Communication Protocols
+
+Session types provide **type-safe communication protocols** with automatic duality checking, enabling distributed systems to maintain correctness guarantees while composing complex multi-party workflows. Session types form the third pillar of Layer 2 alongside Effects and Intents.
+
+#### 2.6.1 Session Type Syntax
+
+Session types describe communication protocols using a precise mathematical syntax:
+
+```rust
+pub enum SessionType {
+    Send(Type, Box<SessionType>),        // !T.S - Send value of type T, continue with S
+    Receive(Type, Box<SessionType>),     // ?T.S - Receive value of type T, continue with S  
+    InternalChoice(Vec<SessionType>),    // ⊕{...} - Choose one branch to offer
+    ExternalChoice(Vec<SessionType>),    // &{...} - Accept one of several branches
+    End,                                 // End - Protocol termination
+    Recursive(String, Box<SessionType>), // rec X.S - Recursive protocol
+    Variable(String),                    // X - Reference to recursive variable
+}
+```
+
+#### 2.6.2 Duality Computation
+
+The core innovation of session types is **automatic duality computation** - the ability to generate complementary protocols that are guaranteed to be compatible:
+
+```
+dual(!T.S) = ?T.dual(S)           // Send becomes receive
+dual(?T.S) = !T.dual(S)           // Receive becomes send  
+dual(P ⊕ Q) = dual(P) & dual(Q)   // Internal choice becomes external
+dual(P & Q) = dual(P) ⊕ dual(Q)   // External choice becomes internal
+dual(End) = End                   // Terminal stays terminal
+dual(rec X.S) = rec X.dual(S[X ↦ dual(X)])  // Recursive types
+```
+
+This ensures that communication protocols are **deadlock-free** and **type-safe** by construction.
+
+#### 2.6.3 Session Declaration and Usage
+
+Session types are declared with explicit role specifications:
+
+```lisp
+;; Session type declaration with automatic duality
+(def-session PaymentProtocol
+  (client !Amount ?Receipt End)
+  (server ?Amount !Receipt End))  ;; Automatically verified as dual
+
+;; Session usage with type safety
+(defn handle-payment (amount)
+  (with-session PaymentProtocol.server as srv
+    (let ((amt (session-recv srv)))
+      (let ((receipt (process-payment amt)))
+        (session-send srv receipt)))))
+```
+
+#### 2.6.4 Session Effects Integration
+
+Session operations integrate seamlessly with the effect system:
+
+```rust
+pub enum EffectExprKind {
+    // ... existing variants ...
+    
+    /// Session communication operations
+    SessionSend {
+        channel: Box<EffectExpr>,
+        value: Term,
+        continuation: Box<EffectExpr>,
+    },
+    SessionReceive {
+        channel: Box<EffectExpr>,
+        continuation: Box<EffectExpr>,
+    },
+    SessionSelect {
+        channel: Box<EffectExpr>,
+        choice: String,
+        continuation: Box<EffectExpr>,
+    },
+    SessionCase {
+        channel: Box<EffectExpr>,
+        branches: Vec<SessionBranch>,
+    },
+    WithSession {
+        session_decl: String,
+        role: String,
+        body: Box<EffectExpr>,
+    },
+}
+```
+
+#### 2.6.5 Choreographies and Multi-Party Coordination
+
+Session types support **choreographies** for multi-party protocol specification:
+
+```lisp
+(choreography EscrowProtocol
+  (roles buyer seller arbiter)
+  (flow
+    buyer → seller: !Item
+    seller → arbiter: !Claim  
+    arbiter → buyer: (!Release ⊕ !Refund)
+    arbiter → seller: (!Payment ⊕ !Return)))
+```
+
+#### 2.6.6 Session-Intent Integration
+
+Session types integrate naturally with the Intent system for declarative communication:
+
+```rust
+pub struct Intent {
+    // ... existing fields ...
+    
+    /// Required session protocols
+    pub session_requirements: Vec<SessionRequirement>,
+    
+    /// Session endpoints this intent provides
+    pub session_endpoints: Vec<SessionEndpoint>,
+}
+
+pub struct SessionRequirement {
+    pub session_name: String,
+    pub role: String,
+    pub required_protocol: SessionType,
+}
+```
+
+#### 2.6.7 Compilation to Linear Resources
+
+Session types compile to Layer 1 linear resources, maintaining the mathematical guarantees:
+
+```rust
+// Session channels as linear resources
+pub struct SessionChannel<T> {
+    pub protocol: SessionType,
+    pub role: String,
+    pub state: SessionState,
+    _phantom: PhantomData<T>,
+}
+
+impl<T> LinearResource for SessionChannel<T> {
+    fn alloc(protocol: SessionType) -> Self;
+    fn consume(self) -> (Value, SessionType);
+}
+```
+
+### 2.7 Module Organization
 
 Layer 2 is implemented in the `causality-core/src/effect` module with the following enhanced structure:
 
@@ -322,6 +473,9 @@ effect/
 ├── row.rs          # Record/row operations (moved from lambda/)
 ├── record.rs       # Record capability effects
 ├── intent.rs       # Intent-based programming
+├── session.rs      # Session types and protocols
+├── session_registry.rs # Session registry and management
+├── choreography.rs # Multi-party choreographies
 ├── synthesis.rs    # Effect synthesis and compilation
 ├── teg.rs          # Temporal Effect Graph
 ├── resource.rs     # Resource algebra
@@ -368,7 +522,17 @@ effect/
 | `sequence` | `(A, B, Proof) ⊗ (B, C, Proof) ⊸ Effect (A, C, Proof)` | Chain causal dependencies |
 | `verify` | `(A, B, Proof) ⊸ Effect Proof` | Extract verifiable proofs |
 
-### 3.5 Transaction Orchestration
+### 3.5 Session Operations
+
+| Operation | Type | Purpose |
+|-----------|------|---------|
+| `session_send` | `SessionChannel A ⊗ A ⊸ Effect (SessionChannel B)` | Send value through session channel |
+| `session_recv` | `SessionChannel A ⊸ Effect (A ⊗ SessionChannel B)` | Receive value from session channel |
+| `session_select` | `SessionChannel A ⊗ String ⊸ Effect (SessionChannel B)` | Select branch in session protocol |
+| `session_case` | `SessionChannel A ⊗ Handlers ⊸ Effect B` | Handle incoming session choices |
+| `with_session` | `SessionType ⊗ String ⊗ (SessionChannel A ⊸ Effect B) ⊸ Effect B` | Create and use session channel |
+
+### 3.6 Transaction Orchestration
 
 | Operation | Type | Purpose |
 |-----------|------|---------|
@@ -473,6 +637,82 @@ let sealed_auction = Intent::new("SealedBidAuction")
             }
         )
     );
+```
+
+### 4.4 Session-Based Payment Protocol
+
+```rust
+// Define payment session protocol
+let payment_session = SessionDeclaration::new("PaymentProtocol")
+    .add_role("client", SessionType::Send(
+        Type::Int, 
+        Box::new(SessionType::Receive(Type::String, Box::new(SessionType::End)))
+    ))
+    .add_role("server", SessionType::Receive(
+        Type::Int,
+        Box::new(SessionType::Send(Type::String, Box::new(SessionType::End)))
+    ));
+
+// Client-side payment intent with session requirement
+let payment_intent = Intent::new("PaymentRequest")
+    .require_session("PaymentProtocol", "client")
+    .input_resource("payment_amount", amount)
+    .constraint(Constraint::GreaterThan(
+        ValueExpr::ResourceRef("payment_amount".to_string()),
+        ValueExpr::Literal(Value::Int(0))
+    ))
+    .effect(
+        with_session("PaymentProtocol", "client", |channel| {
+            bind(
+                session_send(channel, ValueExpr::ResourceRef("payment_amount".to_string())),
+                |updated_channel| {
+                    session_recv(updated_channel)
+                }
+            )
+        })
+    );
+```
+
+### 4.5 Multi-Party Escrow with Session Choreography
+
+```lisp
+;; Define escrow choreography
+(choreography EscrowChoreography
+  (roles buyer seller arbiter)
+  (protocol
+    ;; Initial setup phase
+    (buyer → seller: !ItemRequest)
+    (seller → buyer: !ItemDetails)
+    (buyer → arbiter: !EscrowRequest)
+    
+    ;; Payment and delivery phase  
+    (buyer → arbiter: !Payment)
+    (seller → arbiter: !ItemProof)
+    
+    ;; Resolution phase
+    (arbiter → buyer: (!ItemReceived ⊕ !Dispute))
+    (arbiter → seller: (!PaymentRelease ⊕ !PaymentWithhold))))
+
+;; Implement buyer role
+(defn buyer-escrow-role (item-request payment-amount)
+  (with-session EscrowChoreography.buyer as buyer-chan
+    (do
+      ;; Send item request to seller
+      (session-send buyer-chan item-request)
+      
+      ;; Receive item details
+      (let ((item-details (session-recv buyer-chan)))
+        
+        ;; Send escrow request to arbiter
+        (session-send buyer-chan (create-escrow-request item-details payment-amount))
+        
+        ;; Send payment to arbiter
+        (session-send buyer-chan payment-amount)
+        
+        ;; Wait for resolution
+        (session-case buyer-chan
+          (ItemReceived receipt -> (complete-purchase receipt))
+          (Dispute details -> (handle-dispute details)))))))
 ```
 
 ## 5. Compilation and Optimization

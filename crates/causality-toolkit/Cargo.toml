@@ -10,6 +10,7 @@ repository = "https://github.com/timewave/reverse-causality"
 [dependencies]
 causality-core = { version = "0.1.0", path = "../causality-core" }
 causality-lisp = { path = "../causality-lisp" }
+causality-compiler = { path = "../causality-compiler" }
 anyhow = "1.0"
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -31,4 +32,11 @@ tokio = { version = "1.0", features = ["time", "macros", "rt-multi-thread"] }
 
 [[example]]
 name = "cross_chain_defi_bridge"
-path = "examples/cross_chain_defi_bridge.rs" 
+path = "examples/cross_chain_defi_bridge.rs"
+
+[features]
+default = []
+mocks = []
+testing = []
+almanac = []
+proof-interfaces = ["causality-compiler/traverse"] 

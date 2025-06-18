@@ -19,6 +19,9 @@ This glossary provides definitions for key terms used throughout the Causality f
 **Causality Lisp**
 :   The functional programming language used at Layer 1 of Causality. It features 11 core primitives and is designed for defining resource transformations and application logic. Programs are represented as `Expr` ASTs.
 
+**Choreography**
+:   A global specification of a multi-party communication protocol that describes the interactions between multiple roles. Choreographies compile to individual session types for each participant through endpoint projection.
+
 **Causality Toolkit**
 :   The primary Rust crate (`causality-toolkit`) providing APIs, DSLs, and implementations for building applications with Causality.
 
@@ -36,6 +39,9 @@ This glossary provides definitions for key terms used throughout the Causality f
 
 **Determinism**
 :   A core principle in Causality ensuring that given the same initial state and inputs, operations (especially `Handler`s and VM execution) will always produce the same outputs and state transitions.
+
+**Duality**
+:   A fundamental property of session types where two session types are complementary and can safely communicate. For example, a send operation (!T) has a dual receive operation (?T). Duality is automatically computed and verified to ensure deadlock-free communication.
 
 **Domain (`DomainId`)**
 :   A logical namespace or context within Layer 2 that groups related `Effect` types, `Handler`s, and governance rules. Identified by a unique `DomainId`.
@@ -73,6 +79,9 @@ This glossary provides definitions for key terms used throughout the Causality f
 **Object**
 :   A generalization of a `Resource` that can have configurable linearity qualifiers (linear, affine, relevant, unrestricted).
 
+**Protocol**
+:   In the context of session types, a protocol defines the sequence of communication operations between parties. Protocols are specified using session type syntax (!T.S for send, ?T.S for receive) and ensure type-safe communication.
+
 **ProofId**
 :   A unique identifier for a specific instance of a Zero-Knowledge Proof, typically derived from its SSZ content hash. Links a proof to the statement it verifies.
 
@@ -84,6 +93,15 @@ This glossary provides definitions for key terms used throughout the Causality f
 
 **Row Types**
 :   A type system feature used at Layer 1 to represent records or objects with extensible sets of fields (rows). Used for managing capabilities and performing compile-time checks on resource structures.
+
+**Session Channel**
+:   A linear resource that represents one endpoint of a session type communication. Session channels are typed with their current protocol state and must be used exactly once according to session type rules.
+
+**Session Type**
+:   A type system for describing communication protocols between distributed parties. Session types ensure type safety, deadlock freedom, and protocol compliance through static analysis and automatic duality checking.
+
+**SessionId**
+:   A unique identifier for a session type declaration or active session instance. Used to reference and manage session protocols within the system.
 
 **SSZ (SimpleSerialize)**
 :   A deterministic serialization standard used throughout Causality for hashing, content addressing, and ensuring consistent data representation across different parts of the system and network.

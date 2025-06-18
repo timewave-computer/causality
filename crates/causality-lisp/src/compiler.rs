@@ -124,6 +124,14 @@ impl LispCompiler {
             // Record operations
             ExprKind::RecordAccess { record, field } => self.compile_record_access(record, field),
             ExprKind::RecordUpdate { record, field, value } => self.compile_record_update(record, field, value),
+
+            // Session types operations
+            ExprKind::SessionDeclaration { name, roles } => self.compile_session_declaration(name, roles),
+            ExprKind::WithSession { session, role, body } => self.compile_with_session(session, role, body),
+            ExprKind::SessionSend { channel, value } => self.compile_session_send(channel, value),
+            ExprKind::SessionReceive { channel } => self.compile_session_receive(channel),
+            ExprKind::SessionSelect { channel, choice } => self.compile_session_select(channel, choice),
+            ExprKind::SessionCase { channel, branches } => self.compile_session_case(channel, branches),
         }
     }
     
@@ -542,6 +550,53 @@ impl LispCompiler {
         // In a real implementation, this would perform field update
         instructions.push(Instruction::Move { src: record_reg, dst: result_reg });
         
+        Ok((instructions, result_reg))
+    }
+
+    // Placeholder implementations for session types operations
+    fn compile_session_declaration(&mut self, _name: &str, _roles: &[causality_core::effect::session::SessionRole]) -> CompileResult<(Vec<Instruction>, RegisterId)> {
+        // For now, just return a unit value
+        let result_reg = self.context.alloc_register();
+        let instructions = vec![Instruction::Witness { out_reg: result_reg }];
+        Ok((instructions, result_reg))
+    }
+
+    fn compile_with_session(&mut self, _session: &str, _role: &str, body: &Expr) -> CompileResult<(Vec<Instruction>, RegisterId)> {
+        // For now, just compile the body
+        self.compile_expr(body)
+    }
+
+    fn compile_session_send(&mut self, channel: &Expr, value: &Expr) -> CompileResult<(Vec<Instruction>, RegisterId)> {
+        let (mut instructions, _channel_reg) = self.compile_expr(channel)?;
+        let (value_instructions, _value_reg) = self.compile_expr(value)?;
+        instructions.extend(value_instructions);
+        
+        let result_reg = self.context.alloc_register();
+        instructions.push(Instruction::Witness { out_reg: result_reg });
+        Ok((instructions, result_reg))
+    }
+
+    fn compile_session_receive(&mut self, channel: &Expr) -> CompileResult<(Vec<Instruction>, RegisterId)> {
+        let (mut instructions, _channel_reg) = self.compile_expr(channel)?;
+        
+        let result_reg = self.context.alloc_register();
+        instructions.push(Instruction::Witness { out_reg: result_reg });
+        Ok((instructions, result_reg))
+    }
+
+    fn compile_session_select(&mut self, channel: &Expr, _choice: &str) -> CompileResult<(Vec<Instruction>, RegisterId)> {
+        let (mut instructions, _channel_reg) = self.compile_expr(channel)?;
+        
+        let result_reg = self.context.alloc_register();
+        instructions.push(Instruction::Witness { out_reg: result_reg });
+        Ok((instructions, result_reg))
+    }
+
+    fn compile_session_case(&mut self, channel: &Expr, _branches: &[crate::ast::SessionBranch]) -> CompileResult<(Vec<Instruction>, RegisterId)> {
+        let (mut instructions, _channel_reg) = self.compile_expr(channel)?;
+        
+        let result_reg = self.context.alloc_register();
+        instructions.push(Instruction::Witness { out_reg: result_reg });
         Ok((instructions, result_reg))
     }
 }

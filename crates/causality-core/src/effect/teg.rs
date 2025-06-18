@@ -6,6 +6,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use crate::{
     effect::{EffectExpr, Intent, Constraint},
+    effect::session::SessionType,
     lambda::base::Value,
     system::content_addressing::{EntityId, Timestamp},
 };
@@ -61,6 +62,41 @@ pub struct EffectNode {
     
     /// Resource productions
     pub resource_productions: Vec<String>,
+    
+    /// Session information (if this is a session operation)
+    pub session_info: Option<SessionNodeInfo>,
+}
+
+/// Session information for nodes that perform session operations
+#[derive(Debug, Clone)]
+pub struct SessionNodeInfo {
+    /// Session identifier
+    pub session_id: String,
+    
+    /// Role in the session
+    pub role: String,
+    
+    /// Type of session operation
+    pub operation: SessionOperation,
+    
+    /// Current protocol state
+    pub protocol_state: SessionType,
+}
+
+/// Types of session operations that can be performed in TEG nodes
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionOperation {
+    /// Send a value through the session
+    Send(Value),
+    
+    /// Receive a value from the session
+    Receive,
+    
+    /// Select a choice in an internal choice
+    Select(String),
+    
+    /// Branch on an external choice
+    Branch(Vec<String>),
 }
 
 /// Types of edges in the TEG
@@ -85,6 +121,14 @@ pub enum EffectEdge {
         from: NodeId, 
         to: NodeId, 
         condition: Constraint,
+    },
+    
+    /// Session dependency: session communication ordering
+    SessionLink {
+        from: NodeId,
+        to: NodeId,
+        session_id: String,
+        protocol_constraint: Option<SessionType>,
     },
 }
 
@@ -289,6 +333,7 @@ impl TemporalEffectGraph {
                 cost: teg.estimate_effect_cost(&effect),
                 resource_requirements: teg.extract_resource_requirements(&effect),
                 resource_productions: teg.extract_resource_productions(&effect),
+                session_info: None,
             };
             
             teg.add_node(node)?;
@@ -361,6 +406,7 @@ impl TemporalEffectGraph {
             EffectEdge::CausalityLink { from, to, .. } => (*from, *to),
             EffectEdge::ResourceLink { from, to, .. } => (*from, *to),
             EffectEdge::ControlLink { from, to, .. } => (*from, *to),
+            EffectEdge::SessionLink { from, to, .. } => (*from, *to),
         };
         
         // Verify nodes exist
@@ -411,6 +457,7 @@ impl TemporalEffectGraph {
                 EffectEdge::CausalityLink { to, .. } => *to,
                 EffectEdge::ResourceLink { to, .. } => *to,
                 EffectEdge::ControlLink { to, .. } => *to,
+                EffectEdge::SessionLink { to, .. } => *to,
             };
             *in_degree.get_mut(&to).unwrap() += 1;
         }
@@ -666,6 +713,7 @@ impl TemporalEffectGraph {
                 EffectEdge::CausalityLink { from, to, .. } => (*from, *to),
                 EffectEdge::ResourceLink { from, to, .. } => (*from, *to),
                 EffectEdge::ControlLink { from, to, .. } => (*from, *to),
+                EffectEdge::SessionLink { from, to, .. } => (*from, *to),
             };
             
             if let Some(adj) = self.adjacency_list.get_mut(&from) {
@@ -800,6 +848,13 @@ impl TemporalEffectGraph {
             crate::effect::EffectExprKind::Handle { .. } => 30,
             crate::effect::EffectExprKind::Parallel { .. } => 40,
             crate::effect::EffectExprKind::Race { .. } => 60,
+            
+            // Session operations - relatively low cost as they're communication primitives
+            crate::effect::EffectExprKind::SessionSend { .. } => 15,
+            crate::effect::EffectExprKind::SessionReceive { .. } => 15,
+            crate::effect::EffectExprKind::SessionSelect { .. } => 12,
+            crate::effect::EffectExprKind::SessionCase { .. } => 25,
+            crate::effect::EffectExprKind::WithSession { .. } => 35,
         }
     }
     
@@ -824,340 +879,31 @@ impl TemporalEffectGraph {
         // Add edges
         for edge in &self.edges {
             match edge {
-                EffectEdge::CausalityLink { from, to, .. } => {
-                    mermaid.push_str(&format!(
-                        "    {} --> {}\n",
-                        &from.to_hex()[..8],
-                        &to.to_hex()[..8]
-                    ));
-                }
+                EffectEdge::CausalityLink { from, to, constraint } => {
+                    let label = if let Some(c) = constraint {
+                        format!(" --|{}| ", c)
+                    } else {
+                        " --> ".to_string()
+                    };
+                    mermaid.push_str(&format!("    {} {}{}\n", 
+                        &from.to_hex()[..8], label, &to.to_hex()[..8]));
+                },
                 EffectEdge::ResourceLink { from, to, resource } => {
-                    mermaid.push_str(&format!(
-                        "    {} -->|{}| {}\n",
-                        &from.to_hex()[..8],
-                        resource,
-                        &to.to_hex()[..8]
-                    ));
-                }
+                    mermaid.push_str(&format!("    {} -.{}.- {}\n", 
+                        &from.to_hex()[..8], resource, &to.to_hex()[..8]));
+                },
                 EffectEdge::ControlLink { from, to, .. } => {
-                    mermaid.push_str(&format!(
-                        "    {} -.-> {}\n",
-                        &from.to_hex()[..8],
-                        &to.to_hex()[..8]
-                    ));
-                }
+                    mermaid.push_str(&format!("    {} ==> {}\n", 
+                        &from.to_hex()[..8], &to.to_hex()[..8]));
+                },
+                EffectEdge::SessionLink { from, to, session_id, .. } => {
+                    mermaid.push_str(&format!("    {} -.-{}-.-> {}\n", 
+                        &from.to_hex()[..8], session_id, &to.to_hex()[..8]));
+                },
             }
         }
         
         mermaid
-    }
-    
-    /// Advanced performance optimization algorithms
-    /// Optimize the graph for better cache locality and memory access patterns
-    pub fn optimize_cache_locality(&mut self) -> Result<(), TegError> {
-        // Reorder nodes to improve spatial locality
-        let reordered_nodes = self.optimize_node_ordering()?;
-        
-        // Update node IDs to reflect optimized order
-        self.apply_node_reordering(&reordered_nodes)?;
-        
-        // Rebuild adjacency lists for optimal traversal
-        self.rebuild_adjacency_lists();
-        
-        Ok(())
-    }
-    
-    /// Optimize node ordering for cache-friendly traversal
-    fn optimize_node_ordering(&self) -> Result<Vec<NodeId>, TegError> {
-        let mut ordered_nodes = Vec::new();
-        let _visited: std::collections::HashSet<NodeId> = std::collections::HashSet::new();
-        
-        // Use topological ordering as base, then apply cache optimizations
-        let topo_order = self.topological_sort()?;
-        
-        // Group nodes by execution level (depth from roots)
-        let levels = self.compute_execution_levels(&topo_order);
-        
-        // Within each level, order by cache affinity and resource dependencies
-        for level_nodes in levels {
-            let optimized_level = self.optimize_level_ordering(level_nodes);
-            ordered_nodes.extend(optimized_level);
-        }
-        
-        Ok(ordered_nodes)
-    }
-    
-    /// Compute execution levels for cache optimization
-    fn compute_execution_levels(&self, topo_order: &[NodeId]) -> Vec<Vec<NodeId>> {
-        let mut levels = Vec::new();
-        let mut node_levels = std::collections::HashMap::new();
-        
-        // Calculate depth of each node
-        for &node_id in topo_order {
-            let mut max_depth = 0;
-            
-            // Find maximum depth of dependencies
-            for edge in &self.edges {
-                let (from, to) = match edge {
-                    EffectEdge::CausalityLink { from, to, .. } => (*from, *to),
-                    EffectEdge::ResourceLink { from, to, .. } => (*from, *to),
-                    EffectEdge::ControlLink { from, to, .. } => (*from, *to),
-                };
-                
-                if to == node_id {
-                    if let Some(&dep_level) = node_levels.get(&from) {
-                        max_depth = max_depth.max(dep_level + 1);
-                    }
-                }
-            }
-            
-            node_levels.insert(node_id, max_depth);
-            
-            // Ensure we have enough levels
-            while levels.len() <= max_depth {
-                levels.push(Vec::new());
-            }
-            
-            levels[max_depth].push(node_id);
-        }
-        
-        levels
-    }
-    
-    /// Optimize ordering within an execution level
-    fn optimize_level_ordering(&self, mut level_nodes: Vec<NodeId>) -> Vec<NodeId> {
-        // Sort by cache affinity score
-        level_nodes.sort_by_key(|&node_id| {
-            self.calculate_cache_affinity_score(node_id)
-        });
-        
-        level_nodes
-    }
-    
-    /// Calculate cache affinity score for node ordering
-    fn calculate_cache_affinity_score(&self, node_id: NodeId) -> u64 {
-        let mut score = 0u64;
-        
-        if let Some(node) = self.nodes.get(&node_id) {
-            // Higher score for nodes with more resource dependencies (better to group)
-            score += node.resource_requirements.len() as u64 * 100;
-            
-            // Higher score for nodes with higher cost (execute expensive operations together)
-            score += node.cost / 10;
-            
-            // Higher score for nodes that produce resources (cache producers together)
-            score += node.resource_productions.len() as u64 * 50;
-        }
-        
-        score
-    }
-    
-    /// Apply node reordering for cache optimization
-    fn apply_node_reordering(&mut self, _reordered_nodes: &[NodeId]) -> Result<(), TegError> {
-        // For now, this is a placeholder - would need careful ID remapping
-        // In a full implementation, this would update all node references
-        Ok(())
-    }
-    
-    /// Advanced critical path optimization with resource constraints
-    pub fn optimize_critical_path_with_resources(&mut self) -> Result<u64, TegError> {
-        // Find critical path considering both time and resource constraints
-        let resource_constrained_paths = self.find_resource_constrained_paths()?;
-        
-        // Apply optimizations to reduce critical path length
-        self.apply_critical_path_optimizations(&resource_constrained_paths)?;
-        
-        // Recalculate critical path after optimization
-        self.calculate_critical_path_length()
-    }
-    
-    /// Find paths that are constrained by resource dependencies
-    fn find_resource_constrained_paths(&self) -> Result<Vec<Vec<NodeId>>, TegError> {
-        let mut constrained_paths = Vec::new();
-        
-        // Group nodes by resource type they depend on
-        let mut resource_groups = std::collections::HashMap::new();
-        
-        for (node_id, node) in &self.nodes {
-            for resource in &node.resource_requirements {
-                resource_groups.entry(resource.clone())
-                    .or_insert_with(Vec::new)
-                    .push(*node_id);
-            }
-        }
-        
-        // Find paths within each resource group
-        for resource_nodes in resource_groups.values() {
-            if resource_nodes.len() > 1 {
-                let path = self.find_path_through_nodes(resource_nodes)?;
-                if !path.is_empty() {
-                    constrained_paths.push(path);
-                }
-            }
-        }
-        
-        Ok(constrained_paths)
-    }
-    
-    /// Find execution path through a set of nodes
-    fn find_path_through_nodes(&self, nodes: &[NodeId]) -> Result<Vec<NodeId>, TegError> {
-        // Simplified path finding - in practice would use more sophisticated algorithms
-        let mut path = Vec::new();
-        let mut remaining_nodes = nodes.to_vec();
-        
-        while !remaining_nodes.is_empty() {
-            // Find node with no dependencies in remaining set
-            let next_node = remaining_nodes.iter()
-                .find(|&&node_id| {
-                    self.get_dependencies(node_id).iter()
-                        .all(|dep| !remaining_nodes.contains(dep))
-                })
-                .copied()
-                .unwrap_or(remaining_nodes[0]);
-            
-            path.push(next_node);
-            remaining_nodes.retain(|&x| x != next_node);
-        }
-        
-        Ok(path)
-    }
-    
-    /// Apply optimizations to reduce critical path length
-    fn apply_critical_path_optimizations(&mut self, _paths: &[Vec<NodeId>]) -> Result<(), TegError> {
-        // Placeholder for advanced optimizations like:
-        // - Effect batching
-        // - Resource prefetching
-        // - Parallel resource loading
-        // - Effect fusion where possible
-        Ok(())
-    }
-    
-    /// Adaptive scheduling based on execution history
-    pub fn optimize_scheduling_with_history(&mut self, execution_history: &ExecutionHistory) -> Result<(), TegError> {
-        // Update node priorities based on historical performance
-        for (node_id, node) in &mut self.nodes {
-            if let Some(history) = execution_history.get_node_history(*node_id) {
-                // Adjust cost estimates based on actual execution times
-                let avg_execution_time = history.average_execution_time();
-                node.cost = (node.cost + avg_execution_time) / 2;
-                
-                // Note: We no longer have a metadata field on EffectNode
-                // This would need to be tracked differently in the actual implementation
-            }
-        }
-        
-        // Recompute critical path with updated costs
-        self.metadata.critical_path_length = self.calculate_critical_path_length()?;
-        
-        Ok(())
-    }
-    
-    /// Memory pool optimization for large TEGs
-    pub fn optimize_memory_pools(&mut self) -> Result<MemoryOptimizationStats, TegError> {
-        let initial_memory = self.estimate_memory_usage();
-        
-        // Apply memory optimizations
-        self.compact_node_storage()?;
-        self.optimize_edge_storage()?;
-        self.intern_common_strings()?;
-        
-        let final_memory = self.estimate_memory_usage();
-        
-        Ok(MemoryOptimizationStats {
-            initial_memory,
-            final_memory,
-            savings: initial_memory - final_memory,
-            node_count: self.nodes.len(),
-            edge_count: self.edges.len(),
-        })
-    }
-    
-    /// Estimate memory usage of the TEG
-    fn estimate_memory_usage(&self) -> usize {
-        let node_size = std::mem::size_of::<EffectNode>() * self.nodes.len();
-        let edge_size = std::mem::size_of::<EffectEdge>() * self.edges.len();
-        let metadata_size = std::mem::size_of::<TegMetadata>();
-        
-        node_size + edge_size + metadata_size
-    }
-    
-    /// Compact node storage to reduce memory fragmentation
-    fn compact_node_storage(&mut self) -> Result<(), TegError> {
-        // Create new compacted storage
-        let mut compacted_nodes = std::collections::HashMap::new();
-        
-        // Copy nodes to new storage (would typically use arena allocation)
-        for (node_id, node) in &self.nodes {
-            compacted_nodes.insert(*node_id, node.clone());
-        }
-        
-        self.nodes = compacted_nodes;
-        Ok(())
-    }
-    
-    /// Optimize edge storage for better cache locality
-    fn optimize_edge_storage(&mut self) -> Result<(), TegError> {
-        // Sort edges by source node for better cache locality during traversal
-        self.edges.sort_by_key(|edge| {
-            let (from, to) = match edge {
-                EffectEdge::CausalityLink { from, to, .. } => (*from, *to),
-                EffectEdge::ResourceLink { from, to, .. } => (*from, *to),
-                EffectEdge::ControlLink { from, to, .. } => (*from, *to),
-            };
-            (from, to)
-        });
-        Ok(())
-    }
-    
-    /// Intern common strings to reduce memory usage
-    fn intern_common_strings(&mut self) -> Result<(), TegError> {
-        // In a full implementation, this would use a string interner
-        // Since we don't have metadata fields on nodes anymore, this is a no-op
-        Ok(())
-    }
-    
-    /// Performance profiling and benchmarking
-    pub fn profile_execution_performance(&self) -> PerformanceProfile {
-        PerformanceProfile {
-            total_nodes: self.nodes.len(),
-            total_edges: self.edges.len(),
-            critical_path_length: self.metadata.critical_path_length,
-            parallelization_factor: self.calculate_parallelization_factor(),
-            memory_usage: self.estimate_memory_usage(),
-            cache_locality_score: self.calculate_cache_locality_score(),
-            optimization_opportunities: self.identify_optimization_opportunities(),
-        }
-    }
-    
-    /// Calculate theoretical parallelization factor
-    fn calculate_parallelization_factor(&self) -> f64 {
-        if self.metadata.critical_path_length == 0 {
-            return 1.0;
-        }
-        
-        let total_work: u64 = self.nodes.values().map(|n| n.cost).sum();
-        total_work as f64 / self.metadata.critical_path_length as f64
-    }
-    
-    /// Calculate cache locality score (higher is better)
-    fn calculate_cache_locality_score(&self) -> f64 {
-        let mut locality_score = 0.0;
-        let mut total_transitions = 0;
-        
-        // Analyze transitions between dependent nodes
-        for edge in &self.edges {
-            if let EffectEdge::ResourceLink { .. } = edge {
-                // Resource dependencies benefit from cache locality
-                locality_score += 1.0;
-            }
-            total_transitions += 1;
-        }
-        
-        if total_transitions > 0 {
-            locality_score / total_transitions as f64
-        } else {
-            1.0
-        }
     }
     
     /// Identify optimization opportunities
@@ -1322,6 +1068,7 @@ impl TemporalEffectGraph {
                     EffectEdge::CausalityLink { from, to, .. } => (*from, *to),
                     EffectEdge::ResourceLink { from, to, .. } => (*from, *to),
                     EffectEdge::ControlLink { from, to, .. } => (*from, *to),
+                    EffectEdge::SessionLink { from, to, .. } => (*from, *to),
                 };
                 
                 if from == node_id {
@@ -1357,6 +1104,7 @@ impl TemporalEffectGraph {
                         EffectEdge::CausalityLink { to, .. } => *to == node_id,
                         EffectEdge::ResourceLink { to, .. } => *to == node_id,
                         EffectEdge::ControlLink { to, .. } => *to == node_id,
+                        EffectEdge::SessionLink { to, .. } => *to == node_id,
                     }
                 })
             })
@@ -1553,6 +1301,7 @@ impl TemporalEffectGraph {
                         EffectEdge::CausalityLink { to, .. } => *to == node_id,
                         EffectEdge::ResourceLink { to, .. } => *to == node_id,
                         EffectEdge::ControlLink { to, .. } => *to == node_id,
+                        EffectEdge::SessionLink { to, .. } => *to == node_id,
                     }
                 })
                 .count();
@@ -1587,6 +1336,7 @@ impl TemporalEffectGraph {
             EffectEdge::CausalityLink { from, to, .. } => (*from, *to),
             EffectEdge::ResourceLink { from, to, .. } => (*from, *to),
             EffectEdge::ControlLink { from, to, .. } => (*from, *to),
+            EffectEdge::SessionLink { from, to, .. } => (*from, *to),
         };
         
         // Check if there's already a path from 'to' to 'from'
@@ -1841,6 +1591,8 @@ mod tests {
             cost: 100,
             resource_requirements: vec!["source_tokens".to_string()],
             resource_productions: vec!["dest_tokens".to_string()],
+            session_info: None,
+            session_info: None,
         };
         
         let result = teg.add_node(node);
@@ -1905,6 +1657,7 @@ mod tests {
             cost: 100,
             resource_requirements: vec![],
             resource_productions: vec!["resource_a".to_string()],
+            session_info: None,
         }).unwrap();
         
         teg.add_node(EffectNode {
@@ -1916,6 +1669,7 @@ mod tests {
             cost: 200,
             resource_requirements: vec!["resource_a".to_string()],
             resource_productions: vec!["resource_b".to_string()],
+            session_info: None,
         }).unwrap();
         
         teg.add_node(EffectNode {
@@ -1927,6 +1681,7 @@ mod tests {
             cost: 150,
             resource_requirements: vec!["resource_b".to_string()],
             resource_productions: vec!["resource_c".to_string()],
+            session_info: None,
         }).unwrap();
         
         // Add edges
@@ -1980,6 +1735,7 @@ mod tests {
             cost: 100,
             resource_requirements: vec![],
             resource_productions: vec!["resource_a".to_string()],
+            session_info: None,
         }).unwrap();
         
         // Node B depends on A (not ready)
@@ -1992,6 +1748,7 @@ mod tests {
             cost: 200,
             resource_requirements: vec!["resource_a".to_string()],
             resource_productions: vec![],
+            session_info: None,
         }).unwrap();
         
         let ready = teg.get_ready_nodes();
@@ -2072,6 +1829,7 @@ mod tests {
             cost: 150,
             resource_requirements: vec!["mint_authority".to_string()],
             resource_productions: vec!["new_tokens".to_string()],
+            session_info: None,
         }).unwrap();
         
         teg.add_node(EffectNode {
@@ -2083,6 +1841,7 @@ mod tests {
             cost: 100,
             resource_requirements: vec!["source_tokens".to_string()],
             resource_productions: vec!["dest_tokens".to_string()],
+            session_info: None,
         }).unwrap();
         
         // Analyze dependencies
@@ -2120,6 +1879,7 @@ mod tests {
             cost: 100,
             resource_requirements: vec![],
             resource_productions: vec![],
+            session_info: None,
         }).unwrap();
         
         teg.add_node(EffectNode {
@@ -2131,6 +1891,7 @@ mod tests {
             cost: 200,
             resource_requirements: vec![],
             resource_productions: vec![],
+            session_info: None,
         }).unwrap();
         
         teg.add_edge(EffectEdge::CausalityLink {
@@ -2164,6 +1925,7 @@ mod tests {
             cost: 100,
             resource_requirements: vec!["resource_a".to_string()],
             resource_productions: vec!["output_a".to_string()],
+            session_info: None,
             status: NodeStatus::Pending,
         };
         
@@ -2175,6 +1937,7 @@ mod tests {
             cost: 150,
             resource_requirements: vec!["resource_a".to_string()],
             resource_productions: vec!["output_b".to_string()],
+            session_info: None,
             status: NodeStatus::Pending,
         };
         
@@ -2198,6 +1961,7 @@ mod tests {
             cost: 200,
             resource_requirements: vec!["shared_resource".to_string()],
             resource_productions: vec!["intermediate".to_string()],
+            session_info: None,
             status: NodeStatus::Pending,
         };
         
@@ -2209,6 +1973,7 @@ mod tests {
             cost: 300,
             resource_requirements: vec!["shared_resource".to_string(), "intermediate".to_string()],
             resource_productions: vec!["final_output".to_string()],
+            session_info: None,
             status: NodeStatus::Pending,
         };
         
@@ -2239,6 +2004,7 @@ mod tests {
             cost: 100,
             resource_requirements: vec![],
             resource_productions: vec![],
+            session_info: None,
             status: NodeStatus::Pending,
         };
         
@@ -2281,6 +2047,7 @@ mod tests {
                 cost: 100 + i as u64,
                 resource_requirements: vec![format!("resource_{}", i)],
                 resource_productions: vec![format!("output_{}", i)],
+            session_info: None,
                 status: NodeStatus::Pending,
             };
             teg.add_node(node).unwrap();
@@ -2310,6 +2077,7 @@ mod tests {
                 cost: 100, // Same cost for batching opportunity
                 resource_requirements: vec!["shared_resource".to_string()], // Shared resource for prefetching
                 resource_productions: vec![format!("output_{}", i)],
+            session_info: None,
                 status: NodeStatus::Pending,
             };
             teg.add_node(node).unwrap();
@@ -2324,6 +2092,7 @@ mod tests {
             cost: 200,
             resource_requirements: vec!["shared_resource".to_string()],
             resource_productions: vec!["final_output".to_string()],
+            session_info: None,
             status: NodeStatus::Pending,
         };
         teg.add_node(dependent_node).unwrap();
@@ -2372,6 +2141,7 @@ mod tests {
                 cost: 100, // Same cost for batching
                 resource_requirements: vec!["shared_resource".to_string()],
                 resource_productions: vec![format!("output_{}", i)],
+            session_info: None,
                 status: NodeStatus::Pending,
             };
             teg.add_node(node).unwrap();
@@ -2408,6 +2178,7 @@ mod tests {
             cost: 1000, // High cost
             resource_requirements: vec!["res_a".to_string(), "res_b".to_string()],
             resource_productions: vec!["out_a".to_string(), "out_b".to_string()],
+            session_info: None,
             status: NodeStatus::Pending,
         };
         
@@ -2504,6 +2275,7 @@ mod tests {
             cost: 600,
             resource_requirements: vec!["ethereum_rpc".to_string()],
             resource_productions: vec!["ethereum_storage_value".to_string()],
+            session_info: None,
         };
         
         let cosmos_node = EffectNode {
@@ -2515,6 +2287,7 @@ mod tests {
             cost: 500,
             resource_requirements: vec!["cosmos_rpc".to_string()],
             resource_productions: vec!["cosmos_storage_value".to_string()],
+            session_info: None,
         };
         
         let zk_node = EffectNode {
@@ -2526,6 +2299,7 @@ mod tests {
             cost: 2000,
             resource_requirements: vec!["storage_data".to_string(), "zk_circuit".to_string()],
             resource_productions: vec!["zk_proof".to_string()],
+            session_info: None,
         };
         
         teg.add_node(eth_node).unwrap();
@@ -2570,6 +2344,7 @@ mod tests {
                 cost: 600,
                 resource_requirements: vec!["ethereum_rpc".to_string()],
                 resource_productions: vec!["ethereum_storage_value".to_string()],
+            session_info: None,
             };
             
             teg.add_node(node).unwrap();
@@ -2667,6 +2442,7 @@ mod tests {
                 cost: 2000,
                 resource_requirements: vec!["storage_data".to_string()],
                 resource_productions: vec!["zk_proof".to_string()],
+            session_info: None,
             };
             
             teg.add_node(node).unwrap();
@@ -2763,6 +2539,7 @@ mod tests {
             cost: 500,
             resource_requirements: vec!["storage_commitment".to_string()],
             resource_productions: vec!["verified_data".to_string()],
+            session_info: None,
         };
         
         let node2 = EffectNode {
@@ -2779,6 +2556,7 @@ mod tests {
             cost: 300,
             resource_requirements: vec!["verified_data".to_string()],
             resource_productions: vec!["result".to_string()],
+            session_info: None,
         };
         
         // Add nodes to the graph
@@ -2846,6 +2624,7 @@ mod tests {
             cost: 600,
             resource_requirements: vec!["ethereum_rpc".to_string()],
             resource_productions: vec!["ethereum_storage_value".to_string()],
+            session_info: None,
         };
         
         // Create a compute effect that depends on storage
@@ -2865,6 +2644,7 @@ mod tests {
             cost: 300,
             resource_requirements: vec!["input_tokens".to_string()],
             resource_productions: vec!["output_tokens".to_string()],
+            session_info: None,
         };
         
         teg.add_node(storage_node).unwrap();

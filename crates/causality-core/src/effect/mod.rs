@@ -68,6 +68,12 @@ pub mod storage_proof;
 /// Cross-chain effect coordination for atomic operations across blockchains
 pub mod cross_chain;
 
+/// Session types for typed communication protocols
+pub mod session;
+
+/// Session registry for global session management
+pub mod session_registry;
+
 /// Re-export key types for convenience
 pub use handler_registry::{EffectHandler, EffectHandlerRegistry, EffectResult};
 pub use intent_evaluator::{IntentEvaluator, IntentEvaluationConfig, EvaluationContext};
@@ -81,6 +87,14 @@ pub use cross_chain::{
     CrossChainEffect, CrossChainCoordinator, CrossChainTxState, CrossChainExecutionResult,
     StorageProofRequirement, ProofType, VerificationConstraint, ConstraintType,
     CrossChainStatistics, BlockchainDomain,
+};
+pub use session::{
+    SessionType, SessionDeclaration, SessionChannel, SessionState, SessionRole,
+    SessionMessage, SessionBranch, SessionOperation, SessionError,
+    compute_dual, verify_duality, is_well_formed, substitute, progress_session,
+};
+pub use session_registry::{
+    SessionRegistry, Choreography, ChoreographyProtocol, RegistryStats,
 };
 
 //-----------------------------------------------------------------------------

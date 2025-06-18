@@ -14,8 +14,8 @@ traverse-core = { git = "https://github.com/timewave-computer/traverse", default
 traverse-ethereum = { git = "https://github.com/timewave-computer/traverse", optional = true }
 traverse-valence = { git = "https://github.com/timewave-computer/traverse", features = ["alloc"], optional = true }
 
-# Valence coprocessor integration (optional)
-valence-coprocessor = { git = "https://github.com/timewave-computer/valence-coprocessor.git", tag = "v0.1.13", default-features = false, optional = true }
+# Valence coprocessor integration (optional) - updated to match Almanac version (v0.2.3)
+valence-coprocessor = { git = "https://github.com/timewave-computer/valence-coprocessor.git", tag = "v0.2.3", default-features = false, optional = true }
 valence-coprocessor-client = { git = "https://github.com/timewave-computer/valence-domain-clients", rev = "d26460ceb0f95599300b1521131ef4b078638310", optional = true }
 
 # Core utilities

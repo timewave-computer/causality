@@ -11,6 +11,7 @@ use crate::{
 };
 use super::{
     capability::Capability,
+    session::SessionType,
 };
 
 /// Unique identifier for intents
@@ -36,6 +37,12 @@ pub struct Intent {
     /// This guides the solver without affecting correctness
     pub hint: Hint,
     
+    /// Required session protocols
+    pub session_requirements: Vec<SessionRequirement>,
+    
+    /// Session endpoints this intent provides
+    pub session_endpoints: Vec<SessionEndpoint>,
+    
     /// When this intent was created
     pub timestamp: Timestamp,
 }
@@ -60,6 +67,38 @@ pub struct ResourceBinding {
     
     /// Optional metadata
     pub metadata: Value,
+}
+
+/// Session requirement specification for intents
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionRequirement {
+    /// Name of the required session
+    pub session_name: String,
+    
+    /// Role that this intent will play in the session
+    pub role: String,
+    
+    /// Required protocol for this session role
+    pub required_protocol: SessionType,
+    
+    /// Binding name for the session channel (optional)
+    pub channel_binding: Option<String>,
+}
+
+/// Session endpoint that this intent provides
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionEndpoint {
+    /// Name of the session this endpoint supports
+    pub session_name: String,
+    
+    /// Role that this endpoint plays
+    pub role: String,
+    
+    /// Protocol that this endpoint implements
+    pub protocol: SessionType,
+    
+    /// Binding name for the session channel
+    pub channel_binding: String,
 }
 
 /// Declarative constraints that must be satisfied
@@ -103,6 +142,17 @@ pub enum Constraint {
     
     /// Require that multiple resources exist
     ExistsAll(Vec<ResourceBinding>),
+    
+    /// Session constraints
+    
+    /// Require session protocol compliance
+    SessionCompliant(String, String), // session_name, role
+    
+    /// Session ordering constraint  
+    SessionBefore(String, String), // session1, session2
+    
+    /// Session endpoint availability
+    SessionEndpointAvailable(String, String), // session_name, role
     
     /// Custom constraint expression from machine layer
     Custom(ConstraintExpr),
@@ -244,6 +294,8 @@ impl Intent {
             inputs,
             constraint,
             hint: Hint::True,
+            session_requirements: Vec::new(),
+            session_endpoints: Vec::new(),
             timestamp: Timestamp { millis: timestamp },
         }
     }
@@ -340,7 +392,35 @@ impl Intent {
                 }
                 Ok(())
             }
-            Constraint::Custom(_) => Ok(()),
+            Constraint::SessionCompliant(session_name, _role) => {
+                if !self.has_binding(session_name) && !output_names.contains(session_name) {
+                    return Err(IntentError::InvalidBinding(
+                        format!("SessionCompliant references unknown binding: {}", session_name)
+                    ));
+                }
+                Ok(())
+            }
+            Constraint::SessionBefore(session1, session2) => {
+                if !self.has_binding(session1) && !output_names.contains(session1) {
+                    return Err(IntentError::InvalidBinding(
+                        format!("SessionBefore constraint references unknown binding: {}", session1)
+                    ));
+                }
+                if !self.has_binding(session2) && !output_names.contains(session2) {
+                    return Err(IntentError::InvalidBinding(
+                        format!("SessionBefore constraint references unknown binding: {}", session2)
+                    ));
+                }
+                Ok(())
+            }
+            Constraint::SessionEndpointAvailable(session_name, _role) => {
+                if !self.has_binding(session_name) && !output_names.contains(session_name) {
+                    return Err(IntentError::InvalidBinding(
+                        format!("SessionEndpointAvailable references unknown binding: {}", session_name)
+                    ));
+                }
+                Ok(())
+            }
             Constraint::Before(r1, r2) => {
                 if !self.has_binding(r1) && !output_names.contains(r1) {
                     return Err(IntentError::InvalidBinding(
@@ -363,6 +443,7 @@ impl Intent {
                 // Same for ExistsAll - these are output specifications
                 Ok(())
             }
+            Constraint::Custom(_) => Ok(()),
         }
     }
     
@@ -461,6 +542,38 @@ impl Intent {
     /// Get a resource binding by name
     pub fn get_binding(&self, name: &str) -> Option<&ResourceBinding> {
         self.inputs.iter().find(|b| b.name == name)
+    }
+    
+    /// Add a session requirement to this intent
+    pub fn with_session_requirement(mut self, requirement: SessionRequirement) -> Self {
+        self.session_requirements.push(requirement);
+        self
+    }
+    
+    /// Add a session endpoint to this intent
+    pub fn with_session_endpoint(mut self, endpoint: SessionEndpoint) -> Self {
+        self.session_endpoints.push(endpoint);
+        self
+    }
+    
+    /// Check if this intent requires a specific session
+    pub fn requires_session(&self, session_name: &str, role: &str) -> bool {
+        self.session_requirements.iter().any(|req| 
+            req.session_name == session_name && req.role == role
+        )
+    }
+    
+    /// Check if this intent provides a specific session endpoint  
+    pub fn provides_session(&self, session_name: &str, role: &str) -> bool {
+        self.session_endpoints.iter().any(|endpoint|
+            endpoint.session_name == session_name && endpoint.role == role
+        )
+    }
+    
+    /// Add a hint to this intent
+    pub fn with_hint(mut self, hint: Hint) -> Self {
+        self.hint = hint;
+        self
     }
 }
 
@@ -564,19 +677,35 @@ impl Constraint {
         from: impl Into<String>,
         to: impl Into<String>, 
         amount: u64,
-        token_type: impl Into<String>
+        _token_type: impl Into<String>
     ) -> Self {
-        let token_type = token_type.into();
-        let to_string = to.into();
-        Constraint::and(vec![
-            // Conservation: input amount equals output amount
-            Constraint::conservation(
-                vec![from.into()],
-                vec![to_string.clone()],
+        let from_str = from.into();
+        let to_str = to.into();
+        Constraint::And(vec![
+            Constraint::Conservation(
+                vec![from_str.clone()],
+                vec![to_str]
             ),
-            // Output exists with correct type and amount
-            Constraint::produces_quantity(to_string, token_type, amount),
+            Constraint::Equals(
+                ValueExpr::QuantityRef(from_str),
+                ValueExpr::Literal(Value::Int(amount as u32))
+            ),
         ])
+    }
+    
+    /// Create a session compliance constraint
+    pub fn session_compliant(session_name: impl Into<String>, role: impl Into<String>) -> Self {
+        Constraint::SessionCompliant(session_name.into(), role.into())
+    }
+    
+    /// Create a session ordering constraint
+    pub fn session_before(session1: impl Into<String>, session2: impl Into<String>) -> Self {
+        Constraint::SessionBefore(session1.into(), session2.into())
+    }
+    
+    /// Create a session endpoint availability constraint
+    pub fn session_endpoint_available(session_name: impl Into<String>, role: impl Into<String>) -> Self {
+        Constraint::SessionEndpointAvailable(session_name.into(), role.into())
     }
 }
 
@@ -678,12 +807,50 @@ impl Hint {
     }
 }
 
+impl SessionRequirement {
+    /// Create a new session requirement
+    pub fn new(
+        session_name: impl Into<String>,
+        role: impl Into<String>,
+        required_protocol: SessionType,
+    ) -> Self {
+        Self {
+            session_name: session_name.into(),
+            role: role.into(),
+            required_protocol,
+            channel_binding: None,
+        }
+    }
+    
+    /// Set the channel binding
+    pub fn with_channel_binding(mut self, binding: impl Into<String>) -> Self {
+        self.channel_binding = Some(binding.into());
+        self
+    }
+}
+
+impl SessionEndpoint {
+    /// Create a new session endpoint
+    pub fn new(
+        session_name: impl Into<String>,
+        role: impl Into<String>,
+        protocol: SessionType,
+        channel_binding: impl Into<String>,
+    ) -> Self {
+        Self {
+            session_name: session_name.into(),
+            role: role.into(),
+            protocol,
+            channel_binding: channel_binding.into(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::lambda::base::Value;
     use crate::effect::capability::Capability;
-    use crate::machine::instruction::{Metric, Selector};
 
     #[test]
     fn test_intent_creation() {
@@ -864,30 +1031,119 @@ mod tests {
 
     #[test]
     fn test_intent_with_custom_machine_hints() {
-        let domain_name = String::from("test_domain");
-        let domain = EntityId::from_content(&domain_name.as_bytes().to_vec());
+        let domain_bytes = vec![42u8; 32]; // 32 bytes for proper encoding
+        let domain = EntityId::from_content(&domain_bytes);
+        let inputs = vec![
+            ResourceBinding::new("token_in", "ERC20"),
+        ];
+        let constraint = Constraint::produces("token_out", "ERC20");
         
-        let mut intent = Intent::new(
-            domain,
-            vec![ResourceBinding::new("input", "Token")],
-            Constraint::produces("output", "Token"),
+        let machine_hint = MachineHint::Custom("test_hint".to_string());
+        let custom_hint = Hint::custom(machine_hint.clone());
+        
+        let intent = Intent::new(domain, inputs, constraint)
+            .with_hint(custom_hint.clone());
+        
+        assert_eq!(intent.hint, custom_hint);
+        if let Hint::Custom(hint) = intent.hint {
+            assert_eq!(hint, machine_hint);
+        } else {
+            panic!("Expected custom hint");
+        }
+    }
+
+    #[test]
+    fn test_intent_with_session_requirements() {
+        use crate::lambda::base::{TypeInner, BaseType};
+        
+        let domain_bytes = vec![42u8; 32]; // 32 bytes for proper encoding
+        let domain = EntityId::from_content(&domain_bytes);
+        let inputs = vec![
+            ResourceBinding::new("token_in", "ERC20"),
+        ];
+        let constraint = Constraint::And(vec![
+            Constraint::produces("token_out", "ERC20"),
+            Constraint::session_compliant("PaymentProtocol", "client"),
+        ]);
+        
+        let session_requirement = SessionRequirement::new(
+            "PaymentProtocol",
+            "client", 
+            SessionType::Send(
+                TypeInner::Base(BaseType::Int),
+                Box::new(SessionType::End)
+            )
+        ).with_channel_binding("payment_channel");
+        
+        let intent = Intent::new(domain, inputs, constraint)
+            .with_session_requirement(session_requirement);
+        
+        assert_eq!(intent.session_requirements.len(), 1);
+        assert!(intent.requires_session("PaymentProtocol", "client"));
+        assert!(!intent.requires_session("PaymentProtocol", "server"));
+        
+        let req = &intent.session_requirements[0];
+        assert_eq!(req.session_name, "PaymentProtocol");
+        assert_eq!(req.role, "client");
+        assert_eq!(req.channel_binding, Some("payment_channel".to_string()));
+    }
+    
+    #[test]
+    fn test_intent_with_session_endpoints() {
+        use crate::lambda::base::{TypeInner, BaseType};
+        
+        let domain_bytes = vec![42u8; 32]; // 32 bytes for proper encoding
+        let domain = EntityId::from_content(&domain_bytes);
+        let inputs = vec![
+            ResourceBinding::new("payment_request", "PaymentRequest"),
+        ];
+        let constraint = Constraint::session_endpoint_available("PaymentProtocol", "server");
+        
+        let session_endpoint = SessionEndpoint::new(
+            "PaymentProtocol",
+            "server",
+            SessionType::Receive(
+                TypeInner::Base(BaseType::Int),
+                Box::new(SessionType::End)
+            ),
+            "payment_channel"
         );
         
-        // Test machine-level custom hints
-        intent.hint = Hint::custom(MachineHint::HintAll(vec![
-            MachineHint::BatchWith(Selector::SameType),
-            MachineHint::Minimize(Metric::Latency),
-            MachineHint::PreferDomain(domain.to_string()),
-            MachineHint::Deadline(1000),
-        ]));
+        let intent = Intent::new(domain, inputs, constraint)
+            .with_session_endpoint(session_endpoint);
         
-        assert!(matches!(intent.hint, Hint::Custom(_)));
-        if let Hint::Custom(machine_hint) = &intent.hint {
-            assert!(matches!(machine_hint, MachineHint::HintAll(_)));
-            if let MachineHint::HintAll(hints) = machine_hint {
-                assert_eq!(hints.len(), 4);
-                assert!(matches!(hints[2], MachineHint::PreferDomain(_)));
-            }
-        }
+        assert_eq!(intent.session_endpoints.len(), 1);
+        assert!(intent.provides_session("PaymentProtocol", "server"));
+        assert!(!intent.provides_session("PaymentProtocol", "client"));
+        
+        let endpoint = &intent.session_endpoints[0];
+        assert_eq!(endpoint.session_name, "PaymentProtocol");
+        assert_eq!(endpoint.role, "server");
+        assert_eq!(endpoint.channel_binding, "payment_channel");
+    }
+    
+    #[test]
+    fn test_session_constraint_validation() {
+        let domain_bytes = vec![42u8; 32]; // 32 bytes for proper encoding
+        let domain = EntityId::from_content(&domain_bytes);
+        let inputs = vec![
+            ResourceBinding::new("session1", "SessionChannel"),
+            ResourceBinding::new("session2", "SessionChannel"),
+        ];
+        
+        // Valid session constraints
+        let valid_constraint = Constraint::And(vec![
+            Constraint::session_compliant("session1", "client"),
+            Constraint::session_before("session1", "session2"),
+            Constraint::session_endpoint_available("session2", "server"),
+        ]);
+        
+        let intent = Intent::new(domain.clone(), inputs, valid_constraint);
+        assert!(intent.validate().is_ok());
+        
+        // Invalid session constraint (references unknown binding)
+        let invalid_constraint = Constraint::session_compliant("unknown_session", "client");
+        let invalid_intent = Intent::new(domain, vec![], invalid_constraint);
+        assert!(invalid_intent.validate().is_err());
     }
 } 

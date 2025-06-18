@@ -12,9 +12,27 @@ pub mod checker;
 pub mod artifact;
 pub mod enhanced_pipeline;
 pub mod types;
+pub mod valence_analysis;
+pub mod state_analysis;
+pub mod almanac_schema;
+pub mod query_primitives;
+pub mod almanac_runtime;
+pub mod storage_layout;
+pub mod storage_backend;
+pub mod event_storage;
+pub mod valence_state_persistence;
+pub mod error_handling;
+pub mod observability;
+pub mod traverse_almanac_integration;
+pub mod valence_coprocessor_integration;
+pub mod proof_primitives;
+pub mod traverse_integration;
+
 
 #[cfg(test)]
 pub mod benchmarks;
+#[cfg(test)]
+pub mod storage_integration_tests;
 
 // Re-export key types for convenience
 pub use pipeline::{

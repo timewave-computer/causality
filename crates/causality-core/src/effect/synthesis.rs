@@ -6,7 +6,8 @@
 use super::{
     core::{EffectExpr, EffectExprKind},
     capability::CapabilityLevel,
-    intent::{Intent, ResourceBinding, Constraint},
+    intent::{Intent, ResourceBinding, Constraint, SessionRequirement},
+    session::{SessionType, SessionBranch},
 };
 use crate::{
     lambda::{Term, Literal, Symbol, base::Value},
@@ -164,16 +165,132 @@ impl FlowSynthesizer {
         // Validate intent first
         intent.validate().map_err(|e| SynthesisError::UnsupportedIntent(e.to_string()))?;
         
+        // Synthesize session effects if intent has session requirements
+        let mut effects = Vec::new();
+        
+        if !intent.session_requirements.is_empty() {
+            let session_effects = self.synthesize_session_effects(intent)?;
+            effects.extend(session_effects);
+        }
+        
         // Analyze intent constraint to determine synthesis strategy
         let strategy = self.select_strategy(&intent.constraint)?;
         
         // Apply strategy to generate effect sequence
-        match strategy {
+        let main_effects = match strategy {
             SynthesisStrategy::Transfer => self.synthesize_transfer(intent),
             SynthesisStrategy::Transform => self.synthesize_transform(intent),
             SynthesisStrategy::Exchange => self.synthesize_exchange(intent),
             SynthesisStrategy::Split => self.synthesize_split(intent),
             SynthesisStrategy::Custom(template_name) => self.synthesize_custom(intent, &template_name),
+        }?;
+        
+        effects.extend(main_effects);
+        Ok(effects)
+    }
+    
+    /// Synthesize effects for session requirements
+    pub fn synthesize_session_effects(
+        &self,
+        intent: &Intent,
+    ) -> Result<Vec<EffectExpr>, SynthesisError> {
+        let mut effects = Vec::new();
+        
+        for requirement in &intent.session_requirements {
+            let session_effects = self.compile_session_to_effects(requirement)?;
+            effects.extend(session_effects);
+        }
+        
+        Ok(effects)
+    }
+    
+    /// Compile a session requirement to effect expressions
+    pub fn compile_session_to_effects(
+        &self,
+        requirement: &SessionRequirement,
+    ) -> Result<Vec<EffectExpr>, SynthesisError> {
+        let mut effects = Vec::new();
+        
+        // Create session setup effect
+        let setup_effect = EffectExpr::new(EffectExprKind::WithSession {
+            session_decl: requirement.session_name.clone(),
+            role: requirement.role.clone(),
+            body: Box::new(self.compile_session_protocol(&requirement.required_protocol)?),
+        });
+        
+        effects.push(setup_effect);
+        Ok(effects)
+    }
+    
+    /// Compile a session type to its effect implementation
+    fn compile_session_protocol(&self, session_type: &SessionType) -> Result<EffectExpr, SynthesisError> {
+        match session_type {
+            SessionType::Send(value_type, continuation) => {
+                let send_effect = EffectExpr::new(EffectExprKind::SessionSend {
+                    channel: Box::new(EffectExpr::new(EffectExprKind::Pure(Term::var("channel")))),
+                    value: Term::var("message"),
+                    continuation: Box::new(self.compile_session_protocol(continuation)?),
+                });
+                Ok(send_effect)
+            }
+            
+            SessionType::Receive(value_type, continuation) => {
+                let recv_effect = EffectExpr::new(EffectExprKind::SessionReceive {
+                    channel: Box::new(EffectExpr::new(EffectExprKind::Pure(Term::var("channel")))),
+                    continuation: Box::new(self.compile_session_protocol(continuation)?),
+                });
+                Ok(recv_effect)
+            }
+            
+            SessionType::InternalChoice(choices) => {
+                if choices.is_empty() {
+                    return Err(SynthesisError::UnsupportedIntent("Empty internal choice".to_string()));
+                }
+                
+                // For simplicity, select the first choice
+                let select_effect = EffectExpr::new(EffectExprKind::SessionSelect {
+                    channel: Box::new(EffectExpr::new(EffectExprKind::Pure(Term::var("channel")))),
+                    choice: "choice_0".to_string(),
+                    continuation: Box::new(self.compile_session_protocol(&choices[0])?),
+                });
+                Ok(select_effect)
+            }
+            
+            SessionType::ExternalChoice(branches) => {
+                if branches.is_empty() {
+                    return Err(SynthesisError::UnsupportedIntent("Empty external choice".to_string()));
+                }
+                
+                // Create case branches
+                let mut case_branches = Vec::new();
+                for (i, branch) in branches.iter().enumerate() {
+                    case_branches.push(SessionBranch {
+                        label: format!("branch_{}", i),
+                        body: self.compile_session_protocol(branch)?,
+                    });
+                }
+                
+                let case_effect = EffectExpr::new(EffectExprKind::SessionCase {
+                    channel: Box::new(EffectExpr::new(EffectExprKind::Pure(Term::var("channel")))),
+                    branches: case_branches,
+                });
+                Ok(case_effect)
+            }
+            
+            SessionType::End => {
+                // End protocol - pure effect that does nothing
+                Ok(EffectExpr::new(EffectExprKind::Pure(Term::literal(Literal::Symbol(Symbol::new("end"))))))
+            }
+            
+            SessionType::Recursive(_name, body) => {
+                // For now, just compile the body (ignoring recursion)
+                self.compile_session_protocol(body)
+            }
+            
+            SessionType::Variable(_name) => {
+                // Session variable - create a placeholder
+                Ok(EffectExpr::new(EffectExprKind::Pure(Term::var("session_var"))))
+            }
         }
     }
     
@@ -1262,5 +1379,101 @@ mod tests {
         assert!(names.contains(&"token_b"));
         assert!(names.contains(&"lp_token"));
         assert!(names.contains(&"receipt"));
+    }
+    
+    #[test]
+    fn test_session_synthesis() {
+        use crate::lambda::base::{TypeInner, BaseType};
+        use crate::effect::intent::SessionRequirement;
+        use crate::effect::session::SessionType;
+        
+        let domain = DomainId::from_content(&vec![42u8; 32]);
+        let synthesizer = FlowSynthesizer::new(domain);
+        
+        // Create an intent with session requirements
+        let session_requirement = SessionRequirement::new(
+            "PaymentProtocol",
+            "client",
+            SessionType::Send(
+                TypeInner::Base(BaseType::Int),
+                Box::new(SessionType::Receive(
+                    TypeInner::Base(BaseType::Bool),
+                    Box::new(SessionType::End)
+                ))
+            )
+        );
+        
+        let intent = Intent::new(
+            domain,
+            vec![ResourceBinding::new("payment", "Payment")],
+            Constraint::produces("receipt", "Receipt")
+        ).with_session_requirement(session_requirement);
+        
+        let effects = synthesizer.synthesize(&intent).unwrap();
+        
+        // Should have session effects plus regular effects
+        assert!(!effects.is_empty());
+        
+        // First effect should be a session setup
+        assert!(matches!(effects[0].kind, EffectExprKind::WithSession { .. }));
+    }
+    
+    #[test]
+    fn test_session_protocol_compilation() {
+        use crate::lambda::base::{TypeInner, BaseType};
+        use crate::effect::session::SessionType;
+        
+        let domain = DomainId::from_content(&vec![42u8; 32]);
+        let synthesizer = FlowSynthesizer::new(domain);
+        
+        // Test simple send protocol
+        let send_protocol = SessionType::Send(
+            TypeInner::Base(BaseType::Int),
+            Box::new(SessionType::End)
+        );
+        
+        let effect = synthesizer.compile_session_protocol(&send_protocol).unwrap();
+        assert!(matches!(effect.kind, EffectExprKind::SessionSend { .. }));
+        
+        // Test receive protocol
+        let recv_protocol = SessionType::Receive(
+            TypeInner::Base(BaseType::Int),
+            Box::new(SessionType::End)
+        );
+        
+        let effect = synthesizer.compile_session_protocol(&recv_protocol).unwrap();
+        assert!(matches!(effect.kind, EffectExprKind::SessionReceive { .. }));
+        
+        // Test choice protocol
+        let choice_protocol = SessionType::InternalChoice(vec![
+            SessionType::End,
+            SessionType::Send(
+                TypeInner::Base(BaseType::Int),
+                Box::new(SessionType::End)
+            )
+        ]);
+        
+        let effect = synthesizer.compile_session_protocol(&choice_protocol).unwrap();
+        assert!(matches!(effect.kind, EffectExprKind::SessionSelect { .. }));
+    }
+    
+    #[test]
+    fn test_session_compilation_error_handling() {
+        use crate::effect::session::SessionType;
+        
+        let domain = DomainId::from_content(&vec![42u8; 32]);
+        let synthesizer = FlowSynthesizer::new(domain);
+        
+        // Test empty choice error
+        let empty_choice = SessionType::InternalChoice(vec![]);
+        let result = synthesizer.compile_session_protocol(&empty_choice);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), SynthesisError::UnsupportedIntent(_)));
+        
+        // Test empty external choice error
+        let empty_external_choice = SessionType::ExternalChoice(vec![]);
+        let result = synthesizer.compile_session_protocol(&empty_external_choice);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), SynthesisError::UnsupportedIntent(_)));
     }
 } 

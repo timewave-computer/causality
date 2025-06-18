@@ -11,7 +11,7 @@ members = [
   "crates/causality-lisp",
   # "crates/causality-ffi",  # Temporarily disabled due to compatibility issues
   "e2e",
-  "e2e/cli",
+  "e2e/cli", "session",
 ]
 resolver = "2"
 

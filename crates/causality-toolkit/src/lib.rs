@@ -4,9 +4,17 @@
 //! This crate provides developer-friendly abstractions over the core Causality system.
 
 pub mod cross_language;
+pub mod debug;
+pub mod dsl;
+pub mod effects;
 pub mod formal_verification;
+pub mod interface_synthesis;
+pub mod mocks;
 pub mod primitives;
+pub mod resources;
+pub mod testing;
 pub mod utils;
+pub mod almanac_schema;
 
 // Re-exports
 pub use causality_core::{Value, Effect, EffectExpr, EntityId};

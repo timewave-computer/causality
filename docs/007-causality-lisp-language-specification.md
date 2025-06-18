@@ -365,3 +365,209 @@ Effect handlers can be composed to create complex interaction patterns:
 ```
 
 This design enables separation of concerns between pure computation and effectful operations while maintaining type safety and compositional reasoning.
+
+## 7. Session Types Integration
+
+Causality Lisp integrates session types as first-class language constructs at Layer 2, providing type-safe communication protocols with automatic duality checking. Session types complement effects and intents to form the complete Layer 2 programming model.
+
+### Session Type Declaration
+
+Session types are declared with explicit role specifications and automatic duality verification:
+
+```lisp
+; Declare a session type with two roles
+(def-session PaymentProtocol
+  (client !Amount ?Receipt End)
+  (server ?Amount !Receipt End))  ; Automatically verified as dual
+
+; Multi-party session with three roles
+(def-session EscrowProtocol
+  (buyer !Item ?Quote !Payment ?Confirmation End)
+  (seller ?Item !Quote ?Payment !Delivery End)
+  (arbiter ?Payment !Payment ?Confirmation !Delivery End))
+```
+
+### Session Type Syntax in Expressions
+
+Session operations are integrated into the expression system:
+
+```rust
+pub enum Expr {
+    // ... existing variants ...
+    
+    // Session type declarations
+    SessionDeclaration {
+        name: String,
+        roles: Vec<SessionRole>,
+    },
+    
+    // Session usage
+    WithSession {
+        session: String,
+        role: String,
+        body: Box<Expr>,
+    },
+    
+    // Session operations
+    SessionSend { channel: Box<Expr>, value: Box<Expr> },
+    SessionReceive { channel: Box<Expr> },
+    SessionSelect { channel: Box<Expr>, choice: String },
+    SessionCase { channel: Box<Expr>, branches: Vec<SessionBranch> },
+}
+```
+
+### Session Primitives
+
+Causality Lisp provides dedicated primitives for session operations:
+
+| Primitive | Syntax | Purpose | Type Signature |
+|-----------|--------|---------|----------------|
+| `def-session` | `(def-session name roles...)` | Declare session protocol | Creates session type |
+| `with-session` | `(with-session protocol.role as var body)` | Create session context | Session scope |
+| `session-send` | `(session-send channel value)` | Send value through channel | `!T.S → T → S` |
+| `session-recv` | `(session-recv channel)` | Receive value from channel | `?T.S → (T × S)` |
+| `session-select` | `(session-select channel choice)` | Select branch in protocol | `S₁ ⊕ S₂ → String → Sᵢ` |
+| `session-case` | `(session-case channel branches...)` | Handle incoming choices | `S₁ & S₂ → Handlers → T` |
+
+### Session Usage Examples
+
+Session types enable type-safe communication protocols:
+
+```lisp
+; Simple payment protocol usage
+(defn handle-payment-client (amount)
+  (with-session PaymentProtocol.client as client-chan
+    (do
+      ; Send payment amount
+      (session-send client-chan amount)
+      
+      ; Receive receipt
+      (let ((receipt (session-recv client-chan)))
+        (process-receipt receipt)))))
+
+; Server-side payment handling
+(defn handle-payment-server ()
+  (with-session PaymentProtocol.server as server-chan
+    (do
+      ; Receive payment amount
+      (let ((amount (session-recv server-chan)))
+        (let ((receipt (generate-receipt amount)))
+          ; Send receipt back
+          (session-send server-chan receipt))))))
+```
+
+### Session Types with Choice Operations
+
+Session types support choice operations for branching protocols:
+
+```lisp
+; Protocol with choices
+(def-session NegotiationProtocol
+  (proposer !Offer (?Counter !Accept End ⊕ ?Accept End))
+  (acceptor ?Offer (!Counter ?Accept End ⊕ !Accept End)))
+
+; Proposer implementation
+(defn make-proposal (initial-offer)
+  (with-session NegotiationProtocol.proposer as prop-chan
+    (do
+      ; Send initial offer
+      (session-send prop-chan initial-offer)
+      
+      ; Handle response
+      (session-case prop-chan
+        (Counter counter-offer ->
+          (session-send prop-chan (accept-counter counter-offer)))
+        (Accept acceptance ->
+          (finalize-deal acceptance))))))
+```
+
+### Integration with Effects and Intents
+
+Session types compose naturally with effects and intents:
+
+```lisp
+; Session-based intent
+(intent "PaymentRequest"
+  (requires-session PaymentProtocol.client)
+  (input-resource "amount" int)
+  (constraint (> amount 0))
+  (effect
+    (with-session PaymentProtocol.client as client
+      (bind
+        (session-send client amount)
+        (session-recv client)))))
+
+; Session effect handlers
+(handle-session-effect PaymentProtocol.server
+  (session-recv amount ->
+    (perform DatabaseWrite (log-payment amount))
+    (let ((receipt (generate-receipt amount)))
+      (session-send receipt))))
+```
+
+### Choreography Support
+
+Causality Lisp supports choreographies for multi-party coordination:
+
+```lisp
+; Define a choreography
+(choreography EscrowChoreography
+  (roles buyer seller arbiter)
+  (protocol
+    ; Initial negotiation
+    (buyer → seller: !ItemRequest)
+    (seller → buyer: !ItemDetails)
+    
+    ; Escrow setup
+    (buyer → arbiter: !EscrowRequest)
+    (seller → arbiter: !ItemConfirmation)
+    
+    ; Payment and delivery
+    (buyer → arbiter: !Payment)
+    (seller → arbiter: !DeliveryProof)
+    
+    ; Resolution
+    (arbiter → buyer: (!ItemReceived ⊕ !Dispute))
+    (arbiter → seller: (!PaymentRelease ⊕ !PaymentWithhold))))
+
+; Implement buyer role from choreography
+(defn buyer-escrow-implementation (item-request payment)
+  (with-choreography EscrowChoreography.buyer as buyer-role
+    (do
+      ; Follow choreography protocol
+      (session-send buyer-role item-request)
+      (let ((item-details (session-recv buyer-role)))
+        (session-send buyer-role (create-escrow-request item-details))
+        (session-send buyer-role payment)
+        
+        ; Handle final resolution
+        (session-case buyer-role
+          (ItemReceived receipt -> (complete-purchase receipt))
+          (Dispute details -> (initiate-dispute-resolution details)))))))
+```
+
+### Session Type Safety Properties
+
+Session types in Causality Lisp provide strong safety guarantees:
+
+1. **Protocol Compliance**: All session operations must follow the declared protocol
+2. **Duality Verification**: Communication partners automatically have compatible protocols
+3. **Deadlock Freedom**: Well-typed session programs cannot deadlock
+4. **Linearity Preservation**: Session channels are linear resources that cannot be duplicated
+5. **Type Safety**: Communication values are statically type-checked
+
+### Compilation to Layer 1
+
+Session operations compile to Layer 1 linear lambda calculus:
+
+```lisp
+; Layer 2 session operation
+(session-send channel value)
+
+; Layer 1 compilation
+(let ((old-channel (consume channel)))
+  (let ((new-state (session-state-transition old-channel value "send")))
+    (alloc new-state)))
+```
+
+This compilation strategy ensures that session types maintain all the linearity and verification properties of the underlying system while providing high-level communication abstractions.
