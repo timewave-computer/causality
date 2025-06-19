@@ -59,7 +59,7 @@ fn main() {
     ];
     
     for location in read_locations {
-        let read_effect = Effect::read(location.clone());
+        let read_effect: Effect<Value, EffectRow> = Effect::read(location.clone());
         match interpreter.execute_effect(read_effect) {
             Ok(value) => println!("  {}: {}", location.0, value),
             Err(e) => println!("  {}: Error - {}", location.0, e),
@@ -77,14 +77,14 @@ fn main() {
     );
     
     // Send a message
-    let send_effect = Effect::send("test-channel".to_string(), Value::String("Hello, World!".to_string()));
+    let send_effect: Effect<(), EffectRow> = Effect::send("test-channel".to_string(), Value::String("Hello, World!".to_string()));
     match interpreter.execute_effect(send_effect) {
         Ok(_) => println!("✓ Message sent"),
         Err(e) => println!("✗ Send failed: {}", e),
     }
     
     // Receive the message
-    let receive_effect = Effect::receive("test-channel".to_string());
+    let receive_effect: Effect<Value, EffectRow> = Effect::receive("test-channel".to_string());
     match interpreter.execute_effect(receive_effect) {
         Ok(value) => println!("✓ Message received: {}", value),
         Err(e) => println!("✗ Receive failed: {}", e),
@@ -118,10 +118,10 @@ mod tests {
         
         // Test state effect
         let loc = StateLocation("test".to_string());
-        let write_effect = Effect::write(loc.clone(), Value::Int(123));
+        let write_effect: Effect<(), EffectRow> = Effect::write(loc.clone(), Value::Int(123));
         assert!(interpreter.execute_effect(write_effect).is_ok());
         
-        let read_effect = Effect::read(loc);
+        let read_effect: Effect<Value, EffectRow> = Effect::read(loc);
         let result = interpreter.execute_effect(read_effect);
         assert!(result.is_ok());
         
@@ -144,10 +144,10 @@ mod tests {
         );
         
         // Test send/receive
-        let send_effect = Effect::send("test".to_string(), Value::String("test message".to_string()));
+        let send_effect: Effect<(), EffectRow> = Effect::send("test".to_string(), Value::String("test message".to_string()));
         assert!(interpreter.execute_effect(send_effect).is_ok());
         
-        let receive_effect = Effect::receive("test".to_string());
+        let receive_effect: Effect<Value, EffectRow> = Effect::receive("test".to_string());
         let result = interpreter.execute_effect(receive_effect);
         assert!(result.is_ok());
         
