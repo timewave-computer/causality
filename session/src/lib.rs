@@ -7,12 +7,16 @@ pub mod layer2;
 pub mod layer3;
 pub mod interpreter;
 pub mod ir;  // New IR module for content-addressed representation
+pub mod blockchain;  // Blockchain-native types with linear semantics
 
 // Re-export key types from each layer
 pub use layer0::{MessageId, MessageValue, MachineState};
 pub use layer1::{Type, SessionType, Term};
 pub use layer2::{Outcome, StateTransition, Effect};
 pub use layer3::{Agent, AgentId, Choreography, Capability};
+
+// Re-export blockchain types
+pub use blockchain::{Mailbox, Token, StateDiff};
 
 // Remove the unused add function
 #[cfg(test)]
