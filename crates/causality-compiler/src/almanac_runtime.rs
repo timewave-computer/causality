@@ -1,7 +1,7 @@
 // ------------ ALMANAC RUNTIME INTEGRATION ------------ 
 // Purpose: Runtime integration between compiled programs and Almanac APIs
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
@@ -44,7 +44,7 @@ pub struct AlmanacRuntime {
     schema_registry: Arc<dyn MockSchemaRegistry>,
     
     /// Registered schemas by contract (our extended format)
-    extended_schemas: HashMap<String, AlmanacSchema>,
+    extended_schemas: BTreeMap<String, AlmanacSchema>,
     /// Runtime configuration
     config: RuntimeConfig,
     /// Query execution cache
@@ -82,7 +82,7 @@ impl AlmanacRuntime {
             Ok(Self {
                 storage,
                 schema_registry,
-                extended_schemas: HashMap::new(),
+                extended_schemas: BTreeMap::new(),
                 config: config.clone(),
                 query_cache: QueryCache::new(CacheConfig {
                     max_entries: 1000,
@@ -100,7 +100,7 @@ impl AlmanacRuntime {
             Ok(Self {
                 storage,
                 schema_registry,
-                extended_schemas: HashMap::new(),
+                extended_schemas: BTreeMap::new(),
                 config: config.clone(),
                 query_cache: QueryCache::new(CacheConfig {
                     max_entries: 1000,
@@ -335,7 +335,7 @@ impl AlmanacRuntime {
         let mut plan = QueryPlan::new();
         
         // Group queries by contract and domain for optimization
-        let mut grouped_queries: HashMap<(String, String), Vec<&CompiledQuery>> = HashMap::new();
+        let mut grouped_queries: BTreeMap<(String, String), Vec<&CompiledQuery>> = BTreeMap::new();
         
         for query in queries {
             let key = (query.primitive.contract_id.clone(), 
@@ -404,7 +404,7 @@ impl AlmanacRuntime {
         let mut report = ConsistencyReport::new();
         
         // Group queries by layout commitment to check version consistency
-        let mut commitment_groups: HashMap<String, Vec<&CompiledQuery>> = HashMap::new();
+        let mut commitment_groups: BTreeMap<String, Vec<&CompiledQuery>> = BTreeMap::new();
         
         for query in queries {
             let commitment = query.layout_commitment.commitment_hash.clone();
@@ -493,7 +493,7 @@ impl AlmanacRuntime {
 /// Query cache and other supporting types
 #[derive(Debug)]
 struct QueryCache {
-    cache: HashMap<String, CachedResult>,
+    cache: BTreeMap<String, CachedResult>,
     config: CacheConfig,
 }
 
@@ -540,7 +540,7 @@ pub struct QueryMetadata {
 impl QueryCache {
     fn new(config: CacheConfig) -> Self {
         Self {
-            cache: HashMap::new(),
+            cache: BTreeMap::new(),
             config,
         }
     }

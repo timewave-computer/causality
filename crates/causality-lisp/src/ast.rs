@@ -6,11 +6,11 @@
 //! plus session types integration for Layer 2 communication protocols.
 
 use causality_core::{
-    lambda::{base::{TypeInner, Value as CoreValue}, Symbol},
+    lambda::{Term, base::{BaseType, TypeInner, Value, SessionType}},
     system::content_addressing::{EntityId, Str},
-    effect::session::{SessionType, SessionRole, SessionDeclaration}, // Import session types
+    effect::session_registry::{SessionRole, SessionDeclaration}, // Import session types
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Main expression type
 #[derive(Debug, Clone, PartialEq)]
@@ -114,12 +114,12 @@ pub enum LispValue {
     Unit,
     Bool(bool),
     Int(i64),
-    Float(f64),
+
     String(Str),
     Symbol(Symbol),
     List(Vec<LispValue>),
-    Map(HashMap<Symbol, LispValue>),
-    Record(HashMap<Symbol, LispValue>),
+    Map(BTreeMap<Symbol, LispValue>),
+    Record(BTreeMap<Symbol, LispValue>),
     ResourceId(EntityId),
     ExprId(EntityId),
     CoreValue(CoreValue), // Integration with core Value system
@@ -361,7 +361,7 @@ impl LispValue {
             LispValue::Unit => false,
             LispValue::Bool(b) => *b,
             LispValue::Int(i) => *i != 0,
-            LispValue::Float(f) => *f != 0.0,
+
             LispValue::String(s) => !s.value.is_empty(),
             LispValue::Symbol(_) => true,
             LispValue::List(l) => !l.is_empty(),
@@ -379,7 +379,7 @@ impl LispValue {
             LispValue::Unit => "Unit",
             LispValue::Bool(_) => "Bool",
             LispValue::Int(_) => "Int",
-            LispValue::Float(_) => "Float",
+
             LispValue::String(_) => "String",
             LispValue::Symbol(_) => "Symbol",
             LispValue::List(_) => "List",

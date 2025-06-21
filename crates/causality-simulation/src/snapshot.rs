@@ -1,6 +1,6 @@
 //! Snapshot management for simulation state capture and rollback
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use crate::{
     clock::SimulatedTimestamp, 
@@ -87,7 +87,7 @@ pub enum ExecutionResult {
 /// Manages simulation snapshots for debugging and testing
 #[derive(Debug)]
 pub struct SnapshotManager {
-    snapshots: HashMap<SnapshotId, SimulationSnapshot>,
+    snapshots: BTreeMap<SnapshotId, SimulationSnapshot>,
     max_snapshots: usize,
 }
 
@@ -95,7 +95,7 @@ impl SnapshotManager {
     /// Create a new snapshot manager
     pub fn new(max_snapshots: usize) -> Self {
         Self {
-            snapshots: HashMap::new(),
+            snapshots: BTreeMap::new(),
             max_snapshots,
         }
     }

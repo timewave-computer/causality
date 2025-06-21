@@ -2,7 +2,7 @@
 
 use serde::{Serialize, Deserialize};
 use crate::error::ZkError;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Zero-knowledge circuit representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,7 +40,7 @@ pub struct CircuitGate {
     /// Output wire index
     pub output: usize,
     /// Gate-specific parameters
-    pub parameters: HashMap<String, String>,
+    pub parameters: BTreeMap<String, String>,
 }
 
 /// Circuit compilation metadata

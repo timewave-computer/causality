@@ -1,7 +1,7 @@
 // ------------ STATE QUERY ANALYSIS ------------ 
 // Purpose: Static analysis to identify required state queries from OCaml programs
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use causality_lisp::ast::{Expr, ExprKind, LispValue};
 use causality_core::lambda::Symbol;
 use serde::{Deserialize, Serialize};
@@ -44,9 +44,9 @@ pub struct StateAnalysisResult {
     /// All state queries required by the program
     pub required_queries: Vec<StateQueryRequirement>,
     /// Queries grouped by contract for schema generation
-    pub queries_by_contract: HashMap<String, Vec<StateQueryRequirement>>,
+    pub queries_by_contract: BTreeMap<String, Vec<StateQueryRequirement>>,
     /// Queries grouped by domain for cross-chain coordination
-    pub queries_by_domain: HashMap<String, Vec<StateQueryRequirement>>,
+    pub queries_by_domain: BTreeMap<String, Vec<StateQueryRequirement>>,
     /// Analysis metadata
     pub metadata: AnalysisMetadata,
 }
@@ -65,7 +65,7 @@ pub struct AnalysisMetadata {
 /// State query analyzer that performs static analysis on OCaml programs
 pub struct StateQueryAnalyzer {
     /// Detected query requirements
-    requirements: HashSet<StateQueryRequirement>,
+    requirements: BTreeSet<StateQueryRequirement>,
     /// Current analysis context
     context: AnalysisContext,
     /// Pattern matchers for different query types
@@ -86,26 +86,26 @@ struct AnalysisContext {
 /// Pattern matcher for identifying different types of state queries
 struct QueryPatternMatcher {
     /// Known query function names
-    query_functions: HashSet<String>,
+    query_functions: BTreeSet<String>,
     /// Contract address patterns
-    contract_patterns: HashMap<String, String>,
+    contract_patterns: BTreeMap<String, String>,
 }
 
 impl StateQueryAnalyzer {
     /// Create a new state query analyzer
     pub fn new() -> Self {
-        let mut query_functions = HashSet::new();
+        let mut query_functions = BTreeSet::new();
         query_functions.insert("query_state".to_string());
         query_functions.insert("get_balance".to_string());
         query_functions.insert("get_allowance".to_string());
         query_functions.insert("read_storage".to_string());
         
-        let mut contract_patterns = HashMap::new();
+        let mut contract_patterns = BTreeMap::new();
         contract_patterns.insert("usdc".to_string(), "0xa0b86a33e6ba3e0e4ca4ba5d4e6b3e4c4d5e6f7".to_string());
         contract_patterns.insert("weth".to_string(), "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".to_string());
         
         Self {
-            requirements: HashSet::new(),
+            requirements: BTreeSet::new(),
             context: AnalysisContext {
                 current_function: None,
                 in_conditional: false,
@@ -128,8 +128,8 @@ impl StateQueryAnalyzer {
         let analysis_duration = start_time.elapsed().as_millis() as u64;
         
         // Group requirements by contract and domain
-        let mut queries_by_contract = HashMap::new();
-        let mut queries_by_domain = HashMap::new();
+        let mut queries_by_contract = BTreeMap::new();
+        let mut queries_by_domain = BTreeMap::new();
         
         for req in &self.requirements {
             queries_by_contract

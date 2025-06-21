@@ -8,8 +8,9 @@ use crate::{
     error::{ParseError},
 };
 use causality_core::{
-    lambda::Symbol,
+    lambda::{Symbol, base::SessionType},
     system::content_addressing::Str,
+    effect::session_registry::SessionRole,
 };
 
 /// Result type for parsing operations
@@ -22,7 +23,7 @@ pub enum Token {
     RightParen,
     Symbol(Symbol),
     Number(i64),
-    Float(f64),
+
     String(Str),
     Bool(bool),
     EOF,
@@ -50,7 +51,7 @@ impl PositionedToken {
             Token::RightParen => "')'".to_string(),
             Token::Symbol(s) => format!("symbol '{}'", s),
             Token::Number(n) => format!("number {}", n),
-            Token::Float(f) => format!("float {}", f),
+
             Token::String(s) => format!("string \"{}\"", s),
             Token::Bool(b) => format!("boolean {}", b),
             Token::EOF => "end of input".to_string(),
@@ -209,7 +210,7 @@ impl Lexer {
     
     fn read_number(&mut self) -> ParseResult<Token> {
         let mut value = String::new();
-        let mut is_float = false;
+
         let start_line = self.line;
         let start_column = self.column;
         
@@ -238,11 +239,7 @@ impl Lexer {
                     value.push(ch);
                     self.advance();
                 }
-                Ok('.') if !is_float && has_digits => {
-                    is_float = true;
-                    value.push('.');
-                    self.advance();
-                }
+
                 _ => break,
             }
         }
@@ -251,17 +248,10 @@ impl Lexer {
             return Err(ParseError::InvalidNumber(value.clone(), start_line, start_column));
         }
         
-        if is_float {
-            let float_val = value.parse::<f64>().map_err(|_| {
-                ParseError::InvalidNumber(value.clone(), start_line, start_column)
-            })?;
-            Ok(Token::Float(float_val))
-        } else {
-            let int_val = value.parse::<i64>().map_err(|_| {
-                ParseError::InvalidNumber(value.clone(), start_line, start_column)
-            })?;
-            Ok(Token::Number(int_val))
-        }
+        let int_val = value.parse::<i64>().map_err(|_| {
+            ParseError::InvalidNumber(value.clone(), start_line, start_column)
+        })?;
+        Ok(Token::Number(int_val))
     }
     
     fn read_boolean(&mut self) -> ParseResult<Token> {
@@ -369,11 +359,7 @@ impl LispParser {
                 self.advance();
                 Ok(Expr::constant(LispValue::Int(value)))
             }
-            Token::Float(f) => {
-                let value = *f;
-                self.advance();
-                Ok(Expr::constant(LispValue::Float(value)))
-            }
+
             Token::String(s) => {
                 let value = s.clone();
                 self.advance();
@@ -785,7 +771,7 @@ impl LispParser {
 
             // Create a dummy session role for now
             // In a full implementation, this would parse the actual session type
-            use causality_core::effect::session::{SessionRole, SessionType};
+            // Removed - now using imports from above
             use causality_core::lambda::base::TypeInner;
             
             roles.push(SessionRole {

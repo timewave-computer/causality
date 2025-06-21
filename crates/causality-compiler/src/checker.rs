@@ -8,7 +8,7 @@ use crate::error::{CompileError, CompileResult};
 use crate::pipeline::SExpression;
 use causality_core::lambda::{TypeInner, BaseType, Term, TermKind, Literal};
 use causality_core::effect::{Capability, CapabilitySet, RowOpResult};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Check an S-expression for type correctness and linearity
 pub fn check_sexpr(expr: &SExpression) -> CompileResult<TypeInner> {
@@ -301,7 +301,7 @@ fn check_linearity_with_tracker(expr: &SExpression, tracker: &mut LinearityTrack
 /// Type environment for tracking variable types and capabilities
 #[derive(Debug, Clone, Default)]
 pub struct TypeEnvironment {
-    bindings: HashMap<String, TypeInner>,
+    bindings: BTreeMap<String, TypeInner>,
     capabilities: CapabilitySet,
 }
 
@@ -313,7 +313,7 @@ impl TypeEnvironment {
     /// Create a new environment with capabilities
     pub fn with_capabilities(capabilities: CapabilitySet) -> Self {
         Self {
-            bindings: HashMap::new(),
+            bindings: BTreeMap::new(),
             capabilities,
         }
     }
@@ -345,8 +345,8 @@ impl TypeEnvironment {
 /// Linearity tracker for ensuring linear resources are used exactly once
 #[derive(Debug, Clone, Default)]
 pub struct LinearityTracker {
-    linear_variables: HashMap<String, bool>, // true if used
-    resources: HashMap<String, bool>, // true if consumed
+    linear_variables: BTreeMap<String, bool>, // true if used
+    resources: BTreeMap<String, bool>, // true if consumed
 }
 
 impl LinearityTracker {

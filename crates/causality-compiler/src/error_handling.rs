@@ -102,7 +102,7 @@ pub struct ErrorContext {
     pub component: String,
     pub trace_id: Option<String>,
     pub user_id: Option<String>,
-    pub additional_data: std::collections::HashMap<String, String>,
+    pub additional_data: std::collections::BTreeMap<String, String>,
 }
 
 impl ErrorContext {
@@ -113,7 +113,7 @@ impl ErrorContext {
             component: component.to_string(),
             trace_id: None,
             user_id: None,
-            additional_data: std::collections::HashMap::new(),
+            additional_data: std::collections::BTreeMap::new(),
         }
     }
     
@@ -313,7 +313,7 @@ impl ErrorHandler {
         &self,
         error: CausalityError,
         operation: &str,
-        context_data: std::collections::HashMap<String, String>,
+        context_data: std::collections::BTreeMap<String, String>,
     ) -> ContextualError {
         let mut context = ErrorContext::new(operation, &self.component);
         context.additional_data = context_data;
@@ -478,7 +478,7 @@ pub struct HealthStatus {
     pub is_healthy: bool,
     pub component: String,
     pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub details: std::collections::HashMap<String, String>,
+    pub details: std::collections::BTreeMap<String, String>,
     pub dependencies: Vec<DependencyHealth>,
 }
 
@@ -496,7 +496,7 @@ impl HealthStatus {
             is_healthy: true,
             component: component.to_string(),
             timestamp: chrono::Utc::now(),
-            details: std::collections::HashMap::new(),
+            details: std::collections::BTreeMap::new(),
             dependencies: Vec::new(),
         }
     }

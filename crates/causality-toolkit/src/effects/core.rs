@@ -353,14 +353,14 @@ mod tests {
 /// Library for managing and organizing effects
 #[derive(Debug)]
 pub struct EffectLibrary {
-    effects: std::collections::HashMap<String, Box<dyn std::any::Any + Send + Sync>>,
+    effects: std::collections::BTreeMap<String, Box<dyn std::any::Any + Send + Sync>>,
 }
 
 impl EffectLibrary {
     /// Create a new effect library
     pub fn new() -> Self {
         Self {
-            effects: std::collections::HashMap::new(),
+            effects: std::collections::BTreeMap::new(),
         }
     }
     

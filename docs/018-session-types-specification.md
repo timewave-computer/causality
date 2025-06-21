@@ -1,6 +1,159 @@
 # 018: Session Types Specification
 
-Session types provide type-safe communication protocols with automatic duality checking in Causality's Layer 2. This document provides the complete formal specification for session types, their integration with the effect system, and compilation semantics.
+Session types in Causality provide **type-safe communication protocols** with a revolutionary twist: they are **automatically derived** from data access patterns rather than manually specified. This eliminates the traditional burden of protocol specification while ensuring deadlock-freedom and type safety.
+
+## Key Innovation: Automatic Protocol Derivation
+
+Unlike traditional session type systems that require manual protocol specification, Causality automatically generates session types from **row type operations** on distributed data:
+
+### Traditional Approach (Manual)
+```lisp
+;; Traditional: Manual protocol specification
+(def-session PaymentProtocol
+  (client !Amount ?Receipt End)
+  (server ?Amount !Receipt End))
+
+(with-session PaymentProtocol.client as chan
+  (session-send chan amount)
+  (session-recv chan))
+```
+
+### Causality Approach (Automatic)
+```lisp
+;; Causality: Automatic protocol derivation
+(defn process-payment (remote-account amount)
+  ;; This field access automatically generates the protocol:
+  ;; Send(FieldUpdateRequest) → Receive(FieldUpdateResponse) → End
+  (set-field remote-account "balance" 
+    (+ (get-field remote-account "balance") amount)))
+```
+
+## How Automatic Derivation Works
+
+### 1. Field Access Pattern Analysis
+The compiler analyzes field access patterns on remote data:
+
+```lisp
+;; This code...
+(let ((balance (get-field remote-account "balance")))
+  (set-field remote-account "balance" (+ balance 100)))
+
+;; ...generates this protocol automatically:
+;; Send(GetFieldRequest("balance")) → 
+;; Receive(GetFieldResponse(Int)) → 
+;; Send(SetFieldRequest("balance", Int)) → 
+;; Receive(SetFieldResponse(Bool)) → 
+;; End
+```
+
+### 2. Protocol Optimization
+Multiple field accesses are optimized into efficient protocols:
+
+```lisp
+;; Multiple field accesses...
+(get-field account "balance")
+(get-field account "owner") 
+(get-field account "created_at")
+
+;; ...become a single batch protocol:
+;; Send(BatchFieldRequest(["balance", "owner", "created_at"])) →
+;; Receive(BatchFieldResponse([Int, String, Timestamp])) →
+;; End
+```
+
+### 3. Transactional Protocols
+Complex operations generate transactional protocols:
+
+```lisp
+;; Atomic multi-field update...
+(atomic
+  (set-field account "balance" new-balance)
+  (set-field account "last_updated" (now)))
+
+;; ...generates atomic protocol:
+;; Send(BeginTransaction) →
+;; Send(BatchUpdateRequest([("balance", Int), ("last_updated", Timestamp)])) →
+;; Receive(TransactionResult(Bool)) →
+;; End
+```
+
+## Session Type Algebra
+
+Session types form an algebra with the following operations:
+
+### Core Session Types
+```rust
+pub enum SessionType {
+    /// Send value, continue with protocol
+    Send(TypeInner, Box<SessionType>),
+    
+    /// Receive value, continue with protocol  
+    Receive(TypeInner, Box<SessionType>),
+    
+    /// Internal choice (we choose branch)
+    InternalChoice(Vec<(String, SessionType)>),
+    
+    /// External choice (other party chooses)
+    ExternalChoice(Vec<(String, SessionType)>),
+    
+    /// End of communication
+    End,
+    
+    /// Recursive protocols
+    Recursive(String, Box<SessionType>),
+    
+    /// Session variable for recursion
+    Variable(String),
+}
+```
+
+### Automatic Duality
+Session types automatically compute dual protocols that are guaranteed compatible:
+
+```
+dual(Send(T, S)) = Receive(T, dual(S))
+dual(Receive(T, S)) = Send(T, dual(S))
+dual(InternalChoice(branches)) = ExternalChoice(dual_branches)
+dual(ExternalChoice(branches)) = InternalChoice(dual_branches)
+dual(End) = End
+```
+
+## Integration with Transform System
+
+Session types integrate seamlessly with our unified transform system:
+
+### Session Operations as Transforms
+```rust
+// Session send as transform
+Effect<Local, Remote> {
+    input_type: MessageType,
+    output_type: ContinuationType,
+    transform: SessionSend { message_type, continuation }
+}
+
+// Session receive as transform  
+Effect<Remote, Local> {
+    input_type: ContinuationType,
+    output_type: MessageType,
+    transform: SessionReceive { expected_type, continuation }
+}
+```
+
+### Location-Aware Session Types
+Session types are location-aware and automatically adapt:
+
+```lisp
+;; Same syntax works for different locations
+(defn transfer-funds (from-account to-account amount)
+  (let ((from-balance (get-field from-account "balance"))
+        (to-balance (get-field to-account "balance")))
+    (when (>= from-balance amount)
+      (set-field from-account "balance" (- from-balance amount))
+      (set-field to-account "balance" (+ to-balance amount)))))
+
+;; Works for: local→local, local→remote, remote→local, remote→remote
+;; Each combination generates appropriate protocols automatically
+```
 
 ## 1. Overview
 

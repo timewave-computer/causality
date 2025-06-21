@@ -3,20 +3,186 @@
 //! This module provides a centralized registry for managing session type declarations
 //! and choreographies within the Causality framework.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use serde::{Deserialize, Serialize};
 
-use super::session::{
-    SessionType, SessionDeclaration, SessionError, SessionId,
-    is_well_formed
-};
+use crate::lambda::base::SessionType;
+
+/// Session identifier type
+pub type SessionId = String;
+
+/// Session role specification
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionRole {
+    pub name: String,
+    pub protocol: SessionType,
+}
+
+/// Complete session declaration with all roles
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionDeclaration {
+    pub name: SessionId,
+    pub roles: Vec<SessionRole>,
+    pub verified_duality: bool,
+}
+
+/// Session type errors
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SessionError {
+    /// Duality mismatch between roles
+    DualityMismatch {
+        session_name: String,
+        role1: String,
+        role2: String,
+    },
+    
+    /// Session not found in registry
+    SessionNotFound {
+        session_name: String,
+    },
+    
+    /// Malformed session type
+    MalformedSessionType {
+        reason: String,
+    },
+}
+
+impl std::fmt::Display for SessionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SessionError::DualityMismatch { session_name, role1, role2 } => {
+                write!(f, "Duality mismatch in session '{}' between roles '{}' and '{}'", 
+                       session_name, role1, role2)
+            }
+            SessionError::SessionNotFound { session_name } => {
+                write!(f, "Session '{}' not found", session_name)
+            }
+            SessionError::MalformedSessionType { reason } => {
+                write!(f, "Malformed session type: {}", reason)
+            }
+        }
+    }
+}
+
+impl std::error::Error for SessionError {}
+
+/// Check if a session type is well-formed
+pub fn is_well_formed(session_type: &SessionType) -> Result<(), SessionError> {
+    is_well_formed_with_depth(session_type, 0, 100) // Max recursion depth of 100
+}
+
+fn is_well_formed_with_depth(
+    session_type: &SessionType, 
+    depth: usize, 
+    max_depth: usize
+) -> Result<(), SessionError> {
+    if depth > max_depth {
+        return Err(SessionError::MalformedSessionType {
+            reason: format!("Recursion depth exceeded: {}", max_depth),
+        });
+    }
+    
+    match session_type {
+        SessionType::Send(_, s) | SessionType::Receive(_, s) => {
+            is_well_formed_with_depth(s, depth, max_depth)
+        }
+        SessionType::InternalChoice(branches) | SessionType::ExternalChoice(branches) => {
+            if branches.is_empty() {
+                return Err(SessionError::MalformedSessionType {
+                    reason: "Choice must have at least one branch".to_string(),
+                });
+            }
+            for (_, branch) in branches {
+                is_well_formed_with_depth(branch, depth, max_depth)?;
+            }
+            Ok(())
+        }
+        SessionType::End => Ok(()),
+        SessionType::Recursive(_, s) => {
+            is_well_formed_with_depth(s, depth + 1, max_depth)
+        }
+        SessionType::Variable(_) => Ok(()),
+    }
+}
+
+impl SessionDeclaration {
+    pub fn new(name: SessionId, roles: Vec<SessionRole>) -> Self {
+        Self {
+            name,
+            roles,
+            verified_duality: false,
+        }
+    }
+    
+    pub fn verify_duality(&mut self) -> Result<(), SessionError> {
+        // For simplicity, we only verify binary sessions for now
+        if self.roles.len() == 2 {
+            let role1 = &self.roles[0];
+            let role2 = &self.roles[1];
+            
+            if verify_duality(&role1.protocol, &role2.protocol) {
+                self.verified_duality = true;
+                Ok(())
+            } else {
+                Err(SessionError::DualityMismatch {
+                    session_name: self.name.clone(),
+                    role1: role1.name.clone(),
+                    role2: role2.name.clone(),
+                })
+            }
+        } else {
+            // For multi-party sessions, we'd need more sophisticated checking
+            self.verified_duality = true; // Assume valid for now
+            Ok(())
+        }
+    }
+    
+    pub fn get_role_protocol(&self, role_name: &str) -> Option<&SessionType> {
+        self.roles.iter()
+            .find(|role| role.name == role_name)
+            .map(|role| &role.protocol)
+    }
+}
+
+/// Verify that two session types are duals
+pub fn verify_duality(s1: &SessionType, s2: &SessionType) -> bool {
+    let dual_s1 = compute_dual(s1);
+    &dual_s1 == s2
+}
+
+/// Duality computation for session types
+pub fn compute_dual(session_type: &SessionType) -> SessionType {
+    match session_type {
+        SessionType::Send(t, s) => SessionType::Receive(t.clone(), Box::new(compute_dual(s))),
+        SessionType::Receive(t, s) => SessionType::Send(t.clone(), Box::new(compute_dual(s))),
+        SessionType::InternalChoice(branches) => {
+            SessionType::ExternalChoice(
+                branches.iter()
+                    .map(|(label, session)| (label.clone(), compute_dual(session)))
+                    .collect()
+            )
+        }
+        SessionType::ExternalChoice(branches) => {
+            SessionType::InternalChoice(
+                branches.iter()
+                    .map(|(label, session)| (label.clone(), compute_dual(session)))
+                    .collect()
+            )
+        }
+        SessionType::End => SessionType::End,
+        SessionType::Recursive(var, s) => {
+            SessionType::Recursive(var.clone(), Box::new(compute_dual(s)))
+        }
+        SessionType::Variable(var) => SessionType::Variable(var.clone()),
+    }
+}
 
 /// Global registry for session types and choreographies
 #[derive(Debug, Clone)]
 pub struct SessionRegistry {
-    sessions: Arc<RwLock<HashMap<SessionId, SessionDeclaration>>>,
-    choreographies: Arc<RwLock<HashMap<String, Choreography>>>,
+    sessions: Arc<RwLock<BTreeMap<SessionId, SessionDeclaration>>>,
+    choreographies: Arc<RwLock<BTreeMap<String, Choreography>>>,
 }
 
 /// Choreography for multi-party session coordination
@@ -54,8 +220,8 @@ impl SessionRegistry {
     /// Create a new session registry
     pub fn new() -> Self {
         Self {
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-            choreographies: Arc::new(RwLock::new(HashMap::new())),
+            sessions: Arc::new(RwLock::new(BTreeMap::new())),
+            choreographies: Arc::new(RwLock::new(BTreeMap::new())),
         }
     }
     
@@ -197,7 +363,7 @@ pub struct RegistryStats {
 /// Validate a choreography for well-formedness
 fn validate_choreography(choreography: &Choreography) -> Result<(), SessionError> {
     // Check that all roles mentioned in the protocol are declared
-    let declared_roles: std::collections::HashSet<_> = choreography.roles.iter().collect();
+    let declared_roles: std::collections::BTreeSet<_> = choreography.roles.iter().collect();
     let used_roles = collect_used_roles(&choreography.protocol);
     
     for used_role in &used_roles {
@@ -212,15 +378,15 @@ fn validate_choreography(choreography: &Choreography) -> Result<(), SessionError
 }
 
 /// Collect all roles used in a choreography protocol
-fn collect_used_roles(protocol: &ChoreographyProtocol) -> std::collections::HashSet<String> {
-    let mut roles = std::collections::HashSet::new();
+fn collect_used_roles(protocol: &ChoreographyProtocol) -> std::collections::BTreeSet<String> {
+    let mut roles = std::collections::BTreeSet::new();
     collect_used_roles_recursive(protocol, &mut roles);
     roles
 }
 
 fn collect_used_roles_recursive(
     protocol: &ChoreographyProtocol,
-    roles: &mut std::collections::HashSet<String>
+    roles: &mut std::collections::BTreeSet<String>
 ) {
     match protocol {
         ChoreographyProtocol::Communication { from, to, .. } => {
@@ -253,13 +419,13 @@ fn project_protocol(protocol: &ChoreographyProtocol, role_name: &str) -> Result<
             if from == role_name {
                 // This role sends
                 Ok(SessionType::Send(
-                    parse_message_type(message_type),
+                    Box::new(parse_message_type(message_type)),
                     Box::new(SessionType::End)
                 ))
             } else if to == role_name {
                 // This role receives
                 Ok(SessionType::Receive(
-                    parse_message_type(message_type),
+                    Box::new(parse_message_type(message_type)),
                     Box::new(SessionType::End)
                 ))
             } else {
@@ -271,13 +437,21 @@ fn project_protocol(protocol: &ChoreographyProtocol, role_name: &str) -> Result<
             if role == role_name {
                 // This role makes the choice (internal choice)
                 let projected_branches: Result<Vec<_>, _> = branches.iter()
-                    .map(|branch| project_protocol(branch, role_name))
+                    .enumerate()
+                    .map(|(i, branch)| {
+                        let session = project_protocol(branch, role_name)?;
+                        Ok((format!("choice_{}", i), session))
+                    })
                     .collect();
                 Ok(SessionType::InternalChoice(projected_branches?))
             } else {
                 // This role waits for the choice (external choice)
                 let projected_branches: Result<Vec<_>, _> = branches.iter()
-                    .map(|branch| project_protocol(branch, role_name))
+                    .enumerate()
+                    .map(|(i, branch)| {
+                        let session = project_protocol(branch, role_name)?;
+                        Ok((format!("choice_{}", i), session))
+                    })
                     .collect();
                 Ok(SessionType::ExternalChoice(projected_branches?))
             }
@@ -312,14 +486,14 @@ fn compose_sequential(first: SessionType, second: SessionType) -> SessionType {
         SessionType::InternalChoice(branches) => {
             SessionType::InternalChoice(
                 branches.into_iter()
-                    .map(|branch| compose_sequential(branch, second.clone()))
+                    .map(|(label, branch)| (label, compose_sequential(branch, second.clone())))
                     .collect()
             )
         }
         SessionType::ExternalChoice(branches) => {
             SessionType::ExternalChoice(
                 branches.into_iter()
-                    .map(|branch| compose_sequential(branch, second.clone()))
+                    .map(|(label, branch)| (label, compose_sequential(branch, second.clone())))
                     .collect()
             )
         }
@@ -344,7 +518,7 @@ fn parse_message_type(message_type: &str) -> crate::lambda::base::TypeInner {
 mod tests {
     use super::*;
     use crate::lambda::base::{TypeInner, BaseType};
-    use crate::effect::session::SessionRole;
+
     
     #[test]
     fn test_session_registry_basic_operations() {
@@ -355,11 +529,11 @@ mod tests {
             vec![
                 SessionRole {
                     name: "client".to_string(),
-                    protocol: SessionType::Send(TypeInner::Base(BaseType::Int), Box::new(SessionType::End)),
+                    protocol: SessionType::Send(Box::new(TypeInner::Base(BaseType::Int)), Box::new(SessionType::End)),
                 },
                 SessionRole {
                     name: "server".to_string(),
-                    protocol: SessionType::Receive(TypeInner::Base(BaseType::Int), Box::new(SessionType::End)),
+                    protocol: SessionType::Receive(Box::new(TypeInner::Base(BaseType::Int)), Box::new(SessionType::End)),
                 },
             ]
         );
@@ -407,15 +581,23 @@ mod tests {
         
         // Alice should send, Bob should receive
         match alice_protocol {
-            SessionType::Send(TypeInner::Base(BaseType::Int), continuation) => {
-                assert_eq!(*continuation, SessionType::End);
+            SessionType::Send(type_inner, continuation) => {
+                if let TypeInner::Base(BaseType::Int) = type_inner.as_ref() {
+                    assert_eq!(*continuation, SessionType::End);
+                } else {
+                    panic!("Expected Int type for Alice send");
+                }
             }
             _ => panic!("Expected Send type for Alice"),
         }
         
         match bob_protocol {
-            SessionType::Receive(TypeInner::Base(BaseType::Int), continuation) => {
-                assert_eq!(*continuation, SessionType::End);
+            SessionType::Receive(type_inner, continuation) => {
+                if let TypeInner::Base(BaseType::Int) = type_inner.as_ref() {
+                    assert_eq!(*continuation, SessionType::End);
+                } else {
+                    panic!("Expected Int type for Bob receive");
+                }
             }
             _ => panic!("Expected Receive type for Bob"),
         }
@@ -434,7 +616,7 @@ mod tests {
             vec![
                 SessionRole {
                     name: "client".to_string(),
-                    protocol: SessionType::Send(TypeInner::Base(BaseType::Int), Box::new(SessionType::End)),
+                    protocol: SessionType::Send(Box::new(TypeInner::Base(BaseType::Int)), Box::new(SessionType::End)),
                 },
             ]
         );

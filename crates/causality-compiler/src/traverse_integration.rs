@@ -5,7 +5,7 @@
 //! It bridges the gap between Causality's high-level state queries and Traverse's
 //! low-level proof generation capabilities.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use crate::storage_layout::{StorageLayout, TraverseLayoutInfo};
@@ -21,7 +21,7 @@ pub struct TraverseClient {
     /// Configuration for proof generation
     config: TraverseClientConfig,
     /// Cache for storage layouts
-    layout_cache: HashMap<String, TraverseLayoutInfo>,
+    layout_cache: BTreeMap<String, TraverseLayoutInfo>,
 }
 
 /// Configuration for Traverse client
@@ -62,7 +62,7 @@ pub struct ProofParameters {
     /// Proof type identifier
     pub proof_type: String,
     /// Additional parameters
-    pub additional_params: HashMap<String, String>,
+    pub additional_params: BTreeMap<String, String>,
 }
 
 /// Response from Traverse proof generation
@@ -97,7 +97,7 @@ pub struct VerificationInfo {
     /// Layout commitment used
     pub layout_commitment: String,
     /// Verification parameters
-    pub verification_params: HashMap<String, String>,
+    pub verification_params: BTreeMap<String, String>,
 }
 
 /// Metadata about proof generation
@@ -145,7 +145,7 @@ impl TraverseClient {
             base_url,
             client: reqwest::Client::new(),
             config: TraverseClientConfig::default(),
-            layout_cache: HashMap::new(),
+            layout_cache: BTreeMap::new(),
         }
     }
     
@@ -160,7 +160,7 @@ impl TraverseClient {
             base_url,
             client,
             config,
-            layout_cache: HashMap::new(),
+            layout_cache: BTreeMap::new(),
         }
     }
     
@@ -187,7 +187,7 @@ impl TraverseClient {
             block_number: compiled_proof.witness_data.block_number,
             contract_address: compiled_proof.witness_data.contract_address.clone(),
             proof_type: format!("{:?}", compiled_proof.primitive.proof_type),
-            additional_params: HashMap::new(),
+            additional_params: BTreeMap::new(),
         };
         
         Ok(ProofGenerationRequest {

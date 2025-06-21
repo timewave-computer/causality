@@ -1,20 +1,59 @@
 # 007: Causality Lisp Language Specification
 
-This document defines the syntax, semantics, and type system of **Causality Lisp**, the Layer 1 functional programming language built on top of Causality's Layer 0 Typed Register Machine. Causality Lisp extends linear lambda calculus with algebraic effects, structured types, and resource management capabilities while maintaining the system's core principles of linearity, immutability, and verifiable correctness.
+Causality Lisp is the primary high-level language for the Causality platform, providing a **unified syntax** for both local computation and distributed communication. Built on linear type theory and session types, Causality Lisp enables developers to write location-transparent code where the same operations work seamlessly across local and remote contexts.
+
+## Key Innovations
+
+1. **Unified Syntax**: The same language constructs work for both local computation and distributed communication
+2. **Location Transparency**: Operations automatically adapt to local or remote contexts based on data location
+3. **Automatic Protocol Derivation**: Communication protocols are automatically generated from data access patterns
+4. **Transform-Based Model**: All operations are transformations, eliminating the artificial distinction between computation and communication
+
+## Language Philosophy
+
+Causality Lisp embraces the principle that computation and communication are unified transformations. Whether you're updating a local variable or sending a message to a remote service, the syntax and semantics remain consistent. The type system and compiler handle the complexity of generating appropriate protocols and ensuring correctness.
+
+### Location-Transparent Programming
+
+```lisp
+;; This function works the same whether account is local or remote
+(defn update-balance (account amount)
+  (let ((current-balance (get-field account "balance")))
+    (set-field account "balance" (+ current-balance amount))))
+
+;; Local usage
+(update-balance local-account 100)
+
+;; Remote usage (automatically generates communication protocol)
+(update-balance remote-account 100)
+```
+
+### Automatic Protocol Generation
+
+When you access fields on remote data, Causality Lisp automatically derives the necessary communication protocols:
+
+```lisp
+;; This remote field access...
+(get-field remote-database "user-count")
+
+;; ...automatically generates this protocol:
+;; Send(FieldAccessRequest("user-count")) → Receive(FieldAccessResponse(Int)) → End
+```
 
 ## 1. Overview
 
 Causality Lisp is a statically-typed, linear functional programming language designed for expressing resource-aware computations. Every value in Causality Lisp is linear by default, meaning it must be consumed exactly once. This restriction enables compile-time verification of resource safety and forms the foundation for Causality's broader guarantees around correctness and conservation.
 
-The language is built around 11 core primitives that correspond directly to fundamental operations of linear lambda calculus with effects. These primitives compile to a minimal set of register machine instructions, ensuring that the high-level expressiveness of the language translates to efficient, verifiable execution.
+The language is built around **unified transform operations** that correspond directly to our 5 fundamental Layer 0 instructions. These operations compile to a minimal set of register machine instructions based on symmetric monoidal closed category theory, ensuring that the high-level expressiveness of the language translates to efficient, verifiable execution.
 
 ### Key Features
 
+- **Location-Transparent Syntax**: The same syntax works for both local computation and distributed communication
+- **Unified Transform Model**: All operations are transformations that differ only by their source and target locations
+- **Automatic Protocol Derivation**: Communication protocols are automatically generated from data access patterns
 - **Linear Type System**: All values are linear by default, preventing resource duplication and ensuring proper resource lifecycle management
-- **Algebraic Effects**: First-class support for effects with handlers, enabling controlled interaction with external systems
-- **Structured Types**: Row types, records, and sum types with compile-time capability tracking
-- **Resource Management**: Direct integration with Layer 0's resource allocation and consumption model
-- **Verifiable Compilation**: Transparent compilation to register machine instructions with formal correctness guarantees
+- **Resource Management**: Direct integration with Layer 0's unified resource allocation and consumption model
+- **Verifiable Compilation**: Transparent compilation to the 5 fundamental register machine instructions with formal correctness guarantees
 
 ### Example Application Context
 
@@ -89,7 +128,7 @@ The design of Causality Lisp reflects several fundamental principles that distin
 
 2. **Static Verification**: The type system catches resource safety violations at compile time. Programs that type-check are guaranteed to respect resource linearity constraints, preventing issues like double-spending or resource leaks.
 
-3. **Minimal Core**: 11 primitives compile to nine register machine instructions. This minimalism enables formal verification of the entire language implementation while providing sufficient expressiveness for real-world applications.
+3. **Unified Transform Core**: All operations compile to the 5 fundamental Layer 0 instructions (transform, alloc, consume, compose, tensor). This minimalism enables formal verification of the entire language implementation while providing sufficient expressiveness for real-world applications through location-transparent operations.
 
 4. **Handler/Interpreter Separation**: Pure transformations compose cleanly, while stateful execution is isolated to specific handlers. This separation enables powerful abstraction and composition patterns while maintaining predictable behavior.
 
@@ -134,22 +173,23 @@ By making linearity the default, Causality Lisp inverts these problems:
 - All costs are explicit and predictable
 - Security properties are enforced by the type system
 
-### Why 11 Primitives?
+### Why Unified Transform Operations?
 
-The choice of exactly 11 primitives reflects a careful balance between expressiveness and simplicity:
+The design around **unified transform operations** reflects our revolutionary approach to computation and communication:
 
-**Theoretical Foundation**: These primitives correspond directly to the core constructs of linear lambda calculus:
-- **Unit types** (`UnitVal`, `LetUnit`): The trivial type with one inhabitant
-- **Tensor products** (`Tensor`, `LetTensor`): Combining multiple values
-- **Sum types** (`Inl`, `Inr`, `Case`): Choosing between alternatives
-- **Function types** (`Lambda`, `Apply`): First-class functions
-- **Resource management** (`Alloc`, `Consume`): Explicit resource lifecycle
+**Theoretical Foundation**: These operations correspond directly to the 5 fundamental Layer 0 instructions based on symmetric monoidal closed category theory:
+- **Transform**: Apply any morphism (unifies function application, effects, session operations)
+- **Alloc**: Allocate any linear resource (unifies data allocation, channel creation, function creation)  
+- **Consume**: Consume any linear resource (unifies deallocation, channel closing, function disposal)
+- **Compose**: Sequential composition of morphisms (unifies control flow, session sequencing)
+- **Tensor**: Parallel composition of resources (unifies parallel data, concurrent sessions)
 
-**Practical Considerations**: 11 primitives are:
-- Few enough to formally verify the entire language implementation
-- Rich enough to express complex real-world applications
-- Structured enough to enable systematic optimization
-- Simple enough for developers to understand completely
+**Practical Considerations**: This unified approach provides:
+- **Location Transparency**: Same operations work for local and remote contexts
+- **Automatic Protocols**: Communication protocols derived from data access patterns
+- **Mathematical Elegance**: Perfect symmetry through category theory foundations
+- **Formal Verification**: Minimal instruction set enables complete system verification
+- **Zero Overhead**: Local operations maintain full performance while enabling distributed capabilities
 
 ### Why Compile to Register Machine?
 

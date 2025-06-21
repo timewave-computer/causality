@@ -116,7 +116,7 @@ mod integration_tests {
 
 // TEG compilation support for bridge tests
 use std::path::PathBuf;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use causality_core::system::content_addressing::EntityId;
 
 /// Compiled TEG artifact for bridge workflows
@@ -125,9 +125,9 @@ pub struct CompiledTeg {
     pub id: EntityId,
     pub name: String,
     pub base_dir: PathBuf,
-    pub expressions: HashMap<String, String>,
-    pub handlers: HashMap<String, String>,
-    pub subgraphs: HashMap<String, String>,
+    pub expressions: BTreeMap<String, String>,
+    pub handlers: BTreeMap<String, String>,
+    pub subgraphs: BTreeMap<String, String>,
 }
 
 /// Compile a TEG definition from file
@@ -144,8 +144,8 @@ pub fn compile_teg_definition(path: &PathBuf, name: Option<String>) -> Result<Co
         id: EntityId::new([1u8; 32]),
         name: teg_name,
         base_dir: path.parent().unwrap_or(&PathBuf::from(".")).to_path_buf(),
-        expressions: HashMap::new(),
-        handlers: HashMap::new(),
-        subgraphs: HashMap::new(),
+        expressions: BTreeMap::new(),
+        handlers: BTreeMap::new(),
+        subgraphs: BTreeMap::new(),
     })
 } 

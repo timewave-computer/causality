@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 // Real Almanac storage integration when feature is enabled
 #[cfg(feature = "almanac")]
@@ -347,14 +347,14 @@ impl StorageStatistics {
 /// Mock storage for development (when almanac feature is not enabled)
 #[cfg(not(feature = "almanac"))]
 pub struct MockStorage {
-    data: HashMap<String, String>,
+    data: BTreeMap<String, String>,
 }
 
 #[cfg(not(feature = "almanac"))]
 impl MockStorage {
     pub fn new() -> Self {
         Self {
-            data: HashMap::new(),
+            data: BTreeMap::new(),
         }
     }
 

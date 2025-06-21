@@ -4,7 +4,7 @@
 //! enabling automatic witness generation from high-level state queries. It coordinates between
 //! the two systems to provide seamless ZK proof generation capabilities.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use crate::state_analysis::{StateQueryRequirement, QueryType};
@@ -30,7 +30,7 @@ pub struct TraverseAlmanacIntegrator {
     #[cfg(feature = "traverse")]
     key_resolver: Option<Box<dyn KeyResolver>>,
     /// Witness cache for performance
-    witness_cache: HashMap<String, CachedWitness>,
+    witness_cache: BTreeMap<String, CachedWitness>,
     /// Integration configuration
     config: IntegrationConfig,
 }
@@ -77,7 +77,7 @@ pub struct WitnessGenerationRequest {
     /// Layout commitment for consistency
     pub layout_commitment: LayoutCommitment,
     /// Additional parameters
-    pub parameters: HashMap<String, String>,
+    pub parameters: BTreeMap<String, String>,
 }
 
 /// Result of witness generation
@@ -141,7 +141,7 @@ impl TraverseAlmanacIntegrator {
             almanac_runtime: None,
             #[cfg(feature = "traverse")]
             key_resolver: None,
-            witness_cache: HashMap::new(),
+            witness_cache: BTreeMap::new(),
             config: IntegrationConfig::default(),
         }
     }
@@ -154,7 +154,7 @@ impl TraverseAlmanacIntegrator {
             almanac_runtime: None,
             #[cfg(feature = "traverse")]
             key_resolver: None,
-            witness_cache: HashMap::new(),
+            witness_cache: BTreeMap::new(),
             config,
         }
     }
@@ -471,7 +471,7 @@ mod tests {
                 version: "1.0.0".to_string(),
                 timestamp: 0,
             },
-            parameters: HashMap::new(),
+            parameters: BTreeMap::new(),
         };
         
         let key = integrator.generate_cache_key(&request);

@@ -1,7 +1,7 @@
 // ------------ VALENCE COPROCESSOR INTEGRATION ------------ 
 // Purpose: Real integration with Valence coprocessor APIs for account operations
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
@@ -16,7 +16,7 @@ use valence_coprocessor_client::{CoprocessorClient, AccountCreationRequest, Libr
 #[derive(Debug)]
 pub struct ValenceIntegration {
     /// Domain clients for different chains
-    domain_clients: HashMap<String, Arc<dyn DomainClient + Send + Sync>>,
+    domain_clients: BTreeMap<String, Arc<dyn DomainClient + Send + Sync>>,
     /// Coprocessor client for account operations
     coprocessor_client: Arc<CoprocessorClient>,
     /// Integration configuration
@@ -127,7 +127,7 @@ impl ValenceIntegration {
         );
 
         Ok(Self {
-            domain_clients: HashMap::new(),
+            domain_clients: BTreeMap::new(),
             coprocessor_client,
             config,
         })

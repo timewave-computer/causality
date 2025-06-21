@@ -208,9 +208,9 @@ impl CompilerBenchmark {
 /// Helper function to count unique registers used
 fn count_unique_registers(instructions: &[causality_core::machine::Instruction]) -> usize {
     use causality_core::machine::Instruction;
-    use std::collections::HashSet;
+    use std::collections::BTreeSet;
     
-    let mut registers = HashSet::new();
+    let mut registers = BTreeSet::new();
     
     for instruction in instructions {
         match instruction {

@@ -11,7 +11,7 @@ use causality_lisp::{
     parser::LispParser, 
     type_checker::TypeChecker,
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
 
 // TODO: Legacy simplified AST types for backward compatibility
@@ -119,7 +119,7 @@ pub struct AccountFactoryArtifacts {
     pub effect_dependencies: Vec<String>,
     
     /// Generated deployment scripts
-    pub deployment_scripts: HashMap<String, String>,
+    pub deployment_scripts: BTreeMap<String, String>,
 }
 
 impl AccountFactoryArtifacts {
@@ -129,7 +129,7 @@ impl AccountFactoryArtifacts {
             library_approvals: Vec::new(),
             transaction_patterns: Vec::new(),
             effect_dependencies: Vec::new(),
-            deployment_scripts: HashMap::new(),
+            deployment_scripts: BTreeMap::new(),
         }
     }
     
@@ -359,7 +359,7 @@ impl EnhancedCompilerPipeline {
     
     /// Count used registers in a set of instructions
     fn count_used_registers(&self, instructions: &[Instruction]) -> u32 {
-        let mut used_registers = std::collections::HashSet::new();
+        let mut used_registers = std::collections::BTreeSet::new();
         for instruction in instructions {
             for reg in instruction.reads() {
                 used_registers.insert(reg);
@@ -476,7 +476,7 @@ pub struct CodeGenerator {
     instructions: Vec<Instruction>,
     
     /// Variable bindings
-    bindings: HashMap<String, RegisterId>,
+    bindings: BTreeMap<String, RegisterId>,
     
     /// Label counter for control flow
     label_counter: u32,
@@ -493,7 +493,7 @@ impl CodeGenerator {
         Self {
             allocator: RegisterAllocator::new(),
             instructions: Vec::new(),
-            bindings: HashMap::new(),
+            bindings: BTreeMap::new(),
             label_counter: 0,
         }
     }
@@ -889,7 +889,7 @@ impl RegisterAllocator {
 pub struct InstructionOptimizer {
     optimization_passes: Vec<OptimizationPass>,
     /// Live register analysis cache
-    liveness_cache: HashMap<usize, LivenessInfo>,
+    liveness_cache: BTreeMap<usize, LivenessInfo>,
 }
 
 #[derive(Debug, Clone)]
@@ -906,11 +906,11 @@ pub enum OptimizationPass {
 #[derive(Debug, Clone, Default)]
 struct LivenessInfo {
     /// Registers that are live at this point
-    live_registers: std::collections::HashSet<RegisterId>,
+    live_registers: std::collections::BTreeSet<RegisterId>,
     /// Registers that are defined at this point
-    defined_registers: std::collections::HashSet<RegisterId>,
+    defined_registers: std::collections::BTreeSet<RegisterId>,
     /// Registers that are used at this point
-    used_registers: std::collections::HashSet<RegisterId>,
+    used_registers: std::collections::BTreeSet<RegisterId>,
 }
 
 impl Default for InstructionOptimizer {
@@ -930,7 +930,7 @@ impl InstructionOptimizer {
                 OptimizationPass::PeepholeOptimization,
                 OptimizationPass::RegisterCoalescing,
             ],
-            liveness_cache: HashMap::new(),
+            liveness_cache: BTreeMap::new(),
         }
     }
     
@@ -998,7 +998,7 @@ impl InstructionOptimizer {
     
     /// Fold constant expressions
     fn fold_constants(&self, mut instructions: Vec<Instruction>) -> CompileResult<Vec<Instruction>> {
-        let mut constant_values: HashMap<RegisterId, i64> = HashMap::new();
+        let mut constant_values: BTreeMap<RegisterId, i64> = BTreeMap::new();
         let mut optimized = Vec::new();
         
         for instruction in instructions.drain(..) {
@@ -1034,7 +1034,7 @@ impl InstructionOptimizer {
     
     /// Coalesce registers to reduce register pressure
     fn coalesce_registers(&self, instructions: Vec<Instruction>) -> CompileResult<Vec<Instruction>> {
-        let mut register_map: HashMap<RegisterId, RegisterId> = HashMap::new();
+        let mut register_map: BTreeMap<RegisterId, RegisterId> = BTreeMap::new();
         let mut optimized = Vec::new();
         
         // Find simple move chains: r1 = r2; r3 = r1 => r3 = r2
@@ -1120,7 +1120,7 @@ impl InstructionOptimizer {
     
     /// Propagate constants through the instruction stream
     fn propagate_constants(&self, instructions: Vec<Instruction>) -> CompileResult<Vec<Instruction>> {
-        let mut constant_map: HashMap<RegisterId, RegisterId> = HashMap::new();
+        let mut constant_map: BTreeMap<RegisterId, RegisterId> = BTreeMap::new();
         let mut optimized = Vec::new();
         
         for instruction in instructions {
@@ -1145,8 +1145,8 @@ impl InstructionOptimizer {
     }
     
     /// Compute liveness analysis for all instructions
-    fn compute_liveness(&self, instructions: &[Instruction]) -> HashMap<usize, LivenessInfo> {
-        let mut liveness: HashMap<usize, LivenessInfo> = HashMap::new();
+    fn compute_liveness(&self, instructions: &[Instruction]) -> BTreeMap<usize, LivenessInfo> {
+        let mut liveness: BTreeMap<usize, LivenessInfo> = BTreeMap::new();
         
         // Initialize liveness info for each instruction
         for i in 0..instructions.len() {
@@ -1168,7 +1168,7 @@ impl InstructionOptimizer {
         
         // Backward propagation to compute live_registers
         for i in (0..instructions.len()).rev() {
-            let mut live_after: std::collections::HashSet<RegisterId> = std::collections::HashSet::new();
+            let mut live_after: std::collections::BTreeSet<RegisterId> = std::collections::BTreeSet::new();
             
             // Collect live registers from all successors
             if i + 1 < instructions.len() {
@@ -1205,9 +1205,9 @@ impl InstructionOptimizer {
     }
     
     /// Follow a chain of register mappings to find the ultimate source
-    fn follow_register_chain(&self, register_map: &HashMap<RegisterId, RegisterId>, reg: RegisterId) -> RegisterId {
+    fn follow_register_chain(&self, register_map: &BTreeMap<RegisterId, RegisterId>, reg: RegisterId) -> RegisterId {
         let mut current = reg;
-        let mut visited = std::collections::HashSet::new();
+        let mut visited = std::collections::BTreeSet::new();
         
         while let Some(&mapped) = register_map.get(&current) {
             if visited.contains(&current) {
@@ -1221,7 +1221,7 @@ impl InstructionOptimizer {
     }
     
     /// Remap register references in an instruction
-    fn remap_instruction_registers(&self, instruction: &Instruction, register_map: &HashMap<RegisterId, RegisterId>) -> Instruction {
+    fn remap_instruction_registers(&self, instruction: &Instruction, register_map: &BTreeMap<RegisterId, RegisterId>) -> Instruction {
         let remap = |reg: RegisterId| -> RegisterId {
             self.follow_register_chain(register_map, reg)
         };
@@ -1259,7 +1259,7 @@ impl InstructionOptimizer {
     }
     
     /// Substitute constant registers where possible
-    fn substitute_constants(&self, instruction: &Instruction, constant_map: &HashMap<RegisterId, RegisterId>) -> Instruction {
+    fn substitute_constants(&self, instruction: &Instruction, constant_map: &BTreeMap<RegisterId, RegisterId>) -> Instruction {
         match instruction {
             Instruction::Move { src, dst } => {
                 let new_src = constant_map.get(src).unwrap_or(src);

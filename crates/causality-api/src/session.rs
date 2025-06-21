@@ -3,7 +3,7 @@
 //! This module provides session state management for maintaining
 //! execution context across multiple API calls.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Execution session state
 #[derive(Debug)]
@@ -48,7 +48,7 @@ impl ExecutionSession {
 #[derive(Debug, Default)]
 pub struct SessionMetadata {
     /// User-defined tags
-    pub tags: HashMap<String, String>,
+    pub tags: BTreeMap<String, String>,
     
     /// Execution statistics
     pub stats: ExecutionStats,

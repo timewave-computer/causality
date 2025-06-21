@@ -1,7 +1,7 @@
 // ------------ QUERY PRIMITIVES ------------ 
 // Purpose: Implement query_state primitive with type-safe contract interface generation
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use causality_lisp::ast::{Expr, ExprKind, LispValue};
 use crate::almanac_schema::{AlmanacSchema, LayoutCommitment};
@@ -128,7 +128,7 @@ pub struct CacheConfig {
 /// Query primitive compiler
 pub struct QueryPrimitiveCompiler {
     /// Known contract schemas
-    schemas: HashMap<String, AlmanacSchema>,
+    schemas: BTreeMap<String, AlmanacSchema>,
     /// Default runtime configuration
     default_runtime_config: QueryRuntimeConfig,
 }
@@ -137,7 +137,7 @@ impl QueryPrimitiveCompiler {
     /// Create a new query primitive compiler
     pub fn new() -> Self {
         Self {
-            schemas: HashMap::new(),
+            schemas: BTreeMap::new(),
             default_runtime_config: QueryRuntimeConfig::default(),
         }
     }
@@ -275,7 +275,7 @@ impl QueryPrimitiveCompiler {
     
     /// Compile multi-chain query coordination
     pub fn compile_multi_chain_query(&self, queries: &[Expr]) -> Result<MultiChainQuery, QueryCompileError> {
-        let mut chain_queries = HashMap::new();
+        let mut chain_queries = BTreeMap::new();
         
         for query_expr in queries {
             let primitive = self.extract_query_primitive(query_expr)?;
@@ -395,7 +395,7 @@ impl Default for CacheConfig {
 #[derive(Debug, Clone)]
 pub struct MultiChainQuery {
     /// Queries organized by blockchain
-    pub chain_queries: HashMap<String, Vec<QueryStatePrimitive>>,
+    pub chain_queries: BTreeMap<String, Vec<QueryStatePrimitive>>,
     /// How to coordinate execution across chains
     pub coordination_strategy: CoordinationStrategy,
     /// Total timeout for all chains

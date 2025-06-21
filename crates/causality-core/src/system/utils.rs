@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Get the current time in milliseconds since Unix epoch
 pub fn get_current_time_ms() -> u64 {
-    SystemTime::now()
+    crate::system::deterministic_system_time()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64

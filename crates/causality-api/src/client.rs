@@ -3,7 +3,7 @@
 //! Provides a convenient Rust client for interacting with the Causality API server.
 
 use anyhow::Result;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::types::*;
 
@@ -129,7 +129,7 @@ impl CausalityClient {
     pub async fn create_session_with_options(
         &self,
         name: Option<String>,
-        tags: Option<HashMap<String, String>>,
+        tags: Option<BTreeMap<String, String>>,
     ) -> Result<SessionInfo> {
         let url = format!("{}/sessions", self.base_url);
         let request = CreateSessionRequest { name, tags };

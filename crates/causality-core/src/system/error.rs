@@ -6,12 +6,15 @@
 #![allow(clippy::result_large_err)]
 
 use crate::{
-    lambda::TypeInner,
+    lambda::{Term, Value, TypeInner, Symbol},
+    system::content_addressing::{EntityId, ResourceId},
     machine::instruction::RegisterId,
-    system::content_addressing::ResourceId,
+    effect::EffectError,
 };
 use thiserror::Error;
 use anyhow;
+use serde::{Serialize, Deserialize};
+use std::fmt;
 
 /// Type alias for Results using our Error type
 pub type Result<T> = std::result::Result<T, Error>;
@@ -195,6 +198,9 @@ pub enum ReductionError {
     
     #[error("resource already consumed: {0:?}")]
     ResourceAlreadyConsumed(ResourceId),
+    
+    #[error("resource not found: {0:?}")]
+    ResourceNotFound(ResourceId),
     
     #[error("invalid sum tag: {0}")]
     InvalidSumTag(crate::lambda::Symbol),

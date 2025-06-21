@@ -10,6 +10,9 @@
 //! - Record capability effects for Layer 2
 //! - Capability system and object model
 //! - Row/record type operations
+//! - Transform-based constraint system
+//! - Automatic protocol derivation from row operations
+//! - Unified transform-based effect system
 
 /// Core effect types and expressions
 pub mod core;
@@ -30,10 +33,10 @@ pub mod pattern;
 pub mod intent;
 
 /// Flow synthesis engine
-pub mod synthesis;
+// pub mod synthesis; // Temporarily disabled due to API incompatibilities
 
 /// Temporal Effect Graph (TEG) for dynamic orchestration
-pub mod teg;
+// pub mod teg; // Temporarily disabled due to API incompatibilities
 
 /// Execution tracing
 pub mod trace;
@@ -53,11 +56,17 @@ pub mod object;
 /// Row types for extensible records (moved from Layer 1)
 pub mod row;
 
+/// Location-aware row types for unified computation and communication
+pub mod location_row;
+
+/// Automatic protocol derivation from row operations
+pub mod protocol_derivation;
+
 /// Handler registry for effect handlers
 pub mod handler_registry;
 
 /// Intent evaluator for effect handlers
-pub mod intent_evaluator;
+// pub mod intent_evaluator; // Temporarily disabled due to API incompatibilities
 
 /// ZK proof integration for effects
 pub mod zk_integration;
@@ -68,15 +77,17 @@ pub mod storage_proof;
 /// Cross-chain effect coordination for atomic operations across blockchains
 pub mod cross_chain;
 
-/// Session types for typed communication protocols
-pub mod session;
-
 /// Session registry for global session management
 pub mod session_registry;
 
+/// Transform-based constraint system for unified Layer 2 operations
+pub mod transform_constraint;
+
+/// Unified transform-based effect system
+pub mod transform;
+
 /// Re-export key types for convenience
 pub use handler_registry::{EffectHandler, EffectHandlerRegistry, EffectResult};
-pub use intent_evaluator::{IntentEvaluator, IntentEvaluationConfig, EvaluationContext};
 pub use zk_integration::{EffectHash, ZkProof, ZkVerifiedEffectHandler, ZkEffectRegistry};
 pub use storage_proof::{
     StorageProofEffect, StorageDependency, StorageKeySpec, StorageSlot,
@@ -88,11 +99,7 @@ pub use cross_chain::{
     StorageProofRequirement, ProofType, VerificationConstraint, ConstraintType,
     CrossChainStatistics, BlockchainDomain,
 };
-pub use session::{
-    SessionType, SessionDeclaration, SessionChannel, SessionState, SessionRole,
-    SessionMessage, SessionBranch, SessionOperation, SessionError,
-    compute_dual, verify_duality, is_well_formed, substitute, progress_session,
-};
+// pub use core::SessionBranch; // Temporarily disabled
 pub use session_registry::{
     SessionRegistry, Choreography, ChoreographyProtocol, RegistryStats,
 };
@@ -108,7 +115,7 @@ pub use core::{
 };
 
 // Machine types needed for intents
-pub use crate::machine::instruction::{ConstraintExpr, Hint};
+// pub use crate::machine::instruction::{ConstraintExpr, Hint};
 
 // Operations
 pub use operations::{
@@ -141,21 +148,22 @@ pub use pattern::{
 // Intent system
 pub use intent::{
     Intent, IntentId, ResourceBinding, IntentError,
-    Constraint, ValueExpr, ResourceRef,
+    // Constraint, ValueExpr, // Temporarily disabled - these types don't exist in new intent system
+    ResourceRef,
 };
 
 // Flow synthesis
-pub use synthesis::{
-    FlowSynthesizer, EffectLibrary, EffectTemplate, ConstraintSolver,
-    SynthesisError, ValidationError, SynthesisStrategy, ResourcePattern,
-    ResourceInfo, ResourceTransformation,
-};
+// pub use synthesis::{
+//     FlowSynthesizer, EffectLibrary, EffectTemplate, ConstraintSolver,
+//     SynthesisError, ValidationError, SynthesisStrategy, ResourcePattern,
+//     ResourceInfo, ResourceTransformation,
+// };
 
 // Temporal Effect Graph (TEG)
-pub use teg::{
-    TemporalEffectGraph, EffectNode, EffectEdge, NodeStatus, NodeId,
-    TegMetadata, TegResult, ExecutionStats, TegError,
-};
+// pub use teg::{
+//     TemporalEffectGraph, EffectNode, EffectEdge, NodeStatus, NodeId,
+//     TegMetadata, TegResult, ExecutionStats, TegError,
+// };
 
 // Execution tracing
 pub use trace::{
@@ -187,10 +195,80 @@ pub use object::{
 // Row types (moved from Layer 1) 
 pub use row::{
     RowType, RowVariable, RowConstraint, RecordType, RowOpResult, 
-    row, open_row, record,
+    FieldType, FieldAccess, LocationConstraint,
+    row, open_row, record, location_row,
+};
+
+// Location-aware row types
+pub use location_row::{
+    LocationAwareRowType, AccessProtocol, SyncProtocol, ConsistencyModel, ConflictResolution,
+    RowOpResult as LocationRowOpResult, GeneratedProtocol, ProtocolType, MigrationSpec, MigrationStrategy,
+    LocationConstraint as LocationRowConstraint, LocationRequirement, PerformanceRequirement,
+    LocationRowError,
+};
+
+// Protocol derivation
+pub use protocol_derivation::{
+    ProtocolDerivationEngine, OptimizationPattern, AccessPattern, MultiPartyTemplate,
+    ParticipantRole, ProtocolTemplate, CoordinationStep, ResponsePattern, PeerInteraction,
+    PeerInteractionType, CoordinationProtocol, NetworkTopology, ProtocolDerivationError,
 };
 
 // Re-export main types
-pub use teg::*;
+// pub use teg::*;
 pub use handler_registry::*;
-pub use intent_evaluator::*; 
+// pub use intent_evaluator::*;
+
+// Transform constraint system
+pub use transform_constraint::{
+    TransformConstraintSystem, TransformDefinition, RecordSchema as TransformRecordSchema,
+    FieldDefinition, TransformConstraint, SchemaConstraint, TransformConstraintError,
+};
+
+// Effect system error type
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EffectError {
+    /// Type error in effect expression
+    TypeError(String),
+    
+    /// Capability error
+    CapabilityError(String),
+    
+    /// Intent error
+    IntentError(String),
+    
+    /// Location error
+    LocationError(String),
+}
+
+impl std::fmt::Display for EffectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EffectError::TypeError(msg) => write!(f, "Type error: {}", msg),
+            EffectError::CapabilityError(msg) => write!(f, "Capability error: {}", msg),
+            EffectError::IntentError(msg) => write!(f, "Intent error: {}", msg),
+            EffectError::LocationError(msg) => write!(f, "Location error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for EffectError {}
+
+// Re-exports for convenience
+pub use core::*;
+pub use operations::*;
+pub use resource::*;
+pub use causality::*;
+pub use pattern::*;
+pub use intent::*;
+// pub use synthesis::*;
+// pub use teg::*;
+pub use interface::*;
+pub use capability::*;
+pub use row::*;
+pub use location_row::*;
+pub use session_registry::*;
+// pub use intent_evaluator::*;
+pub use transform_constraint::*;
+pub use protocol_derivation::*;
+pub use transform::*; 

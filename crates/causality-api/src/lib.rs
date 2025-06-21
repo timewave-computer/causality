@@ -6,7 +6,7 @@
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 // Core modules
 pub mod client;
@@ -39,13 +39,13 @@ pub struct CausalityApi {
     config: ApiConfig,
     
     /// Session manager
-    sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    sessions: Arc<RwLock<BTreeMap<String, ExecutionSession>>>,
 }
 
 impl CausalityApi {
     /// Create a new API instance
     pub fn new(config: ApiConfig) -> Result<Self> {
-        let sessions = Arc::new(RwLock::new(HashMap::new()));
+        let sessions = Arc::new(RwLock::new(BTreeMap::new()));
         
         Ok(Self {
             config,
@@ -59,7 +59,7 @@ impl CausalityApi {
     }
     
     /// Get the session manager
-    pub fn sessions(&self) -> Arc<RwLock<HashMap<String, ExecutionSession>>> {
+    pub fn sessions(&self) -> Arc<RwLock<BTreeMap<String, ExecutionSession>>> {
         Arc::clone(&self.sessions)
     }
 } 

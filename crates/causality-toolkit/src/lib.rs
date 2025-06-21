@@ -15,6 +15,8 @@ pub mod resources;
 pub mod testing;
 pub mod utils;
 pub mod almanac_schema;
+pub mod intent;
+pub mod fixed_point;
 
 // Re-exports
 pub use causality_core::{Value, Effect, EffectExpr, EntityId};
@@ -158,11 +160,14 @@ pub fn toolkit_verbose() -> CausalityToolkit {
     CausalityToolkit::with_config(config)
 }
 
+pub use intent::*;
+pub use fixed_point::FixedPoint;
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::primitives::DeFiPrimitive;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_toolkit_creation() {
@@ -194,7 +199,7 @@ mod tests {
             max_supply: Some(1_000_000_000_000_000_000_000_000),
             description: Some("A test token for the toolkit".to_string()),
             logo_uri: None,
-            metadata: HashMap::new(),
+            metadata: BTreeMap::new(),
         };
         
         let token = toolkit.create_fungible_token(

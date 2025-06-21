@@ -102,6 +102,77 @@ pub enum TermKind {
         value: Box<Term>,
         body: Box<Term>,
     },
+    
+    // Session type constructors
+    
+    /// Create a new session channel: new_channel session_type
+    NewChannel {
+        session_type: super::base::SessionType,
+    },
+    
+    /// Send a value on a channel: send channel_term value_term
+    Send {
+        channel: Box<Term>,
+        value: Box<Term>,
+    },
+    
+    /// Receive a value from a channel: receive channel_term
+    Receive {
+        channel: Box<Term>,
+    },
+    
+    /// Select a choice on an internal choice channel: select channel_term label
+    Select {
+        channel: Box<Term>,
+        label: String,
+    },
+    
+    /// Branch on an external choice channel: case channel_term of { label1 -> t1 | label2 -> t2 | ... }
+    Branch {
+        channel: Box<Term>,
+        branches: Vec<(String, Term)>,
+    },
+    
+    /// Close a session channel: close channel_term
+    Close {
+        channel: Box<Term>,
+    },
+    
+    /// Fork a session into two endpoints: fork session_type (client_var server_var -> body)
+    Fork {
+        session_type: super::base::SessionType,
+        client_var: String,
+        server_var: String,
+        body: Box<Term>,
+    },
+    
+    /// Wait for a session to complete: wait channel_term body
+    Wait {
+        channel: Box<Term>,
+        body: Box<Term>,
+    },
+    
+    // Transform type constructors
+    
+    /// Create a transform: transform input_type output_type location body
+    Transform {
+        input_type: TypeInner,
+        output_type: TypeInner,
+        location: super::base::Location,
+        body: Box<Term>,
+    },
+    
+    /// Apply a transform: apply_transform transform_term arg_term
+    ApplyTransform {
+        transform: Box<Term>,
+        arg: Box<Term>,
+    },
+    
+    /// Create a located computation: at location body
+    At {
+        location: super::base::Location,
+        body: Box<Term>,
+    },
 }
 
 //-----------------------------------------------------------------------------
@@ -211,6 +282,107 @@ impl Term {
             body: Box::new(body),
         })
     }
+    
+    // Session type term constructors
+    
+    /// Create a new session channel
+    pub fn new_channel(session_type: super::base::SessionType) -> Self {
+        Self::new(TermKind::NewChannel { session_type })
+    }
+    
+    /// Send a value on a channel
+    pub fn send(channel: Term, value: Term) -> Self {
+        Self::new(TermKind::Send {
+            channel: Box::new(channel),
+            value: Box::new(value),
+        })
+    }
+    
+    /// Receive a value from a channel
+    pub fn receive(channel: Term) -> Self {
+        Self::new(TermKind::Receive {
+            channel: Box::new(channel),
+        })
+    }
+    
+    /// Select a choice on an internal choice channel
+    pub fn select(channel: Term, label: impl Into<String>) -> Self {
+        Self::new(TermKind::Select {
+            channel: Box::new(channel),
+            label: label.into(),
+        })
+    }
+    
+    /// Branch on an external choice channel
+    pub fn branch(channel: Term, branches: Vec<(String, Term)>) -> Self {
+        Self::new(TermKind::Branch {
+            channel: Box::new(channel),
+            branches,
+        })
+    }
+    
+    /// Close a session channel
+    pub fn close(channel: Term) -> Self {
+        Self::new(TermKind::Close {
+            channel: Box::new(channel),
+        })
+    }
+    
+    /// Fork a session into two endpoints
+    pub fn fork(
+        session_type: super::base::SessionType,
+        client_var: impl Into<String>,
+        server_var: impl Into<String>,
+        body: Term
+    ) -> Self {
+        Self::new(TermKind::Fork {
+            session_type,
+            client_var: client_var.into(),
+            server_var: server_var.into(),
+            body: Box::new(body),
+        })
+    }
+    
+    /// Wait for a session to complete
+    pub fn wait(channel: Term, body: Term) -> Self {
+        Self::new(TermKind::Wait {
+            channel: Box::new(channel),
+            body: Box::new(body),
+        })
+    }
+    
+    // Transform type term constructors
+    
+    /// Create a transform
+    pub fn transform(
+        input_type: TypeInner,
+        output_type: TypeInner,
+        location: super::base::Location,
+        body: Term
+    ) -> Self {
+        Self::new(TermKind::Transform {
+            input_type,
+            output_type,
+            location,
+            body: Box::new(body),
+        })
+    }
+    
+    /// Apply a transform
+    pub fn apply_transform(transform: Term, arg: Term) -> Self {
+        Self::new(TermKind::ApplyTransform {
+            transform: Box::new(transform),
+            arg: Box::new(arg),
+        })
+    }
+    
+    /// Create a located computation
+    pub fn at(location: super::base::Location, body: Term) -> Self {
+        Self::new(TermKind::At {
+            location,
+            body: Box::new(body),
+        })
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -236,7 +408,7 @@ impl From<Literal> for MachineValue {
 mod tests {
     use super::{Term, TermKind, Literal}; // Items from the parent module (term.rs)
     use crate::lambda::base::{BaseType, TypeInner}; // Types from elsewhere in the crate
-    use crate::lambda::symbol::Symbol;      // Symbol type
+    use crate::lambda::symbol::Symbol;  // Symbol type
 
     // --- Test Term Construction: Variables and Literals
 
@@ -492,5 +664,267 @@ mod tests {
         term = term.with_type(ty_annotation.clone());
 
         assert_eq!(term.ty, Some(ty_annotation));
+    }
+    
+    // --- Test Session Type Term Construction
+    
+    #[test]
+    fn test_term_new_channel() {
+        use crate::lambda::base::SessionType;
+        
+        let session_type = SessionType::Send(
+            Box::new(TypeInner::Base(BaseType::Int)),
+            Box::new(SessionType::End)
+        );
+        let term = Term::new_channel(session_type.clone());
+        
+        if let TermKind::NewChannel { session_type: st } = term.kind {
+            assert_eq!(st, session_type);
+        } else {
+            panic!("Expected TermKind::NewChannel");
+        }
+        assert_eq!(term.ty, None);
+    }
+    
+    #[test]
+    fn test_term_send() {
+        let channel_term = Term::var("ch");
+        let value_term = Term::literal(Literal::Int(42));
+        let term = Term::send(channel_term.clone(), value_term.clone());
+        
+        if let TermKind::Send { channel, value } = term.kind {
+            assert_eq!(*channel, channel_term);
+            assert_eq!(*value, value_term);
+        } else {
+            panic!("Expected TermKind::Send");
+        }
+        assert_eq!(term.ty, None);
+    }
+    
+    #[test]
+    fn test_term_receive() {
+        let channel_term = Term::var("ch");
+        let term = Term::receive(channel_term.clone());
+        
+        if let TermKind::Receive { channel } = term.kind {
+            assert_eq!(*channel, channel_term);
+        } else {
+            panic!("Expected TermKind::Receive");
+        }
+        assert_eq!(term.ty, None);
+    }
+    
+    #[test]
+    fn test_term_select() {
+        let channel_term = Term::var("ch");
+        let label = "option_a";
+        let term = Term::select(channel_term.clone(), label);
+        
+        if let TermKind::Select { channel, label: selected_label } = term.kind {
+            assert_eq!(*channel, channel_term);
+            assert_eq!(selected_label, label);
+        } else {
+            panic!("Expected TermKind::Select");
+        }
+        assert_eq!(term.ty, None);
+    }
+    
+    #[test]
+    fn test_term_branch() {
+        let channel_term = Term::var("ch");
+        let branches = vec![
+            ("option_a".to_string(), Term::var("handle_a")),
+            ("option_b".to_string(), Term::var("handle_b")),
+        ];
+        let term = Term::branch(channel_term.clone(), branches.clone());
+        
+        if let TermKind::Branch { channel, branches: term_branches } = term.kind {
+            assert_eq!(*channel, channel_term);
+            assert_eq!(term_branches, branches);
+        } else {
+            panic!("Expected TermKind::Branch");
+        }
+        assert_eq!(term.ty, None);
+    }
+    
+    #[test]
+    fn test_term_close() {
+        let channel_term = Term::var("ch");
+        let term = Term::close(channel_term.clone());
+        
+        if let TermKind::Close { channel } = term.kind {
+            assert_eq!(*channel, channel_term);
+        } else {
+            panic!("Expected TermKind::Close");
+        }
+        assert_eq!(term.ty, None);
+    }
+    
+    #[test]
+    fn test_term_fork() {
+        use crate::lambda::base::SessionType;
+        
+        let session_type = SessionType::Send(
+            Box::new(TypeInner::Base(BaseType::Int)),
+            Box::new(SessionType::End)
+        );
+        let client_var = "client";
+        let server_var = "server";
+        let body = Term::var("interaction");
+        
+        let term = Term::fork(session_type.clone(), client_var, server_var, body.clone());
+        
+        if let TermKind::Fork { session_type: st, client_var: cv, server_var: sv, body: term_body } = term.kind {
+            assert_eq!(st, session_type);
+            assert_eq!(cv, client_var);
+            assert_eq!(sv, server_var);
+            assert_eq!(*term_body, body);
+        } else {
+            panic!("Expected TermKind::Fork");
+        }
+        assert_eq!(term.ty, None);
+    }
+    
+    #[test]
+    fn test_term_wait() {
+        let channel_term = Term::var("ch");
+        let body = Term::var("continuation");
+        let term = Term::wait(channel_term.clone(), body.clone());
+        
+        if let TermKind::Wait { channel, body: term_body } = term.kind {
+            assert_eq!(*channel, channel_term);
+            assert_eq!(*term_body, body);
+        } else {
+            panic!("Expected TermKind::Wait");
+        }
+        assert_eq!(term.ty, None);
+    }
+    
+    #[test]
+    fn test_session_term_composition() {
+        // Test that we can compose session operations
+        let session_type = crate::lambda::base::SessionType::Send(
+            Box::new(TypeInner::Base(BaseType::Int)),
+            Box::new(crate::lambda::base::SessionType::End)
+        );
+        
+        let fork_term = Term::fork(
+            session_type,
+            "client",
+            "server",
+            Term::send(Term::var("client"), Term::literal(Literal::Int(42)))
+        );
+        
+        // Should compile without issues
+        assert!(matches!(fork_term.kind, TermKind::Fork { .. }));
+    }
+    
+    // --- Test Transform Type Term Construction ---
+    
+    #[test]
+    fn test_term_transform() {
+        use crate::lambda::base::{Location, TypeInner, BaseType};
+        
+        let input_type = TypeInner::Base(BaseType::Int);
+        let output_type = TypeInner::Base(BaseType::Bool);
+        let location = Location::Remote("server".to_string());
+        let body = Term::var("x");
+        
+        let transform_term = Term::transform(
+            input_type.clone(),
+            output_type.clone(),
+            location.clone(),
+            body.clone()
+        );
+        
+        if let TermKind::Transform { input_type: it, output_type: ot, location: loc, body: b } = transform_term.kind {
+            assert_eq!(it, input_type);
+            assert_eq!(ot, output_type);
+            assert_eq!(loc, location);
+            assert_eq!(*b, body);
+        } else {
+            panic!("Expected TermKind::Transform");
+        }
+    }
+    
+    #[test]
+    fn test_term_apply_transform() {
+        use crate::lambda::base::{Location, TypeInner, BaseType};
+        
+        let transform_term = Term::transform(
+            TypeInner::Base(BaseType::Int),
+            TypeInner::Base(BaseType::Bool),
+            Location::Local,
+            Term::var("x")
+        );
+        let arg_term = Term::literal(Literal::Int(42));
+        
+        let apply_term = Term::apply_transform(transform_term.clone(), arg_term.clone());
+        
+        if let TermKind::ApplyTransform { transform, arg } = apply_term.kind {
+            assert_eq!(*transform, transform_term);
+            assert_eq!(*arg, arg_term);
+        } else {
+            panic!("Expected TermKind::ApplyTransform");
+        }
+    }
+    
+    #[test]
+    fn test_term_at() {
+        use crate::lambda::base::Location;
+        
+        let location = Location::Remote("compute_node".to_string());
+        let body = Term::apply(Term::var("f"), Term::var("x"));
+        
+        let at_term = Term::at(location.clone(), body.clone());
+        
+        if let TermKind::At { location: loc, body: b } = at_term.kind {
+            assert_eq!(loc, location);
+            assert_eq!(*b, body);
+        } else {
+            panic!("Expected TermKind::At");
+        }
+    }
+    
+    #[test]
+    fn test_transform_composition() {
+        use crate::lambda::base::{Location, TypeInner, BaseType};
+        
+        // Create a transform that doubles an integer
+        let double_transform = Term::transform(
+            TypeInner::Base(BaseType::Int),
+            TypeInner::Base(BaseType::Int),
+            Location::Local,
+            Term::apply(
+                Term::apply(Term::var("mul"), Term::var("x")),
+                Term::literal(Literal::Int(2))
+            )
+        );
+        
+        // Apply it to an argument
+        let application = Term::apply_transform(
+            double_transform,
+            Term::literal(Literal::Int(21))
+        );
+        
+        // Should compile without issues
+        assert!(matches!(application.kind, TermKind::ApplyTransform { .. }));
+    }
+    
+    #[test]
+    fn test_located_computation() {
+        use crate::lambda::base::Location;
+        
+        // Create a computation that runs on a remote server
+        let remote_computation = Term::at(
+            Location::Remote("gpu_cluster".to_string()),
+            Term::apply(
+                Term::var("expensive_computation"),
+                Term::var("large_dataset")
+            )
+        );
+        
+        // Should compile without issues
+        assert!(matches!(remote_computation.kind, TermKind::At { .. }));
     }
 }

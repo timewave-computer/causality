@@ -11,7 +11,7 @@ use causality_core::machine::instruction::{
     Instruction, RegisterId,
 };
 use causality_core::lambda::Symbol;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Result type for compilation operations
 pub type CompileResult<T> = Result<T, LispError>;
@@ -23,7 +23,7 @@ pub struct CompilerContext {
     next_register: u32,
     
     /// Variable name to register mapping
-    bindings: HashMap<Symbol, RegisterId>,
+    bindings: BTreeMap<Symbol, RegisterId>,
     
     /// Label counter for control flow
     next_label: u32,
@@ -34,7 +34,7 @@ impl CompilerContext {
     pub fn new() -> Self {
         Self {
             next_register: 0,
-            bindings: HashMap::new(),
+            bindings: BTreeMap::new(),
             next_label: 0,
         }
     }
@@ -169,18 +169,7 @@ impl LispCompiler {
                     },
                 ]
             },
-            LispValue::Float(_f) => {
-                // For float constants, similar to int
-                let val_reg = self.context.alloc_register();
-                vec![
-                    Instruction::Witness { out_reg: val_reg },
-                    Instruction::Alloc { 
-                        type_reg: self.context.alloc_register(), 
-                        val_reg,
-                        out_reg: result_reg 
-                    },
-                ]
-            },
+
             LispValue::String(_s) => {
                 // For string constants
                 let val_reg = self.context.alloc_register();
@@ -554,7 +543,7 @@ impl LispCompiler {
     }
 
     // Placeholder implementations for session types operations
-    fn compile_session_declaration(&mut self, _name: &str, _roles: &[causality_core::effect::session::SessionRole]) -> CompileResult<(Vec<Instruction>, RegisterId)> {
+    fn compile_session_declaration(&mut self, _name: &str, _roles: &[causality_core::effect::session_registry::SessionRole]) -> CompileResult<(Vec<Instruction>, RegisterId)> {
         // For now, just return a unit value
         let result_reg = self.context.alloc_register();
         let instructions = vec![Instruction::Witness { out_reg: result_reg }];

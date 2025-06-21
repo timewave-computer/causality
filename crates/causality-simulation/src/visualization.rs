@@ -1,6 +1,6 @@
 //! Visualization and tracing for simulation analysis
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use crate::{
     clock::SimulatedTimestamp,
@@ -27,7 +27,7 @@ pub struct ExecutionTrace {
     pub outputs: Vec<String>,
     pub effects: Vec<String>,
     pub status: TraceStatus,
-    pub metadata: HashMap<String, String>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 /// Status of an execution trace
@@ -70,7 +70,7 @@ impl VisualizationHooks {
             outputs: Vec::new(),
             effects: Vec::new(),
             status: TraceStatus::Started,
-            metadata: HashMap::new(),
+            metadata: BTreeMap::new(),
         };
         
         self.traces.push(trace);
@@ -178,7 +178,7 @@ impl VisualizationHooks {
 /// Graph visualizer for TEG and execution flow
 #[derive(Debug)]
 pub struct GraphVisualizer {
-    nodes: HashMap<String, GraphNode>,
+    nodes: BTreeMap<String, GraphNode>,
     edges: Vec<GraphEdge>,
 }
 
@@ -188,7 +188,7 @@ pub struct GraphNode {
     pub id: String,
     pub label: String,
     pub node_type: String,
-    pub metadata: HashMap<String, String>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 /// Edge in the execution graph
@@ -204,7 +204,7 @@ impl GraphVisualizer {
     /// Create a new graph visualizer
     pub fn new() -> Self {
         Self {
-            nodes: HashMap::new(),
+            nodes: BTreeMap::new(),
             edges: Vec::new(),
         }
     }
@@ -231,7 +231,7 @@ impl GraphVisualizer {
                 label: effect.effect_id.clone(),
                 node_type: "effect".to_string(),
                 metadata: {
-                    let mut meta = HashMap::new();
+                    let mut meta = BTreeMap::new();
                     meta.insert("start_time".to_string(), effect.start_time.as_secs().to_string());
                     if let Some(end_time) = effect.end_time {
                         meta.insert("end_time".to_string(), end_time.as_secs().to_string());
@@ -348,14 +348,14 @@ mod tests {
             id: "node1".to_string(),
             label: "Effect 1".to_string(),
             node_type: "effect".to_string(),
-            metadata: HashMap::new(),
+            metadata: BTreeMap::new(),
         };
         
         let node2 = GraphNode {
             id: "node2".to_string(),
             label: "Effect 2".to_string(),
             node_type: "effect".to_string(),
-            metadata: HashMap::new(),
+            metadata: BTreeMap::new(),
         };
         
         visualizer.add_node(node1);

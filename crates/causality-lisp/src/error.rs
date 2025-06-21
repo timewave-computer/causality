@@ -147,6 +147,10 @@ pub enum EvalError {
     #[error("Division by zero")]
     DivisionByZero,
     
+    /// Arithmetic overflow
+    #[error("Arithmetic overflow: {0}")]
+    ArithmeticOverflow(String),
+    
     /// Stack overflow
     #[error("Stack overflow")]
     StackOverflow,

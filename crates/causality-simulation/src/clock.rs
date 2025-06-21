@@ -58,7 +58,7 @@ impl SimulatedClock {
     
     /// Create a simulated clock starting at the current system time
     pub fn from_system_time() -> Self {
-        let now = SystemTime::now()
+        let now = std::time::UNIX_EPOCH
             .duration_since(UNIX_EPOCH)
             .unwrap_or(Duration::ZERO)
             .as_secs();

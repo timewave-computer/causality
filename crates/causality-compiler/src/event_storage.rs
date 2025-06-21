@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::storage_backend::StorageBackendManager;
 
 // Real Almanac types when feature is enabled
@@ -359,7 +359,7 @@ impl EventSubscription {
 
 /// Event subscription manager
 pub struct EventSubscriptionManager {
-    subscriptions: HashMap<String, EventSubscription>,
+    subscriptions: BTreeMap<String, EventSubscription>,
     storage_manager: Arc<EventStorageManager>,
 }
 
@@ -367,7 +367,7 @@ impl EventSubscriptionManager {
     /// Create a new subscription manager
     pub fn new(storage_manager: Arc<EventStorageManager>) -> Self {
         Self {
-            subscriptions: HashMap::new(),
+            subscriptions: BTreeMap::new(),
             storage_manager,
         }
     }

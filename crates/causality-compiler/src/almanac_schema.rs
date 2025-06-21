@@ -1,7 +1,7 @@
 // ------------ ALMANAC SCHEMA GENERATION ------------ 
 // Purpose: Generate Almanac indexing schemas from state query analysis
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use crate::state_analysis::{StateAnalysisResult, StateQueryRequirement, QueryType};
 // Note: LayoutCommitment will be defined locally to avoid circular dependency
@@ -111,7 +111,7 @@ pub struct SchemaMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaGenerationResult {
     /// Generated schemas by contract
-    pub schemas: HashMap<String, AlmanacSchema>,
+    pub schemas: BTreeMap<String, AlmanacSchema>,
     /// Cross-contract dependencies
     pub dependencies: Vec<SchemaDependency>,
     /// Generation metadata
@@ -154,7 +154,7 @@ pub struct GenerationMetadata {
 /// Almanac schema generator
 pub struct AlmanacSchemaGenerator {
     /// Known contract layouts
-    contract_layouts: HashMap<String, LayoutCommitment>,
+    contract_layouts: BTreeMap<String, LayoutCommitment>,
     /// Schema optimization settings
     optimization_settings: OptimizationSettings,
 }
@@ -176,7 +176,7 @@ impl AlmanacSchemaGenerator {
     /// Create a new schema generator
     pub fn new() -> Self {
         Self {
-            contract_layouts: HashMap::new(),
+            contract_layouts: BTreeMap::new(),
             optimization_settings: OptimizationSettings::default(),
         }
     }
@@ -184,7 +184,7 @@ impl AlmanacSchemaGenerator {
     /// Create a new schema generator with custom optimization settings
     pub fn with_optimization_settings(settings: OptimizationSettings) -> Self {
         Self {
-            contract_layouts: HashMap::new(),
+            contract_layouts: BTreeMap::new(),
             optimization_settings: settings,
         }
     }
@@ -197,7 +197,7 @@ impl AlmanacSchemaGenerator {
     /// Generate Almanac schemas from state analysis results
     pub fn generate_schemas(&self, analysis: &StateAnalysisResult) -> SchemaGenerationResult {
         let start_time = std::time::Instant::now();
-        let mut schemas = HashMap::new();
+        let mut schemas = BTreeMap::new();
         let mut dependencies = Vec::new();
         
         // Generate schema for each contract
@@ -264,7 +264,7 @@ impl AlmanacSchemaGenerator {
     
     /// Generate storage slot schemas from query requirements
     fn generate_storage_slots(&self, queries: &[StateQueryRequirement]) -> Vec<StorageSlotSchema> {
-        let mut slots = HashMap::new();
+        let mut slots = BTreeMap::new();
         
         for query in queries {
             let slot_id = query.storage_slot.clone();
@@ -285,7 +285,7 @@ impl AlmanacSchemaGenerator {
     
     /// Generate query patterns for optimization
     fn generate_query_patterns(&self, queries: &[StateQueryRequirement]) -> Vec<QueryPattern> {
-        let mut patterns = HashMap::new();
+        let mut patterns = BTreeMap::new();
         
         for query in queries {
             let pattern_id = format!("{}_{}", query.query_type.type_name(), query.storage_slot);
@@ -437,13 +437,13 @@ mod tests {
             },
         ];
         
-        let mut queries_by_contract = HashMap::new();
+        let mut queries_by_contract = BTreeMap::new();
         queries_by_contract.insert("usdc".to_string(), queries.clone());
         
         let analysis = StateAnalysisResult {
             required_queries: queries,
             queries_by_contract,
-            queries_by_domain: HashMap::new(),
+            queries_by_domain: BTreeMap::new(),
             metadata: crate::state_analysis::AnalysisMetadata {
                 expressions_analyzed: 10,
                 patterns_detected: 2,

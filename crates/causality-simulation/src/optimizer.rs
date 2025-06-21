@@ -4,7 +4,7 @@
 //! effects to minimize execution cost and maximize parallelization opportunities.
 
 use crate::MockEffect;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Cost metric for effect execution
 #[derive(Debug, Clone, PartialEq)]
@@ -125,7 +125,7 @@ pub struct EffectOptimizer {
     config: OptimizerConfig,
     
     /// Cost database for effect types
-    cost_database: HashMap<String, EffectCost>,
+    cost_database: BTreeMap<String, EffectCost>,
     
     /// Statistics from previous optimizations
     optimization_stats: OptimizationStats,
@@ -162,7 +162,7 @@ pub struct SimulationOptimizer {
     /// Default optimization strategy
     default_strategy: OptimizationStrategy,
     /// Cache for optimization results
-    optimization_cache: HashMap<String, String>,
+    optimization_cache: BTreeMap<String, String>,
 }
 
 impl SimulationOptimizer {
@@ -170,7 +170,7 @@ impl SimulationOptimizer {
     pub fn new() -> Self {
         Self {
             default_strategy: OptimizationStrategy::Balanced,
-            optimization_cache: HashMap::new(),
+            optimization_cache: BTreeMap::new(),
         }
     }
     
@@ -178,7 +178,7 @@ impl SimulationOptimizer {
     pub fn with_strategy(strategy: OptimizationStrategy) -> Self {
         Self {
             default_strategy: strategy,
-            optimization_cache: HashMap::new(),
+            optimization_cache: BTreeMap::new(),
         }
     }
     
@@ -412,8 +412,8 @@ impl EffectOptimizer {
     }
     
     /// Create default cost database with common effect types
-    fn create_default_cost_database() -> HashMap<String, EffectCost> {
-        let mut db = HashMap::new();
+    fn create_default_cost_database() -> BTreeMap<String, EffectCost> {
+        let mut db = BTreeMap::new();
         
         // Basic computation effects
         db.insert("compute".to_string(), EffectCost::new(10, 50, 1024, 0));

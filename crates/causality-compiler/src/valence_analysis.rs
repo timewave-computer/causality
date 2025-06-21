@@ -3,7 +3,7 @@
 //! This module analyzes OCaml programs to detect Valence account factory usage patterns
 //! and generates appropriate account configurations for the compilation pipeline.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use anyhow::{Result, anyhow};
 use serde::{Serialize, Deserialize};
 use causality_lisp::ast::{Expr, ExprKind, LispValue, Span};
@@ -40,7 +40,7 @@ pub struct LibraryApproval {
 pub struct TransactionPattern {
     pub operation_type: String,
     pub account: String,
-    pub parameters: HashMap<String, String>,
+    pub parameters: BTreeMap<String, String>,
 }
 
 /// Valence account factory analyzer
@@ -211,7 +211,7 @@ impl ValenceAnalyzer {
         let account = self.extract_string_literal(&args[0])
             .unwrap_or_else(|| "unknown_account".to_string());
         
-        let mut parameters = HashMap::new();
+        let mut parameters = BTreeMap::new();
         parameters.insert("account".to_string(), account.clone());
         
         // Analyze operation type from second argument

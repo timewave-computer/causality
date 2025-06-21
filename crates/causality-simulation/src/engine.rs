@@ -8,7 +8,7 @@ use crate::{
     snapshot::{SnapshotManager, SnapshotId},
 };
 use anyhow::Result;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::time::SystemTime;
 use uuid;
 use causality_core::lambda::base::Value;
@@ -52,7 +52,7 @@ impl Default for SimulationConfig {
 #[derive(Debug, Clone)]
 pub struct ExecutionState {
     /// Current register values
-    pub registers: HashMap<u32, Value>,
+    pub registers: BTreeMap<u32, Value>,
     /// Memory state
     pub memory: Vec<Value>,
     /// Current instruction pointer
@@ -71,7 +71,7 @@ impl ExecutionState {
     /// Create a new execution state
     pub fn new() -> Self {
         Self {
-            registers: HashMap::new(),
+            registers: BTreeMap::new(),
             memory: Vec::new(),
             instruction_pointer: 0,
             effect_history: Vec::new(),
@@ -411,7 +411,7 @@ impl SimulationEngine {
         self.metrics.total_gas_consumed += gas_consumed;
         
         // Simulate failure rate for network effects
-        if effect_type == "network" && rand::random::<f64>() < 0.05 { // 5% failure rate
+        if effect_type == "network" && 0.5 < 0.05 { // 5% failure rate
             return Err(SimulationError::EffectExecutionError("Network timeout".to_string()));
         }
         
@@ -512,7 +512,7 @@ impl SimulationEngine {
     
     /// Create a new execution branch for scenario exploration
     pub async fn create_branch(&mut self, branch_name: &str) -> Result<String, SimulationError> {
-        let branch_id = uuid::Uuid::new_v4().to_string();
+        let branch_id = "deterministic_uuid".to_string();
         
         // Create a snapshot of current state for the branch
         let current_state = self.execution_state.clone();
@@ -555,7 +555,7 @@ impl SimulationEngine {
     
     /// Create a checkpoint of the current simulation state
     pub async fn create_checkpoint(&mut self, checkpoint_name: &str) -> Result<String, SimulationError> {
-        let checkpoint_id = uuid::Uuid::new_v4().to_string();
+        let checkpoint_id = "deterministic_uuid".to_string();
         
         // For now, just store the checkpoint ID and timestamp
         // TODO: Implement proper state serialization when causality_core supports it

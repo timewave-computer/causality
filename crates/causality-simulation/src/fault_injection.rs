@@ -1,6 +1,6 @@
 //! Fault injection for resilience testing
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ pub struct FaultConfig {
 /// Manages fault injection during simulation
 #[derive(Debug)]
 pub struct FaultInjector {
-    active_faults: HashMap<String, FaultConfig>,
+    active_faults: BTreeMap<String, FaultConfig>,
     fault_history: Vec<FaultEvent>,
     rng: StdRng,
     enabled: bool,
@@ -70,7 +70,7 @@ impl FaultInjector {
     /// Create a fault injector with a specific seed for deterministic testing
     pub fn with_seed(seed: u64) -> Self {
         Self {
-            active_faults: HashMap::new(),
+            active_faults: BTreeMap::new(),
             fault_history: Vec::new(),
             rng: StdRng::seed_from_u64(seed),
             enabled: true,
@@ -162,7 +162,7 @@ impl FaultInjector {
         let total_faults = self.fault_history.len();
         let triggered_faults = self.fault_history.iter().filter(|e| e.triggered).count();
         
-        let mut fault_type_counts = HashMap::new();
+        let mut fault_type_counts = BTreeMap::new();
         for event in &self.fault_history {
             if event.triggered {
                 let fault_type_name = match &event.fault_type {
@@ -195,7 +195,7 @@ impl FaultInjector {
 pub struct FaultStatistics {
     pub total_faults: usize,
     pub triggered_faults: usize,
-    pub fault_type_counts: HashMap<String, usize>,
+    pub fault_type_counts: BTreeMap<String, usize>,
 }
 
 impl Default for FaultInjector {

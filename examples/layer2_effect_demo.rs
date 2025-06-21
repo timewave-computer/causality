@@ -13,11 +13,8 @@ use causality_core::{
         synthesis::FlowSynthesizer,
         intent::{Intent, Constraint},
     },
-    lambda::base::Value,
-    system::{
-        content_addressing::DomainId,
-        error::Result,
-    },
+    lambda::base::{Value, Location},
+    system::error::Result,
 };
 use std::sync::Arc;
 
@@ -119,8 +116,8 @@ fn main() -> Result<()> {
     
     // 3. Set up intent evaluator
     println!("3. Setting up intent evaluator...");
-    let domain_id = DomainId::default();
-    let synthesizer = FlowSynthesizer::new(domain_id);
+    let domain_id = Location::default();
+    let synthesizer = FlowSynthesizer::new(domain_id.clone());
     let evaluator = IntentEvaluator::new(synthesizer, registry);
     
     // 4. Create and evaluate simple intents
@@ -128,7 +125,7 @@ fn main() -> Result<()> {
     
     // Create a simple intent with a trivial constraint
     let intent = Intent::new(
-        domain_id,
+        domain_id.clone(),
         vec![], // No specific inputs required
         Constraint::True, // Simple constraint that always passes
     );
@@ -146,7 +143,7 @@ fn main() -> Result<()> {
     
     // Create an intent with a constraint that always fails
     let failing_intent = Intent::new(
-        DomainId::default(),
+        Location::default(),
         vec![],
         Constraint::False, // This should fail
     );

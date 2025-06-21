@@ -5,13 +5,14 @@
 
 use crate::{ZkBackend, ZkCircuit, ZkProof, ZkWitness, ProofResult, ProofError};
 use causality_core::machine::instruction::Instruction;
-use std::collections::HashMap;
+use causality_core::lambda::base::Location;
+use std::collections::BTreeMap;
 use sha2::{Sha256, Digest};
 use chrono;
 use serde::{Serialize, Deserialize};
 
 /// Domain identifier for effect isolation
-pub type DomainId = String;
+pub type DomainId = Location;
 
 /// Domain-specific proof artifact
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,7 +40,7 @@ pub struct CompositeProof {
     pub id: String,
     
     /// Individual domain proofs
-    pub domain_proofs: HashMap<DomainId, DomainProof>,
+    pub domain_proofs: BTreeMap<DomainId, DomainProof>,
     
     /// Cross-domain consistency proof
     pub consistency_proof: Vec<u8>,
@@ -66,7 +67,7 @@ pub enum DomainPartition {
     ByDataFlow,
     
     /// Custom partition strategy with explicit domain assignments
-    Custom(HashMap<String, DomainId>),
+    Custom(BTreeMap<String, DomainId>),
     
     /// Partition by circuit size
     ByCircuitSize { threshold: usize },
@@ -119,7 +120,7 @@ impl ZkBackend for MockBackend {
 /// Cross-domain zero-knowledge coordination manager
 pub struct CrossDomainZkManager {
     /// Domain-specific ZK backends
-    backends: HashMap<String, Box<dyn ZkBackend>>,
+    backends: BTreeMap<String, Box<dyn ZkBackend>>,
     
     /// Cross-domain proof aggregation
     #[allow(dead_code)]
@@ -131,7 +132,7 @@ pub struct CrossDomainZkManager {
     
     /// Circuit cache for reusing compiled circuits
     #[allow(dead_code)]
-    circuit_cache: HashMap<String, ZkCircuit>,
+    circuit_cache: BTreeMap<String, ZkCircuit>,
     
     /// Domain partition strategy
     partition_strategy: DomainPartition,
@@ -152,10 +153,10 @@ impl CrossDomainZkManager {
     /// Create a new cross-domain ZK manager with a specific partition
     pub fn new_with_partition(partition_strategy: DomainPartition) -> Self {
         Self {
-            backends: HashMap::new(),
+            backends: BTreeMap::new(),
             aggregator: ProofAggregator::new(),
             verification_coordinator: VerificationCoordinator::new(),
-            circuit_cache: HashMap::new(),
+            circuit_cache: BTreeMap::new(),
             partition_strategy,
         }
     }
@@ -166,8 +167,8 @@ impl CrossDomainZkManager {
     }
     
     /// Partition instructions across domains
-    pub fn partition_instructions(&self, instructions: &[Instruction]) -> HashMap<DomainId, Vec<Instruction>> {
-        let mut partitions = HashMap::new();
+    pub fn partition_instructions(&self, instructions: &[Instruction]) -> BTreeMap<DomainId, Vec<Instruction>> {
+        let mut partitions = BTreeMap::new();
         
         match &self.partition_strategy {
             DomainPartition::ByEffectType => {
@@ -243,7 +244,7 @@ impl CrossDomainZkManager {
         let partitions = self.partition_instructions(&instructions);
         
         // Step 2: Generate individual domain proofs
-        let mut domain_proofs = HashMap::new();
+        let mut domain_proofs = BTreeMap::new();
         
         for (domain_id, domain_instructions) in partitions {
             // Create domain-specific circuit
@@ -292,7 +293,7 @@ impl CrossDomainZkManager {
     }
     
     /// Generate consistency proof for cross-domain interactions
-    fn generate_consistency_proof(&self, domain_proofs: &HashMap<DomainId, DomainProof>) -> ProofResult<Vec<u8>> {
+    fn generate_consistency_proof(&self, domain_proofs: &BTreeMap<DomainId, DomainProof>) -> ProofResult<Vec<u8>> {
         // Simplified consistency proof generation
         // In a real implementation, this would verify that:
         // 1. All domain interfaces match
@@ -372,7 +373,7 @@ impl CrossDomainZkManager {
         // Partition instructions by domain
         let partitions = self.partition_instructions(instructions);
         
-        let mut domain_proofs = HashMap::new();
+        let mut domain_proofs = BTreeMap::new();
         
         // Generate proofs for each domain
         for (domain_id, domain_instructions) in partitions {

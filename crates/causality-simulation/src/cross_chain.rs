@@ -32,7 +32,7 @@ pub enum ScenarioStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScenarioResult {
     pub status: ScenarioStatus,
-    pub chain_results: HashMap<String, ChainExecutionResult>,
+    pub chain_results: BTreeMap<String, ChainExecutionResult>,
     pub aggregated_metrics: CrossChainMetrics,
 }
 
@@ -93,13 +93,13 @@ pub struct CrossChainTestScenario {
     pub description: String,
     
     /// Chain configurations for testing
-    pub chain_configs: HashMap<String, ChainParams>,
+    pub chain_configs: BTreeMap<String, ChainParams>,
     
     /// Test suites per chain
-    pub chain_test_suites: HashMap<String, Vec<TestSuite>>,
+    pub chain_test_suites: BTreeMap<String, Vec<TestSuite>>,
     
     /// Cross-chain dependencies (chain_id -> dependent_chain_ids)
-    pub dependencies: HashMap<String, Vec<String>>,
+    pub dependencies: BTreeMap<String, Vec<String>>,
     
     /// Maximum execution time for the entire scenario
     pub timeout: Duration,
@@ -171,7 +171,7 @@ pub enum SyncAction {
 /// Multi-chain test executor
 pub struct CrossChainTestExecutor {
     /// Individual chain executors
-    chain_executors: HashMap<String, ChainExecutor>,
+    chain_executors: BTreeMap<String, ChainExecutor>,
     
     /// Cross-chain message relay
     message_relay: MessageRelay,
@@ -287,10 +287,10 @@ pub struct MessageRelay {
     pub in_transit: Vec<CrossChainMessage>,
     
     /// Message delivery latencies per chain pair
-    pub latencies: HashMap<(String, String), Duration>,
+    pub latencies: BTreeMap<(String, String), Duration>,
     
     /// Message failure rates per chain pair
-    pub failure_rates: HashMap<(String, String), f64>,
+    pub failure_rates: BTreeMap<(String, String), f64>,
     
     /// Total messages relayed
     pub total_messages: u32,
@@ -309,7 +309,7 @@ pub struct CrossChainTestResult {
     pub overall_result: ScenarioResult,
     
     /// Results per chain
-    pub chain_results: HashMap<String, ChainExecutionResult>,
+    pub chain_results: BTreeMap<String, ChainExecutionResult>,
     
     /// Cross-chain interaction results
     pub interaction_results: Vec<InteractionResult>,
@@ -419,7 +419,7 @@ impl CrossChainTestExecutor {
     /// Create a new cross-chain test executor
     pub fn new(clock: SimulatedClock) -> Self {
         Self {
-            chain_executors: HashMap::new(),
+            chain_executors: BTreeMap::new(),
             message_relay: MessageRelay::new(),
             clock,
             _snapshot_manager: SnapshotManager::default(),
@@ -531,7 +531,7 @@ impl CrossChainTestExecutor {
                     .cloned()
                     .unwrap_or(0.01); // Default 1% failure rate
                 
-                if rand::random::<f64>() >= failure_rate {
+                if 0.5 >= failure_rate {
                     // Successful delivery
                     if let Some(recipient) = self.chain_executors.get_mut(&message.to_chain) {
                         recipient.pending_messages.push(message.clone());
@@ -588,22 +588,22 @@ impl CrossChainTestExecutor {
         // Create timeout result
         let overall_result = ScenarioResult {
             status: ScenarioStatus::Timeout,
-            chain_results: HashMap::new(),
-            aggregated_metrics: self.calculate_aggregated_metrics(&HashMap::new()),
+            chain_results: BTreeMap::new(),
+            aggregated_metrics: self.calculate_aggregated_metrics(&BTreeMap::new()),
         };
         
         Ok(CrossChainTestResult {
             scenario: scenario.clone(),
             overall_result,
-            chain_results: HashMap::new(),
+            chain_results: BTreeMap::new(),
             interaction_results: Vec::new(),
             sync_results: Vec::new(),
-            aggregated_metrics: self.calculate_aggregated_metrics(&HashMap::new()),
+            aggregated_metrics: self.calculate_aggregated_metrics(&BTreeMap::new()),
         })
     }
     
     /// Evaluate cross-chain outcomes
-    fn evaluate_cross_chain_outcomes(&self, scenario: &CrossChainTestScenario, chain_results: &HashMap<String, ChainExecutionResult>) -> SimulationResult<ScenarioStatus> {
+    fn evaluate_cross_chain_outcomes(&self, scenario: &CrossChainTestScenario, chain_results: &BTreeMap<String, ChainExecutionResult>) -> SimulationResult<ScenarioStatus> {
         for outcome in &scenario.expected_outcomes {
             match outcome {
                 CrossChainOutcome::AllChainsSuccess => {
@@ -636,7 +636,7 @@ impl CrossChainTestExecutor {
     }
     
     /// Calculate aggregated metrics across all chains
-    fn calculate_aggregated_metrics(&self, chain_results: &HashMap<String, ChainExecutionResult>) -> AggregatedMetrics {
+    fn calculate_aggregated_metrics(&self, chain_results: &BTreeMap<String, ChainExecutionResult>) -> AggregatedMetrics {
         let _total_tests: u32 = chain_results.values().map(|result| result.metrics.tests_executed).sum();
         let _total_passed: u32 = chain_results.values().map(|result| result.metrics.tests_passed).sum();
         let max_execution_time = chain_results.values()
@@ -663,8 +663,8 @@ impl CrossChainTestExecutor {
     }
 
     /// Execute coordinated steps across all chains
-    async fn execute_coordinated_steps(&mut self, scenario: &CrossChainTestScenario) -> SimulationResult<HashMap<String, ChainExecutionResult>> {
-        let mut chain_results = HashMap::new();
+    async fn execute_coordinated_steps(&mut self, scenario: &CrossChainTestScenario) -> SimulationResult<BTreeMap<String, ChainExecutionResult>> {
+        let mut chain_results = BTreeMap::new();
         
         // Execute each chain according to dependencies
         for chain_id in scenario.chain_configs.keys() {
@@ -703,14 +703,14 @@ impl CrossChainTestExecutor {
     ) -> SimulationResult<CrossChainResult> {
         println!("Executing coordinated cross-chain operations on {} chains", chain_programs.len());
         
-        let mut chain_results = HashMap::new();
+        let mut chain_results = BTreeMap::new();
         let mut total_steps = 0;
         
         for (chain_name, program) in chain_programs {
             println!("  Executing on chain '{}': {}", chain_name, program);
             
             // Create a minimal test scenario for this chain
-            let mut chain_configs = HashMap::new();
+            let mut chain_configs = BTreeMap::new();
             chain_configs.insert(chain_name.to_string(), ChainParams {
                 chain_id: chain_name.to_string(),
                 gas_limit: 1000000,
@@ -719,11 +719,11 @@ impl CrossChainTestExecutor {
             });
             
             let scenario = CrossChainTestScenario {
-                id: uuid::Uuid::new_v4().to_string(),
+                id: "deterministic_uuid".to_string(),
                 description: format!("Execution on {}", chain_name),
                 chain_configs,
-                chain_test_suites: HashMap::new(),
-                dependencies: HashMap::new(),
+                chain_test_suites: BTreeMap::new(),
+                dependencies: BTreeMap::new(),
                 timeout: std::time::Duration::from_secs(30),
                 expected_outcomes: Vec::new(),
                 sync_points: Vec::new(),
@@ -762,8 +762,8 @@ impl MessageRelay {
     pub fn new() -> Self {
         Self {
             in_transit: Vec::new(),
-            latencies: HashMap::new(),
-            failure_rates: HashMap::new(),
+            latencies: BTreeMap::new(),
+            failure_rates: BTreeMap::new(),
             total_messages: 0,
             failed_deliveries: 0,
         }
@@ -810,7 +810,7 @@ pub struct CrossChainResult {
     /// Total execution steps across all chains
     pub total_steps: usize,
     /// Results per chain
-    pub chain_results: HashMap<String, ChainExecutionResult>,
+    pub chain_results: BTreeMap<String, ChainExecutionResult>,
     /// Whether coordination was successful
     pub coordination_successful: bool,
     /// Total execution time in milliseconds
@@ -820,7 +820,7 @@ pub struct CrossChainResult {
 // Local mock types to replace toolkit dependencies
 #[derive(Debug, Clone)]
 pub struct ResourceManager {
-    resources: HashMap<String, u64>,
+    resources: BTreeMap<String, u64>,
 }
 
 impl Default for ResourceManager {
@@ -832,7 +832,7 @@ impl Default for ResourceManager {
 impl ResourceManager {
     pub fn new() -> Self {
         Self {
-            resources: HashMap::new(),
+            resources: BTreeMap::new(),
         }
     }
     

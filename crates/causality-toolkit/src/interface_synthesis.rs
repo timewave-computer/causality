@@ -4,7 +4,7 @@
 //! version-aware OCaml interfaces by coordinating between Traverse (proof/layout)
 //! and Almanac (indexing), using content-addressed contract versioning.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use anyhow::{Result, anyhow};
 use serde::{Serialize, Deserialize};
 use crate::almanac_schema::{AlmanacSchema, SchemaGenerationResult};
@@ -65,8 +65,8 @@ pub struct ContractIdentity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageLayout {
     pub commitment: LayoutCommitment,
-    pub storage_paths: HashMap<String, String>,
-    pub field_types: HashMap<String, String>,
+    pub storage_paths: BTreeMap<String, String>,
+    pub field_types: BTreeMap<String, String>,
 }
 
 /// Contract schema information from Almanac
@@ -88,9 +88,9 @@ pub struct GeneratedInterface {
 /// Layout commitment registry for version tracking
 #[derive(Debug, Default)]
 pub struct LayoutCommitmentRegistry {
-    contracts: HashMap<(String, String), LayoutCommitment>, // (chain, address) -> commitment
-    layouts: HashMap<LayoutCommitment, StorageLayout>,
-    schemas: HashMap<LayoutCommitment, ContractSchema>,
+    contracts: BTreeMap<(String, String), LayoutCommitment>, // (chain, address) -> commitment
+    layouts: BTreeMap<LayoutCommitment, StorageLayout>,
+    schemas: BTreeMap<LayoutCommitment, ContractSchema>,
 }
 
 impl LayoutCommitmentRegistry {
@@ -568,8 +568,8 @@ mod tests {
         let commitment = LayoutCommitment::default();
         let layout = StorageLayout {
             commitment: commitment.clone(),
-            storage_paths: HashMap::new(),
-            field_types: HashMap::new(),
+            storage_paths: BTreeMap::new(),
+            field_types: BTreeMap::new(),
         };
         
         registry.register_layout("ethereum", "0x123", layout);
@@ -583,12 +583,12 @@ mod tests {
         
         // Create test layout and schema
         let commitment = LayoutCommitment::default();
-        let mut field_types = HashMap::new();
+        let mut field_types = BTreeMap::new();
         field_types.insert("balance".to_string(), "uint256".to_string());
         
         let layout = StorageLayout {
             commitment: commitment.clone(),
-            storage_paths: HashMap::new(),
+            storage_paths: BTreeMap::new(),
             field_types,
         };
         
@@ -615,7 +615,7 @@ mod tests {
 impl InterfaceSynthesisEngine {
     /// Generate query interfaces for Almanac schemas
     pub fn generate_query_interfaces(&self, schemas: &SchemaGenerationResult) -> Result<QueryInterfaceResult, SynthesisError> {
-        let mut interfaces = HashMap::new();
+        let mut interfaces = BTreeMap::new();
         let mut query_modules = Vec::new();
         
         for (contract_id, schema) in &schemas.schemas {
@@ -635,7 +635,7 @@ impl InterfaceSynthesisEngine {
             query_modules,
             layout_commitments: self.extract_layout_commitments(schemas),
             metadata: QueryInterfaceMetadata {
-                generated_at: std::time::SystemTime::now()
+                generated_at: std::time::std::time::UNIX_EPOCH
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_secs(),
@@ -907,7 +907,7 @@ end"#,
     }
     
     /// Extract layout commitments from schemas
-    fn extract_layout_commitments(&self, schemas: &SchemaGenerationResult) -> HashMap<String, String> {
+    fn extract_layout_commitments(&self, schemas: &SchemaGenerationResult) -> BTreeMap<String, String> {
         schemas.schemas.iter()
             .map(|(contract_id, schema)| (contract_id.clone(), schema.layout_commitment.clone()))
             .collect()
@@ -918,11 +918,11 @@ end"#,
 #[derive(Debug, Clone)]
 pub struct QueryInterfaceResult {
     /// Generated interfaces by contract
-    pub interfaces: HashMap<String, ContractQueryInterface>,
+    pub interfaces: BTreeMap<String, ContractQueryInterface>,
     /// Generated OCaml modules
     pub query_modules: Vec<QueryModule>,
     /// Layout commitments for version tracking
-    pub layout_commitments: HashMap<String, String>,
+    pub layout_commitments: BTreeMap<String, String>,
     /// Generation metadata
     pub metadata: QueryInterfaceMetadata,
 }

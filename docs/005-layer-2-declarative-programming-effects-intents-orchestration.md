@@ -1,66 +1,60 @@
-# 005: Layer 2 - Declarative Programming, Effects, Intents, Sessions & Orchestration
+# 005: Layer 2 - Transform-Based Effects, Intents & Unified Operations
 
-Layer 2 represents the highest abstraction level within the Causality architecture. This layer is where application developers primarily work, creating sophisticated domain-specific logic through a declarative programming model centered around **Effects**, **Intents**, **Session Types**, **Capability-based Access Control**, and cross-domain orchestration capabilities.
+Layer 2 represents the highest abstraction level within the Causality architecture, implementing unification of computation and communication through transform-based effects. This layer is where application developers primarily work, creating sophisticated domain-specific logic through a declarative programming model centered around **Unified Transforms**, **Intents**, **Location-Aware Capabilities**, and automatic protocol derivation.
 
-Building upon the type-safe resource management of Layer 1 and the verifiable execution substrate of Layer 0, Layer 2 provides the tools needed to express complex business logic, coordinate multi-party interactions, and manage sophisticated resource transformations while maintaining the mathematical guarantees of the underlying system.
+Building upon the type-safe resource management of Layer 1 and the verifiable execution substrate of Layer 0, Layer 2 provides the tools needed to express complex business logic, coordinate multi-party interactions, and manage sophisticated resource transformations while maintaining perfect symmetry between local and distributed operations.
 
-**Key Architecture**: Layer 2 includes a complete **capability system**, **object model**, and **record operations**. These features compile down to pure Layer 1 primitives through effect resolution and capability analysis.
+**Key Innovation**: Layer 2 eliminates the artificial distinction between computation and communication by treating both as **transformations** that differ only in their source and target locations. This unification enables location-transparent programming with automatic protocol derivation.
 
-## 1. Mathematical Foundation
+## 1. Mathematical Foundation: Symmetric Monoidal Closed Categories
 
-Layer 2 is built upon the **Kleisli category** for an Effect monad over Layer 1's linear lambda calculus. This categorical structure enables:
+Layer 2 is built upon **Symmetric Monoidal Closed Category Theory**, providing a unified mathematical foundation for all operations:
 
-- **Composable Effects**: Effects form a monad with well-defined composition laws
-- **Natural Transformations**: Handlers represent morphisms between effect algebras  
-- **Functorial Semantics**: Resource transformations preserve structural properties
-- **Categorical Stratification**: Clean separation between pure computation (Layer 1) and effectful operations (Layer 2)
-- **Capability Algebra**: Fine-grained access control through algebraic capability composition
+### 1.1 Category Structure
 
-### 1.1 Effect Monad
+- **Objects**: Linear resources (data, channels, functions, protocols)
+- **Morphisms**: Transformations between resources  
+- **Monoidal Structure**: Parallel composition (⊗)
+- **Symmetry**: Resource braiding/swapping
+- **Closure**: Internal hom (→) for functions and protocols
 
-```
-Effect A := Computation that may perform effects and produce value of type A
-pure : A → Effect A                    -- Monadic return
-bind : Effect A × (A → Effect B) → Effect B  -- Monadic composition
-```
+### 1.2 Transform Unification
 
-### 1.2 Capability Algebra
-
-Capabilities form a **partial order** representing access permissions with algebraic structure:
+All operations are **transformations** `T: A → B` where location determines the operation type:
 
 ```
-Capability := PowerSet(AccessRight) × ResourceSchema
-⊑ := capability implication (subset relation + schema compatibility)
-∩ := capability intersection (meet)  
-∪ := capability union (join)
-⊥ := no capabilities (bottom)
-⊤ := all capabilities (admin access)
+Effect<From, To> where:
+  - Local computation:     Effect<Local, Local>
+  - Remote communication:  Effect<Local, Remote>  
+  - Data migration:        Effect<LocationA, LocationB>
+  - Protocol derivation:   Automatic from access patterns
 ```
 
-**Capability Levels**:
-- `Read` ⊑ `Write` ⊑ `Admin`
-- `Read` ⊑ `Execute` ⊑ `Admin`
-- Record-specific capabilities with field-level granularity
+This unification provides:
+- **Location Transparency**: Same API for local and distributed operations
+- **Automatic Protocols**: Communication protocols derived from transform patterns  
+- **Single Constraint Language**: Unified constraints for all operation types
+- **Mathematical Elegance**: Perfect symmetry through category theory
 
 ## 2. Core Layer 2 Components
 
 Layer 2 is built around three fundamental abstractions that work together to provide comprehensive declarative programming capabilities:
 
-1. **Effects** - Structured descriptions of operations to be performed
+1. **Unified Transforms** - Structured descriptions of operations to be performed
 2. **Intents** - Declarative specifications of desired outcomes  
 3. **Session Types** - Type-safe communication protocols with automatic duality
 
-These three pillars complement each other: Effects handle individual operations, Intents coordinate complex workflows, and Session Types ensure safe communication between parties.
+These three pillars complement each other: Unified Transforms handle individual operations, Intents coordinate complex workflows, and Session Types ensure safe communication between parties.
 
-### 2.1 Effects - Structured Side Effects
+### 2.1 Unified Transforms - Structured Side Effects
 
-Effects are **pure data structures** that describe operations to be performed. They separate the specification of what should happen from how it's implemented, enabling powerful composition and transformation patterns.
+Unified Transforms are **pure data structures** that describe operations to be performed. They separate the specification of what should happen from how it's implemented, enabling powerful composition and transformation patterns.
 
 ```rust
-pub enum Effect {
+pub enum UnifiedTransform {
     // Core effect operations
     Pure(Value),
-    Bind(Box<Effect>, Box<dyn Fn(Value) -> Effect>),
+    Bind(Box<UnifiedTransform>, Box<dyn Fn(Value) -> UnifiedTransform>),
     Perform(EffectData),
     
     // Capability-based operations (moved from Layer 1)
@@ -99,10 +93,10 @@ pub enum Effect {
     Verify(Proof),
     
     // Transaction orchestration
-    Transact(Vec<Effect>),
-    Atomic(Box<Effect>),
-    Parallel(Vec<Effect>),
-    Race(Vec<Effect>),
+    Transact(Vec<UnifiedTransform>),
+    Atomic(Box<UnifiedTransform>),
+    Parallel(Vec<UnifiedTransform>),
+    Race(Vec<UnifiedTransform>),
 }
 ```
 
@@ -271,55 +265,206 @@ pub struct RecordType {
 | `create_record` | `RecordSchema × Capability ⊸ Effect ResourceId` | Create new record |
 | `delete_record` | `ResourceId × Capability ⊸ Effect Unit` | Delete entire record |
 
-### 2.5 Intents - Declarative Specifications
+### 2.5 Intents - Declarative Specifications with Transform Constraints
 
-Intents represent **declarative specifications** of desired outcomes, enhanced with comprehensive capability requirements and object management.
+Intents represent **declarative specifications** of desired outcomes using our unified transform constraint system that eliminates the distinction between computation and communication.
 
 ```rust
 pub struct Intent {
+    pub id: IntentId,
     pub name: String,
-    pub domain: EntityId,
     
-    // Resource bindings with capabilities
+    // Resource bindings with location awareness
     pub input_bindings: Vec<ResourceBinding>,
     pub output_bindings: Vec<ResourceBinding>,
     
-    // Capability requirements (comprehensive)
-    pub required_capabilities: Vec<CapabilityRequirement>,
-    pub granted_capabilities: Vec<CapabilityGrant>,
+    // Unified transform constraints
+    pub constraints: Vec<TransformConstraint>,
     
-    // Constraint system  
-    pub constraints: ConstraintTree,
+    // Location requirements for distributed operations
+    pub location_requirements: LocationRequirements,
     
-    // Effect specification with capability effects
-    pub effects: Vec<Effect>,
+    // Capability requirements
+    pub required_capabilities: Vec<Capability>,
     
-    // Object linearity requirements
-    pub linearity_constraints: Vec<LinearityConstraint>,
-    
-    // Optimization hints
-    pub hints: IntentHints,
+    // Cost estimation and optimization
+    pub cost_constraints: Option<CostConstraints>,
+    pub performance_constraints: Option<PerformanceConstraints>,
 }
 ```
 
-#### 2.5.1 Enhanced Resource Bindings
+#### 2.5.1 Transform Constraints - Unified Operations
+
+The key innovation is **unified transform constraints** that work for both local and distributed operations:
 
 ```rust
-pub struct ResourceBinding {
-    pub name: String,
-    pub resource_type: String,
-    pub quantity: Option<u64>,
-    pub capabilities: Vec<Capability>,          // Required capabilities
-    pub object_linearity: Option<LinearityType>, // Linearity requirements
-    pub schema: Option<RecordSchema>,           // Expected record structure
-    pub constraints: Vec<Constraint>,
-    pub metadata: Value,
+pub enum TransformConstraint {
+    /// Local computation constraint
+    LocalTransform {
+        input_type: TypeInner,
+        output_type: TypeInner,
+        operation: String,
+    },
+    
+    /// Remote communication constraint  
+    RemoteTransform {
+        from_location: Location,
+        to_location: Location,
+        message_type: TypeInner,
+        protocol: Option<SessionType>, // Auto-derived if None
+    },
+    
+    /// Data migration constraint
+    DataMigration {
+        resource_type: TypeInner,
+        from_location: Location,
+        to_location: Location,
+        migration_strategy: MigrationStrategy,
+    },
+    
+    /// Distributed synchronization constraint
+    DistributedSync {
+        locations: Vec<Location>,
+        sync_type: SyncType,
+        consistency_model: ConsistencyModel,
+    },
+    
+    /// Protocol requirement (auto-derived from access patterns)
+    ProtocolRequirement {
+        session_type: SessionType,
+        role: String,
+        derived_from: Vec<String>, // Field access patterns that generated this
+    },
+    
+    /// Capability access constraint
+    CapabilityAccess {
+        resource_ref: ResourceRef,
+        required_capability: Capability,
+        access_location: Location,
+    },
+}
+```
+
+#### 2.5.2 Location Requirements - Transparent Distribution
+
+Location requirements enable transparent distributed programming:
+
+```rust
+pub struct LocationRequirements {
+    /// Preferred locations for execution
+    pub preferred_locations: Vec<Location>,
+    
+    /// Locations that are allowed for this intent
+    pub allowed_locations: Vec<Location>,
+    
+    /// Required protocols for remote operations (auto-derived)
+    pub required_protocols: Vec<SessionType>,
+    
+    /// Data migration specifications
+    pub migration_specs: Vec<MigrationSpec>,
+    
+    /// Performance constraints by location
+    pub performance_constraints: BTreeMap<Location, PerformanceConstraints>,
+    
+    /// Cost constraints by location
+    pub cost_constraints: BTreeMap<Location, CostConstraints>,
+}
+
+pub struct MigrationSpec {
+    pub resource_type: TypeInner,
+    pub from_location: Location,
+    pub to_location: Location,
+    pub strategy: MigrationStrategy,
+    pub consistency_model: ConsistencyModel,
+}
+
+pub enum MigrationStrategy {
+    Copy,      // Copy data, keep original
+    Move,      // Move data, invalidate original  
+    Replicate, // Create multiple consistent copies
+    Partition, // Split data across locations
+}
+
+pub enum ConsistencyModel {
+    Strong,     // Strict consistency
+    Eventual,   // Eventually consistent
+    Causal,     // Causally consistent
+    Session,    // Session consistency
+}
+```
+
+#### 2.5.3 Automatic Protocol Derivation
+
+The system automatically derives communication protocols from data access patterns:
+
+```rust
+impl Intent {
+    /// Analyze resource access patterns and derive required protocols
+    pub fn derive_protocols(&self) -> Vec<SessionType> {
+        let mut protocols = Vec::new();
+        
+        // Analyze cross-location field accesses
+        for constraint in &self.constraints {
+            match constraint {
+                TransformConstraint::RemoteTransform { 
+                    from_location, 
+                    to_location, 
+                    message_type, 
+                    protocol: None 
+                } => {
+                    // Auto-derive protocol from message type and locations
+                    let derived_protocol = self.derive_protocol_for_transform(
+                        from_location, 
+                        to_location, 
+                        message_type
+                    );
+                    protocols.push(derived_protocol);
+                },
+                
+                TransformConstraint::CapabilityAccess { 
+                    resource_ref, 
+                    access_location, 
+                    .. 
+                } => {
+                    // Derive protocol for distributed capability verification
+                    if access_location != &Location::Local {
+                        let capability_protocol = self.derive_capability_protocol(
+                            resource_ref, 
+                            access_location
+                        );
+                        protocols.push(capability_protocol);
+                    }
+                },
+                
+                _ => {}
+            }
+        }
+        
+        protocols
+    }
+    
+    /// Derive a protocol for a specific transform operation
+    fn derive_protocol_for_transform(
+        &self,
+        from: &Location,
+        to: &Location, 
+        message_type: &TypeInner
+    ) -> SessionType {
+        // Simple request-response protocol
+        SessionType::Send(
+            Box::new(message_type.clone()),
+            Box::new(SessionType::Receive(
+                Box::new(message_type.clone()),
+                Box::new(SessionType::End)
+            ))
+        )
+    }
 }
 ```
 
 ### 2.6 Session Types - Type-Safe Communication Protocols
 
-Session types provide **type-safe communication protocols** with automatic duality checking, enabling distributed systems to maintain correctness guarantees while composing complex multi-party workflows. Session types form the third pillar of Layer 2 alongside Effects and Intents.
+Session types provide **type-safe communication protocols** with automatic duality checking, enabling distributed systems to maintain correctness guarantees while composing complex multi-party workflows. Session types form the third pillar of Layer 2 alongside Unified Transforms and Intents.
 
 #### 2.6.1 Session Type Syntax
 
@@ -544,11 +689,11 @@ effect/
 To sum this all up:
 
 - Resources are data.
-- Effects are transformations of resources.
-- Handlers are transformations of effects.
+- Unified Transforms are transformations of resources.
+- Handlers are transformations of Unified Transforms.
 - Transactions are committed graphs of resource transformations.
 
-Linear types tie everything together, ensuring every resource and effect is used exactly once, accounted for, and safely composed.
+Linear types tie everything together, ensuring every resource and Unified Transform is used exactly once, accounted for, and safely composed.
 
 ## 4. Programming Model Examples
 
@@ -795,7 +940,7 @@ Layer 2 effects compile to Layer 1 expressions that use only the 11 core primiti
 
 ### 7.2 Layer 0 Execution
 
-The compilation chain ensures that high-level Intent operations ultimately execute as sequences of the 11 register machine instructions, maintaining:
+The compilation chain ensures that high-level Intent operations ultimately execute as sequences of the **5 fundamental register machine instructions** (transform, alloc, consume, compose, tensor), maintaining:
 
 - **Deterministic Execution**: Same Intent always produces same instruction sequence
 - **Resource Linearity**: Hardware-enforced resource tracking preserved

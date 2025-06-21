@@ -4,7 +4,7 @@
 //! verified blockchain storage state. It integrates with the Traverse storage
 //! commitment system and Valence coprocessor for ZK proof generation.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use crate::lambda::base::Value;
@@ -165,7 +165,7 @@ pub struct ZkCircuitConfig {
     pub max_proof_size: u32,
     
     /// Circuit-specific parameters
-    pub parameters: HashMap<String, String>,
+    pub parameters: BTreeMap<String, String>,
 }
 
 /// Proof aggregation strategy
@@ -223,7 +223,7 @@ pub struct StorageEffectMetadata {
     pub description: Option<String>,
     
     /// Effect tags for categorization
-    pub tags: HashMap<String, String>,
+    pub tags: BTreeMap<String, String>,
     
     /// Estimated gas cost for execution
     pub estimated_gas_cost: Option<u64>,
@@ -321,7 +321,7 @@ pub struct ProofMetadata {
     pub proof_size: u32,
     
     /// Additional metadata
-    pub extra: HashMap<String, String>,
+    pub extra: BTreeMap<String, String>,
 }
 
 /// Cache information for storage values
@@ -585,13 +585,13 @@ impl Default for VerificationRequirements {
 impl Default for StorageEffectMetadata {
     fn default() -> Self {
         Self {
-            created_at: std::time::SystemTime::now()
+            created_at: crate::system::deterministic_system_time()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
             creator: None,
             description: None,
-            tags: HashMap::new(),
+            tags: BTreeMap::new(),
             estimated_gas_cost: None,
             priority: EffectPriority::Normal,
         }
@@ -608,10 +608,10 @@ pub struct StorageProofEffectHandler {
     config: StorageProofHandlerConfig,
     
     /// Cache for storage proof results
-    result_cache: HashMap<String, StorageProofResult>,
+    result_cache: BTreeMap<String, StorageProofResult>,
     
     /// Active storage proof requests
-    active_requests: HashMap<String, StorageProofRequest>,
+    active_requests: BTreeMap<String, StorageProofRequest>,
 }
 
 /// Configuration for storage proof effect handler
@@ -679,8 +679,8 @@ impl StorageProofEffectHandler {
     pub fn new(config: StorageProofHandlerConfig) -> Self {
         Self {
             config,
-            result_cache: HashMap::new(),
-            active_requests: HashMap::new(),
+            result_cache: BTreeMap::new(),
+            active_requests: BTreeMap::new(),
         }
     }
     
@@ -699,7 +699,7 @@ impl StorageProofEffectHandler {
         
         // Create new request
         let request_id = format!("req_{}_{}", effect.id, 
-            std::time::SystemTime::now()
+            crate::system::deterministic_system_time()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_millis());
@@ -708,7 +708,7 @@ impl StorageProofEffectHandler {
             _id: request_id.clone(),
             _effect: effect.clone(),
             status: RequestStatus::Pending,
-            _created_at: std::time::SystemTime::now()
+            _created_at: crate::system::deterministic_system_time()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
@@ -840,15 +840,15 @@ impl StorageProofEffectHandler {
                     value: vec![0; 32], // Mock storage value
                     block_info: BlockInfo {
                         height: block_number.unwrap_or(1000),
-                        hash: format!("0x{:x}", 12345u64), // Placeholder for rand::random::<u64>()),
-                        timestamp: std::time::SystemTime::now()
+                        hash: format!("0x{:x}", 12345u64), // Placeholder for crate::system::deterministic_u64()),
+                        timestamp: crate::system::deterministic_system_time()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap()
                             .as_secs(),
                         confirmations: 6,
                     },
                     proof_data: None, // Would contain ZK proof if required
-                    verified_at: std::time::SystemTime::now()
+                    verified_at: crate::system::deterministic_system_time()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap()
                         .as_secs(),
@@ -886,15 +886,15 @@ impl StorageProofEffectHandler {
                     value: state_key.as_bytes().to_vec(), // Mock storage value
                     block_info: BlockInfo {
                         height: height.unwrap_or(1000),
-                        hash: format!("cosmos_block_{:x}", 12345u64), // Placeholder for rand::random::<u64>()),
-                        timestamp: std::time::SystemTime::now()
+                        hash: format!("cosmos_block_{:x}", 12345u64), // Placeholder for crate::system::deterministic_u64()),
+                        timestamp: crate::system::deterministic_system_time()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap()
                             .as_secs(),
                         confirmations: 1,
                     },
                     proof_data: None,
-                    verified_at: std::time::SystemTime::now()
+                    verified_at: crate::system::deterministic_system_time()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap()
                         .as_secs(),
@@ -941,14 +941,14 @@ impl StorageProofEffectHandler {
                 block_info: BlockInfo {
                     height: 1000,
                     hash: "custom_block_hash".to_string(),
-                    timestamp: std::time::SystemTime::now()
+                    timestamp: crate::system::deterministic_system_time()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap()
                         .as_secs(),
                     confirmations: 1,
                 },
                 proof_data: None,
-                verified_at: std::time::SystemTime::now()
+                verified_at: crate::system::deterministic_system_time()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_secs(),
@@ -1071,7 +1071,7 @@ impl StorageProofEffectHandler {
     fn create_result_value(&self, results: &[StorageProofResult]) -> EffectResult {
         // Convert results to a causality Value
         // This is a simplified implementation
-        let result_data: HashMap<String, serde_json::Value> = results
+        let result_data: BTreeMap<String, serde_json::Value> = results
             .iter()
             .map(|result| {
                 (result.dependency_id.clone(), serde_json::json!({
@@ -1384,7 +1384,7 @@ mod tests {
             name: "my-chain".to_string(),
             config: DomainConfig {
                 rpc_endpoint: "http://localhost:8545".to_string(),
-                chain_config: HashMap::new(),
+                chain_config: BTreeMap::new(),
                 proof_format: "merkle".to_string(),
             },
         };

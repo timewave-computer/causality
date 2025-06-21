@@ -3,8 +3,7 @@
 //! This module implements the core effect operations: pure, bind, perform, handle
 //! and effect combinators: parallel, race.
 
-use super::core::{EffectExpr, EffectExprKind, EffectHandler};
-use super::session::SessionBranch;
+use super::core::{EffectExpr, EffectExprKind, EffectHandler, SessionBranch};
 use crate::lambda::Term;
 
 //-----------------------------------------------------------------------------
@@ -227,7 +226,7 @@ pub fn with_session(
 mod tests {
     use super::*;
     use crate::lambda::{Term, Literal};
-    use crate::effect::session::SessionBranch;
+    use crate::effect::core::SessionBranch;
 
     #[test]
     fn test_session_send() {

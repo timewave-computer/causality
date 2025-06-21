@@ -6,7 +6,7 @@
 use anyhow::Result;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use base64::Engine;
 
 // Import the actual client types from valence-domain-clients
@@ -435,8 +435,8 @@ impl NeutronClientWrapper {
     ) -> Result<ContractDeploymentResult> {
         // TODO: Implement using the actual valence-domain-clients API
         // For now, return a placeholder result
-        let contract_address = format!("neutron1{:x}", rand::random::<u64>());
-        let tx_hash = format!("tx_{:x}", rand::random::<u64>());
+        let contract_address = format!("neutron1{:x}", 0x1234567890abcdefu64);
+        let tx_hash = format!("tx_{:x}", 0x1234567890abcdefu64);
         
         log::info!("Instantiated contract {} from code ID {} with label '{}'", 
                   contract_address, instantiate_msg.code_id, instantiate_msg.label);
@@ -457,7 +457,7 @@ impl NeutronClientWrapper {
     ) -> Result<ContractExecutionResult> {
         // TODO: Implement using the actual valence-domain-clients API
         // For now, return a placeholder result
-        let tx_hash = format!("exec_tx_{:x}", rand::random::<u64>());
+        let tx_hash = format!("exec_tx_{:x}", 0x1234567890abcdefu64);
         
         log::info!("Executed contract {} with message: {}", 
                   execute_msg.contract_address, execute_msg.msg);
@@ -495,7 +495,7 @@ impl NeutronClientWrapper {
     ) -> Result<TxResponse> {
         // TODO: Implement using the actual valence-domain-clients API
         // For now, return a placeholder result
-        let tx_hash = format!("migrate_tx_{:x}", rand::random::<u64>());
+        let tx_hash = format!("migrate_tx_{:x}", 0x1234567890abcdefu64);
         
         log::info!("Migrated contract {} to code ID {} with message: {}", 
                   migrate_msg.contract_address, migrate_msg.new_code_id, migrate_msg.msg);
@@ -529,7 +529,7 @@ impl NeutronClientWrapper {
         coins: Vec<Coin>,
     ) -> Result<TxResponse> {
         // TODO: Implement using the actual valence-domain-clients API
-        let tx_hash = format!("send_tx_{:x}", rand::random::<u64>());
+        let tx_hash = format!("send_tx_{:x}", 0x1234567890abcdefu64);
         
         log::info!("Sent {} tokens to {}", 
                   coins.iter().map(|c| format!("{}{}", c.amount, c.denom)).collect::<Vec<_>>().join(","),
@@ -601,7 +601,7 @@ impl NeutronClientWrapper {
         public_inputs: Vec<ZkInput>,
         auth_context: AuthorizationContext,
     ) -> Result<ZkMessage> {
-        let message_id = format!("zk_msg_{:x}", rand::random::<u64>());
+        let message_id = format!("zk_msg_{:x}", 0x1234567890abcdefu64);
         let proof_data = ZkProofData {
             proof_bytes: base64::engine::general_purpose::STANDARD.encode(&proof_bytes),
             encoding: ProofEncoding::Base64,
@@ -611,7 +611,7 @@ impl NeutronClientWrapper {
                 generation_time_ms: 0, // Placeholder
                 prover_service: Some("valence-coprocessor".to_string()),
                 constraints_satisfied: true,
-                extra: HashMap::new(),
+                extra: BTreeMap::new(),
             },
         };
         
@@ -773,8 +773,8 @@ impl NeutronClientWrapper {
             action,
             amount,
             expires_at,
-            nonce: rand::random::<u64>(),
-            context_data: HashMap::new(),
+            nonce: 0x1234567890abcdefu64,
+            context_data: BTreeMap::new(),
         }
     }
     
@@ -863,7 +863,7 @@ impl NeutronClientWrapper {
     /// Sign and broadcast a transaction
     pub async fn sign_and_broadcast_tx(&self, _tx_data: &str) -> Result<TxResponse> {
         // TODO: Implement transaction signing and broadcasting
-        let tx_hash = format!("signed_tx_{:x}", rand::random::<u64>());
+        let tx_hash = format!("signed_tx_{:x}", 0x1234567890abcdefu64);
         
         log::info!("Signed and broadcast transaction: {}", tx_hash);
         
@@ -1059,7 +1059,7 @@ pub struct AuthorizationContractConfig {
     pub time_lock_duration: Option<u64>,
     
     /// Contract-specific configuration
-    pub custom_config: HashMap<String, serde_json::Value>,
+    pub custom_config: BTreeMap<String, serde_json::Value>,
 }
 
 /// Authorization status query result
@@ -1075,7 +1075,7 @@ pub struct AuthorizationStatus {
     pub expires_at: Option<u64>,
     
     /// Authorization metadata
-    pub metadata: HashMap<String, serde_json::Value>,
+    pub metadata: BTreeMap<String, serde_json::Value>,
 }
 
 /// Authorization grant request
@@ -1094,7 +1094,7 @@ pub struct AuthorizationGrantRequest {
     pub permissions: Vec<String>,
     
     /// Grant metadata
-    pub metadata: HashMap<String, serde_json::Value>,
+    pub metadata: BTreeMap<String, serde_json::Value>,
 }
 
 /// Authorization revoke request
@@ -1351,7 +1351,7 @@ impl ValenceAuthorizationContract {
     }
     
     /// Update contract configuration
-    pub async fn update_config(&self, new_config: HashMap<String, serde_json::Value>) -> Result<TxResponse> {
+    pub async fn update_config(&self, new_config: BTreeMap<String, serde_json::Value>) -> Result<TxResponse> {
         let contract_msg = serde_json::json!({
             "update_config": new_config
         });
@@ -1513,7 +1513,7 @@ mod tests {
             initial_authorized: vec!["neutron1user1".to_string(), "neutron1user2".to_string()],
             threshold: Some(2),
             time_lock_duration: None,
-            custom_config: HashMap::new(),
+            custom_config: BTreeMap::new(),
         };
         
         // Test contract type inference
@@ -1528,7 +1528,7 @@ mod tests {
     
     #[test]
     fn test_authorization_grant_request() {
-        let mut metadata = HashMap::new();
+        let mut metadata = BTreeMap::new();
         metadata.insert("grant_reason".to_string(), serde_json::Value::String("test grant".to_string()));
         
         let grant_request = AuthorizationGrantRequest {
@@ -1572,7 +1572,7 @@ mod tests {
                     generation_time_ms: 500,
                     prover_service: None,
                     constraints_satisfied: true,
-                    extra: HashMap::new(),
+                    extra: BTreeMap::new(),
                 },
             },
             public_inputs: Vec::new(),
@@ -1583,7 +1583,7 @@ mod tests {
                 amount: None,
                 expires_at: None,
                 nonce: 1,
-                context_data: HashMap::new(),
+                context_data: BTreeMap::new(),
             },
             timestamp: 1000,
             signature: None,

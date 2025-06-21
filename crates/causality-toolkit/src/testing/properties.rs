@@ -13,7 +13,7 @@ use crate::{
 };
 use serde::{Serialize, Deserialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     time::Duration,
 };
 
@@ -23,7 +23,7 @@ pub struct PropertyTestGenerator {
     config: PropertyTestConfig,
     
     /// Cached property tests by effect type
-    property_cache: HashMap<String, Vec<PropertyTest>>,
+    property_cache: BTreeMap<String, Vec<PropertyTest>>,
 }
 
 /// Configuration for property-based testing
@@ -113,7 +113,7 @@ pub struct PropertyTest {
     pub timeout: Duration,
     
     /// Tags for categorization
-    pub tags: HashSet<String>,
+    pub tags: BTreeSet<String>,
 }
 
 /// Individual property test case
@@ -142,7 +142,7 @@ pub struct PropertyInputs {
     pub initial_state: TestSetup,
     
     /// Effect parameters for testing
-    pub effect_params: HashMap<String, TestValue>,
+    pub effect_params: BTreeMap<String, TestValue>,
     
     /// Additional context parameters
     pub context: PropertyContext,
@@ -164,7 +164,7 @@ pub struct PropertyContext {
     pub mock_strategy: Option<String>,
     
     /// Additional context data
-    pub metadata: HashMap<String, String>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 /// Property assertion types
@@ -310,7 +310,7 @@ pub struct PropertyCoverage {
     pub input_coverage_percentage: f64,
     
     /// Property types covered
-    pub property_types_covered: HashSet<PropertyType>,
+    pub property_types_covered: BTreeSet<PropertyType>,
 }
 
 /// Counterexample for failed property
@@ -335,7 +335,7 @@ impl PropertyTestGenerator {
     pub fn new() -> Self {
         PropertyTestGenerator {
             config: PropertyTestConfig::default(),
-            property_cache: HashMap::new(),
+            property_cache: BTreeMap::new(),
         }
     }
     
@@ -343,7 +343,7 @@ impl PropertyTestGenerator {
     pub fn with_config(config: PropertyTestConfig) -> Self {
         PropertyTestGenerator {
             config,
-            property_cache: HashMap::new(),
+            property_cache: BTreeMap::new(),
         }
     }
     
@@ -400,7 +400,7 @@ impl PropertyTestGenerator {
                 violation_behavior: ViolationBehavior::IndicatesBug,
                 timeout: self.config.test_timeout,
                 tags: {
-                    let mut tags = HashSet::new();
+                    let mut tags = BTreeSet::new();
                     tags.insert("conservation".to_string());
                     tags.insert("critical".to_string());
                     tags
@@ -426,7 +426,7 @@ impl PropertyTestGenerator {
                 violation_behavior: ViolationBehavior::ConditionallyViolated(vec![FailureMode::InsufficientBalance]),
                 timeout: self.config.test_timeout * 2, // Longer timeout for multiple operations
                 tags: {
-                    let mut tags = HashSet::new();
+                    let mut tags = BTreeSet::new();
                     tags.insert("idempotency".to_string());
                     tags.insert("consistency".to_string());
                     tags
@@ -453,7 +453,7 @@ impl PropertyTestGenerator {
                     violation_behavior: ViolationBehavior::ConditionallyViolated(vec![FailureMode::GasLimitExceeded]),
                     timeout: self.config.test_timeout,
                     tags: {
-                        let mut tags = HashSet::new();
+                        let mut tags = BTreeSet::new();
                         tags.insert("monotonicity".to_string());
                         tags.insert(param.name.clone());
                         tags
@@ -480,7 +480,7 @@ impl PropertyTestGenerator {
                 violation_behavior: ViolationBehavior::NeverViolated,
                 timeout: self.config.test_timeout,
                 tags: {
-                    let mut tags = HashSet::new();
+                    let mut tags = BTreeSet::new();
                     tags.insert("slippage".to_string());
                     tags.insert("defi".to_string());
                     tags
@@ -498,7 +498,7 @@ impl PropertyTestGenerator {
             violation_behavior: ViolationBehavior::IndicatesBug,
             timeout: self.config.test_timeout,
             tags: {
-                let mut tags = HashSet::new();
+                let mut tags = BTreeSet::new();
                 tags.insert("balance".to_string());
                 tags.insert("critical".to_string());
                 tags
@@ -524,7 +524,7 @@ impl PropertyTestGenerator {
                     violation_behavior: ViolationBehavior::ConditionallyViolated(vec![FailureMode::NetworkError]),
                     timeout: self.config.test_timeout,
                     tags: {
-                        let mut tags = HashSet::new();
+                        let mut tags = BTreeSet::new();
                         tags.insert("gas".to_string());
                         tags.insert("consistency".to_string());
                         tags
@@ -633,7 +633,7 @@ impl PropertyTestGenerator {
                 id: format!("slippage_case_{}", i),
                 inputs: PropertyInputs {
                     initial_state: TestSetup::default(),
-                    effect_params: HashMap::new(),
+                    effect_params: BTreeMap::new(),
                     context: PropertyContext::default(),
                 },
                 assertion: PropertyAssertion::WithinPercentage(
@@ -724,8 +724,8 @@ impl PropertyTestGenerator {
         Ok(setup)
     }
     
-    fn generate_random_valid_params(&self, schema: &EffectSchema, seed: u64) -> TestResult<HashMap<String, TestValue>> {
-        let mut params = HashMap::new();
+    fn generate_random_valid_params(&self, schema: &EffectSchema, seed: u64) -> TestResult<BTreeMap<String, TestValue>> {
+        let mut params = BTreeMap::new();
         
         for param in &schema.parameters {
             let value = match &param.param_type {
@@ -766,7 +766,7 @@ impl Default for PropertyContext {
             gas_price: None,
             network_latency: None,
             mock_strategy: None,
-            metadata: HashMap::new(),
+            metadata: BTreeMap::new(),
         }
     }
 }

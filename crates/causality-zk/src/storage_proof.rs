@@ -67,17 +67,17 @@ use coprocessor_types::{ProofRequest, ProofResponse, CircuitInput};
 
 use causality_core::system::{StorageCommitment, StorageCommitmentBatch, StorageKeyDerivation, StorageKeyComponent, EntityId, Result, Error};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Ethereum storage key resolver for complex storage layouts
 #[derive(Debug, Clone)]
 pub struct EthereumKeyResolver {
     /// Known contract ABIs for storage layout resolution
-    contract_abis: HashMap<String, ContractAbi>,
+    contract_abis: BTreeMap<String, ContractAbi>,
     
     /// Storage layout cache
     #[allow(dead_code)]
-    layout_cache: HashMap<String, StorageLayout>,
+    layout_cache: BTreeMap<String, StorageLayout>,
 }
 
 /// Contract ABI information for storage resolution
@@ -87,7 +87,7 @@ pub struct ContractAbi {
     pub address: String,
     
     /// Storage variable definitions
-    pub storage_variables: HashMap<String, StorageVariable>,
+    pub storage_variables: BTreeMap<String, StorageVariable>,
     
     /// Contract metadata
     pub metadata: ContractMetadata,
@@ -128,7 +128,7 @@ pub enum StorageVariableType {
     Mapping { key_type: String, value_type: String },
     
     /// Struct type
-    Struct { type_name: String, fields: HashMap<String, StorageVariable> },
+    Struct { type_name: String, fields: BTreeMap<String, StorageVariable> },
     
     /// String type
     String,
@@ -237,8 +237,8 @@ impl EthereumKeyResolver {
     /// Create a new Ethereum key resolver
     pub fn new() -> Self {
         Self {
-            contract_abis: HashMap::new(),
-            layout_cache: HashMap::new(),
+            contract_abis: BTreeMap::new(),
+            layout_cache: BTreeMap::new(),
         }
     }
     
@@ -552,7 +552,7 @@ pub struct StorageProofGenerator {
     supported_domains: Vec<String>,
     
     /// Circuit cache for reusing compiled circuits
-    circuit_cache: HashMap<String, StorageCircuit>,
+    circuit_cache: BTreeMap<String, StorageCircuit>,
     
     /// Configuration for proof generation
     config: StorageProofConfig,
@@ -712,7 +712,7 @@ impl StorageProofGenerator {
                 "neutron".to_string(),
                 "cosmos".to_string(),
             ],
-            circuit_cache: HashMap::new(),
+            circuit_cache: BTreeMap::new(),
             config,
             ethereum_resolver: Some(EthereumKeyResolver::new()),
             proof_fetcher: Some(StorageProofFetcher::new(1000)), // 1000 cache entries
@@ -728,7 +728,7 @@ impl StorageProofGenerator {
                 "neutron".to_string(),
                 "cosmos".to_string(),
             ],
-            circuit_cache: HashMap::new(),
+            circuit_cache: BTreeMap::new(),
             config,
             ethereum_resolver: Some(EthereumKeyResolver::new()),
             proof_fetcher: Some(StorageProofFetcher::new(witness_config.max_cache_size)),
@@ -1363,7 +1363,7 @@ mod tests {
     
     #[test]
     fn test_contract_abi_creation() {
-        let mut storage_vars = HashMap::new();
+        let mut storage_vars = BTreeMap::new();
         storage_vars.insert(
             "_balances".to_string(),
             StorageVariable {
@@ -1456,7 +1456,7 @@ mod tests {
         let mut resolver = EthereumKeyResolver::new();
         
         // Create a contract ABI with a mapping
-        let mut storage_vars = HashMap::new();
+        let mut storage_vars = BTreeMap::new();
         storage_vars.insert(
             "_balances".to_string(),
             StorageVariable {
@@ -1506,7 +1506,7 @@ mod tests {
         let mut resolver = EthereumKeyResolver::new();
         
         // Create a contract ABI with an array
-        let mut storage_vars = HashMap::new();
+        let mut storage_vars = BTreeMap::new();
         storage_vars.insert(
             "owners".to_string(),
             StorageVariable {
@@ -1553,7 +1553,7 @@ mod tests {
         let mut resolver = EthereumKeyResolver::new();
         
         // Create struct fields
-        let mut struct_fields = HashMap::new();
+        let mut struct_fields = BTreeMap::new();
         struct_fields.insert(
             "amount".to_string(),
             StorageVariable {
@@ -1578,7 +1578,7 @@ mod tests {
         );
         
         // Create a contract ABI with a struct mapping
-        let mut storage_vars = HashMap::new();
+        let mut storage_vars = BTreeMap::new();
         storage_vars.insert(
             "userInfo".to_string(),
             StorageVariable {
@@ -1626,7 +1626,7 @@ mod tests {
         let mut generator = StorageProofGenerator::new(config);
         
         // Create a contract ABI
-        let mut storage_vars = HashMap::new();
+        let mut storage_vars = BTreeMap::new();
         storage_vars.insert(
             "_balances".to_string(),
             StorageVariable {
@@ -2269,10 +2269,10 @@ mod tests {
 #[derive(Debug, Clone)]
 pub struct StorageProofFetcher {
     /// RPC client configurations for different chains
-    rpc_clients: HashMap<String, RpcClientConfig>,
+    rpc_clients: BTreeMap<String, RpcClientConfig>,
     
     /// Proof validation cache
-    proof_cache: HashMap<String, CachedStorageProof>,
+    proof_cache: BTreeMap<String, CachedStorageProof>,
     
     /// Maximum cache size
     max_cache_size: usize,
@@ -2382,8 +2382,8 @@ impl StorageProofFetcher {
     /// Create a new storage proof fetcher
     pub fn new(max_cache_size: usize) -> Self {
         Self {
-            rpc_clients: HashMap::new(),
-            proof_cache: HashMap::new(),
+            rpc_clients: BTreeMap::new(),
+            proof_cache: BTreeMap::new(),
             max_cache_size,
         }
     }
@@ -2684,7 +2684,7 @@ pub struct CoprocessorWitnessCreator {
     config: WitnessCreationConfig,
     
     /// Cached witnesses for reuse
-    witness_cache: HashMap<String, CachedWitness>,
+    witness_cache: BTreeMap<String, CachedWitness>,
 }
 
 /// Configuration for witness creation
@@ -2729,7 +2729,7 @@ pub struct WitnessMetadata {
     pub domains: Vec<String>,
     
     /// Block numbers for each domain
-    pub block_numbers: HashMap<String, u64>,
+    pub block_numbers: BTreeMap<String, u64>,
     
     /// Contract addresses involved
     pub contract_addresses: Vec<String>,
@@ -2882,7 +2882,7 @@ impl CoprocessorWitnessCreator {
         Self {
             proof_fetcher: StorageProofFetcher::new(config.max_cache_size),
             config,
-            witness_cache: HashMap::new(),
+            witness_cache: BTreeMap::new(),
         }
     }
     
@@ -2914,7 +2914,7 @@ impl CoprocessorWitnessCreator {
         let metadata = WitnessMetadata {
             domains: vec![domain.to_string()],
             block_numbers: {
-                let mut map = HashMap::new();
+                let mut map = BTreeMap::new();
                 map.insert(domain.to_string(), proof.raw_proof.block_number);
                 map
             },
@@ -3003,7 +3003,7 @@ impl CoprocessorWitnessCreator {
         let metadata = WitnessMetadata {
             domains: vec![request.domain.clone()],
             block_numbers: {
-                let mut map = HashMap::new();
+                let mut map = BTreeMap::new();
                 if let Some(block_num) = request.block_number {
                     map.insert(request.domain.clone(), block_num);
                 } else if let Some(first_proof) = all_proofs.first() {

@@ -6,15 +6,14 @@
 use causality_core::{
     effect::{Intent, ResourceBinding, Constraint, ValueExpr},
     effect::intent::Hint,
-    system::content_addressing::DomainId,
-    lambda::base::Value,
+    lambda::base::{Value, Location},
     effect::capability::Capability,
 };
 
 /// Fluent builder for constructing Intents
 #[derive(Debug, Clone)]
 pub struct IntentBuilder {
-    domain: Option<DomainId>,
+    domain: Option<Location>,
     inputs: Vec<ResourceBinding>,
     constraint: Option<Constraint>,
     hint: Option<Hint>,
@@ -49,7 +48,7 @@ impl IntentBuilder {
     }
     
     /// Set the domain for this intent
-    pub fn domain(mut self, domain: DomainId) -> Self {
+    pub fn domain(mut self, domain: Location) -> Self {
         self.domain = Some(domain);
         self
     }
@@ -314,8 +313,8 @@ mod tests {
     use super::*;
     use causality_core::system::content_addressing::{EntityId, Str};
 
-    fn test_domain() -> DomainId {
-        EntityId::from_content(&Str::new("test_domain"))
+    fn test_domain() -> Location {
+        Location::Remote("test_domain".to_string())
     }
 
     #[test]

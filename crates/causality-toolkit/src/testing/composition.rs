@@ -15,7 +15,7 @@ use crate::{
 };
 use serde::{Serialize, Deserialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     time::Duration,
 };
 
@@ -25,7 +25,7 @@ pub struct CompositionTestGenerator {
     config: CompositionTestConfig,
     
     /// Cached composition tests by scenario name
-    composition_cache: HashMap<String, Vec<CompositionTest>>,
+    composition_cache: BTreeMap<String, Vec<CompositionTest>>,
 }
 
 /// Configuration for composition testing
@@ -115,7 +115,7 @@ pub struct CompositionTest {
     pub timeout: Duration,
     
     /// Tags for categorization
-    pub tags: HashSet<String>,
+    pub tags: BTreeSet<String>,
 }
 
 /// Effect within a composition
@@ -141,10 +141,10 @@ pub struct EffectInComposition {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EffectConfig {
     /// Input parameter bindings
-    pub parameter_bindings: HashMap<String, ParameterBinding>,
+    pub parameter_bindings: BTreeMap<String, ParameterBinding>,
     
     /// Output value mappings
-    pub output_mappings: HashMap<String, String>,
+    pub output_mappings: BTreeMap<String, String>,
     
     /// Retry configuration
     pub retry_config: Option<RetryConfig>,
@@ -284,7 +284,7 @@ pub enum CompositionConstraint {
     MaxGasCost(u64),
     
     /// Required resource availability
-    RequiredResources(HashMap<String, u64>),
+    RequiredResources(BTreeMap<String, u64>),
     
     /// Ordering constraint
     MustExecuteBefore(String, String), // (first_effect, second_effect)
@@ -306,7 +306,7 @@ pub enum CompositionBehavior {
     AtLeastOneSucceeds,
     
     /// Specific effects should succeed/fail
-    SpecificOutcomes(HashMap<String, ExpectedOutcome>),
+    SpecificOutcomes(BTreeMap<String, ExpectedOutcome>),
     
     /// Should satisfy property assertions
     SatisfiesProperties(Vec<PropertyAssertion>),
@@ -360,7 +360,7 @@ pub enum CompositionResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompositionSuccess {
     /// Results from each effect
-    pub effect_results: HashMap<String, TestValue>,
+    pub effect_results: BTreeMap<String, TestValue>,
     
     /// Total execution time
     pub total_execution_time: Duration,
@@ -404,7 +404,7 @@ pub struct CompositionPartial {
     pub skipped_effects: Vec<String>,
     
     /// Partial results
-    pub partial_results: HashMap<String, TestValue>,
+    pub partial_results: BTreeMap<String, TestValue>,
 }
 
 impl CompositionTestGenerator {
@@ -412,7 +412,7 @@ impl CompositionTestGenerator {
     pub fn new() -> Self {
         CompositionTestGenerator {
             config: CompositionTestConfig::default(),
-            composition_cache: HashMap::new(),
+            composition_cache: BTreeMap::new(),
         }
     }
     
@@ -420,7 +420,7 @@ impl CompositionTestGenerator {
     pub fn with_config(config: CompositionTestConfig) -> Self {
         CompositionTestGenerator {
             config,
-            composition_cache: HashMap::new(),
+            composition_cache: BTreeMap::new(),
         }
     }
     
@@ -493,7 +493,7 @@ impl CompositionTestGenerator {
             test_cases: self.generate_sequential_test_cases(schemas)?,
             timeout: self.config.test_timeout,
             tags: {
-                let mut tags = HashSet::new();
+                let mut tags = BTreeSet::new();
                 tags.insert("sequential".to_string());
                 tags.insert("all_effects".to_string());
                 tags
@@ -526,7 +526,7 @@ impl CompositionTestGenerator {
                 test_cases: self.generate_parallel_test_cases(&compatible_effects)?,
                 timeout: self.config.test_timeout,
                 tags: {
-                    let mut tags = HashSet::new();
+                    let mut tags = BTreeSet::new();
                     tags.insert("parallel".to_string());
                     tags.insert("compatible".to_string());
                     tags
@@ -560,7 +560,7 @@ impl CompositionTestGenerator {
                 test_cases: self.generate_dependency_test_cases(schemas)?,
                 timeout: self.config.test_timeout * 2,
                 tags: {
-                    let mut tags = HashSet::new();
+                    let mut tags = BTreeSet::new();
                     tags.insert("dependency".to_string());
                     tags.insert("chain".to_string());
                     tags
@@ -589,7 +589,7 @@ impl CompositionTestGenerator {
             test_cases: self.generate_failure_test_cases(schemas)?,
             timeout: self.config.test_timeout,
             tags: {
-                let mut tags = HashSet::new();
+                let mut tags = BTreeSet::new();
                 tags.insert("failure".to_string());
                 tags.insert("rollback".to_string());
                 tags
@@ -629,8 +629,8 @@ impl CompositionTestGenerator {
                 execution_order: Some(i as u32),
                 optional: false,
                 config: EffectConfig {
-                    parameter_bindings: HashMap::new(),
-                    output_mappings: HashMap::new(),
+                    parameter_bindings: BTreeMap::new(),
+                    output_mappings: BTreeMap::new(),
                     retry_config: None,
                     timeout_override: None,
                     mock_strategy: None,
@@ -707,7 +707,7 @@ impl CompositionTestGenerator {
                 context: PropertyContext::default(),
                 expected_final_state: None,
                 expected_result: CompositionResult::Success(CompositionSuccess {
-                    effect_results: HashMap::new(),
+                    effect_results: BTreeMap::new(),
                     total_execution_time: Duration::from_millis(100 * schemas.len() as u64),
                     total_gas_consumed: schemas.iter().map(|s| s.metadata.gas_cost).sum(),
                     final_state: TestSetup::default(),
@@ -730,7 +730,7 @@ impl CompositionTestGenerator {
                 context: PropertyContext::default(),
                 expected_final_state: None,
                 expected_result: CompositionResult::Success(CompositionSuccess {
-                    effect_results: HashMap::new(),
+                    effect_results: BTreeMap::new(),
                     total_execution_time: schemas.iter()
                         .map(|s| s.metadata.expected_duration)
                         .max()
@@ -756,7 +756,7 @@ impl CompositionTestGenerator {
                 context: PropertyContext::default(),
                 expected_final_state: None,
                 expected_result: CompositionResult::Success(CompositionSuccess {
-                    effect_results: HashMap::new(),
+                    effect_results: BTreeMap::new(),
                     total_execution_time: Duration::from_millis(200 * schemas.len() as u64),
                     total_gas_consumed: schemas.iter().map(|s| s.metadata.gas_cost).sum(),
                     final_state: TestSetup::default(),

@@ -71,7 +71,7 @@ pub struct TestCase {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestInputs {
-    pub parameters: HashMap<String, TestValue>,
+    pub parameters: BTreeMap<String, TestValue>,
     pub mock_strategy: Option<MockStrategy>,
     pub setup: TestSetup,
 }
@@ -216,10 +216,10 @@ pub struct EffectTestRunner {
 /// Mock handler registry for effect implementations
 pub struct MockHandlerRegistry {
     /// Mock handlers for different effect types
-    handlers: HashMap<String, Box<dyn MockEffectHandler>>,
+    handlers: BTreeMap<String, Box<dyn MockEffectHandler>>,
     
     /// Blockchain simulation mocks
-    _blockchain_mocks: HashMap<String, BlockchainSimulationMock>,
+    _blockchain_mocks: BTreeMap<String, BlockchainSimulationMock>,
 }
 
 /// Test execution state tracking
@@ -235,7 +235,7 @@ pub struct ExecutionState {
     pub metrics: TestMetrics,
     
     /// Branching state for parallel test execution
-    pub branches: HashMap<String, ExecutionBranch>,
+    pub branches: BTreeMap<String, ExecutionBranch>,
 }
 
 /// Test execution record
@@ -313,7 +313,7 @@ pub struct TestMetrics {
     pub memory_usage: MemoryMetrics,
     
     /// Effect-specific metrics
-    pub effect_metrics: HashMap<String, EffectMetrics>,
+    pub effect_metrics: BTreeMap<String, EffectMetrics>,
 }
 
 /// Memory usage metrics
@@ -760,8 +760,8 @@ impl Default for MockHandlerRegistry {
 impl MockHandlerRegistry {
     pub fn new() -> Self {
         MockHandlerRegistry {
-            handlers: HashMap::new(),
-            _blockchain_mocks: HashMap::new(),
+            handlers: BTreeMap::new(),
+            _blockchain_mocks: BTreeMap::new(),
         }
     }
     
@@ -792,7 +792,7 @@ impl ExecutionState {
             current_test: None,
             execution_history: Vec::new(),
             metrics: TestMetrics::new(),
-            branches: HashMap::new(),
+            branches: BTreeMap::new(),
         }
     }
 }
@@ -813,7 +813,7 @@ impl TestMetrics {
             total_execution_time: Duration::ZERO,
             average_execution_time: Duration::ZERO,
             memory_usage: MemoryMetrics::new(),
-            effect_metrics: HashMap::new(),
+            effect_metrics: BTreeMap::new(),
         }
     }
     
@@ -889,7 +889,7 @@ mod tests {
             test_id: "test_1".to_string(),
             effect_name: "test_effect".to_string(),
             inputs: TestInputs {
-                parameters: HashMap::new(),
+                parameters: BTreeMap::new(),
                 mock_strategy: None,
                 setup: TestSetup::default(),
             },

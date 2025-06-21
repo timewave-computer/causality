@@ -7,7 +7,7 @@ use crate::{
     mocks::blockchain::{ForkChoiceParams, NetworkTopology},
 };
 use std::time::Duration;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Mock handler for TokenTransfer effects
 pub struct TokenTransferMockHandler {
@@ -21,7 +21,7 @@ pub struct TokenTransferMockHandler {
     execution_history: Vec<TransferExecution>,
     
     /// Token balances (simplified - address -> balance)
-    balances: HashMap<String, u64>,
+    balances: BTreeMap<String, u64>,
 }
 
 /// Record of transfer execution for consistency tracking
@@ -36,7 +36,7 @@ struct TransferExecution {
 impl TokenTransferMockHandler {
     /// Create a new mock handler with strategy
     pub fn new(strategy: MockStrategy) -> Self {
-        let mut balances = HashMap::new();
+        let mut balances = BTreeMap::new();
         // Initialize some mock balances
         balances.insert("0x1234".to_string(), 1_000_000);
         balances.insert("0x5678".to_string(), 500_000);
@@ -71,7 +71,7 @@ impl TokenTransferMockHandler {
         
         let chain_state = MockChainState::new(&chain_params);
         
-        let mut balances = HashMap::new();
+        let mut balances = BTreeMap::new();
         balances.insert("0x1234".to_string(), 1_000_000);
         balances.insert("0x5678".to_string(), 500_000);
         
@@ -124,7 +124,7 @@ impl TokenTransferMockHandler {
         let execution = TransferExecution {
             transfer: transfer.clone(),
             result: result.clone(),
-            timestamp: std::time::SystemTime::now()
+            timestamp: std::time::std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -139,13 +139,13 @@ impl TokenTransferMockHandler {
     /// Always succeed strategy implementation
     async fn execute_always_succeed(&self, transfer: &TokenTransfer) -> EffectResult<TransferReceipt, TransferError> {
         let receipt = TransferReceipt {
-            transaction_hash: format!("0x{:064x}", rand::random::<u64>()),
+            transaction_hash: format!("0x{:064x}", 0x1234567890abcdefu64),
             block_number: 12345678,
             transaction_index: 0,
             gas_used: transfer.estimated_gas_cost(),
             gas_price: transfer.gas_price.unwrap_or(20_000_000_000),
             confirmations: transfer.confirmations.unwrap_or(12),
-            timestamp: std::time::SystemTime::now()
+            timestamp: std::time::std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -155,12 +155,12 @@ impl TokenTransferMockHandler {
                     address: transfer.token.clone(),
                     topics: vec![
                         "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef".to_string(),
-                        format!("0x{:040x}", rand::random::<u64>()),
-                        format!("0x{:040x}", rand::random::<u64>()),
+                        format!("0x{:040x}", 0x1234567890abcdefu64),
+                        format!("0x{:040x}", 0x1234567890abcdefu64),
                     ],
                     data: format!("0x{:064x}", transfer.amount),
                     block_number: 12345678,
-                    transaction_hash: format!("0x{:064x}", rand::random::<u64>()),
+                    transaction_hash: format!("0x{:064x}", 0x1234567890abcdefu64),
                     log_index: 0,
                 }
             ],
@@ -206,7 +206,7 @@ impl TokenTransferMockHandler {
     
     /// Probabilistic strategy implementation
     async fn execute_probabilistic(&self, transfer: &TokenTransfer, success_rate: f64, failure_modes: &[(FailureMode, f64)]) -> EffectResult<TransferReceipt, TransferError> {
-        if rand::random::<f64>() < success_rate {
+        if 0.5 < success_rate {
             self.execute_always_succeed(transfer).await
         } else {
             // Pick a random failure mode
@@ -223,7 +223,7 @@ impl TokenTransferMockHandler {
     /// Latency strategy implementation
     async fn execute_with_latency(&self, transfer: &TokenTransfer, base_strategy: &Box<MockStrategy>, min_latency: Duration, max_latency: Duration, timeout_rate: f64) -> EffectResult<TransferReceipt, TransferError> {
         // Check for timeout
-        if rand::random::<f64>() < timeout_rate {
+        if 0.5 < timeout_rate {
             return EffectResult::Timeout;
         }
         
@@ -231,7 +231,7 @@ impl TokenTransferMockHandler {
         let latency_range = max_latency.as_millis().saturating_sub(min_latency.as_millis());
         let latency = min_latency + Duration::from_millis(
             if latency_range > 0 {
-                rand::random::<u64>() % (latency_range as u64)
+                0x1234567890abcdefu64 % (latency_range as u64)
             } else {
                 0
             }
@@ -284,7 +284,7 @@ impl TokenTransferMockHandler {
             tokio::time::sleep(network_delay).await;
             
             // Network failure based on congestion
-            if rand::random::<f64>() < (chain_config.congestion_factor - 1.0).max(0.0) * 0.1 {
+            if 0.5 < (chain_config.congestion_factor - 1.0).max(0.0) * 0.1 {
                 return EffectResult::Failure(TransferError::NetworkError {
                     reason: "Network congestion".to_string(),
                     is_transient: true,
@@ -324,13 +324,13 @@ impl TokenTransferMockHandler {
         
         // Create realistic receipt
         let receipt = TransferReceipt {
-            transaction_hash: format!("0x{:064x}", rand::random::<u64>()),
-            block_number: 12345678 + rand::random::<u64>() % 1000,
+            transaction_hash: format!("0x{:064x}", 0x1234567890abcdefu64),
+            block_number: 12345678 + 0x1234567890abcdefu64 % 1000,
             transaction_index: rand::random::<u32>() % 100,
             gas_used: transfer.estimated_gas_cost(),
             gas_price: transfer.gas_price.unwrap_or(min_gas_price),
             confirmations: confirmations_required,
-            timestamp: std::time::SystemTime::now()
+            timestamp: std::time::std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -361,7 +361,7 @@ impl TokenTransferMockHandler {
                 ],
                 data: format!("0x{:064x}", transfer.amount),
                 block_number: 12345678,
-                transaction_hash: format!("0x{:064x}", rand::random::<u64>()),
+                transaction_hash: format!("0x{:064x}", 0x1234567890abcdefu64),
                 log_index: 0,
             });
         }

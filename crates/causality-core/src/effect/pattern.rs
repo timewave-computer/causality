@@ -250,40 +250,50 @@ impl Pattern {
 // Conversion to Machine Patterns
 //-----------------------------------------------------------------------------
 
+// Machine pattern conversion (commented out until machine patterns are implemented)
+/*
 impl From<Pattern> for crate::machine::Pattern {
-    fn from(pat: Pattern) -> Self {
-        match pat.kind {
+    fn from(pattern: Pattern) -> Self {
+        match pattern.kind {
             PatternKind::Wildcard => crate::machine::Pattern::Wildcard,
-            
-            PatternKind::Var(_) => {
-                // Variables become register bindings in IR
-                // The actual register allocation happens during compilation
+            PatternKind::Bind { name, pattern: None } => {
+                // Simple binding without pattern
                 crate::machine::Pattern::Wildcard // Placeholder
             }
-            
-            PatternKind::Literal(lit) => {
+            PatternKind::Bind { name: _, pattern: Some(p) } => {
                 crate::machine::Pattern::Literal(lit.into())
             }
-            
-            PatternKind::Constructor { tag, args } => {
+            PatternKind::Constructor { name, patterns } => {
                 crate::machine::Pattern::Constructor {
-                    tag: tag.into(),
-                    args: args.into_iter().map(|p| p.into()).collect(),
+                    name,
+                    patterns: patterns.into_iter().map(|p| p.into()).collect(),
                 }
             }
-            
-            PatternKind::Product { left, right } => {
+            PatternKind::Product(patterns) => {
                 crate::machine::Pattern::Product(
-                    Box::new((*left).into()),
-                    Box::new((*right).into()),
+                    patterns.into_iter().map(|p| p.into()).collect()
                 )
             }
-            
-            // Other patterns would need more complex Machine compilation
+            PatternKind::Record { .. } => {
+                // Records not yet supported in machine layer
+                crate::machine::Pattern::Wildcard // Placeholder
+            }
             _ => crate::machine::Pattern::Wildcard, // Placeholder
         }
     }
 }
+
+impl From<Literal> for crate::machine::LiteralValue {
+    fn from(lit: Literal) -> Self {
+        match lit {
+            Literal::Bool(b) => crate::machine::LiteralValue::Bool(b),
+            Literal::Int(i) => crate::machine::LiteralValue::Int(i),
+            Literal::Symbol(s) => crate::machine::LiteralValue::Symbol(s),
+            Literal::Unit => crate::machine::LiteralValue::Unit,
+        }
+    }
+}
+*/
 
 //-----------------------------------------------------------------------------
 // Helper Implementations
@@ -321,17 +331,5 @@ impl PatternKind {
     /// Create a symbol literal pattern
     pub fn symbol(value: String) -> Self {
         PatternKind::Literal(Literal::Symbol(value.into()))
-    }
-}
-
-// Helper to convert lambda Literal to machine LiteralValue
-impl From<Literal> for crate::machine::LiteralValue {
-    fn from(lit: Literal) -> Self {
-        match lit {
-            Literal::Bool(b) => crate::machine::LiteralValue::Bool(b),
-            Literal::Int(i) => crate::machine::LiteralValue::Int(i),
-            Literal::Symbol(s) => crate::machine::LiteralValue::Symbol(s),
-            Literal::Unit => crate::machine::LiteralValue::Unit,
-        }
     }
 } 

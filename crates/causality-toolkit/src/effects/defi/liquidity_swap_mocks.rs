@@ -7,7 +7,7 @@ use crate::{
     mocks::blockchain::{ForkChoiceParams, NetworkTopology},
 };
 use std::time::Duration;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Mock handler for LiquiditySwap effects
 pub struct LiquiditySwapMockHandler {
@@ -21,10 +21,10 @@ pub struct LiquiditySwapMockHandler {
     execution_history: Vec<SwapExecution>,
     
     /// Pool liquidity state (simplified - pool_address -> PoolInfo)
-    pool_states: HashMap<String, PoolInfo>,
+    pool_states: BTreeMap<String, PoolInfo>,
     
     /// User token balances (address -> token -> balance)
-    user_balances: HashMap<String, HashMap<String, u64>>,
+    user_balances: BTreeMap<String, BTreeMap<String, u64>>,
 }
 
 /// Record of swap execution for consistency tracking
@@ -40,8 +40,8 @@ struct SwapExecution {
 impl LiquiditySwapMockHandler {
     /// Create a new mock handler with strategy
     pub fn new(strategy: MockStrategy) -> Self {
-        let mut pool_states = HashMap::new();
-        let mut user_balances = HashMap::new();
+        let mut pool_states = BTreeMap::new();
+        let mut user_balances = BTreeMap::new();
         
         // Initialize some mock pools
         pool_states.insert(
@@ -69,7 +69,7 @@ impl LiquiditySwapMockHandler {
         );
         
         // Initialize some mock user balances
-        let mut user1_balances = HashMap::new();
+        let mut user1_balances = BTreeMap::new();
         user1_balances.insert("USDC".to_string(), 10000000000); // 10k USDC
         user1_balances.insert("WETH".to_string(), 5000000000000000000); // 5 WETH
         user1_balances.insert("USDT".to_string(), 10000000000); // 10k USDT
@@ -164,7 +164,7 @@ impl LiquiditySwapMockHandler {
         let execution = SwapExecution {
             swap: swap.clone(),
             result: result.clone(),
-            timestamp: std::time::SystemTime::now()
+            timestamp: std::time::std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -192,7 +192,7 @@ impl LiquiditySwapMockHandler {
             .unwrap_or(swap.amount_in / 2); // Fallback estimate
         
         let receipt = SwapReceipt {
-            transaction_hash: format!("0x{:064x}", rand::random::<u64>()),
+            transaction_hash: format!("0x{:064x}", 0x1234567890abcdefu64),
             block_number: 12345678,
             amount_in: swap.amount_in,
             amount_out: estimated_output,
@@ -202,7 +202,7 @@ impl LiquiditySwapMockHandler {
             gas_price: swap.gas_price.unwrap_or(25_000_000_000),
             protocol_fees: (swap.amount_in as f64 * 0.003) as u64, // 0.3% fee
             pool_state_after: self.update_pool_after_swap(&pool_info, swap, estimated_output),
-            timestamp: std::time::SystemTime::now()
+            timestamp: std::time::std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -260,7 +260,7 @@ impl LiquiditySwapMockHandler {
     
     /// Probabilistic strategy implementation
     async fn execute_probabilistic(&self, swap: &LiquiditySwap, success_rate: f64, failure_modes: &[(FailureMode, f64)]) -> EffectResult<SwapReceipt, SwapError> {
-        if rand::random::<f64>() < success_rate {
+        if 0.5 < success_rate {
             self.execute_always_succeed(swap).await
         } else {
             let failure_mode = if failure_modes.is_empty() {
@@ -276,7 +276,7 @@ impl LiquiditySwapMockHandler {
     /// Latency strategy implementation
     async fn execute_with_latency(&self, swap: &LiquiditySwap, base_strategy: &Box<MockStrategy>, min_latency: Duration, max_latency: Duration, timeout_rate: f64) -> EffectResult<SwapReceipt, SwapError> {
         // Check for timeout
-        if rand::random::<f64>() < timeout_rate {
+        if 0.5 < timeout_rate {
             return EffectResult::Timeout;
         }
         
@@ -284,7 +284,7 @@ impl LiquiditySwapMockHandler {
         let latency_range = max_latency.as_millis().saturating_sub(min_latency.as_millis());
         let latency = min_latency + Duration::from_millis(
             if latency_range > 0 {
-                rand::random::<u64>() % (latency_range as u64)
+                0x1234567890abcdefu64 % (latency_range as u64)
             } else {
                 0
             }
@@ -336,7 +336,7 @@ impl LiquiditySwapMockHandler {
             tokio::time::sleep(network_delay).await;
             
             // Network failure based on congestion
-            if rand::random::<f64>() < (chain_config.congestion_factor - 1.0).max(0.0) * 0.15 {
+            if 0.5 < (chain_config.congestion_factor - 1.0).max(0.0) * 0.15 {
                 return EffectResult::Failure(SwapError::NetworkError {
                     reason: "DEX network congestion".to_string(),
                     is_transient: true,
@@ -387,7 +387,7 @@ impl LiquiditySwapMockHandler {
         }
         
         // MEV protection simulation
-        if rand::random::<f64>() < 0.02 { // 2% chance of MEV attack
+        if 0.5 < 0.02 { // 2% chance of MEV attack
             return EffectResult::Failure(SwapError::MevProtection {
                 reason: "Front-running detected".to_string(),
                 sandwich_detected: true,
@@ -406,8 +406,8 @@ impl LiquiditySwapMockHandler {
         
         // Create receipt
         let receipt = SwapReceipt {
-            transaction_hash: format!("0x{:064x}", rand::random::<u64>()),
-            block_number: 12345678 + rand::random::<u64>() % 1000,
+            transaction_hash: format!("0x{:064x}", 0x1234567890abcdefu64),
+            block_number: 12345678 + 0x1234567890abcdefu64 % 1000,
             amount_in: swap.amount_in,
             amount_out: estimated_output,
             exchange_rate: estimated_output as f64 / swap.amount_in as f64,
@@ -416,7 +416,7 @@ impl LiquiditySwapMockHandler {
             gas_price: swap.gas_price.unwrap_or(min_gas_price),
             protocol_fees: self.calculate_protocol_fees(swap, &pool_info),
             pool_state_after: self.update_pool_after_swap(&pool_info, swap, estimated_output),
-            timestamp: std::time::SystemTime::now()
+            timestamp: std::time::std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -485,7 +485,7 @@ impl LiquiditySwapMockHandler {
             data: format!("0x{:064x}{:064x}{:064x}{:064x}", 
                          swap.amount_in, 0u64, 0u64, amount_out),
             block_number: 12345678,
-            transaction_hash: format!("0x{:064x}", rand::random::<u64>()),
+            transaction_hash: format!("0x{:064x}", 0x1234567890abcdefu64),
             log_index: 0,
         });
         
@@ -508,12 +508,12 @@ impl LiquiditySwapMockHandler {
     }
     
     /// Get pool states
-    pub fn get_pool_states(&self) -> &HashMap<String, PoolInfo> {
+    pub fn get_pool_states(&self) -> &BTreeMap<String, PoolInfo> {
         &self.pool_states
     }
     
     /// Get user balances
-    pub fn get_user_balances(&self) -> &HashMap<String, HashMap<String, u64>> {
+    pub fn get_user_balances(&self) -> &BTreeMap<String, BTreeMap<String, u64>> {
         &self.user_balances
     }
     

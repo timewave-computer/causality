@@ -3,7 +3,7 @@
 //! Request and response types for the REST API.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 //-----------------------------------------------------------------------------
 // Request Types
@@ -68,7 +68,7 @@ pub struct CreateSessionRequest {
     pub name: Option<String>,
     
     /// Optional tags for the session
-    pub tags: Option<HashMap<String, String>>,
+    pub tags: Option<BTreeMap<String, String>>,
 }
 
 //-----------------------------------------------------------------------------
@@ -184,17 +184,17 @@ pub struct ExecutionStep {
     pub instruction: String,
     
     /// Register states before execution
-    pub registers_before: HashMap<String, String>,
+    pub registers_before: BTreeMap<String, String>,
     
     /// Register states after execution
-    pub registers_after: HashMap<String, String>,
+    pub registers_after: BTreeMap<String, String>,
 }
 
 /// Machine state information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MachineStateInfo {
     /// Register states
-    pub registers: HashMap<String, String>,
+    pub registers: BTreeMap<String, String>,
     
     /// Current program counter
     pub program_counter: usize,
@@ -232,7 +232,7 @@ pub struct SessionInfo {
     pub last_accessed: String,
     
     /// Session tags
-    pub tags: HashMap<String, String>,
+    pub tags: BTreeMap<String, String>,
     
     /// Session statistics
     pub stats: SessionStatsInfo,
@@ -364,7 +364,7 @@ pub struct ProofMetadata {
     pub constraints_satisfied: bool,
     
     /// Additional metadata
-    pub extra: HashMap<String, serde_json::Value>,
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 /// ZK input for public verification
@@ -438,7 +438,7 @@ pub struct AuthorizationContext {
     pub nonce: u64,
     
     /// Additional context data
-    pub context_data: HashMap<String, serde_json::Value>,
+    pub context_data: BTreeMap<String, serde_json::Value>,
 }
 
 /// Authorization actions

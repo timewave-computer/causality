@@ -9,7 +9,7 @@ use causality_core::{
 // use crate::context::RuntimeContext;  // TODO: Implement context module
 // use crate::handler::{HandlerRegistry, default_handlers};  // TODO: Implement handler module
 use crate::error::{RuntimeError, RuntimeResult};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Result of an interpreter operation
 pub type InterpreterResult<T> = RuntimeResult<T>;

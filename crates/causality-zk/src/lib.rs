@@ -193,7 +193,7 @@ mod tests {
 #[cfg(test)]
 mod zk_compilation_tests {
     use super::*;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     
     #[test]
     fn test_full_compilation_pipeline_into_zk_circuits() {
@@ -270,16 +270,16 @@ mod zk_compilation_tests {
         Ok(true)
     }
     
-    fn generate_cross_domain_combinations(domains: &[&str]) -> Vec<HashMap<String, String>> {
+    fn generate_cross_domain_combinations(domains: &[&str]) -> Vec<BTreeMap<String, String>> {
         domains.iter().map(|domain| {
-            let mut combo = HashMap::new();
+            let mut combo = BTreeMap::new();
             combo.insert("domain".to_string(), domain.to_string());
             combo.insert("effect_type".to_string(), "transfer".to_string());
             combo
         }).collect()
     }
     
-    fn isolate_domain_effects(_combination: &HashMap<String, String>) -> Result<(), String> {
+    fn isolate_domain_effects(_combination: &BTreeMap<String, String>) -> Result<(), String> {
         // Simulate domain isolation
         Ok(())
     }

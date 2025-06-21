@@ -5,7 +5,7 @@
 //! for production ZK proof generation.
 
 use anyhow::{anyhow, Result};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -39,7 +39,7 @@ pub struct ZkExecutor {
     pub circuit_compiler: CircuitCompiler,
     
     /// Cache of compiled circuits
-    circuit_cache: HashMap<String, CircuitId>,
+    circuit_cache: BTreeMap<String, CircuitId>,
     
     /// Current witness data
     current_witness: Option<ZkWitness>,
@@ -88,8 +88,8 @@ pub struct ZkExecutionConfig {
 pub enum ZkBackendConfig {
     /// Mock backend for testing
     Mock {
-        /// Probability of successful proof generation
-        success_rate: f64,
+        /// Probability of successful proof generation (0-1000, where 1000 = 100%)
+        success_rate: u64,
         /// Simulated proof generation time in milliseconds
         proof_time_ms: u64,
     },
@@ -150,7 +150,7 @@ impl Default for ZkExecutionConfig {
             max_circuit_size: 1000,
             always_generate_proofs: false,
             backend_config: ZkBackendConfig::Mock {
-                success_rate: 1.0,
+                success_rate: 1000,
                 proof_time_ms: 100,
             },
         }
@@ -166,7 +166,7 @@ impl ZkExecutor {
             executor: Executor::new(),
             proof_generator: Arc::new(Mutex::new(proof_generator)),
             circuit_compiler: CircuitCompiler::new(OptimizationLevel::Standard),
-            circuit_cache: HashMap::new(),
+            circuit_cache: BTreeMap::new(),
             current_witness: None,
             zk_backend,
             performance_tracker: PerformanceTracker::default(),
@@ -258,9 +258,10 @@ impl ZkExecutor {
     /// Get performance metrics for ZK operations
     pub fn get_performance_metrics(&self) -> ZkPerformanceMetrics {
         let cache_hit_rate = if self.performance_tracker.total_cache_lookups > 0 {
-            self.performance_tracker.cache_hits as f64 / self.performance_tracker.total_cache_lookups as f64
+            // Use simple integer ratio: cache_hits * 1000 / total_cache_lookups for 3 decimal precision
+            (self.performance_tracker.cache_hits * 1000) / self.performance_tracker.total_cache_lookups
         } else {
-            0.0
+            0 // 0.0 scaled by 1000
         };
         
         let avg_proof_time = if self.performance_tracker.proofs_generated > 0 {
@@ -449,7 +450,7 @@ impl ZkExecutor {
         let mut states = Vec::new();
         
         // Track which registers are used
-        let mut used_registers = std::collections::HashSet::new();
+        let mut used_registers = std::collections::BTreeSet::new();
         
         for instruction in instructions {
             self.collect_register_usage(instruction, &mut used_registers);
@@ -467,7 +468,7 @@ impl ZkExecutor {
     }
     
     /// Collect register usage from instruction
-    fn collect_register_usage(&self, instruction: &Instruction, used_registers: &mut std::collections::HashSet<u32>) {
+    fn collect_register_usage(&self, instruction: &Instruction, used_registers: &mut std::collections::BTreeSet<u32>) {
         match instruction {
             Instruction::Move { src, dst } => {
                 used_registers.insert(src.0);
@@ -605,7 +606,7 @@ pub struct ZkPerformanceMetrics {
     pub cached_circuits: usize,
     
     /// Cache hit rate (0.0 to 1.0)
-    pub cache_hit_rate: f64,
+    pub cache_hit_rate: u64,
     
     /// Average proof generation time in milliseconds
     pub avg_proof_generation_time_ms: u64,

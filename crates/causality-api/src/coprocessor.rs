@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use base64::Engine;
 
 // For now, we'll define our own simplified client interface
@@ -25,7 +25,7 @@ pub struct CircuitInfo {
     pub id: String,
     pub description: String,
     pub created_at: String,
-    pub parameters: HashMap<String, String>,
+    pub parameters: BTreeMap<String, String>,
 }
 
 /// Proof request for circuit execution
@@ -34,7 +34,7 @@ pub struct ProofRequest {
     pub circuit_name: String,
     pub public_inputs: Vec<String>,
     pub private_inputs: Vec<String>,
-    pub metadata: HashMap<String, String>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 /// Proof response from coprocessor
@@ -51,7 +51,7 @@ pub struct CircuitDeployRequest {
     pub name: String,
     pub wasm_bytecode: Vec<u8>,
     pub description: String,
-    pub parameters: HashMap<String, String>,
+    pub parameters: BTreeMap<String, String>,
 }
 
 /// Proof verification request
@@ -76,7 +76,7 @@ pub struct CoprocessorService {
     client: CoprocessorClient,
     
     /// Deployed circuits cache
-    circuits: HashMap<String, CircuitInfo>,
+    circuits: BTreeMap<String, CircuitInfo>,
     
     /// Configuration
     config: CoprocessorConfig,
@@ -111,7 +111,7 @@ pub struct ZkProofRequest {
     pub private_inputs: Vec<String>,
     
     /// Optional metadata
-    pub metadata: Option<HashMap<String, String>>,
+    pub metadata: Option<BTreeMap<String, String>>,
 }
 
 /// ZK proof generation response
@@ -143,7 +143,7 @@ pub struct DeployCircuitRequest {
     pub description: Option<String>,
     
     /// Circuit parameters
-    pub parameters: Option<HashMap<String, String>>,
+    pub parameters: Option<BTreeMap<String, String>>,
 }
 
 /// Proof verification request
@@ -173,7 +173,7 @@ impl CoprocessorClient {
         // In a real implementation, this would POST to the coprocessor endpoint
         let circuit_info = CircuitInfo {
             name: request.name.clone(),
-            id: uuid::Uuid::new_v4().to_string(),
+            id: "deterministic_uuid".to_string(),
             description: request.description,
             created_at: chrono::Utc::now().to_rfc3339(),
             parameters: request.parameters,
@@ -223,10 +223,10 @@ impl CoprocessorClient {
         // In a real implementation, this would GET from the coprocessor endpoint
         let circuit_info = CircuitInfo {
             name: circuit_name.to_string(),
-            id: uuid::Uuid::new_v4().to_string(),
+            id: "deterministic_uuid".to_string(),
             description: "Mock circuit".to_string(),
             created_at: chrono::Utc::now().to_rfc3339(),
-            parameters: HashMap::new(),
+            parameters: BTreeMap::new(),
         };
         
         Ok(circuit_info)
@@ -257,7 +257,7 @@ impl CoprocessorService {
         
         Ok(Self {
             client,
-            circuits: HashMap::new(),
+            circuits: BTreeMap::new(),
             config,
         })
     }

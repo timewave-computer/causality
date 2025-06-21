@@ -88,7 +88,7 @@ fn compute_content_hash(artifact: &CompiledArtifact) -> ContentHash {
 /// content-addressable storage system.
 #[derive(Debug, Default)]
 pub struct ArtifactCache {
-    artifacts: std::collections::HashMap<ContentHash, ContentAddressedArtifact>,
+    artifacts: std::collections::BTreeMap<ContentHash, ContentAddressedArtifact>,
 }
 
 impl ArtifactCache {

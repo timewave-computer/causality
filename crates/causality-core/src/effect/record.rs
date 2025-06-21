@@ -10,7 +10,7 @@ use super::operations::{pure, bind, perform, handle};
 use super::capability::{RecordCapability, RecordSchema, FieldName, Capability};
 use crate::lambda::{Term, Symbol};
 use crate::system::content_addressing::EntityId;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 //-----------------------------------------------------------------------------
 // Record Effect Types
@@ -49,7 +49,7 @@ pub enum RecordEffect {
     ExtendRecord {
         resource_id: EntityId,
         extension: RecordSchema,
-        values: HashMap<FieldName, Term>,
+        values: BTreeMap<FieldName, Term>,
         capability: RecordCapability,
     },
     
@@ -65,7 +65,7 @@ pub enum RecordEffect {
     /// create_record : RecordSchema → Values → Capability → Effect ResourceId
     CreateRecord {
         schema: RecordSchema,
-        values: HashMap<FieldName, Term>,
+        values: BTreeMap<FieldName, Term>,
         capability: RecordCapability,
     },
     
@@ -110,7 +110,7 @@ pub enum RecordOperationResult {
     /// Successful field access
     FieldValue(Term),
     /// Successful record projection
-    RecordProjection(HashMap<FieldName, Term>),
+    RecordProjection(BTreeMap<FieldName, Term>),
     /// Successful record creation/modification
     ResourceId(EntityId),
     /// Unit result for updates/deletions
@@ -228,7 +228,7 @@ pub fn project_record(
 pub fn extend_record(
     resource_id: EntityId,
     extension: RecordSchema,
-    values: HashMap<FieldName, Term>,
+    values: BTreeMap<FieldName, Term>,
     capability: RecordCapability,
 ) -> EffectExpr {
     // Validate capability allows record extension
@@ -316,7 +316,7 @@ pub fn restrict_record(
 /// Create a new record with given schema and initial values
 pub fn create_record(
     schema: RecordSchema,
-    values: HashMap<FieldName, Term>,
+    values: BTreeMap<FieldName, Term>,
     capability: RecordCapability,
 ) -> EffectExpr {
     // Validate capability allows record creation

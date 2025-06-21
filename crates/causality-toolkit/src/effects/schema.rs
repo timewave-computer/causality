@@ -169,7 +169,7 @@ impl EffectSchema {
     /// Validate that this schema is well-formed
     pub fn validate(&self) -> Result<(), SchemaError> {
         // Check for duplicate parameter names
-        let mut param_names = std::collections::HashSet::new();
+        let mut param_names = std::collections::BTreeSet::new();
         for param in &self.parameters {
             if !param_names.insert(&param.name) {
                 return Err(SchemaError::DuplicateParameter(param.name.clone()));

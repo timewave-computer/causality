@@ -12,7 +12,7 @@ use causality_core::{
     lambda::Symbol,
     system::content_addressing,
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Evaluation context containing the current environment
 #[derive(Debug, Clone)]
@@ -318,7 +318,7 @@ impl Interpreter {
             LispValue::Unit => Ok(Value::unit()),
             LispValue::Bool(b) => Ok(Value::bool(*b)),
             LispValue::Int(i) => Ok(Value::int(*i)),
-            LispValue::Float(f) => Ok(Value::float(*f)),
+
             LispValue::String(s) => Ok(Value::string(s.clone())),
             LispValue::Symbol(s) => Ok(Value::symbol(s.clone())),
             LispValue::List(items) => {
@@ -329,14 +329,14 @@ impl Interpreter {
                 Ok(Value::list(values?))
             }
             LispValue::Map(map) => {
-                let result: Result<HashMap<Symbol, Value>, _> = map
+                let result: Result<BTreeMap<Symbol, Value>, _> = map
                     .iter()
                     .map(|(k, v)| Ok((k.clone(), self.eval_const(v)?)))
                     .collect();
                 Ok(Value::record(result?))
             }
             LispValue::Record(record) => {
-                let result: Result<HashMap<Symbol, Value>, _> = record
+                let result: Result<BTreeMap<Symbol, Value>, _> = record
                     .iter()
                     .map(|(k, v)| Ok((k.clone(), self.eval_const(v)?)))
                     .collect();
@@ -412,7 +412,7 @@ impl Interpreter {
                 }
                 match (&args[0].kind, &args[1].kind) {
                     (ValueKind::Int(a), ValueKind::Int(b)) => Ok(Value::int(a + b)),
-                    (ValueKind::Float(a), ValueKind::Float(b)) => Ok(Value::float(a + b)),
+    
                     _ => Err(EvalError::TypeMismatch { 
                         expected: "Numeric types".to_string(), 
                         found: "Other".to_string() 
@@ -425,7 +425,7 @@ impl Interpreter {
                 }
                 match (&args[0].kind, &args[1].kind) {
                     (ValueKind::Int(a), ValueKind::Int(b)) => Ok(Value::int(a - b)),
-                    (ValueKind::Float(a), ValueKind::Float(b)) => Ok(Value::float(a - b)),
+    
                     _ => Err(EvalError::TypeMismatch { 
                         expected: "Numeric types".to_string(), 
                         found: "Other".to_string() 
@@ -438,7 +438,7 @@ impl Interpreter {
                 }
                 match (&args[0].kind, &args[1].kind) {
                     (ValueKind::Int(a), ValueKind::Int(b)) => Ok(Value::int(a * b)),
-                    (ValueKind::Float(a), ValueKind::Float(b)) => Ok(Value::float(a * b)),
+    
                     _ => Err(EvalError::TypeMismatch { 
                         expected: "Numeric types".to_string(), 
                         found: "Other".to_string() 
@@ -457,7 +457,7 @@ impl Interpreter {
                             Ok(Value::int(a / b))
                         }
                     }
-                    (ValueKind::Float(a), ValueKind::Float(b)) => Ok(Value::float(a / b)),
+    
                     _ => Err(EvalError::TypeMismatch { 
                         expected: "Numeric types".to_string(), 
                         found: "Other".to_string() 
@@ -476,7 +476,7 @@ impl Interpreter {
                 }
                 match (&args[0].kind, &args[1].kind) {
                     (ValueKind::Int(a), ValueKind::Int(b)) => Ok(Value::bool(a < b)),
-                    (ValueKind::Float(a), ValueKind::Float(b)) => Ok(Value::bool(a < b)),
+    
                     _ => Err(EvalError::TypeMismatch { 
                         expected: "Numeric types".to_string(), 
                         found: "Other".to_string() 
@@ -489,7 +489,7 @@ impl Interpreter {
                 }
                 match (&args[0].kind, &args[1].kind) {
                     (ValueKind::Int(a), ValueKind::Int(b)) => Ok(Value::bool(a > b)),
-                    (ValueKind::Float(a), ValueKind::Float(b)) => Ok(Value::bool(a > b)),
+    
                     _ => Err(EvalError::TypeMismatch { 
                         expected: "Numeric types".to_string(), 
                         found: "Other".to_string() 

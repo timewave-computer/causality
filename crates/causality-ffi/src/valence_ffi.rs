@@ -1,7 +1,7 @@
 // ------------ VALENCE COPROCESSOR FFI IMPLEMENTATION ------------ 
 // Purpose: Rust FFI implementation for OCaml bindings to Valence coprocessor APIs
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::sync::Arc;
@@ -39,7 +39,7 @@ pub struct ValenceFFIClient {
     #[cfg(feature = "valence")]
     coprocessor_client: Arc<CoprocessorClient>,
     #[cfg(feature = "valence")]
-    domain_clients: HashMap<String, Arc<dyn DomainClient + Send + Sync>>,
+    domain_clients: BTreeMap<String, Arc<dyn DomainClient + Send + Sync>>,
     almanac_runtime: AlmanacRuntimeFFI,
     config: ValenceFFIConfig,
 }
@@ -78,7 +78,7 @@ impl ValenceFFIClient {
         
         Ok(Self {
             coprocessor_client,
-            domain_clients: HashMap::new(),
+            domain_clients: BTreeMap::new(),
             almanac_runtime,
             config,
         })

@@ -112,7 +112,7 @@ impl LiquiditySwap {
             slippage_tolerance: 50, // 0.5% default
             dex_protocol: DexProtocol::UniswapV2,
             pool_address: String::new(),
-            deadline: std::time::SystemTime::now()
+            deadline: std::time::std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs() + 1800, // 30 minutes from now
@@ -240,7 +240,7 @@ impl LiquiditySwap {
         }
         
         // Validate deadline
-        let current_time = std::time::SystemTime::now()
+        let current_time = std::time::std::time::UNIX_EPOCH
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();

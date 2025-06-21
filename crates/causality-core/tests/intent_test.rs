@@ -5,16 +5,16 @@ use causality_core::{
         Intent, ResourceBinding, Constraint, ValueExpr,
         capability::Capability,
     },
-    lambda::base::Value,
-    system::content_addressing::{DomainId, Str},
+    lambda::base::{Value, Location},
+    system::content_addressing::Str,
 };
 
 #[test]
 fn test_intent_basic_creation() {
-    let domain = DomainId::from_content(&Str::new("test_domain"));
+    let domain = Location::Remote("test_domain".to_string());
     
     let intent = Intent::new(
-        domain,
+        domain.clone(),
         vec![
             ResourceBinding::new("source_account", "Account").with_quantity(100),
             ResourceBinding::new("tokens", "Token").with_quantity(50),
@@ -35,7 +35,7 @@ fn test_intent_basic_creation() {
 
 #[test]
 fn test_intent_with_constraints() {
-    let domain = DomainId::from_content(&Str::new("swap_domain"));
+    let domain = Location::Remote("swap_domain".to_string());
     
     let intent = Intent::new(
         domain,
@@ -61,11 +61,11 @@ fn test_intent_with_constraints() {
 
 #[test]
 fn test_intent_validation_errors() {
-    let domain = DomainId::from_content(&Str::new("validation_domain"));
+    let domain = Location::Remote("validation_domain".to_string());
     
     // Test duplicate binding names
     let intent_duplicate = Intent::new(
-        domain,
+        domain.clone(),
         vec![
             ResourceBinding::new("duplicate", "TokenA"),
             ResourceBinding::new("duplicate", "TokenB"), // Duplicate name
@@ -77,7 +77,7 @@ fn test_intent_validation_errors() {
     
     // Test constraint referencing unknown binding
     let intent_unknown_ref = Intent::new(
-        domain,
+        domain.clone(),
         vec![ResourceBinding::new("input", "Token")],
         Constraint::equals(
             ValueExpr::quantity("unknown_binding"), // Reference to non-existent binding
@@ -185,7 +185,7 @@ fn test_value_expression_builders() {
 
 #[test]
 fn test_intent_binding_queries() {
-    let domain = DomainId::from_content(&Str::new("query_domain"));
+    let domain = Location::Remote("query_domain".to_string());
     
     let intent = Intent::new(
         domain,
@@ -222,11 +222,11 @@ fn test_intent_binding_queries() {
 
 #[test]
 fn test_real_world_intent_scenarios() {
-    let domain = DomainId::from_content(&Str::new("defi_domain"));
+    let domain = Location::Remote("defi_domain".to_string());
     
     // Scenario 1: Token transfer with fee
     let transfer_intent = Intent::new(
-        domain,
+        domain.clone(),
         vec![
             ResourceBinding::new("sender_account", "Account")
                 .with_capability(Capability::write("write")),

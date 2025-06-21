@@ -8,7 +8,7 @@ use causality_core::{
     system::content_addressing::{EntityId, Str},
     lambda::Symbol,
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 /// Runtime value in Causality Lisp
@@ -31,8 +31,7 @@ pub enum ValueKind {
     /// Integer values
     Int(i64),
     
-    /// Floating point values
-    Float(f64),
+
     
     /// String values (ZK-compatible bounded strings)
     String(Str),
@@ -89,7 +88,7 @@ pub enum ValueKind {
     },
     
     /// Record value
-    Record(HashMap<Symbol, Value>),
+    Record(BTreeMap<Symbol, Value>),
 }
 
 /// Function arity specification
@@ -148,7 +147,7 @@ pub enum Ownership {
 /// Environment for variable bindings
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
-    pub bindings: HashMap<Symbol, Value>,
+    pub bindings: BTreeMap<Symbol, Value>,
     pub parent: Option<Box<Environment>>,
 }
 
@@ -204,17 +203,7 @@ impl Value {
         }
     }
     
-    /// Create a floating-point value
-    pub fn float(f: f64) -> Self {
-        Self {
-            kind: ValueKind::Float(f),
-            type_info: TypeInfo {
-                type_name: "Float".to_string(),
-                constraints: vec![],
-            },
-            linearity: LinearityInfo::default(),
-        }
-    }
+
     
     /// Create a string value
     pub fn string(s: impl Into<Str>) -> Self {
@@ -327,7 +316,7 @@ impl Value {
     }
     
     /// Create a record value
-    pub fn record(fields: HashMap<Symbol, Value>) -> Self {
+    pub fn record(fields: BTreeMap<Symbol, Value>) -> Self {
         Self {
             kind: ValueKind::Record(fields),
             type_info: TypeInfo {
@@ -377,7 +366,7 @@ impl Value {
             ValueKind::Nil => false,
             ValueKind::Bool(b) => *b,
             ValueKind::Int(i) => *i != 0,
-            ValueKind::Float(f) => *f != 0.0,
+
             ValueKind::String(s) => !s.as_str().is_empty(),
             ValueKind::Symbol(_) => true,
             ValueKind::List(items) => !items.is_empty(),
@@ -399,7 +388,7 @@ impl Value {
             ValueKind::Nil => "Nil",
             ValueKind::Bool(_) => "Bool",
             ValueKind::Int(_) => "Int",
-            ValueKind::Float(_) => "Float",
+
             ValueKind::String(_) => "String",
             ValueKind::Symbol(_) => "Symbol",
             ValueKind::List(_) => "List",
@@ -490,35 +479,26 @@ fn create_builtin_function(name: &str) -> BuiltinFunc {
             }
             
             let mut result = match &args[0].kind {
-                ValueKind::Int(i) => *i as f64,
-                ValueKind::Float(f) => *f,
+                ValueKind::Int(i) => *i,
                 _ => return Err(crate::error::EvalError::TypeMismatch {
-                    expected: "number".to_string(),
+                    expected: "integer".to_string(),
                     found: "other".to_string(),
                 }),
             };
             
-            let mut is_float = matches!(&args[0].kind, ValueKind::Float(_));
-            
             for arg in &args[1..] {
                 match &arg.kind {
-                    ValueKind::Int(i) => result += *i as f64,
-                    ValueKind::Float(f) => {
-                        result += f;
-                        is_float = true;
-                    }
+                    ValueKind::Int(i) => result = result.checked_add(*i).ok_or_else(|| {
+                        crate::error::EvalError::ArithmeticOverflow("addition overflow".to_string())
+                    })?,
                     _ => return Err(crate::error::EvalError::TypeMismatch {
-                        expected: "number".to_string(),
+                        expected: "integer".to_string(),
                         found: "other".to_string(),
                     }),
                 }
             }
             
-            if is_float {
-                Ok(Value::float(result))
-            } else {
-                Ok(Value::int(result as i64))
-            }
+            Ok(Value::int(result))
         }),
         "subtract" => Rc::new(|args| {
             if args.len() < 2 {
@@ -526,35 +506,26 @@ fn create_builtin_function(name: &str) -> BuiltinFunc {
             }
             
             let mut result = match &args[0].kind {
-                ValueKind::Int(i) => *i as f64,
-                ValueKind::Float(f) => *f,
+                ValueKind::Int(i) => *i,
                 _ => return Err(crate::error::EvalError::TypeMismatch {
-                    expected: "number".to_string(),
+                    expected: "integer".to_string(),
                     found: "other".to_string(),
                 }),
             };
             
-            let mut is_float = matches!(&args[0].kind, ValueKind::Float(_));
-            
             for arg in &args[1..] {
                 match &arg.kind {
-                    ValueKind::Int(i) => result -= *i as f64,
-                    ValueKind::Float(f) => {
-                        result -= f;
-                        is_float = true;
-                    }
+                    ValueKind::Int(i) => result = result.checked_sub(*i).ok_or_else(|| {
+                        crate::error::EvalError::ArithmeticOverflow("subtraction overflow".to_string())
+                    })?,
                     _ => return Err(crate::error::EvalError::TypeMismatch {
-                        expected: "number".to_string(),
+                        expected: "integer".to_string(),
                         found: "other".to_string(),
                     }),
                 }
             }
             
-            if is_float {
-                Ok(Value::float(result))
-            } else {
-                Ok(Value::int(result as i64))
-            }
+            Ok(Value::int(result))
         }),
         "multiply" => Rc::new(|args| {
             if args.is_empty() {
@@ -562,35 +533,26 @@ fn create_builtin_function(name: &str) -> BuiltinFunc {
             }
             
             let mut result = match &args[0].kind {
-                ValueKind::Int(i) => *i as f64,
-                ValueKind::Float(f) => *f,
+                ValueKind::Int(i) => *i,
                 _ => return Err(crate::error::EvalError::TypeMismatch {
-                    expected: "number".to_string(),
+                    expected: "integer".to_string(),
                     found: "other".to_string(),
                 }),
             };
             
-            let mut is_float = matches!(&args[0].kind, ValueKind::Float(_));
-            
             for arg in &args[1..] {
                 match &arg.kind {
-                    ValueKind::Int(i) => result *= *i as f64,
-                    ValueKind::Float(f) => {
-                        result *= f;
-                        is_float = true;
-                    }
+                    ValueKind::Int(i) => result = result.checked_mul(*i).ok_or_else(|| {
+                        crate::error::EvalError::ArithmeticOverflow("multiplication overflow".to_string())
+                    })?,
                     _ => return Err(crate::error::EvalError::TypeMismatch {
-                        expected: "number".to_string(),
+                        expected: "integer".to_string(),
                         found: "other".to_string(),
                     }),
                 }
             }
             
-            if is_float {
-                Ok(Value::float(result))
-            } else {
-                Ok(Value::int(result as i64))
-            }
+            Ok(Value::int(result))
         }),
         "divide" => Rc::new(|args| {
             if args.len() != 2 {
@@ -604,29 +566,8 @@ fn create_builtin_function(name: &str) -> BuiltinFunc {
                         Ok(Value::int(a / b))
                     }
                 }
-                (ValueKind::Float(a), ValueKind::Float(b)) => {
-                    if *b == 0.0 {
-                        Err(crate::error::EvalError::DivisionByZero)
-                    } else {
-                        Ok(Value::float(a / b))
-                    }
-                }
-                (ValueKind::Int(a), ValueKind::Float(b)) => {
-                    if *b == 0.0 {
-                        Err(crate::error::EvalError::DivisionByZero)
-                    } else {
-                        Ok(Value::float(*a as f64 / b))
-                    }
-                }
-                (ValueKind::Float(a), ValueKind::Int(b)) => {
-                    if *b == 0 {
-                        Err(crate::error::EvalError::DivisionByZero)
-                    } else {
-                        Ok(Value::float(a / *b as f64))
-                    }
-                }
                 _ => Err(crate::error::EvalError::TypeMismatch {
-                    expected: "number".to_string(),
+                    expected: "integer".to_string(),
                     found: "other".to_string(),
                 }),
             }
@@ -694,7 +635,7 @@ impl Environment {
     /// Create a new empty environment
     pub fn new() -> Self {
         Self {
-            bindings: HashMap::new(),
+            bindings: BTreeMap::new(),
             parent: None,
         }
     }
@@ -702,7 +643,7 @@ impl Environment {
     /// Create a new environment with a parent
     pub fn with_parent(parent: Environment) -> Self {
         Self {
-            bindings: HashMap::new(),
+            bindings: BTreeMap::new(),
             parent: Some(Box::new(parent)),
         }
     }

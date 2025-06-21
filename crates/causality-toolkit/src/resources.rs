@@ -1,20 +1,20 @@
 //! Resource management utilities for the Causality toolkit.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use causality_core::{EntityId, Value};
 use sha2::{Sha256, Digest};
 
 /// Resource manager for handling system resources
 #[derive(Debug, Clone)]
 pub struct ResourceManager {
-    resources: HashMap<EntityId, Value>,
+    resources: BTreeMap<EntityId, Value>,
 }
 
 impl ResourceManager {
     /// Create a new resource manager
     pub fn new() -> Self {
         Self {
-            resources: HashMap::new(),
+            resources: BTreeMap::new(),
         }
     }
     

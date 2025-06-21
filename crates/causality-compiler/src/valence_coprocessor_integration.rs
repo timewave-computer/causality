@@ -4,7 +4,7 @@
 //! and verifying ZK proofs. It handles proof lifecycle management, submission tracking,
 //! and result processing for cross-chain state verification.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use tokio::time::{timeout, Duration};
@@ -27,9 +27,9 @@ pub struct ValenceCoprocessorClient {
     /// Client configuration
     config: CoprocessorClientConfig,
     /// Active proof submissions
-    active_proofs: HashMap<String, ProofSubmission>,
+    active_proofs: BTreeMap<String, ProofSubmission>,
     /// Proof result cache
-    result_cache: HashMap<String, CachedProofResult>,
+    result_cache: BTreeMap<String, CachedProofResult>,
 }
 
 /// Configuration for Valence coprocessor client
@@ -121,7 +121,7 @@ pub struct ProofSubmissionRequest {
     /// Optional callback URL for status updates
     pub callback_url: Option<String>,
     /// Additional metadata
-    pub metadata: HashMap<String, String>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 /// Response from proof submission
@@ -202,8 +202,8 @@ impl ValenceCoprocessorClient {
             base_url,
             client: reqwest::Client::new(),
             config: CoprocessorClientConfig::default(),
-            active_proofs: HashMap::new(),
-            result_cache: HashMap::new(),
+            active_proofs: BTreeMap::new(),
+            result_cache: BTreeMap::new(),
         }
     }
     
@@ -218,8 +218,8 @@ impl ValenceCoprocessorClient {
             base_url,
             client,
             config,
-            active_proofs: HashMap::new(),
-            result_cache: HashMap::new(),
+            active_proofs: BTreeMap::new(),
+            result_cache: BTreeMap::new(),
         }
     }
     
@@ -414,7 +414,7 @@ impl ValenceCoprocessorClient {
             verification_info: VerificationInfo {
                 circuit_id: format!("{}_circuit", compiled_proof.primitive.contract_id),
                 layout_commitment: compiled_proof.layout_commitment.commitment_hash.clone(),
-                verification_params: HashMap::new(),
+                verification_params: BTreeMap::new(),
             },
             metadata: ProofMetadata {
                 generation_duration_ms: 5000,

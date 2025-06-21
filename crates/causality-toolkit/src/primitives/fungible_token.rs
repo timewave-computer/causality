@@ -5,7 +5,7 @@
 
 use super::*;
 use causality_core::system::content_addressing::ContentAddressable;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
 use anyhow::Result;
 
@@ -16,10 +16,10 @@ pub struct FungibleTokenState {
     pub token_info: TokenInfo,
     
     /// Account balances (address -> balance)
-    pub balances: HashMap<String, u128>,
+    pub balances: BTreeMap<String, u128>,
     
     /// Token allowances (owner -> spender -> amount)
-    pub allowances: HashMap<String, HashMap<String, u128>>,
+    pub allowances: BTreeMap<String, BTreeMap<String, u128>>,
     
     /// Total supply of tokens
     pub total_supply: u128,
@@ -28,13 +28,13 @@ pub struct FungibleTokenState {
     pub paused: bool,
     
     /// Minting permissions (address -> can_mint)
-    pub minters: HashMap<String, bool>,
+    pub minters: BTreeMap<String, bool>,
     
     /// Burning permissions (address -> can_burn)
-    pub burners: HashMap<String, bool>,
+    pub burners: BTreeMap<String, bool>,
     
     /// Token lockups (address -> locked_until_timestamp)
-    pub lockups: HashMap<String, u64>,
+    pub lockups: BTreeMap<String, u64>,
 }
 
 /// Token metadata information
@@ -59,7 +59,7 @@ pub struct TokenInfo {
     pub logo_uri: Option<String>,
     
     /// Additional metadata
-    pub metadata: HashMap<String, Value>,
+    pub metadata: BTreeMap<String, Value>,
 }
 
 /// Fungible token operations
@@ -127,7 +127,7 @@ pub enum FungibleTokenOperation {
     /// Update token metadata
     UpdateMetadata {
         admin: String,
-        new_metadata: HashMap<String, Value>,
+        new_metadata: BTreeMap<String, Value>,
     },
     
     /// Grant minting permission
@@ -185,23 +185,23 @@ impl FungibleToken {
         let id = EntityId::default();
         let timestamp = chrono::Utc::now().timestamp() as u64;
         
-        let mut balances = HashMap::new();
+        let mut balances = BTreeMap::new();
         if initial_supply > 0 {
             balances.insert(initial_owner.clone(), initial_supply);
         }
         
-        let mut minters = HashMap::new();
+        let mut minters = BTreeMap::new();
         minters.insert(initial_owner, true);
         
         let state = FungibleTokenState {
             token_info,
             balances,
-            allowances: HashMap::new(),
+            allowances: BTreeMap::new(),
             total_supply: initial_supply,
             paused: false,
             minters,
-            burners: HashMap::new(),
-            lockups: HashMap::new(),
+            burners: BTreeMap::new(),
+            lockups: BTreeMap::new(),
         };
         
         Ok(Self {
@@ -518,8 +518,8 @@ impl DeFiPrimitive for FungibleToken {
         "fungible_token"
     }
     
-    fn metadata(&self) -> HashMap<String, Value> {
-        let mut metadata = HashMap::new();
+    fn metadata(&self) -> BTreeMap<String, Value> {
+        let mut metadata = BTreeMap::new();
         metadata.insert("name".to_string(), Value::String(causality_core::system::Str { value: self.state.token_info.name.clone() }));
         metadata.insert("symbol".to_string(), Value::String(causality_core::system::Str { value: self.state.token_info.symbol.clone() }));
         metadata.insert("decimals".to_string(), Value::Int(self.state.token_info.decimals as u32));
@@ -566,7 +566,7 @@ mod tests {
             max_supply: Some(1_000_000_000_000_000_000_000_000), // 1M tokens
             description: Some("A test token".to_string()),
             logo_uri: None,
-            metadata: HashMap::new(),
+            metadata: BTreeMap::new(),
         };
         
         let mut config = PrimitiveConfig::default();

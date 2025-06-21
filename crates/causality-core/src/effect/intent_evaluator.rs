@@ -4,16 +4,17 @@
 //! declarative intents into concrete effect sequences using algebraic effects
 //! and handlers.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use crate::{
     lambda::base::Value,
     system::error::Result,
+    effect::{EffectExpr, Intent, Constraint, ResourceBinding, synthesis::FlowSynthesizer, IntentError},
+    lambda::{Term, base::{BaseType, Location}},
+    system::content_addressing::EntityId,
 };
 use crate::effect::{
     handler_registry::{EffectHandlerRegistry, EffectExecutionError},
-    synthesis::FlowSynthesizer,
-    intent::{Intent, IntentError},
     synthesis::SynthesisError,
 };
 
@@ -88,13 +89,13 @@ pub struct IntentEvaluator {
 #[derive(Debug, Clone, Default)]
 pub struct EvaluationContext {
     /// Available resources by name
-    pub resources: HashMap<String, Value>,
+    pub resources: BTreeMap<String, Value>,
     
     /// Available capabilities
     pub capabilities: Vec<String>,
     
     /// Metadata for evaluation
-    pub metadata: HashMap<String, Value>,
+    pub metadata: BTreeMap<String, Value>,
 }
 
 impl IntentEvaluator {
@@ -203,40 +204,51 @@ impl std::error::Error for IntentEvaluationError {}
 mod tests {
     use super::*;
     use crate::{
-        system::content_addressing::DomainId,
-        effect::{
-            synthesis::FlowSynthesizer,
-            intent::Constraint,
-        },
+        effect::{Intent, ResourceBinding, Constraint, synthesis::FlowSynthesizer},
+        lambda::base::Location,
     };
     
     
     fn create_test_evaluator() -> IntentEvaluator {
-        let synthesizer = FlowSynthesizer::new(DomainId::default());
+        let synthesizer = FlowSynthesizer::new(Location::Remote("test".to_string()));
         let handler_registry = EffectHandlerRegistry::new();
         
         IntentEvaluator::new(synthesizer, handler_registry)
     }
     
     #[test]
-    fn test_intent_evaluator_creation() {
-        let evaluator = create_test_evaluator();
-        // Check that the evaluator was created successfully
-        assert!(evaluator.handler_registry().lock().unwrap().list_effects().is_empty());
+    fn test_evaluator_creation() {
+        let synthesizer = FlowSynthesizer::new(Location::Remote("test_domain".to_string()));
+        let registry = EffectHandlerRegistry::new();
+        let evaluator = IntentEvaluator::new(synthesizer, registry);
+        
+        assert!(evaluator._config.timeout_ms > 0);
+        assert!(evaluator._config.max_effects > 0);
     }
     
     #[test]
     fn test_simple_intent_evaluation() {
-        let evaluator = create_test_evaluator();
+        let synthesizer = FlowSynthesizer::new(Location::Remote("test_domain".to_string()));
+        let registry = EffectHandlerRegistry::new();
+        let evaluator = IntentEvaluator::new(synthesizer, registry);
         
-        // Create a simple intent with trivial constraint
         let intent = Intent::new(
-            DomainId::default(),
-            vec![], // No inputs for this test
-            Constraint::True,
+            Location::Remote("test_domain".to_string()),
+            vec![ResourceBinding::new("input", "Token").with_quantity(100)],
+            Constraint::produces_quantity("output", "Token", 100),
         );
         
         let result = evaluator.evaluate_intent(&intent);
         assert!(result.is_ok());
+    }
+    
+    #[test]
+    fn test_intent_evaluator_basic() {
+        let synthesizer = FlowSynthesizer::new(Location::Remote("test_domain".to_string()));
+        let registry = EffectHandlerRegistry::new();
+        let evaluator = IntentEvaluator::new(synthesizer, registry);
+        
+        // Basic functionality test
+        assert!(evaluator._config.timeout_ms > 0);
     }
 } 

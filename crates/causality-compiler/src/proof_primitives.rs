@@ -4,7 +4,7 @@
 //! ZK proofs of blockchain state queries. It coordinates between Almanac (for witness data)
 //! and Traverse (for proof generation) to create verifiable state proofs.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use causality_lisp::ast::{Expr, ExprKind, LispValue};
@@ -167,7 +167,7 @@ pub struct ProofCacheConfig {
 /// Compiler for proof primitives
 pub struct ProofPrimitiveCompiler {
     /// Known storage layouts
-    storage_layouts: HashMap<String, StorageLayout>,
+    storage_layouts: BTreeMap<String, StorageLayout>,
     /// Default proof generation configuration
     default_proof_config: ProofGenerationConfig,
     /// Traverse-Almanac integrator for automatic witness generation
@@ -200,7 +200,7 @@ impl ProofPrimitiveCompiler {
     /// Create a new proof primitive compiler
     pub fn new() -> Self {
         Self {
-            storage_layouts: HashMap::new(),
+            storage_layouts: BTreeMap::new(),
             default_proof_config: ProofGenerationConfig::default(),
             integrator: TraverseAlmanacIntegrator::new(),
         }
@@ -317,7 +317,7 @@ impl ProofPrimitiveCompiler {
             block_number,
             contract_address: contract_address.to_string(),
             layout_commitment: layout.layout_commitment.clone(),
-            parameters: HashMap::new(),
+            parameters: BTreeMap::new(),
         };
         
         match self.integrator.generate_witness(request).await {
@@ -450,7 +450,7 @@ pub struct VerificationParams {
     /// Verification strategy
     pub strategy: VerificationStrategy,
     /// Additional verification data
-    pub additional_data: HashMap<String, String>,
+    pub additional_data: BTreeMap<String, String>,
 }
 
 /// Strategy for proof verification

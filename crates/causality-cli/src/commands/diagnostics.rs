@@ -9,7 +9,7 @@ use causality_core::{
     lambda::{Term, TermKind},
     machine::{Instruction, RegisterId},
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Diagnostic information for type checking and resource analysis
 #[derive(Debug, Clone)]
@@ -234,7 +234,7 @@ fn analyze_compilation_error(report: &mut DiagnosticReport, error: &CompileError
 
 /// Analyze instructions for resource usage patterns
 fn analyze_instructions(report: &mut DiagnosticReport, instructions: &[Instruction]) {
-    let mut resource_map: HashMap<RegisterId, ResourceLifetime> = HashMap::new();
+    let mut resource_map: BTreeMap<RegisterId, ResourceLifetime> = BTreeMap::new();
     let mut allocation_count = 0;
     let mut consumption_count = 0;
 
@@ -284,7 +284,7 @@ fn analyze_instructions(report: &mut DiagnosticReport, instructions: &[Instructi
 /// Analyze lambda term for linearity properties
 fn analyze_term_linearity(_report: &mut DiagnosticReport, term: &Term) {
     // Simple linearity analysis - could be expanded significantly
-    let mut used_vars = HashSet::new();
+    let mut used_vars = BTreeSet::new();
     collect_used_variables(term, &mut used_vars);
     
     // This is a simplified analysis - in practice would need much more sophisticated
@@ -292,7 +292,7 @@ fn analyze_term_linearity(_report: &mut DiagnosticReport, term: &Term) {
 }
 
 /// Collect all variables used in a term
-fn collect_used_variables(term: &Term, used_vars: &mut HashSet<String>) {
+fn collect_used_variables(term: &Term, used_vars: &mut BTreeSet<String>) {
     match &term.kind {
         TermKind::Var(name) => {
             used_vars.insert(name.clone());
@@ -357,7 +357,7 @@ fn estimate_performance(report: &mut DiagnosticReport) -> Result<()> {
 
 /// Count unique registers used in instructions
 fn count_registers(instructions: &[Instruction]) -> usize {
-    let mut registers = HashSet::new();
+    let mut registers = BTreeSet::new();
     
     for instruction in instructions {
         match instruction {

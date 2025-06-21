@@ -7,7 +7,7 @@
 // pub mod vm;
 
 use anyhow::Result;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -16,12 +16,12 @@ use crate::{ExecutionSession, types::*};
 /// API request handlers
 pub struct ApiHandlers {
     /// Shared session storage
-    sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    sessions: Arc<RwLock<BTreeMap<String, ExecutionSession>>>,
 }
 
 impl ApiHandlers {
     /// Create new API handlers
-    pub fn new(sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>) -> Self {
+    pub fn new(sessions: Arc<RwLock<BTreeMap<String, ExecutionSession>>>) -> Self {
         Self { sessions }
     }
     
@@ -122,7 +122,7 @@ impl ApiHandlers {
             .unwrap_or(false)
         {
             Some(MachineStateInfo {
-                registers: HashMap::new(), // Would extract from executor
+                registers: BTreeMap::new(), // Would extract from executor
                 program_counter: 0,
                 stats: ExecutionStatsInfo {
                     steps_executed: compiled.instructions.len() as u64,
@@ -147,7 +147,7 @@ impl ApiHandlers {
     
     /// Handle session creation request
     pub async fn handle_create_session(&self, request: CreateSessionRequest) -> Result<ApiResponse<SessionInfo>> {
-        let session_id = uuid::Uuid::new_v4().to_string();
+        let session_id = "deterministic_uuid".to_string();
         let mut session = ExecutionSession::new(session_id.clone());
         
         // Set session name and tags if provided

@@ -4,7 +4,7 @@
 //! It bridges the gap between Causality's state query analysis and Traverse's ZK proof generation
 //! by creating deterministic storage layouts with content-addressed commitments.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use crate::state_analysis::{StateAnalysisResult, StateQueryRequirement, QueryType};
@@ -62,7 +62,7 @@ pub struct TypeInfo {
 /// Storage layout generator that creates Traverse-compatible layouts
 pub struct StorageLayoutGenerator {
     /// Known contract layouts by domain
-    contract_layouts: HashMap<String, HashMap<String, StorageLayout>>,
+    contract_layouts: BTreeMap<String, BTreeMap<String, StorageLayout>>,
     /// Type mapping configuration
     type_mapping: TypeMappingConfig,
     /// Integration with real Traverse system
@@ -74,23 +74,23 @@ pub struct StorageLayoutGenerator {
 #[derive(Debug, Clone)]
 pub struct TypeMappingConfig {
     /// Default slot assignments for common patterns
-    pub default_slots: HashMap<QueryType, u64>,
+    pub default_slots: BTreeMap<QueryType, u64>,
     /// Type size mappings
-    pub type_sizes: HashMap<String, usize>,
+    pub type_sizes: BTreeMap<String, usize>,
 }
 
 /// Result of storage layout generation
 #[derive(Debug, Clone)]
 pub struct StorageLayoutResult {
     /// Generated layouts by contract
-    pub layouts: HashMap<String, StorageLayout>,
+    pub layouts: BTreeMap<String, StorageLayout>,
     /// Layout commitments for version tracking
-    pub commitments: HashMap<String, LayoutCommitment>,
+    pub commitments: BTreeMap<String, LayoutCommitment>,
     /// Generation metadata
     pub metadata: LayoutGenerationMetadata,
     /// Traverse layout info for ZK proof generation
     #[cfg(feature = "traverse")]
-    pub traverse_layouts: HashMap<String, TraverseLayoutInfo>,
+    pub traverse_layouts: BTreeMap<String, TraverseLayoutInfo>,
 }
 
 /// Metadata about layout generation process
@@ -144,7 +144,7 @@ impl StorageLayoutGenerator {
     /// Create a new storage layout generator
     pub fn new() -> Self {
         Self {
-            contract_layouts: HashMap::new(),
+            contract_layouts: BTreeMap::new(),
             type_mapping: TypeMappingConfig::default(),
             #[cfg(feature = "traverse")]
             traverse_integration: None,
@@ -158,7 +158,7 @@ impl StorageLayoutGenerator {
         key_resolver: Box<dyn traverse_core::KeyResolver>,
     ) -> Self {
         Self {
-            contract_layouts: HashMap::new(),
+            contract_layouts: BTreeMap::new(),
             type_mapping: TypeMappingConfig::default(),
             traverse_integration: Some(TraverseIntegration {
                 layout_compiler,
@@ -170,12 +170,12 @@ impl StorageLayoutGenerator {
     /// Generate storage layouts from state analysis results
     pub fn generate_layouts(&self, analysis: &StateAnalysisResult) -> Result<StorageLayoutResult> {
         let start_time = std::time::Instant::now();
-        let mut layouts = HashMap::new();
-        let mut commitments = HashMap::new();
+        let mut layouts = BTreeMap::new();
+        let mut commitments = BTreeMap::new();
         let mut total_entries = 0;
         
         #[cfg(feature = "traverse")]
-        let mut traverse_layouts = HashMap::new();
+        let mut traverse_layouts = BTreeMap::new();
         
         // Generate layout for each contract
         for (contract_id, queries) in &analysis.queries_by_contract {
@@ -470,11 +470,11 @@ impl StorageLayoutGenerator {
 
 impl Default for TypeMappingConfig {
     fn default() -> Self {
-        let mut default_slots = HashMap::new();
+        let mut default_slots = BTreeMap::new();
         default_slots.insert(QueryType::TokenBalance, 1); // Common slot for balances mapping
         default_slots.insert(QueryType::TokenAllowance, 2); // Common slot for allowances mapping
         
-        let mut type_sizes = HashMap::new();
+        let mut type_sizes = BTreeMap::new();
         type_sizes.insert("t_uint256".to_string(), 32);
         type_sizes.insert("t_address".to_string(), 20);
         type_sizes.insert("t_bytes32".to_string(), 32);

@@ -4,7 +4,17 @@
 //! Generic expression constructs have been moved to Layer 1 terms.
 
 use crate::lambda::{Term, TypeInner};
-use super::session::SessionBranch;
+
+//-----------------------------------------------------------------------------
+// Session Types
+//-----------------------------------------------------------------------------
+
+/// Session branch for case operations
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionBranch {
+    pub label: String,
+    pub body: EffectExpr,
+}
 
 //-----------------------------------------------------------------------------
 // Effect Expressions

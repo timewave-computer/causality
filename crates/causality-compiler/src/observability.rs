@@ -4,7 +4,7 @@
 //! for real API calls and system operations.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::time::interval;
@@ -12,45 +12,45 @@ use tokio::time::interval;
 /// Metrics collector for system operations
 #[derive(Debug, Clone)]
 pub struct MetricsCollector {
-    counters: Arc<Mutex<HashMap<String, u64>>>,
-    gauges: Arc<Mutex<HashMap<String, f64>>>,
-    histograms: Arc<Mutex<HashMap<String, Vec<f64>>>>,
+    counters: Arc<Mutex<BTreeMap<String, u64>>>,
+    gauges: Arc<Mutex<BTreeMap<String, f64>>>,
+    histograms: Arc<Mutex<BTreeMap<String, Vec<f64>>>>,
     component: String,
 }
 
 impl MetricsCollector {
     pub fn new(component: &str) -> Self {
         Self {
-            counters: Arc::new(Mutex::new(HashMap::new())),
-            gauges: Arc::new(Mutex::new(HashMap::new())),
-            histograms: Arc::new(Mutex::new(HashMap::new())),
+            counters: Arc::new(Mutex::new(BTreeMap::new())),
+            gauges: Arc::new(Mutex::new(BTreeMap::new())),
+            histograms: Arc::new(Mutex::new(BTreeMap::new())),
             component: component.to_string(),
         }
     }
     
     /// Increment a counter metric
-    pub fn increment_counter(&self, name: &str, labels: Option<HashMap<String, String>>) {
+    pub fn increment_counter(&self, name: &str, labels: Option<BTreeMap<String, String>>) {
         let metric_name = self.format_metric_name(name, labels);
         let mut counters = self.counters.lock().unwrap();
         *counters.entry(metric_name).or_insert(0) += 1;
     }
     
     /// Set a gauge metric
-    pub fn set_gauge(&self, name: &str, value: f64, labels: Option<HashMap<String, String>>) {
+    pub fn set_gauge(&self, name: &str, value: f64, labels: Option<BTreeMap<String, String>>) {
         let metric_name = self.format_metric_name(name, labels);
         let mut gauges = self.gauges.lock().unwrap();
         gauges.insert(metric_name, value);
     }
     
     /// Record a histogram value (for timing, sizes, etc.)
-    pub fn record_histogram(&self, name: &str, value: f64, labels: Option<HashMap<String, String>>) {
+    pub fn record_histogram(&self, name: &str, value: f64, labels: Option<BTreeMap<String, String>>) {
         let metric_name = self.format_metric_name(name, labels);
         let mut histograms = self.histograms.lock().unwrap();
         histograms.entry(metric_name).or_insert_with(Vec::new).push(value);
     }
     
     /// Record operation duration
-    pub fn record_duration(&self, name: &str, duration: Duration, labels: Option<HashMap<String, String>>) {
+    pub fn record_duration(&self, name: &str, duration: Duration, labels: Option<BTreeMap<String, String>>) {
         self.record_histogram(name, duration.as_secs_f64(), labels);
     }
     
@@ -72,7 +72,7 @@ impl MetricsCollector {
         }
     }
     
-    fn format_metric_name(&self, name: &str, labels: Option<HashMap<String, String>>) -> String {
+    fn format_metric_name(&self, name: &str, labels: Option<BTreeMap<String, String>>) -> String {
         let mut metric_name = format!("{}_{}", self.component, name);
         
         if let Some(labels) = labels {
@@ -95,9 +95,9 @@ impl MetricsCollector {
 pub struct MetricsSnapshot {
     pub component: String,
     pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub counters: HashMap<String, u64>,
-    pub gauges: HashMap<String, f64>,
-    pub histograms: HashMap<String, HistogramStats>,
+    pub counters: BTreeMap<String, u64>,
+    pub gauges: BTreeMap<String, f64>,
+    pub histograms: BTreeMap<String, HistogramStats>,
 }
 
 /// Statistics for histogram metrics
@@ -162,14 +162,14 @@ pub struct OperationTimer {
     start_time: Instant,
     operation_name: String,
     metrics_collector: MetricsCollector,
-    labels: Option<HashMap<String, String>>,
+    labels: Option<BTreeMap<String, String>>,
 }
 
 impl OperationTimer {
     pub fn new(
         operation_name: &str,
         metrics_collector: MetricsCollector,
-        labels: Option<HashMap<String, String>>,
+        labels: Option<BTreeMap<String, String>>,
     ) -> Self {
         Self {
             start_time: Instant::now(),
@@ -257,7 +257,7 @@ impl StructuredLogger {
     }
     
     /// Log an operation start
-    pub fn log_operation_start(&self, operation: &str, context: HashMap<String, String>) {
+    pub fn log_operation_start(&self, operation: &str, context: BTreeMap<String, String>) {
         let log_entry = LogEntry {
             timestamp: chrono::Utc::now(),
             level: LogLevel::Info,
@@ -273,7 +273,7 @@ impl StructuredLogger {
     }
     
     /// Log an operation completion
-    pub fn log_operation_complete(&self, operation: &str, duration: Duration, context: HashMap<String, String>) {
+    pub fn log_operation_complete(&self, operation: &str, duration: Duration, context: BTreeMap<String, String>) {
         let log_entry = LogEntry {
             timestamp: chrono::Utc::now(),
             level: LogLevel::Info,
@@ -293,7 +293,7 @@ impl StructuredLogger {
         &self,
         operation: &str,
         error: &crate::error_handling::CausalityError,
-        context: HashMap<String, String>,
+        context: BTreeMap<String, String>,
     ) {
         let log_entry = LogEntry {
             timestamp: chrono::Utc::now(),
@@ -318,7 +318,7 @@ impl StructuredLogger {
         duration: Duration,
         error: Option<&str>,
     ) {
-        let mut context = HashMap::new();
+        let mut context = BTreeMap::new();
         context.insert("endpoint".to_string(), endpoint.to_string());
         context.insert("method".to_string(), method.to_string());
         
@@ -415,7 +415,7 @@ struct LogEntry {
     component: String,
     operation: String,
     message: String,
-    context: HashMap<String, String>,
+    context: BTreeMap<String, String>,
     duration_ms: Option<u64>,
     error: Option<String>,
 }
@@ -464,7 +464,7 @@ impl SystemMonitor {
                 let snapshot = metrics_collector.get_metrics_snapshot();
                 
                 // Log system status
-                let mut context = HashMap::new();
+                let mut context = BTreeMap::new();
                 context.insert("counters_count".to_string(), snapshot.counters.len().to_string());
                 context.insert("gauges_count".to_string(), snapshot.gauges.len().to_string());
                 context.insert("histograms_count".to_string(), snapshot.histograms.len().to_string());
@@ -512,7 +512,7 @@ impl SystemMonitor {
     pub fn start_operation_timer(
         &self,
         operation_name: &str,
-        labels: Option<HashMap<String, String>>,
+        labels: Option<BTreeMap<String, String>>,
     ) -> OperationTimer {
         OperationTimer::new(operation_name, self.metrics_collector.clone(), labels)
     }
@@ -586,7 +586,7 @@ mod tests {
     fn test_structured_logger() {
         let logger = StructuredLogger::new("test");
         
-        let mut context = HashMap::new();
+        let mut context = BTreeMap::new();
         context.insert("user_id".to_string(), "123".to_string());
         
         // These should not panic

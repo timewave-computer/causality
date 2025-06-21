@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::storage_backend::StorageBackendManager;
 
 // Real Almanac types when feature is enabled
@@ -377,14 +377,14 @@ pub struct CausalityValenceState {
     pub pending_owner_expiry: Option<chrono::DateTime<chrono::Utc>>,
     pub last_updated_block: u64,
     pub last_updated_tx: String,
-    pub state_data: HashMap<String, serde_json::Value>,
+    pub state_data: BTreeMap<String, serde_json::Value>,
 }
 
 impl CausalityValenceState {
     /// Create a mock state for development
     #[cfg(not(feature = "almanac"))]
     pub fn mock(account_id: &str) -> Self {
-        let mut state_data = HashMap::new();
+        let mut state_data = BTreeMap::new();
         state_data.insert("balance".to_string(), serde_json::json!("1000000000000000000"));
         state_data.insert("nonce".to_string(), serde_json::json!(1));
 

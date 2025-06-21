@@ -11,7 +11,7 @@ use crate::ast::{Expr, ExprKind, LispValue};
 use crate::error::{TypeError, TypeResult};
 use causality_core::lambda::base::{TypeInner, BaseType};
 use causality_core::effect::{Capability, CapabilitySet, RecordCapability, RowType};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Type checker for Lisp expressions
 pub struct TypeChecker {
@@ -21,12 +21,12 @@ pub struct TypeChecker {
 /// Type checking context with capability tracking
 #[derive(Debug, Clone)]
 pub struct TypeContext {
-    pub type_bindings: HashMap<String, TypeInner>,
+    pub type_bindings: BTreeMap<String, TypeInner>,
     pub current_scope: usize,
     /// Available capabilities for the current context
     pub capabilities: CapabilitySet,
     /// Track row type constraints
-    pub row_constraints: HashMap<String, RowType>,
+    pub row_constraints: BTreeMap<String, RowType>,
 }
 
 /// Type representation with linearity and effects
@@ -36,7 +36,7 @@ pub enum Type {
     Unit,
     Bool,
     Int,
-    Float,
+
     String,
     Symbol,
     
@@ -186,7 +186,7 @@ impl TypeChecker {
                     LispValue::Unit => Ok(TypeInner::Base(BaseType::Unit)),
                     LispValue::Bool(_) => Ok(TypeInner::Base(BaseType::Bool)),
                     LispValue::Int(_) => Ok(TypeInner::Base(BaseType::Int)),
-                    LispValue::Float(_) => Ok(TypeInner::Base(BaseType::Int)), // Map to Int for now
+        
                     LispValue::String(_) => Ok(TypeInner::Base(BaseType::Symbol)), // Map to Symbol for now
                     LispValue::Symbol(_) => Ok(TypeInner::Base(BaseType::Symbol)),
                     _ => Err(TypeError::Mismatch { 
@@ -493,7 +493,7 @@ impl TypeChecker {
 impl TypeContext {
     /// Create a new type context with built-in types
     pub fn new() -> Self {
-        let mut type_bindings = HashMap::new();
+        let mut type_bindings = BTreeMap::new();
         
         // Add built-in function types
         type_bindings.insert("+".to_string(), TypeInner::LinearFunction(
@@ -536,7 +536,7 @@ impl TypeContext {
             type_bindings,
             current_scope: 0,
             capabilities: CapabilitySet::new(),
-            row_constraints: HashMap::new(),
+            row_constraints: BTreeMap::new(),
         }
     }
     

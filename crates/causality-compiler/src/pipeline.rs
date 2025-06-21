@@ -6,7 +6,7 @@
 use crate::error::{CompileError, CompileResult, Location};
 use causality_core::lambda::{Term, TermKind, Literal};
 use causality_core::machine::{Instruction, RegisterId};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 //-----------------------------------------------------------------------------
 // S-Expression Parsing
@@ -211,7 +211,7 @@ struct CompileContext {
     /// Next available register ID
     next_register: u32,
     /// Variable to register mapping
-    variables: HashMap<String, RegisterId>,
+    variables: BTreeMap<String, RegisterId>,
     /// Generated instructions
     instructions: Vec<Instruction>,
 }
@@ -220,7 +220,7 @@ impl CompileContext {
     fn new() -> Self {
         Self {
             next_register: 0,
-            variables: HashMap::new(),
+            variables: BTreeMap::new(),
             instructions: Vec::new(),
         }
     }

@@ -1,7 +1,7 @@
 // Causality API server for cross-chain deployment coordination
 use anyhow::Result;
 use causality_api::{ApiConfig, ExecutionSession, server::start_server};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

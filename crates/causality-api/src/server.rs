@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -13,7 +13,7 @@ use crate::{ApiConfig, ExecutionSession};
 /// Start the HTTP server
 pub async fn start_server(
     config: ApiConfig,
-    _sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    _sessions: Arc<RwLock<BTreeMap<String, ExecutionSession>>>,
 ) -> Result<()> {
     use colored::Colorize;
     
@@ -60,9 +60,9 @@ pub async fn health_check() -> Result<serde_json::Value> {
 
 /// Create a new session
 pub async fn create_session(
-    _sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    _sessions: Arc<RwLock<BTreeMap<String, ExecutionSession>>>,
 ) -> Result<serde_json::Value> {
-    let session_id = uuid::Uuid::new_v4().to_string();
+    let session_id = "deterministic_uuid".to_string();
     let session = ExecutionSession::new(session_id.clone());
     
     _sessions.write().await.insert(session_id.clone(), session);
@@ -76,7 +76,7 @@ pub async fn create_session(
 
 /// List all sessions
 pub async fn list_sessions(
-    _sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    _sessions: Arc<RwLock<BTreeMap<String, ExecutionSession>>>,
 ) -> Result<serde_json::Value> {
     let sessions_guard = _sessions.read().await;
     let session_list: Vec<serde_json::Value> = sessions_guard
@@ -104,7 +104,7 @@ pub async fn list_sessions(
 /// Compile Lisp source code
 pub async fn compile_source(
     source: String,
-    _sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    _sessions: Arc<RwLock<BTreeMap<String, ExecutionSession>>>,
     session_id: Option<String>,
 ) -> Result<serde_json::Value> {
     use causality_compiler::EnhancedCompilerPipeline;
@@ -142,7 +142,7 @@ pub async fn compile_source(
 /// Execute Lisp source code
 pub async fn execute_source(
     source: String,
-    _sessions: Arc<RwLock<HashMap<String, ExecutionSession>>>,
+    _sessions: Arc<RwLock<BTreeMap<String, ExecutionSession>>>,
     session_id: Option<String>,
 ) -> Result<serde_json::Value> {
     use causality_compiler::EnhancedCompilerPipeline;

@@ -126,3 +126,29 @@ This glossary provides definitions for key terms used throughout the Causality f
 
 **Zero-Knowledge Proof (ZKP)**
 :   A cryptographic technique allowing one party (the prover) to prove to another party (the verifier) that a statement is true, without revealing any information beyond the validity of the statement itself. Used in Causality for privacy-preserving verification of operations or properties.
+
+## Transform-Based Unification
+
+**Transform** - The fundamental operation in Causality that unifies computation and communication. All operations are transformations `T: A → B` where location determines whether it's local computation or distributed communication.
+
+**Location Transparency** - The property that operations work the same whether data is local or remote, with location awareness provided through the type system rather than separate APIs.
+
+**Automatic Protocol Derivation** - The process by which communication protocols are automatically generated from data access patterns, eliminating the need for manual protocol specification.
+
+**Unified Constraints** - A single constraint language that works for both local field access and distributed communication, enabling seamless composition of local and remote operations.
+
+**Transform Constraint** - A constraint in the unified system that can represent local computation, remote communication, data migration, or distributed synchronization using the same mathematical framework.
+
+**Location-Aware Row Types** - Row types extended with location information that enable the same field operations to work on both local and remote data.
+
+**Effect<From, To>** - The generic effect type where the source and target locations determine the operation type (local computation, remote communication, or data migration).
+
+## Updated Core Terms
+
+**Effect** - Now specifically refers to a transform operation with source and target locations. Effects unify computation (Effect<Local, Local>) and communication (Effect<Local, Remote>) under a single mathematical framework.
+
+**Session Type** - Communication protocols that are automatically derived from row type operations rather than manually specified. Session types integrate seamlessly with the unified transform system.
+
+**Intent** - A declarative specification using unified transform constraints that can describe both local computation and distributed operations through the same constraint language.
+
+**Capability** - Access control mechanism extended with location awareness, supporting distributed capabilities and session-based delegation across locations.

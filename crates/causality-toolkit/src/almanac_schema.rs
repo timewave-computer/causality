@@ -1,7 +1,7 @@
 // ------------ ALMANAC SCHEMA GENERATION ------------ 
 // Purpose: Automatic Almanac schema generation from state query analysis
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use causality_compiler::state_analysis::{StateAnalysisResult, StateQueryRequirement, QueryType};
 
@@ -99,7 +99,7 @@ pub struct SchemaMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaGenerationResult {
     /// Generated schemas by contract
-    pub schemas: HashMap<String, AlmanacSchema>,
+    pub schemas: BTreeMap<String, AlmanacSchema>,
     /// Cross-contract dependencies
     pub dependencies: Vec<SchemaDependency>,
     /// Generation statistics
@@ -133,9 +133,9 @@ pub struct GenerationStats {
 /// Almanac schema generator
 pub struct AlmanacSchemaGenerator {
     /// Known contract patterns
-    contract_patterns: HashMap<String, ContractPattern>,
+    contract_patterns: BTreeMap<String, ContractPattern>,
     /// Field type mappings
-    type_mappings: HashMap<String, FieldType>,
+    type_mappings: BTreeMap<String, FieldType>,
 }
 
 /// Pattern for a known contract type
@@ -166,8 +166,8 @@ impl AlmanacSchemaGenerator {
     /// Create a new schema generator
     pub fn new() -> Self {
         let mut generator = Self {
-            contract_patterns: HashMap::new(),
-            type_mappings: HashMap::new(),
+            contract_patterns: BTreeMap::new(),
+            type_mappings: BTreeMap::new(),
         };
         
         generator.initialize_patterns();
@@ -178,7 +178,7 @@ impl AlmanacSchemaGenerator {
     /// Generate Almanac schemas from state analysis results
     pub fn generate_schemas(&self, analysis: &StateAnalysisResult) -> SchemaGenerationResult {
         let start_time = std::time::Instant::now();
-        let mut schemas = HashMap::new();
+        let mut schemas = BTreeMap::new();
         let mut dependencies = Vec::new();
         
         // Generate schema for each contract
@@ -237,7 +237,7 @@ impl AlmanacSchemaGenerator {
             query_patterns,
             metadata: SchemaMetadata {
                 version: "1.0.0".to_string(),
-                generated_at: std::time::SystemTime::now()
+                generated_at: std::time::std::time::UNIX_EPOCH
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_secs(),
@@ -250,7 +250,7 @@ impl AlmanacSchemaGenerator {
     /// Generate indexed fields from query requirements
     fn generate_indexed_fields(&self, queries: &[StateQueryRequirement]) -> Vec<IndexedField> {
         let mut fields = Vec::new();
-        let mut seen_fields = HashSet::new();
+        let mut seen_fields = BTreeSet::new();
         
         for query in queries {
             let field_key = format!("{}:{}", query.storage_slot, query.query_type.type_name());
@@ -277,7 +277,7 @@ impl AlmanacSchemaGenerator {
     /// Generate query patterns from requirements
     fn generate_query_patterns(&self, queries: &[StateQueryRequirement]) -> Vec<QueryPattern> {
         let mut patterns = Vec::new();
-        let mut pattern_groups: HashMap<String, Vec<&StateQueryRequirement>> = HashMap::new();
+        let mut pattern_groups: BTreeMap<String, Vec<&StateQueryRequirement>> = BTreeMap::new();
         
         // Group queries by type
         for query in queries {
@@ -289,7 +289,7 @@ impl AlmanacSchemaGenerator {
         for (pattern_type, group_queries) in pattern_groups {
             let fields: Vec<String> = group_queries.iter()
                 .map(|q| q.storage_slot.clone())
-                .collect::<HashSet<_>>()
+                .collect::<BTreeSet<_>>()
                 .into_iter()
                 .collect();
             
@@ -408,7 +408,7 @@ impl AlmanacSchemaGenerator {
         
         let unique_contracts = queries.iter()
             .map(|q| &q.contract)
-            .collect::<HashSet<_>>()
+            .collect::<BTreeSet<_>>()
             .len();
         if unique_contracts > 1 {
             hints.push("cross_contract_optimization".to_string());
@@ -433,7 +433,7 @@ impl AlmanacSchemaGenerator {
     }
     
     /// Detect cross-contract dependencies
-    fn detect_dependencies(&self, schemas: &HashMap<String, AlmanacSchema>) -> Vec<SchemaDependency> {
+    fn detect_dependencies(&self, schemas: &BTreeMap<String, AlmanacSchema>) -> Vec<SchemaDependency> {
         // Simplified dependency detection
         Vec::new()
     }
@@ -467,13 +467,13 @@ mod tests {
             },
         ];
         
-        let mut queries_by_contract = HashMap::new();
+        let mut queries_by_contract = BTreeMap::new();
         queries_by_contract.insert("usdc".to_string(), queries.clone());
         
         let analysis = StateAnalysisResult {
             required_queries: queries,
             queries_by_contract,
-            queries_by_domain: HashMap::new(),
+            queries_by_domain: BTreeMap::new(),
             metadata: causality_compiler::state_analysis::AnalysisMetadata {
                 expressions_analyzed: 1,
                 patterns_detected: 1,
