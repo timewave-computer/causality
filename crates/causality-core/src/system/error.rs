@@ -6,15 +6,12 @@
 #![allow(clippy::result_large_err)]
 
 use crate::{
-    lambda::{Term, Value, TypeInner, Symbol},
-    system::content_addressing::{EntityId, ResourceId},
+    lambda::TypeInner,
+    system::content_addressing::ResourceId,
     machine::instruction::RegisterId,
-    effect::EffectError,
 };
 use thiserror::Error;
 use anyhow;
-use serde::{Serialize, Deserialize};
-use std::fmt;
 
 /// Type alias for Results using our Error type
 pub type Result<T> = std::result::Result<T, Error>;

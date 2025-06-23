@@ -12,7 +12,7 @@
 
 use crate::{
     machine::instruction::RegisterId,
-    machine::resource::{ResourceId, ResourceStore},
+    machine::resource::ResourceId,
     system::deterministic::DeterministicSystem,
 };
 use serde::{Serialize, Deserialize};
@@ -73,10 +73,7 @@ impl RegisterFile {
     
     /// Allocate a new register deterministically
     /// Returns None if no registers are available
-    pub fn allocate_register(&mut self, det_sys: &mut DeterministicSystem) -> Option<RegisterId> {
-        // Use deterministic system for consistent allocation
-        let _counter = det_sys.next_counter();
-        
+    pub fn allocate_register(&mut self, _det_sys: &mut DeterministicSystem) -> Option<RegisterId> {
         // Get the smallest available register ID for deterministic allocation
         if let Some(&register_id) = self.available_registers.iter().next() {
             self.available_registers.remove(&register_id);
@@ -115,6 +112,11 @@ impl RegisterFile {
     pub fn read_register(&self, register: RegisterId) -> Result<Option<ResourceId>, RegisterFileError> {
         if register.id() as usize >= MAX_REGISTERS {
             return Err(RegisterFileError::InvalidRegister(register.id()));
+        }
+        
+        // Check if register is allocated
+        if !self.allocated_registers.contains(&register.id()) {
+            return Err(RegisterFileError::RegisterNotAllocated(register.id()));
         }
         
         Ok(self.registers[register.id() as usize])
@@ -170,7 +172,7 @@ impl RegisterFile {
     /// Create a snapshot of the current register file state
     pub fn snapshot(&self) -> RegisterFileSnapshot {
         RegisterFileSnapshot {
-            register_contents: self.registers.clone(),
+            register_contents: self.registers,
             allocated_registers: self.allocated_registers.clone(),
             next_register_id: self.next_register_id,
         }
@@ -211,7 +213,7 @@ impl RegisterFile {
     }
     
     /// Optimize register allocation to minimize pressure
-    pub fn optimize_allocation(&mut self, det_sys: &mut DeterministicSystem) -> Result<Vec<RegisterId>, RegisterFileError> {
+    pub fn optimize_allocation(&mut self, _det_sys: &mut DeterministicSystem) -> Result<Vec<RegisterId>, RegisterFileError> {
         let mut optimized_registers = Vec::new();
         
         // Find registers that can be freed based on usage patterns
@@ -314,23 +316,20 @@ impl RegisterFile {
         let mut coalesced_count = 0;
         
         for candidate in candidates {
-            // Only coalesce if both registers are still allocated and compatible
-            if self.is_allocated(candidate.register) && self.is_allocated(candidate.merge_target) {
-                if self.are_registers_compatible(&candidate.register, &candidate.merge_target) {
-                    // Perform the coalescing by moving content from register to merge_target
-                    if let Ok(Some(resource)) = self.read_register(candidate.register) {
-                        // If merge_target is empty, move the resource there
-                        if let Ok(None) = self.read_register(candidate.merge_target) {
-                            self.write_register(candidate.merge_target, Some(resource))?;
-                            self.write_register(candidate.register, None)?;
-                            self.free_register(candidate.register)?;
-                            coalesced_count += 1;
-                        }
-                    } else if let Ok(None) = self.read_register(candidate.register) {
-                        // Source register is empty, just free it
+            if self.is_allocated(candidate.register) && self.is_allocated(candidate.merge_target) && self.are_registers_compatible(&candidate.register, &candidate.merge_target) {
+                // Perform the coalescing by moving content from register to merge_target
+                if let Ok(Some(resource)) = self.read_register(candidate.register) {
+                    // If merge_target is empty, move the resource there
+                    if let Ok(None) = self.read_register(candidate.merge_target) {
+                        self.write_register(candidate.merge_target, Some(resource))?;
+                        self.write_register(candidate.register, None)?;
                         self.free_register(candidate.register)?;
                         coalesced_count += 1;
                     }
+                } else if let Ok(None) = self.read_register(candidate.register) {
+                    // Source register is empty, just free it
+                    self.free_register(candidate.register)?;
+                    coalesced_count += 1;
                 }
             }
         }
@@ -349,12 +348,12 @@ impl RegisterFile {
     }
     
     /// Perform comprehensive register optimization
-    pub fn optimize(&mut self, det_sys: &mut DeterministicSystem) -> Result<OptimizationResult, RegisterFileError> {
+    pub fn optimize(&mut self, _det_sys: &mut DeterministicSystem) -> Result<OptimizationResult, RegisterFileError> {
         let initial_allocated = self.allocated_count();
         let initial_pressure = self.register_pressure();
         
         // Step 1: Basic allocation optimization
-        let freed_registers = self.optimize_allocation(det_sys)?;
+        let freed_registers = self.optimize_allocation(_det_sys)?;
         
         // Step 2: Register coalescing
         let candidates = self.find_coalescing_candidates();

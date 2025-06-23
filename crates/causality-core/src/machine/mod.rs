@@ -11,6 +11,7 @@ pub mod metering;
 pub mod register_file;
 pub mod bounded_execution;
 pub mod channel_resource;
+pub mod pattern;
 
 // Re-export key types
 pub use instruction::{Instruction, Label, RegisterId};
@@ -20,6 +21,7 @@ pub use resource::Resource;
 pub use register_file::{RegisterFile, RegisterFileError};
 pub use bounded_execution::{BoundedExecutor, BoundedExecutionError, ExecutionResult};
 pub use metering::{GasMeter, GasError, InstructionCosts};
+pub use pattern::{Pattern, LiteralValue};
 
 // Channel-resource integration
 pub use channel_resource::{
@@ -104,4 +106,4 @@ mod tests {
         assert_eq!(meter.gas_used, 3);
         assert_eq!(meter.remaining_gas(), 97);
     }
-} 
+}

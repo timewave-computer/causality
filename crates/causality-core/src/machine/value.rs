@@ -4,7 +4,7 @@
 //! and manipulated by the minimal register machine.
 
 use super::instruction::RegisterId;
-use crate::system::content_addressing::{ResourceId, EntityId};
+use crate::system::content_addressing::ResourceId;
 use crate::lambda::{TypeInner, Symbol, BaseType};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::collections::BTreeMap;
@@ -475,10 +475,9 @@ mod tests {
     
     #[test]
     fn test_channel_as_linear_resource_lifecycle() {
-        use crate::machine::resource::{ResourceHeap, Resource};
-        use crate::lambda::base::Value;
+        use crate::machine::resource::ResourceStore;
         
-        let mut heap = ResourceHeap::new();
+        let mut heap = ResourceStore::new();
         
         // Create a session channel
         let session_type = SessionType::Send(
@@ -490,20 +489,17 @@ mod tests {
         
         // Allocate the channel as a resource
         let channel_value = MachineValue::Channel(channel.clone());
-        let resource = Resource::simple(
-            channel_value.clone(),
-            TypeInner::Session(Box::new(session_type)),
-            location
+        let resource_id = heap.allocate(
+            MachineValue::Type(TypeInner::Session(Box::new(session_type))),
+            channel_value.clone()
         );
-        let resource_id = heap.alloc_full_resource(resource);
         
         // Verify the resource exists and is available
-        assert!(heap.is_available(resource_id));
-        assert!(!heap.is_consumed(resource_id));
+        assert!(heap.is_available(&resource_id));
+        assert!(!heap.is_consumed(&resource_id));
         
         // Peek at the resource to verify it's a channel
-        let peeked_resource = heap.peek_resource(resource_id).unwrap();
-        let peeked_value = peeked_resource.as_machine_value();
+        let peeked_value = heap.peek(&resource_id).unwrap();
         assert!(matches!(peeked_value, MachineValue::Channel(_)));
         
         // Verify the channel is available
@@ -513,26 +509,26 @@ mod tests {
         }
         
         // Consume the channel resource
-        let consumed_value = heap.consume_resource(resource_id).unwrap();
+        let consumed_result = heap.consume(resource_id).unwrap();
+        let consumed_value = consumed_result.value;
         
         // Verify the consumed value is the channel
         assert!(matches!(consumed_value, MachineValue::Channel(_)));
         
         // Verify the resource is now consumed
-        assert!(!heap.is_available(resource_id));
-        assert!(heap.is_consumed(resource_id));
+        assert!(!heap.is_available(&resource_id));
+        assert!(heap.is_consumed(&resource_id));
         
         // Verify we cannot consume it again
-        let second_consume = heap.consume_resource(resource_id);
+        let second_consume = heap.consume(resource_id);
         assert!(second_consume.is_err());
     }
     
     #[test]
     fn test_channel_resource_reference_pattern() {
-        use crate::machine::resource::ResourceHeap;
-        use crate::system::content_addressing::ResourceId;
+        use crate::machine::resource::ResourceStore;
         
-        let mut heap = ResourceHeap::new();
+        let mut heap = ResourceStore::new();
         
         // Create a session channel
         let session_type = SessionType::Receive(
@@ -548,17 +544,16 @@ mod tests {
         
         // Allocate the channel as a resource
         let channel_value = MachineValue::Channel(channel_with_message);
-        let resource_id = heap.alloc_resource(channel_value, TypeInner::Session(Box::new(session_type)));
+        let resource_id = heap.allocate(MachineValue::Type(TypeInner::Session(Box::new(session_type))), channel_value);
         
         // Create a resource reference (this is what would be stored in registers)
         let resource_ref = MachineValue::ResourceRef(resource_id);
         
         // Verify we can peek at the channel through the resource reference
         if let MachineValue::ResourceRef(ref_id) = resource_ref {
-            let peeked_resource = heap.peek_resource(ref_id).unwrap();
-            let channel_value = peeked_resource.as_machine_value();
+            let peeked_value = heap.peek(&ref_id).unwrap();
             
-            if let MachineValue::Channel(channel) = channel_value {
+            if let MachineValue::Channel(channel) = peeked_value {
                 assert!(channel.is_available());
                 assert_eq!(channel.message_queue.len(), 1);
                 assert_eq!(channel.message_queue[0], MachineValue::Bool(true));
@@ -568,8 +563,8 @@ mod tests {
         }
         
         // Verify linear consumption works
-        let consumed = heap.consume_resource(resource_id).unwrap();
-        assert!(matches!(consumed, MachineValue::Channel(_)));
-        assert!(heap.is_consumed(resource_id));
+        let consumed_result = heap.consume(resource_id).unwrap();
+        assert!(matches!(consumed_result.value, MachineValue::Channel(_)));
+        assert!(heap.is_consumed(&resource_id));
     }
 } 

@@ -8,7 +8,6 @@ use crate::{
     system::{
         content_addressing::{EntityId, ContentAddressable}, 
         DecodeWithRemainder,
-        encode_enum_variant, decode_enum_variant,
     },
     effect::row::{RecordType, RowType, FieldType},
 };

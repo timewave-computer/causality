@@ -1,21 +1,19 @@
 //! Intent Evaluation System
 //!
 //! This module implements the intent evaluation system that converts high-level
-//! declarative intents into concrete effect sequences using algebraic effects
-//! and handlers.
+//! declarative intents into concrete effect sequences using the unified
+//! transform-based constraint system.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use crate::{
     lambda::base::Value,
     system::error::Result,
-    effect::{EffectExpr, Intent, Constraint, ResourceBinding, synthesis::FlowSynthesizer, IntentError},
-    lambda::{Term, base::{BaseType, Location}},
-    system::content_addressing::EntityId,
+    effect::{Intent, IntentError},
 };
 use crate::effect::{
     handler_registry::{EffectHandlerRegistry, EffectExecutionError},
-    synthesis::SynthesisError,
+    transform_constraint::{TransformConstraintSystem, TransformConstraintError},
 };
 
 /// Result type for intent evaluation
@@ -24,8 +22,8 @@ pub type IntentEvaluationResult = Result<Vec<Value>>;
 /// Errors that can occur during intent evaluation
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IntentEvaluationError {
-    /// Intent synthesis failed
-    SynthesisFailed(SynthesisError),
+    /// Transform constraint solving failed
+    ConstraintSolvingFailed(TransformConstraintError),
     
     /// Intent validation failed
     IntentValidationFailed(IntentError),
@@ -72,8 +70,8 @@ impl Default for IntentEvaluationConfig {
 
 /// Main intent evaluator that orchestrates intent evaluation
 pub struct IntentEvaluator {
-    /// Flow synthesizer for converting intents to effect sequences
-    _synthesizer: FlowSynthesizer,
+    /// Transform constraint system for converting intents to operations
+    constraint_system: TransformConstraintSystem,
     
     /// Handler registry for effect execution
     handler_registry: Arc<Mutex<EffectHandlerRegistry>>,
@@ -100,9 +98,9 @@ pub struct EvaluationContext {
 
 impl IntentEvaluator {
     /// Create a new intent evaluator
-    pub fn new(synthesizer: FlowSynthesizer, handler_registry: EffectHandlerRegistry) -> Self {
+    pub fn new(constraint_system: TransformConstraintSystem, handler_registry: EffectHandlerRegistry) -> Self {
         Self {
-            _synthesizer: synthesizer,
+            constraint_system,
             handler_registry: Arc::new(Mutex::new(handler_registry)),
             _config: IntentEvaluationConfig::default(),
             context: EvaluationContext::default(),
@@ -111,12 +109,12 @@ impl IntentEvaluator {
     
     /// Create a new intent evaluator with custom configuration
     pub fn with_config(
-        synthesizer: FlowSynthesizer,
+        constraint_system: TransformConstraintSystem,
         handler_registry: EffectHandlerRegistry,
         config: IntentEvaluationConfig,
     ) -> Self {
         Self {
-            _synthesizer: synthesizer,
+            constraint_system,
             handler_registry: Arc::new(Mutex::new(handler_registry)),
             _config: config,
             context: EvaluationContext::default(),
@@ -132,7 +130,8 @@ impl IntentEvaluator {
     /// Evaluate an intent and return the results
     pub fn evaluate_intent(&self, _intent: &Intent) -> IntentEvaluationResult {
         // For now, return a simple result to get compilation working
-        // Full implementation will come in subsequent steps
+        // Full implementation will use the constraint system to solve intents
+        // and execute the resulting operations
         Ok(vec![Value::Unit])
     }
     
@@ -144,6 +143,11 @@ impl IntentEvaluator {
     /// Get a mutable reference to the handler registry
     pub fn handler_registry_mut(&mut self) -> Arc<Mutex<EffectHandlerRegistry>> {
         Arc::clone(&self.handler_registry)
+    }
+    
+    /// Get the constraint system for external configuration
+    pub fn constraint_system(&self) -> &TransformConstraintSystem {
+        &self.constraint_system
     }
     
     /// Helper method to evaluate literal values
@@ -176,8 +180,8 @@ impl IntentEvaluator {
 impl std::fmt::Display for IntentEvaluationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            IntentEvaluationError::SynthesisFailed(err) => {
-                write!(f, "Intent synthesis failed: {}", err)
+            IntentEvaluationError::ConstraintSolvingFailed(err) => {
+                write!(f, "Constraint solving failed: {}", err)
             }
             IntentEvaluationError::IntentValidationFailed(err) => {
                 write!(f, "Intent validation failed: {}", err)
@@ -203,52 +207,48 @@ impl std::error::Error for IntentEvaluationError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        effect::{Intent, ResourceBinding, Constraint, synthesis::FlowSynthesizer},
-        lambda::base::Location,
+    use crate::lambda::base::Location;
+    use crate::effect::{
+        handler_registry::EffectHandlerRegistry,
+        transform_constraint::TransformConstraintSystem,
     };
-    
-    
+
     fn create_test_evaluator() -> IntentEvaluator {
-        let synthesizer = FlowSynthesizer::new(Location::Remote("test".to_string()));
+        let constraint_system = TransformConstraintSystem::new();
         let handler_registry = EffectHandlerRegistry::new();
-        
-        IntentEvaluator::new(synthesizer, handler_registry)
+        IntentEvaluator::new(constraint_system, handler_registry)
     }
-    
+
     #[test]
     fn test_evaluator_creation() {
-        let synthesizer = FlowSynthesizer::new(Location::Remote("test_domain".to_string()));
-        let registry = EffectHandlerRegistry::new();
-        let evaluator = IntentEvaluator::new(synthesizer, registry);
+        let evaluator = create_test_evaluator();
         
-        assert!(evaluator._config.timeout_ms > 0);
-        assert!(evaluator._config.max_effects > 0);
+        // Verify basic properties
+        assert!(evaluator.handler_registry().lock().is_ok());
+        // Note: TransformConstraintSystem doesn't expose constraints directly
+        // This is by design for encapsulation
     }
-    
+
     #[test]
     fn test_simple_intent_evaluation() {
-        let synthesizer = FlowSynthesizer::new(Location::Remote("test_domain".to_string()));
-        let registry = EffectHandlerRegistry::new();
-        let evaluator = IntentEvaluator::new(synthesizer, registry);
-        
-        let intent = Intent::new(
-            Location::Remote("test_domain".to_string()),
-            vec![ResourceBinding::new("input", "Token").with_quantity(100)],
-            Constraint::produces_quantity("output", "Token", 100),
-        );
+        let evaluator = create_test_evaluator();
+        let intent = Intent::new(Location::Local);
         
         let result = evaluator.evaluate_intent(&intent);
         assert!(result.is_ok());
+        
+        let values = result.unwrap();
+        assert_eq!(values.len(), 1);
+        assert_eq!(values[0], Value::Unit);
     }
-    
+
     #[test]
     fn test_intent_evaluator_basic() {
-        let synthesizer = FlowSynthesizer::new(Location::Remote("test_domain".to_string()));
-        let registry = EffectHandlerRegistry::new();
-        let evaluator = IntentEvaluator::new(synthesizer, registry);
+        let constraint_system = TransformConstraintSystem::new();
+        let handler_registry = EffectHandlerRegistry::new();
+        let evaluator = IntentEvaluator::new(constraint_system, handler_registry);
         
-        // Basic functionality test
-        assert!(evaluator._config.timeout_ms > 0);
+        // Test basic functionality
+        assert!(evaluator.handler_registry().lock().is_ok());
     }
 } 

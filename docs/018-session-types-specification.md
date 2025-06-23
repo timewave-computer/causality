@@ -77,6 +77,192 @@ Complex operations generate transactional protocols:
 ;; End
 ```
 
+## Integration with Row Type Constraints
+
+Session types are automatically derived from **location-aware row type constraints**:
+
+### Row Operation → Protocol Derivation
+
+```rust
+// Row type constraint for remote field access
+let field_constraint = TransformConstraint::RemoteTransform {
+    source_location: Location::Local,
+    target_location: Location::Remote("database".to_string()),
+    source_type: TypeInner::Base(BaseType::Symbol), // Field name
+    target_type: TypeInner::Base(BaseType::Int),    // Field value
+    protocol: TypeInner::Base(BaseType::Unit),      // Auto-derived
+};
+
+// Automatically generates session type:
+let derived_protocol = SessionType::Send(
+    Box::new(TypeInner::Base(BaseType::Symbol)), // Field query
+    Box::new(SessionType::Receive(
+        Box::new(TypeInner::Base(BaseType::Int)), // Field value
+        Box::new(SessionType::End)
+    ))
+);
+```
+
+### Multi-Field Operations → Batch Protocols
+
+```rust
+// Multiple field access constraints
+let multi_field_constraints = vec![
+    TransformConstraint::RemoteTransform {
+        source_location: Location::Local,
+        target_location: Location::Remote("user_service".to_string()),
+        source_type: TypeInner::Base(BaseType::Symbol),
+        target_type: TypeInner::Base(BaseType::Symbol), // name field
+        protocol: TypeInner::Base(BaseType::Unit),
+    },
+    TransformConstraint::RemoteTransform {
+        source_location: Location::Local,
+        target_location: Location::Remote("user_service".to_string()),
+        source_type: TypeInner::Base(BaseType::Symbol),
+        target_type: TypeInner::Base(BaseType::Symbol), // email field
+        protocol: TypeInner::Base(BaseType::Unit),
+    },
+];
+
+// Automatically optimized into batch protocol:
+let batch_protocol = SessionType::Send(
+    Box::new(TypeInner::Product(
+        Box::new(TypeInner::Base(BaseType::Symbol)), // Field list
+        Box::new(TypeInner::Base(BaseType::Symbol))  // Query type
+    )),
+    Box::new(SessionType::Receive(
+        Box::new(TypeInner::Product(
+            Box::new(TypeInner::Base(BaseType::Symbol)), // name value
+            Box::new(TypeInner::Base(BaseType::Symbol))  // email value
+        )),
+        Box::new(SessionType::End)
+    ))
+);
+```
+
+### Location Migration → Migration Protocols
+
+```rust
+// Data migration constraint
+let migration_constraint = TransformConstraint::DataMigration {
+    from_location: Location::Local,
+    to_location: Location::Remote("fast_storage".to_string()),
+    data_type: TypeInner::Record(user_record_type),
+    migration_strategy: "online_copy".to_string(),
+};
+
+// Automatically generates migration protocol:
+let migration_protocol = SessionType::Send(
+    Box::new(TypeInner::Base(BaseType::Symbol)), // Migration request
+    Box::new(SessionType::Send(
+        Box::new(TypeInner::Record(user_record_type)), // Data stream
+        Box::new(SessionType::Receive(
+            Box::new(TypeInner::Base(BaseType::Bool)), // Confirmation
+            Box::new(SessionType::End)
+        ))
+    ))
+);
+```
+
+## Unified Constraint Language Examples
+
+All session types emerge from the **same unified constraint system** used for local operations:
+
+### Example 1: Local Computation vs Remote Communication
+
+```rust
+// Local computation constraint
+let local_constraint = TransformConstraint::LocalTransform {
+    source_type: TypeInner::Record(account_record_type),
+    target_type: TypeInner::Base(BaseType::Int),
+    transform: TransformDefinition::FunctionApplication {
+        function: "get_balance".to_string(),
+        argument: "account".to_string(),
+    },
+};
+
+// Remote communication constraint - SAME CONSTRAINT LANGUAGE!
+let remote_constraint = TransformConstraint::RemoteTransform {
+    source_location: Location::Local,
+    target_location: Location::Remote("account_service".to_string()),
+    source_type: TypeInner::Record(account_record_type),
+    target_type: TypeInner::Base(BaseType::Int),
+    protocol: TypeInner::Base(BaseType::Unit), // Auto-derived from transform
+};
+
+// Same constraint solver handles both!
+let mut constraint_system = TransformConstraintSystem::new();
+constraint_system.add_constraint(local_constraint);
+constraint_system.add_constraint(remote_constraint);
+
+// Results in unified execution plan with:
+// 1. Local function call for local constraint
+// 2. Automatically derived session protocol for remote constraint
+```
+
+### Example 2: Cross-Location Distributed Transaction
+
+```rust
+// Distributed transaction across multiple services
+let distributed_transaction = vec![
+    TransformConstraint::RemoteTransform {
+        source_location: Location::Local,
+        target_location: Location::Remote("payment_service".to_string()),
+        source_type: TypeInner::Base(BaseType::Int),
+        target_type: TypeInner::Base(BaseType::Bool),
+        protocol: TypeInner::Base(BaseType::Unit), // Auto-derived
+    },
+    TransformConstraint::RemoteTransform {
+        source_location: Location::Local,
+        target_location: Location::Remote("inventory_service".to_string()),
+        source_type: TypeInner::Base(BaseType::Symbol),
+        target_type: TypeInner::Base(BaseType::Bool),
+        protocol: TypeInner::Base(BaseType::Unit), // Auto-derived
+    },
+    TransformConstraint::DistributedSync {
+        locations: vec![
+            Location::Remote("payment_service".to_string()),
+            Location::Remote("inventory_service".to_string()),
+        ],
+        sync_type: TypeInner::Base(BaseType::Bool),
+        consistency_model: "two_phase_commit".to_string(),
+    },
+];
+
+// Automatically generates coordinated protocol:
+// 1. Parallel sends to both services
+// 2. Collect responses
+// 3. Coordinate commit/abort decision
+// 4. Send final decision to both services
+```
+
+### Example 3: Capability-Constrained Communication
+
+```rust
+// Communication requiring specific capabilities
+let capability_constraint = TransformConstraint::CapabilityAccess {
+    resource: "sensitive_user_data".to_string(),
+    required_capability: Some(Capability {
+        name: "read_pii".to_string(),
+        level: CapabilityLevel::High,
+        location_constraint: Some(LocationConstraint::RequiresProtocol(
+            SessionType::Send(
+                Box::new(TypeInner::Base(BaseType::Symbol)), // Capability proof
+                Box::new(SessionType::Receive(
+                    Box::new(TypeInner::Base(BaseType::Bool)), // Access granted
+                    Box::new(SessionType::End)
+                ))
+            )
+        )),
+    }),
+    access_pattern: "authenticated_read".to_string(),
+};
+
+// Results in protocol that includes capability verification:
+// Send(CapabilityProof) → Receive(AccessGranted) → 
+// Send(DataRequest) → Receive(SensitiveData) → End
+```
+
 ## Session Type Algebra
 
 Session types form an algebra with the following operations:

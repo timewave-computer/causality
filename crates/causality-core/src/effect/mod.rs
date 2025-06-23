@@ -33,10 +33,10 @@ pub mod pattern;
 pub mod intent;
 
 /// Flow synthesis engine
-// pub mod synthesis; // Temporarily disabled due to API incompatibilities
+pub mod synthesis;
 
 /// Temporal Effect Graph (TEG) for dynamic orchestration
-// pub mod teg; // Temporarily disabled due to API incompatibilities
+pub mod teg;
 
 /// Execution tracing
 pub mod trace;
@@ -66,7 +66,7 @@ pub mod protocol_derivation;
 pub mod handler_registry;
 
 /// Intent evaluator for effect handlers
-// pub mod intent_evaluator; // Temporarily disabled due to API incompatibilities
+pub mod intent_evaluator;
 
 /// ZK proof integration for effects
 pub mod zk_integration;
@@ -85,24 +85,6 @@ pub mod transform_constraint;
 
 /// Unified transform-based effect system
 pub mod transform;
-
-/// Re-export key types for convenience
-pub use handler_registry::{EffectHandler, EffectHandlerRegistry, EffectResult};
-pub use zk_integration::{EffectHash, ZkProof, ZkVerifiedEffectHandler, ZkEffectRegistry};
-pub use storage_proof::{
-    StorageProofEffect, StorageDependency, StorageKeySpec, StorageSlot,
-    StorageProofRequirements, StorageProofResult, ProofData, EffectPriority,
-    StorageValueConstraint, StorageCachePolicy, ZkCircuitConfig, ProofAggregationStrategy,
-};
-pub use cross_chain::{
-    CrossChainEffect, CrossChainCoordinator, CrossChainTxState, CrossChainExecutionResult,
-    StorageProofRequirement, ProofType, VerificationConstraint, ConstraintType,
-    CrossChainStatistics, BlockchainDomain,
-};
-// pub use core::SessionBranch; // Temporarily disabled
-pub use session_registry::{
-    SessionRegistry, Choreography, ChoreographyProtocol, RegistryStats,
-};
 
 //-----------------------------------------------------------------------------
 // Re-exports
@@ -153,11 +135,11 @@ pub use intent::{
 };
 
 // Flow synthesis
-// pub use synthesis::{
-//     FlowSynthesizer, EffectLibrary, EffectTemplate, ConstraintSolver,
-//     SynthesisError, ValidationError, SynthesisStrategy, ResourcePattern,
-//     ResourceInfo, ResourceTransformation,
-// };
+pub use synthesis::{
+    FlowSynthesizer, EffectLibrary, EffectTemplate, ConstraintSolver,
+    SynthesisError, ValidationError, SynthesisStrategy, ResourcePattern,
+    ResourceInfo, ResourceTransformation,
+};
 
 // Temporal Effect Graph (TEG)
 // pub use teg::{
@@ -225,6 +207,12 @@ pub use transform_constraint::{
     FieldDefinition, TransformConstraint, SchemaConstraint, TransformConstraintError,
 };
 
+// Transform system
+pub use transform::{
+    Effect, EffectComposition, EffectParallel, EffectContext, EffectStats,
+    SyncRequirement, MergeStrategy,
+};
+
 // Effect system error type
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EffectError {
@@ -254,21 +242,21 @@ impl std::fmt::Display for EffectError {
 
 impl std::error::Error for EffectError {}
 
-// Re-exports for convenience
-pub use core::*;
-pub use operations::*;
-pub use resource::*;
-pub use causality::*;
-pub use pattern::*;
-pub use intent::*;
+// Re-exports for convenience - temporarily disabled to avoid conflicts
+// pub use core::*;
+// pub use operations::*;
+// pub use resource::*;
+// pub use causality::*;
+// pub use pattern::*;
+// pub use intent::*;
 // pub use synthesis::*;
 // pub use teg::*;
-pub use interface::*;
-pub use capability::*;
-pub use row::*;
-pub use location_row::*;
-pub use session_registry::*;
+// pub use interface::*;
+// pub use capability::*;
+// pub use row::*;
+// pub use location_row::*;
+// pub use session_registry::*;
 // pub use intent_evaluator::*;
-pub use transform_constraint::*;
-pub use protocol_derivation::*;
-pub use transform::*; 
+// pub use transform_constraint::*;
+// pub use protocol_derivation::*;
+// pub use transform::*; 

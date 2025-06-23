@@ -174,7 +174,7 @@ pub mod primitive {
         
         impl Timestamp {
             pub fn now() -> Self {
-                use std::time::{SystemTime, UNIX_EPOCH};
+                use std::time::UNIX_EPOCH;
                 let duration = crate::system::deterministic_system_time().duration_since(UNIX_EPOCH).unwrap();
                 Self {
                     secs_since_epoch: duration.as_secs(),
@@ -397,6 +397,17 @@ pub mod graph {
 
 // Re-exports for convenience
 pub use machine::*;
-pub use lambda::*;
-pub use effect::*;
-pub use system::*;
+pub use lambda::{
+    Term, TermKind, Literal, Location,
+    type_checker, base, function, session_linear,
+};
+pub use lambda::base::SessionType;
+pub use effect::{
+    Intent, TransformConstraint, TransformDefinition,
+    synthesis, intent_evaluator, teg, transform_constraint, transform,
+    capability, row, location_row, protocol_derivation, core as effect_core,
+};
+pub use system::{
+    DeterministicSystem,
+    content_addressing, deterministic, domain, error, utils,
+};

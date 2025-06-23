@@ -8,13 +8,12 @@ use crate::{
     lambda::base::{SessionType, Location, TypeInner},
     machine::{
         instruction::{Instruction, RegisterId},
-        resource::{ResourceId, ResourceManager, Resource, ResourceError},
+        resource::{ResourceId, ResourceManager, ResourceError},
         value::{MachineValue, SessionChannel},
         register_file::{RegisterFile, RegisterFileError},
     },
     system::deterministic::DeterministicSystem,
 };
-use serde::{Serialize, Deserialize};
 
 /// Channel resource operations integrated with the machine layer
 #[derive(Debug, Clone)]
@@ -90,7 +89,7 @@ impl ChannelResourceManager {
         
         // Allocate a register to hold the channel reference
         let result_register = self.register_file.allocate_register(det_sys)
-            .ok_or_else(|| ChannelResourceError::RegisterError(
+            .ok_or(ChannelResourceError::RegisterError(
                 RegisterFileError::NoRegistersAvailable
             ))?;
         
@@ -146,7 +145,7 @@ impl ChannelResourceManager {
         
         // Allocate a register for the result (updated channel)
         let result_register = self.register_file.allocate_register(det_sys)
-            .ok_or_else(|| ChannelResourceError::RegisterError(
+            .ok_or(ChannelResourceError::RegisterError(
                 RegisterFileError::NoRegistersAvailable
             ))?;
         
@@ -190,12 +189,12 @@ impl ChannelResourceManager {
         
         // Allocate registers for the received value and updated channel
         let value_register = self.register_file.allocate_register(det_sys)
-            .ok_or_else(|| ChannelResourceError::RegisterError(
+            .ok_or(ChannelResourceError::RegisterError(
                 RegisterFileError::NoRegistersAvailable
             ))?;
         
-        let updated_channel_register = self.register_file.allocate_register(det_sys)
-            .ok_or_else(|| ChannelResourceError::RegisterError(
+        let _updated_channel_register = self.register_file.allocate_register(det_sys)
+            .ok_or(ChannelResourceError::RegisterError(
                 RegisterFileError::NoRegistersAvailable
             ))?;
         
@@ -231,7 +230,7 @@ impl ChannelResourceManager {
         
         // Allocate a register for the final value
         let result_register = self.register_file.allocate_register(det_sys)
-            .ok_or_else(|| ChannelResourceError::RegisterError(
+            .ok_or(ChannelResourceError::RegisterError(
                 RegisterFileError::NoRegistersAvailable
             ))?;
         
@@ -285,7 +284,7 @@ impl ChannelResourceManager {
     ) -> Result<ChannelOperationResult, ChannelResourceError> {
         // Allocate a register for the composed result
         let result_register = self.register_file.allocate_register(det_sys)
-            .ok_or_else(|| ChannelResourceError::RegisterError(
+            .ok_or(ChannelResourceError::RegisterError(
                 RegisterFileError::NoRegistersAvailable
             ))?;
         
@@ -315,7 +314,7 @@ impl ChannelResourceManager {
     ) -> Result<ChannelOperationResult, ChannelResourceError> {
         // Allocate a register for the tensor result
         let result_register = self.register_file.allocate_register(det_sys)
-            .ok_or_else(|| ChannelResourceError::RegisterError(
+            .ok_or(ChannelResourceError::RegisterError(
                 RegisterFileError::NoRegistersAvailable
             ))?;
         
@@ -460,8 +459,16 @@ mod tests {
             &mut det_sys,
         ).unwrap();
         
-        // Create a value register for sending
+        // Create a value resource to send
+        let value_to_send = MachineValue::Int(42);
+        let value_resource_id = manager.resource_manager.allocate(
+            MachineValue::Type(TypeInner::Base(BaseType::Int)),
+            value_to_send
+        );
+        
+        // Create a value register and put the value resource ID in it
         let value_register = manager.register_file.allocate_register(&mut det_sys).unwrap();
+        manager.register_file.write_register(value_register, Some(value_resource_id)).unwrap();
         
         // Send operation
         let send_result = manager.send_channel_resource(

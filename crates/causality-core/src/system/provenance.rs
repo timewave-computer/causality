@@ -1,4 +1,4 @@
-//! Causal proof chain for tracking resource transformations
+//! Resource provenance tracking for transformation history
 //!
 //! This module provides basic causal proof structures to track the provenance
 //! and transformation history of resources.

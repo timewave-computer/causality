@@ -320,6 +320,154 @@ Resource operations work seamlessly with content addressing:
 
 **Key Innovation**: All operations are **transformations** - local computation and distributed communication are unified under a single mathematical framework based on symmetric monoidal closed category theory.
 
+### Computation/Communication Symmetry
+
+The fundamental breakthrough of Layer 2 is the recognition that **computation and communication are the same operation**, differing only by location:
+
+```rust
+// Local computation - same transform applied locally
+Effect::new(
+    Location::Local,
+    Location::Local,        // Same location = computation
+    input_type,
+    output_type,
+    transform_definition
+)
+
+// Distributed communication - same transform across locations  
+Effect::new(
+    Location::Local,
+    Location::Remote("server"),  // Different location = communication
+    input_type,
+    output_type,
+    transform_definition         // Same transform!
+)
+```
+
+This unification eliminates artificial distinctions and provides:
+- **Single API**: No separate interfaces for computation vs communication
+- **Location Transparency**: Operations work the same locally and remotely
+- **Automatic Protocols**: Communication protocols derived from transform patterns
+- **Mathematical Elegance**: Perfect symmetry through category theory
+- **Zero Overhead**: Local operations maintain full performance
+
+### Unified Transform Model
+
+All Layer 2 operations are expressed as transformations `T: A → B` where:
+
+#### Transform Types
+```rust
+enum TransformDefinition {
+    // Function application (local computation)
+    FunctionApplication { function: String, argument: String },
+    
+    // Communication operations (distributed)
+    CommunicationSend { message_type: TypeInner },
+    CommunicationReceive { expected_type: TypeInner },
+    
+    // Resource management (unified)
+    StateAllocation { initial_value: String },
+    ResourceConsumption { resource_type: String },
+}
+```
+
+#### Effect Composition
+Transforms compose naturally through category theory:
+- **Sequential**: `f.then(g)` creates `g ∘ f`
+- **Parallel**: `f.parallel_with(g)` creates `f ⊗ g`
+- **Mixed**: Local and distributed transforms compose seamlessly
+
+#### Location-Aware Type System
+
+The type system extends to include location information:
+
+```rust
+// Base types remain the same
+TypeInner::Base(BaseType::Int)
+
+// Located types carry location information
+TypeInner::Located(
+    Box::new(TypeInner::Base(BaseType::Int)),
+    Location::Remote("database")
+)
+
+// Transform types unify functions and protocols
+TypeInner::Transform {
+    input: Box::new(TypeInner::Base(BaseType::String)),
+    output: Box::new(TypeInner::Base(BaseType::Int)),
+    location: Location::Remote("compute_cluster"),
+}
+```
+
+**Location-Aware Row Types** enable the same field operations on both local and remote data:
+
+```rust
+// Local row access
+row.project_local("field_name")
+
+// Remote row access - same API, different location
+row.project_remote("field_name", Location::Remote("server"))
+
+// Distributed update across locations
+row.distributed_update(field_updates, target_locations)
+
+// Automatic migration when needed
+row.migrate(from_location, to_location, migration_strategy)
+```
+
+### Protocol Derivation from Transforms
+
+Communication protocols are **automatically derived** from data access patterns:
+
+#### Field Access Patterns → Protocols
+```rust
+// Field read access pattern
+field_access_pattern = ReadField { 
+    field: "balance", 
+    location: Remote("database") 
+}
+
+// Automatically derives protocol:
+protocol = SessionType::Send(
+    Box::new(TypeInner::Base(BaseType::Symbol)), // Field query
+    Box::new(SessionType::Receive(
+        Box::new(TypeInner::Base(BaseType::Int)), // Field value
+        Box::new(SessionType::End)
+    ))
+)
+```
+
+#### Transform Composition → Protocol Composition
+```rust
+// Composed transforms
+let workflow = preprocess
+    .then(remote_compute)
+    .then(postprocess);
+
+// Automatically derives composed protocol:
+// 1. Send preprocessed data
+// 2. Receive computation request
+// 3. Send computation result  
+// 4. Receive final output
+```
+
+#### Migration Patterns → Migration Protocols
+```rust
+// Data migration specification
+migration_spec = MigrationSpec {
+    from: Location::Local,
+    to: Location::Remote("fast_storage"),
+    strategy: MigrationStrategy::Copy,
+    fields: vec!["large_dataset"],
+}
+
+// Automatically derives migration protocol:
+// 1. Send migration request
+// 2. Stream data chunks
+// 3. Receive confirmation
+// 4. Update location metadata
+```
+
 ### Core Components
 
 1. **Unified Transform System**
@@ -330,13 +478,25 @@ Resource operations work seamlessly with content addressing:
    - Single constraint language for all operations
    - Automatic protocol derivation from data access patterns
 
-2. **Intent-Based Programming**
+2. **Transform Constraint System**
+   ```rust
+   enum TransformConstraint {
+       LocalTransform { source_type, target_type, transform },
+       RemoteTransform { source_location, target_location, protocol, .. },
+       DataMigration { from_location, to_location, migration_strategy, .. },
+       DistributedSync { locations, consistency_model, .. },
+       ProtocolRequirement { required_protocol, capability },
+       CapabilityAccess { resource, required_capability, .. },
+   }
+   ```
+
+3. **Intent-Based Programming**
    - Declarative specification of desired outcomes
    - Transform constraints replace separate constraint types
    - Location requirements and migration specifications
    - Cost estimation and execution planning
 
-3. **Location-Aware Capabilities**
+4. **Location-Aware Capabilities**
    - Distributed access control with session delegation
    - Cross-location verification
    - Time-limited capability delegation
@@ -351,6 +511,26 @@ Based on **Symmetric Monoidal Closed Category Theory**:
 - **Symmetry**: Resource braiding/swapping
 - **Closure**: Internal hom (→) for functions and protocols
 
+### Compilation Pipeline
+
+Layer 2 transforms compile to Layer 1 through a unified pipeline:
+
+```
+Intent (Layer 2)
+    ↓ constraint analysis
+Location-Aware Transform Constraints
+    ↓ capability resolution  
+Distributed Capability Requirements
+    ↓ protocol derivation
+Local Functions + Communication Protocols
+    ↓ monomorphization
+Concrete Row Operations + Session Operations
+    ↓ Layer 1 compilation
+Linear Lambda Terms + Session Terms
+    ↓ Layer 0 compilation
+5 Fundamental Instructions
+```
+
 ### Benefits of Unification
 
 - **Location Transparency**: Operations work the same locally and remotely
@@ -358,3 +538,6 @@ Based on **Symmetric Monoidal Closed Category Theory**:
 - **Single API**: No separate interfaces for computation vs communication
 - **Mathematical Elegance**: Perfect symmetry through category theory
 - **Zero Overhead**: Local operations maintain full performance
+- **Seamless Composition**: Local and distributed operations compose naturally
+- **Unified Constraints**: Same constraint language for all operation types
+- **Simplified Programming**: No need to distinguish computation from communication

@@ -15,15 +15,26 @@ use serde::{Serialize, Deserialize};
 use std::collections::{BTreeMap, BTreeSet};
 use ssz::{Encode, Decode, DecodeError};
 use crate::system::DecodeWithRemainder;
+use crate::system::EntityId;
 
-/// Location in the distributed system
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+/// Location represents where computation can occur
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 pub enum Location {
-    /// Local execution context
+    /// Local computation - executed in the current context/node
+    #[default]
     Local,
     
-    /// Remote location identified by address
-    Remote(String),
+    /// Remote computation - executed on a specific node identified by ID
+    Remote(EntityId),
+    
+    /// Distributed computation - executed across multiple nodes
+    Distributed(Vec<EntityId>),
+    
+    /// Edge computation - executed on edge devices
+    Edge(String),
+    
+    /// Cloud computation - executed in cloud infrastructure
+    Cloud(String),
     
     /// Domain-based location (for compatibility)
     Domain(String),
@@ -45,7 +56,7 @@ pub enum Location {
 impl Location {
     /// Create a new remote location
     pub fn remote(address: impl Into<String>) -> Self {
-        Location::Remote(address.into())
+        Location::Remote(EntityId::from_content(&address.into().as_bytes().to_vec()))
     }
     
     /// Create a new domain location
@@ -99,7 +110,8 @@ impl Location {
     /// Check if this location is concrete (no variables)
     pub fn is_concrete(&self) -> bool {
         match self {
-            Location::Local | Location::Remote(_) | Location::Domain(_) => true,
+            Location::Local | Location::Remote(_) | Location::Domain(_) | Location::Edge(_) | Location::Cloud(_) => true,
+            Location::Distributed(_entities) => true, // Distributed locations are concrete
             Location::Composite(locs) => locs.iter().all(|loc| loc.is_concrete()),
             Location::Variable(_) | Location::Any | Location::None => false,
         }
@@ -114,7 +126,11 @@ impl Location {
     
     fn collect_concrete_locations(&self, result: &mut BTreeSet<Location>) {
         match self {
-            Location::Local | Location::Remote(_) | Location::Domain(_) => {
+            Location::Local | Location::Remote(_) | Location::Domain(_) | Location::Edge(_) | Location::Cloud(_) => {
+                result.insert(self.clone());
+            }
+            Location::Distributed(_entities) => {
+                // For distributed locations, we consider the location itself as concrete
                 result.insert(self.clone());
             }
             Location::Composite(locs) => {
@@ -359,6 +375,12 @@ impl LocationUnifier {
     }
 }
 
+impl Default for LocationUnifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Location context for tracking location assignments
 #[derive(Debug, Clone)]
 pub struct LocationContext {
@@ -521,45 +543,59 @@ impl Encode for Location {
     fn ssz_bytes_len(&self) -> usize {
         1 + match self {
             Location::Local => 0,
-            Location::Remote(s) | Location::Domain(s) | Location::Variable(s) => 4 + s.len(),
-            Location::Composite(locs) => 4 + locs.iter().map(|loc| loc.ssz_bytes_len()).sum::<usize>(),
+            Location::Remote(entity) => entity.ssz_bytes_len(),
+            Location::Distributed(_entities) => 4 + _entities.iter().map(|e| e.ssz_bytes_len()).sum::<usize>(),
+            Location::Edge(s) | Location::Cloud(s) | Location::Domain(s) | Location::Variable(s) => 4 + s.len(),
+            Location::Composite(locs) => 4 + locs.iter().map(|l| l.ssz_bytes_len()).sum::<usize>(),
             Location::Any | Location::None => 0,
         }
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
+        use crate::system::encode_enum_variant;
+        
         match self {
-            Location::Local => {
-                0u8.ssz_append(buf);
+            Location::Local => encode_enum_variant(0, buf),
+            Location::Remote(entity) => {
+                encode_enum_variant(1, buf);
+                entity.ssz_append(buf);
             }
-            Location::Remote(s) => {
-                1u8.ssz_append(buf);
+            Location::Distributed(_entities) => {
+                encode_enum_variant(2, buf);
+                (_entities.len() as u32).ssz_append(buf);
+                for entity in _entities {
+                    entity.ssz_append(buf);
+                }
+            }
+            Location::Edge(s) => {
+                encode_enum_variant(3, buf);
+                (s.len() as u32).ssz_append(buf);
+                buf.extend_from_slice(s.as_bytes());
+            }
+            Location::Cloud(s) => {
+                encode_enum_variant(4, buf);
                 (s.len() as u32).ssz_append(buf);
                 buf.extend_from_slice(s.as_bytes());
             }
             Location::Domain(s) => {
-                2u8.ssz_append(buf);
+                encode_enum_variant(5, buf);
                 (s.len() as u32).ssz_append(buf);
                 buf.extend_from_slice(s.as_bytes());
             }
             Location::Composite(locs) => {
-                3u8.ssz_append(buf);
+                encode_enum_variant(6, buf);
                 (locs.len() as u32).ssz_append(buf);
                 for loc in locs {
                     loc.ssz_append(buf);
                 }
             }
             Location::Variable(s) => {
-                4u8.ssz_append(buf);
+                encode_enum_variant(7, buf);
                 (s.len() as u32).ssz_append(buf);
                 buf.extend_from_slice(s.as_bytes());
             }
-            Location::Any => {
-                5u8.ssz_append(buf);
-            }
-            Location::None => {
-                6u8.ssz_append(buf);
-            }
+            Location::Any => encode_enum_variant(8, buf),
+            Location::None => encode_enum_variant(9, buf),
         }
     }
 }
@@ -570,11 +606,85 @@ impl Decode for Location {
     }
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        let (result, remainder) = Self::decode_with_remainder(bytes)?;
-        if !remainder.is_empty() {
-            return Err(DecodeError::BytesInvalid("Trailing bytes after decoding".to_string()));
+        use crate::system::decode_enum_variant;
+        
+        let (variant, data) = decode_enum_variant(bytes)?;
+        
+        match variant {
+            0 => Ok(Location::Local),
+            1 => {
+                let entity = EntityId::from_ssz_bytes(data)?;
+                Ok(Location::Remote(entity))
+            }
+            2 => {
+                if data.len() < 4 {
+                    return Err(DecodeError::InvalidByteLength { len: data.len(), expected: 4 });
+                }
+                let len = u32::from_ssz_bytes(&data[..4])? as usize;
+                let mut _entities = Vec::new();
+                let mut offset = 4;
+                for _ in 0..len {
+                    if offset + 32 > data.len() {
+                        return Err(DecodeError::InvalidByteLength { len: data.len() - offset, expected: 32 });
+                    }
+                    let entity = EntityId::from_ssz_bytes(&data[offset..offset+32])?;
+                    _entities.push(entity);
+                    offset += 32; // EntityId is always 32 bytes
+                }
+                Ok(Location::Distributed(_entities))
+            }
+            3 => {
+                if data.len() < 4 {
+                    return Err(DecodeError::InvalidByteLength { len: data.len(), expected: 4 });
+                }
+                let len = u32::from_ssz_bytes(&data[..4])? as usize;
+                if data.len() < 4 + len {
+                    return Err(DecodeError::InvalidByteLength { len: data.len(), expected: 4 + len });
+                }
+                let s = String::from_utf8(data[4..4+len].to_vec())
+                    .map_err(|_| DecodeError::InvalidByteLength { len: data.len(), expected: 4 + len })?;
+                Ok(Location::Edge(s))
+            }
+            4 => {
+                if data.len() < 4 {
+                    return Err(DecodeError::InvalidByteLength { len: data.len(), expected: 4 });
+                }
+                let len = u32::from_ssz_bytes(&data[..4])? as usize;
+                if data.len() < 4 + len {
+                    return Err(DecodeError::InvalidByteLength { len: data.len(), expected: 4 + len });
+                }
+                let s = String::from_utf8(data[4..4+len].to_vec())
+                    .map_err(|_| DecodeError::InvalidByteLength { len: data.len(), expected: 4 + len })?;
+                Ok(Location::Cloud(s))
+            }
+            5 => {
+                if data.len() < 4 {
+                    return Err(DecodeError::InvalidByteLength { len: data.len(), expected: 4 });
+                }
+                let len = u32::from_ssz_bytes(&data[..4])? as usize;
+                if data.len() < 4 + len {
+                    return Err(DecodeError::InvalidByteLength { len: data.len(), expected: 4 + len });
+                }
+                let s = String::from_utf8(data[4..4+len].to_vec())
+                    .map_err(|_| DecodeError::InvalidByteLength { len: data.len(), expected: 4 + len })?;
+                Ok(Location::Domain(s))
+            }
+            6 => {
+                if data.len() < 4 {
+                    return Err(DecodeError::InvalidByteLength { len: data.len(), expected: 4 });
+                }
+                let len = u32::from_ssz_bytes(&data[..4])? as usize;
+                if data.len() < 4 + len {
+                    return Err(DecodeError::InvalidByteLength { len: data.len(), expected: 4 + len });
+                }
+                let s = String::from_utf8(data[4..4+len].to_vec())
+                    .map_err(|_| DecodeError::InvalidByteLength { len: data.len(), expected: 4 + len })?;
+                Ok(Location::Variable(s))
+            }
+            7 => Ok(Location::Any),
+            8 => Ok(Location::None),
+            _ => Err(DecodeError::InvalidByteLength { len: bytes.len(), expected: 1 }),
         }
-        Ok(result)
     }
 }
 
@@ -606,7 +716,7 @@ impl DecodeWithRemainder for Location {
                 offset += len;
                 
                 let location = match variant {
-                    1 => Location::Remote(s),
+                    1 => Location::Remote(EntityId::from_content(&s.as_bytes().to_vec())),
                     2 => Location::Domain(s),
                     4 => Location::Variable(s),
                     _ => unreachable!(),
@@ -645,6 +755,16 @@ impl std::fmt::Display for Location {
         match self {
             Location::Local => write!(f, "local"),
             Location::Remote(id) => write!(f, "remote:{}", id),
+            Location::Distributed(_entities) => {
+                write!(f, "distributed(")?;
+                for (i, entity) in _entities.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", entity)?;
+                }
+                write!(f, ")")
+            }
+            Location::Edge(s) => write!(f, "edge:{}", s),
+            Location::Cloud(s) => write!(f, "cloud:{}", s),
             Location::Domain(id) => write!(f, "domain:{}", id),
             Location::Composite(locs) => {
                 write!(f, "composite(")?;
@@ -661,11 +781,6 @@ impl std::fmt::Display for Location {
     }
 }
 
-impl Default for Location {
-    fn default() -> Self {
-        Location::Local
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -719,4 +834,4 @@ mod tests {
         ctx.add_constraint(LocationConstraint::Local(Location::variable("x")));
         assert!(ctx.solve_constraints().is_ok());
     }
-} 
+}

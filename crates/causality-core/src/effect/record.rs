@@ -412,7 +412,26 @@ pub fn record_capability_handlers() -> Vec<EffectHandler> {
             effect_tag: "record.access_field".to_string(),
             params: vec!["resource_id".to_string(), "field".to_string(), "capability".to_string()],
             continuation: "k".to_string(),
-            body: pure(Term::var("field_value")), // Placeholder - actual implementation compiles to tensor ops
+            body: {
+                // Compile field access to proper tensor operations
+                // 1. Load the resource as a tensor structure
+                // 2. Extract the field index from the record schema
+                // 3. Project the tensor to get the field value
+                let load_resource = perform("load_resource", vec![Term::var("resource_id")]);
+                let get_field_index = perform("get_field_index", vec![Term::var("field")]);
+                let project_tensor = perform("tensor_project", vec![Term::var("loaded_resource"), Term::var("field_index")]);
+                
+                // Chain the operations: load → index → project
+                bind(
+                    load_resource,
+                    "loaded_resource",
+                    bind(
+                        get_field_index,
+                        "field_index", 
+                        project_tensor
+                    )
+                )
+            },
         },
         
         // Field update handler - compiles to tensor reconstruction

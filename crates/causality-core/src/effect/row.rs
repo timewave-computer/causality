@@ -767,7 +767,7 @@ impl DecodeWithRemainder for FieldType {
         
         let location = if offset > 0 && bytes[offset-1] == 1 {
             let (loc, loc_remainder) = Location::decode_with_remainder(&bytes[..offset-1])?;
-            offset = bytes.len() - loc_remainder.len();
+            let _offset = bytes.len() - loc_remainder.len();
             Some(loc)
         } else {
             None
@@ -857,7 +857,7 @@ impl DecodeWithRemainder for FieldAccess {
                 let mut map = BTreeMap::new();
                 for _ in 0..field_count {
                     let (location, loc_remainder) = Location::decode_with_remainder(&bytes[offset..])?;
-                    offset = bytes.len() - loc_remainder.len();
+                    let _offset = bytes.len() - loc_remainder.len();
                     
                     let (access, access_remainder) = FieldAccess::decode_with_remainder(loc_remainder)?;
                     offset = bytes.len() - access_remainder.len();

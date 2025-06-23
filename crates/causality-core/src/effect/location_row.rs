@@ -14,8 +14,7 @@
 use crate::{
     lambda::base::{Location, TypeInner},
     effect::row::{RowType, RowConstraint, FieldType},
-    machine::{instruction::RegisterId, resource::ResourceId},
-    system::deterministic::DeterministicSystem,
+    machine::instruction::RegisterId,
 };
 use serde::{Serialize, Deserialize};
 use std::collections::BTreeMap;
@@ -363,7 +362,7 @@ impl LocationAwareRowType {
                 // Generate protocol for remote field access
                 let protocol = GeneratedProtocol {
                     protocol_type: ProtocolType::FieldAccess,
-                    session_type: self.generate_field_access_protocol(field, field_type)?,
+                    session_type: self.create_field_access_protocol(field, field_type)?,
                     participants: vec![location.clone(), target],
                     cost_estimate: 100, // Simplified cost estimate
                 };
@@ -392,7 +391,7 @@ impl LocationAwareRowType {
             to: to.clone(),
             fields: self.row_type().field_names(),
             strategy: MigrationStrategy::Move, // Default to move for linear semantics
-            protocol: self.generate_migration_protocol(&from, &to)?,
+            protocol: self.create_communication_protocol(&from, &to)?,
         };
         
         let result_row = match self {
@@ -442,7 +441,7 @@ impl LocationAwareRowType {
             consistency_model: ConsistencyModel::Strong, // Default to strong consistency
             conflict_resolution: ConflictResolution::LastWriterWins,
             participants: locations.clone(),
-            session_type: self.generate_sync_protocol(field, field_type, &locations)?,
+            session_type: self.create_distributed_field_access_protocol(field, field_type, &locations)?,
         };
         
         let protocol = GeneratedProtocol {
@@ -471,23 +470,22 @@ impl LocationAwareRowType {
         })
     }
     
-    /// Generate session type for field access protocol
-    fn generate_field_access_protocol(&self, field: &str, field_type: &FieldType) -> Result<TypeInner, LocationRowError> {
-        // For now, generate a simple request-response protocol
-        // In a full implementation, this would be more sophisticated
-        Ok(TypeInner::Base(crate::lambda::BaseType::Unit)) // Placeholder
+    /// Create a field access protocol
+    pub fn create_field_access_protocol(&self, _field: &str, _field_type: &FieldType) -> Result<TypeInner, LocationRowError> {
+        // For now, return a simple unit type
+        Ok(TypeInner::Base(crate::lambda::BaseType::Unit))
     }
     
-    /// Generate session type for migration protocol
-    fn generate_migration_protocol(&self, from: &Location, to: &Location) -> Result<TypeInner, LocationRowError> {
-        // Generate protocol for data migration
-        Ok(TypeInner::Base(crate::lambda::BaseType::Unit)) // Placeholder
+    /// Create a communication protocol between locations
+    pub fn create_communication_protocol(&self, _from: &Location, _to: &Location) -> Result<TypeInner, LocationRowError> {
+        // For now, return a simple unit type
+        Ok(TypeInner::Base(crate::lambda::BaseType::Unit))
     }
     
-    /// Generate session type for synchronization protocol
-    fn generate_sync_protocol(&self, field: &str, field_type: &FieldType, locations: &[Location]) -> Result<TypeInner, LocationRowError> {
-        // Generate protocol for distributed synchronization
-        Ok(TypeInner::Base(crate::lambda::BaseType::Unit)) // Placeholder
+    /// Create a distributed field access protocol
+    pub fn create_distributed_field_access_protocol(&self, _field: &str, _field_type: &FieldType, _locations: &[Location]) -> Result<TypeInner, LocationRowError> {
+        // Implementation needed
+        Err(LocationRowError::ProtocolGenerationFailed("Distributed field access protocol generation not implemented".to_string()))
     }
 }
 
@@ -544,8 +542,8 @@ mod tests {
     #[test]
     fn test_local_row_projection() {
         let mut row = RowType::empty();
-        row.add_field("name".to_string(), FieldType::String);
-        row.add_field("age".to_string(), FieldType::Integer);
+        row.add_field("name".to_string(), FieldType::simple(TypeInner::Base(crate::lambda::BaseType::Symbol)));
+        row.add_field("age".to_string(), FieldType::simple(TypeInner::Base(crate::lambda::BaseType::Int)));
         
         let location_row = LocationAwareRowType::local(row);
         
@@ -558,7 +556,7 @@ mod tests {
     #[test]
     fn test_remote_row_projection() {
         let mut row = RowType::empty();
-        row.add_field("data".to_string(), FieldType::String);
+        row.add_field("data".to_string(), FieldType::simple(TypeInner::Base(crate::lambda::BaseType::Symbol)));
         
         let remote_location = Location::Remote("server1".to_string());
         let location_row = LocationAwareRowType::remote(row, remote_location.clone());
@@ -574,7 +572,7 @@ mod tests {
     #[test]
     fn test_data_migration() {
         let mut row = RowType::empty();
-        row.add_field("value".to_string(), FieldType::Integer);
+        row.add_field("value".to_string(), FieldType::simple(TypeInner::Base(crate::lambda::BaseType::Int)));
         
         let location_row = LocationAwareRowType::local(row);
         let target = Location::Remote("backup".to_string());

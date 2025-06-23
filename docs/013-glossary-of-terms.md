@@ -129,26 +129,79 @@ This glossary provides definitions for key terms used throughout the Causality f
 
 ## Transform-Based Unification
 
-**Transform** - The fundamental operation in Causality that unifies computation and communication. All operations are transformations `T: A → B` where location determines whether it's local computation or distributed communication.
+**Transform**
+:   The fundamental operation in Causality that unifies computation and communication. All operations are transformations `T: A → B` where location determines whether it's local computation or distributed communication.
 
-**Location Transparency** - The property that operations work the same whether data is local or remote, with location awareness provided through the type system rather than separate APIs.
+**Computation-Communication Symmetry**
+:   The fundamental recognition that computation and communication are the same mathematical operation, differing only by their source and target locations. This symmetry eliminates artificial distinctions and enables location transparency.
 
-**Automatic Protocol Derivation** - The process by which communication protocols are automatically generated from data access patterns, eliminating the need for manual protocol specification.
+**Location Transparency**
+:   The property that operations work the same whether data is local or remote, with location awareness provided through the type system rather than separate APIs.
 
-**Unified Constraints** - A single constraint language that works for both local field access and distributed communication, enabling seamless composition of local and remote operations.
+**Automatic Protocol Derivation**
+:   The process by which communication protocols are automatically generated from data access patterns, eliminating the need for manual protocol specification.
 
-**Transform Constraint** - A constraint in the unified system that can represent local computation, remote communication, data migration, or distributed synchronization using the same mathematical framework.
+**Unified Constraints**
+:   A single constraint language that works for both local field access and distributed communication, enabling seamless composition of local and remote operations.
 
-**Location-Aware Row Types** - Row types extended with location information that enable the same field operations to work on both local and remote data.
+**Transform Constraint**
+:   A constraint in the unified system that can represent local computation, remote communication, data migration, or distributed synchronization using the same mathematical framework.
 
-**Effect<From, To>** - The generic effect type where the source and target locations determine the operation type (local computation, remote communication, or data migration).
+**Location-Aware Row Types**
+:   Row types extended with location information that enable the same field operations to work on both local and remote data.
+
+**Effect<From, To>**
+:   The generic effect type where the source and target locations determine the operation type (local computation, remote communication, or data migration).
+
+**Transform Definition**
+:   A specification of how a transform operates, unified across function application, communication operations, and resource management.
+
+**Location**
+:   A specification of where data or computation resides, including Local, Remote(name), Domain(name), and Distributed variants.
+
+**Data Migration**
+:   A transform operation that moves data between locations using automatically derived migration protocols.
+
+**Distributed Synchronization**
+:   A transform operation that coordinates state across multiple locations with configurable consistency models.
+
+**Capability Access**
+:   A transform operation that includes capability verification as part of the unified constraint system.
+
+**Transform Constraint System**
+:   The unified system that resolves all types of constraints (local, remote, migration, synchronization, capability) through a single mathematical framework.
+
+**Location Requirements**
+:   Specifications in intents that describe preferred locations, allowed locations, migration strategies, and performance constraints.
+
+**Migration Strategy**
+:   A specification of how data should move between locations (copy, move, replicate, partition) with automatic protocol generation.
+
+**Consistency Model**
+:   A specification of how distributed operations should be coordinated (strong, eventual, causal, session consistency).
+
+**Protocol Optimization**
+:   The automatic batching and optimization of multiple operations into efficient communication protocols.
+
+**Cross-Location Verification**
+:   The capability system's ability to verify access permissions across different locations and security domains.
+
+**Session Delegation**
+:   The mechanism for delegating capabilities across locations using time-limited session-based protocols.
 
 ## Updated Core Terms
 
-**Effect** - Now specifically refers to a transform operation with source and target locations. Effects unify computation (Effect<Local, Local>) and communication (Effect<Local, Remote>) under a single mathematical framework.
+**Effect**
+:   Now specifically refers to a transform operation with source and target locations. Effects unify computation (Effect<Local, Local>) and communication (Effect<Local, Remote>) under a single mathematical framework.
 
-**Session Type** - Communication protocols that are automatically derived from row type operations rather than manually specified. Session types integrate seamlessly with the unified transform system.
+**Session Type**
+:   Communication protocols that are automatically derived from row type operations rather than manually specified. Session types integrate seamlessly with the unified transform system.
 
-**Intent** - A declarative specification using unified transform constraints that can describe both local computation and distributed operations through the same constraint language.
+**Intent**
+:   A declarative specification using unified transform constraints that can describe both local computation and distributed operations through the same constraint language.
 
-**Capability** - Access control mechanism extended with location awareness, supporting distributed capabilities and session-based delegation across locations.
+**Capability**
+:   Access control mechanism extended with location awareness, supporting distributed capabilities and session-based delegation across locations.
+
+**Domain**
+:   Now refers to security and capability domains rather than separate computational contexts. Domains can span multiple locations and support cross-location capability verification.

@@ -6,7 +6,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, UNIX_EPOCH};
 use sha2::{Sha256, Digest};
-use serde::{Serialize, Deserialize};
 
 // Use simple integer type instead of FixedPoint for deterministic arithmetic
 pub type DeterministicFloat = i64;
@@ -110,7 +109,6 @@ impl Default for DeterministicSystem {
     }
 }
 
-#[cfg(feature = "uuid")]
 pub fn deterministic_uuid() -> String {
     use std::sync::Mutex;
     use std::sync::OnceLock;

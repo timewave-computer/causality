@@ -1,23 +1,22 @@
-//! Transform-Based Constraint System for Layer 2
+//! Transform-based constraint system for unified Layer 2 operations
 //!
-//! This module implements the Layer 2 Transform-Based Constraint System that unifies
-//! effect synthesis, intent solving, and Layer 1 compilation under the mathematical
-//! framework of symmetric monoidal closed categories.
+//! This module implements a unified constraint system that treats all Layer 2 operations
+//! (effects, intents, session protocols) as transformations in a symmetric monoidal closed category.
+//! This unification eliminates the need for separate handling of different operation types.
+
+#![allow(dead_code, unused_variables)]
 
 use crate::{
     effect::{
-        intent::{Intent, IntentError},
+        intent::Intent,
         capability::Capability,
         // synthesis::{ConstraintSolver, FlowSynthesizer}, // Temporarily disabled
     },
     lambda::{
-        base::{TypeInner, Location, SessionType, BaseType},
+        base::{TypeInner, Location},
         Term, TermKind,
     },
-    system::{
-        content_addressing::{ResourceId, Timestamp},
-        deterministic::{DeterministicSystem, deterministic_probability_percent},
-    },
+    system::deterministic::DeterministicSystem,
 };
 use std::collections::BTreeMap;
 
@@ -72,7 +71,7 @@ pub struct FieldDefinition {
     pub default_value: Option<String>, // Simplified representation
 }
 
-/// Transform definition mapping Layer 2 constructs to Layer 1 operations
+/// Definition of a transform operation
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransformDefinition {
     /// Function application transform
@@ -301,18 +300,18 @@ impl TransformConstraintSystem {
     }
     
     /// Solve all active constraints and generate execution plan
-    pub fn solve_constraints(&mut self, det_sys: &mut DeterministicSystem) -> Result<Vec<Layer1Operation>, TransformConstraintError> {
+    pub fn solve_constraints(&mut self, _det_sys: &mut DeterministicSystem) -> Result<Vec<Layer1Operation>, TransformConstraintError> {
         // Phase 1: Constraint Analysis
         let analyzed_constraints = self.analyze_constraints()?;
         
         // Phase 2: Capability Resolution
-        let capability_requirements = self.resolve_capabilities(&analyzed_constraints)?;
+        let _capability_requirements = self.resolve_capabilities(&analyzed_constraints)?;
         
         // Phase 3: Schema Resolution
-        let schema_operations = self.resolve_schemas(&analyzed_constraints)?;
+        let _schema_operations = self.resolve_schemas(&analyzed_constraints)?;
         
         // Phase 4: Intent Solving
-        let intent_plan = self.solve_intents(&analyzed_constraints, det_sys)?;
+        let intent_plan = self.solve_intents(&analyzed_constraints, _det_sys)?;
         
         // Phase 5: Layer 1 Compilation
         let layer1_operations = self.compile_to_layer1(&intent_plan)?;
@@ -326,7 +325,7 @@ impl TransformConstraintSystem {
         
         for constraint in &self.active_constraints {
             let analysis = match constraint {
-                TransformConstraint::LocalTransform { source_type, target_type, transform } => {
+                TransformConstraint::LocalTransform { source_type: _, target_type: _, transform: _ } => {
                     AnalyzedConstraint {
                         constraint: constraint.clone(),
                         dependencies: vec![], // Simplified
@@ -336,7 +335,7 @@ impl TransformConstraintSystem {
                     }
                 }
                 
-                TransformConstraint::RemoteTransform { source_location, target_location, protocol, .. } => {
+                TransformConstraint::RemoteTransform {    .. } => {
                     AnalyzedConstraint {
                         constraint: constraint.clone(),
                         dependencies: vec![], // Would analyze protocol dependencies
@@ -369,7 +368,7 @@ impl TransformConstraintSystem {
         for constraint in constraints {
             // Extract capability requirements from each constraint
             match &constraint.constraint {
-                TransformConstraint::ProtocolRequirement { required_protocol, capability } => {
+                TransformConstraint::ProtocolRequirement { required_protocol: _, capability } => {
                     requirements.push(CapabilityRequirement {
                         capability: capability.clone(),
                         source: "protocol".to_string(),
@@ -399,17 +398,13 @@ impl TransformConstraintSystem {
         let mut operations = Vec::new();
         
         for constraint in constraints {
-            match &constraint.constraint {
-                TransformConstraint::LocalTransform { source_type, target_type, .. } => {
-                    // Check if this involves record types that need schema resolution
-                    operations.push(SchemaOperation {
-                        operation_type: "type_check".to_string(),
-                        schema_name: "default".to_string(),
-                        field_accesses: vec![], // Would extract from types
-                    });
-                }
-                
-                _ => {}
+            if let TransformConstraint::LocalTransform {   .. } = &constraint.constraint {
+                // Check if this involves record types that need schema resolution
+                operations.push(SchemaOperation {
+                    operation_type: "type_check".to_string(),
+                    schema_name: "default".to_string(),
+                    field_accesses: vec![], // Would extract from types
+                });
             }
         }
         
@@ -417,9 +412,9 @@ impl TransformConstraintSystem {
     }
     
     /// Solve intents using the constraint information
-    fn solve_intents(&self, constraints: &[AnalyzedConstraint], det_sys: &mut DeterministicSystem) -> Result<IntentPlan, TransformConstraintError> {
+    fn solve_intents(&self, constraints: &[AnalyzedConstraint], _det_sys: &mut DeterministicSystem) -> Result<IntentPlan, TransformConstraintError> {
         // Create an intent that represents the overall goal
-        let mut intent = Intent::new(Location::Local);
+        let _intent = Intent::new(Location::Local);
         
         // Add constraints as intent requirements
         for constraint in constraints {
@@ -450,7 +445,7 @@ impl TransformConstraintSystem {
         let mut operations = Vec::new();
         
         // Convert each step in the plan to Layer 1 operations
-        for step in &plan.steps {
+        for _step in &plan.steps {
             // This would use the transform definitions to generate appropriate Layer 1 operations
             operations.push(Layer1Operation::LambdaTerm(
                 Term::new(TermKind::Unit)

@@ -3,20 +3,15 @@
 //! This module implements the Temporal Effect Graph system for handling
 //! dynamic effect orchestration and execution.
 
-use super::{
-    core::{EffectExpr, EffectExprKind},
-    intent::{Intent, Constraint},
-};
+use super::core::{EffectExpr, EffectExprKind};
 use crate::{
-    lambda::base::{Value, SessionType},
+    lambda::base::Value,
     system::{
         content_addressing::{EntityId, Timestamp},
         deterministic::DeterministicFloat,
     },
 };
-use serde::{Serialize, Deserialize};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use ssz::{Encode, Decode};
+use std::collections::BTreeMap;
 
 /// Unique identifier for nodes in the TEG
 pub type NodeId = EntityId;
@@ -92,7 +87,7 @@ pub enum EffectEdge {
     ControlLink { 
         from: NodeId, 
         to: NodeId, 
-        condition: Constraint,
+        condition: String,
     },
 }
 
@@ -384,7 +379,7 @@ impl TemporalEffectGraph {
         for (id, node) in &self.nodes {
             let node_label = format!("{}[{}]", 
                 hex::encode(&id.bytes[0..4]), 
-                node.effect.kind.to_string()
+                node.effect.kind
             );
             result.push_str(&format!("    {}\n", node_label));
         }
@@ -478,7 +473,10 @@ mod tests {
         let mut teg = TemporalEffectGraph::new();
         
         let effect1 = EffectExpr::new(EffectExprKind::Pure(Term::new(TermKind::Unit)));
-        let effect2 = EffectExpr::new(EffectExprKind::Pure(Term::new(TermKind::Unit)));
+        let effect2 = EffectExpr::new(EffectExprKind::Perform {
+            effect_tag: "test_effect".to_string(),
+            args: vec![],
+        });
         
         let node1_id = effect_to_entity_id(&effect1);
         let node2_id = effect_to_entity_id(&effect2);

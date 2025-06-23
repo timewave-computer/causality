@@ -3,8 +3,7 @@
 //! This module implements gas metering and cost calculation for the
 //! mathematically minimal instruction set.
 
-use crate::machine::instruction::{Instruction, RegisterId};
-use crate::system::content_addressing::ResourceId;
+use crate::machine::instruction::Instruction;
 use serde::{Serialize, Deserialize};
 
 /// Gas metering for the minimal instruction set
@@ -218,6 +217,7 @@ pub enum ResourceOperation {
 
 #[cfg(test)]
 mod tests {
+    use crate::machine::instruction::RegisterId;
     use super::*;
     
     #[test]

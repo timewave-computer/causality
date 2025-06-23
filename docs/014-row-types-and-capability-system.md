@@ -196,9 +196,375 @@ let concrete_access = project_field(
 ]
 ```
 
-## 5. Content-Addressed Schema Management
+## 5. Location-Aware Row Types
 
-### 5.1 Schema Content Addressing
+### 5.1 Row Types with Location Information
+
+**Location-aware row types** extend the traditional row type system to include location information, enabling the same field operations to work seamlessly across local and remote data:
+
+```rust
+pub struct LocationAwareRowType {
+    /// Base row type with field definitions
+    pub base_row: RowType,
+    
+    /// Location information for each field
+    pub field_locations: BTreeMap<String, Location>,
+    
+    /// Default location for new fields
+    pub default_location: Location,
+    
+    /// Migration specifications for moving fields between locations
+    pub migration_specs: Vec<MigrationSpec>,
+}
+
+pub enum Location {
+    Local,
+    Remote(String),
+    Domain(String),
+}
+```
+
+### 5.2 Location-Transparent Operations
+
+The same row operations work regardless of data location:
+
+```rust
+// Local row access - traditional operation
+let local_row = LocationAwareRowType::new(
+    user_row_type,
+    btreemap! {
+        "name" => Location::Local,
+        "email" => Location::Local,
+        "preferences" => Location::Local,
+    }
+);
+
+let local_name = local_row.project_local("name");
+
+// Remote row access - same API, different location
+let distributed_row = LocationAwareRowType::new(
+    user_row_type,
+    btreemap! {
+        "name" => Location::Remote("user_service".to_string()),
+        "email" => Location::Remote("user_service".to_string()),
+        "preferences" => Location::Remote("preferences_service".to_string()),
+    }
+);
+
+let remote_name = distributed_row.project_remote("name", &Location::Remote("user_service".to_string()));
+
+// Mixed location access
+let hybrid_row = LocationAwareRowType::new(
+    user_row_type,
+    btreemap! {
+        "name" => Location::Local,                                    // Cached locally
+        "email" => Location::Remote("user_service".to_string()),     // Authoritative remote
+        "preferences" => Location::Remote("prefs_service".to_string()), // Separate service
+    }
+);
+```
+
+### 5.3 Automatic Data Migration
+
+Location-aware row types support automatic migration when data needs to move:
+
+```rust
+// Define migration specification
+let migration_spec = MigrationSpec {
+    from: Location::Local,
+    to: Location::Remote("fast_storage".to_string()),
+    fields: vec!["large_dataset".to_string()],
+    strategy: MigrationStrategy::Move,
+    protocol: TypeInner::Base(BaseType::Unit), // Auto-derived
+};
+
+// Migration is triggered automatically when needed
+let migrated_row = hybrid_row.migrate(
+    "large_dataset",
+    Location::Remote("fast_storage".to_string()),
+    MigrationStrategy::Copy
+)?;
+
+// Protocol is automatically derived for the migration:
+// 1. Send migration request
+// 2. Stream data chunks  
+// 3. Receive confirmation
+// 4. Update location metadata
+```
+
+### 5.4 Distributed Row Updates
+
+Updates can span multiple locations with automatic coordination:
+
+```rust
+// Distributed update across multiple locations
+let field_updates = btreemap! {
+    "name" => ("Alice Smith".to_string(), Location::Remote("user_service".to_string())),
+    "email" => ("alice.smith@example.com".to_string(), Location::Remote("user_service".to_string())),
+    "preferences" => (new_preferences, Location::Remote("prefs_service".to_string())),
+};
+
+let updated_row = hybrid_row.distributed_update(field_updates)?;
+
+// Automatically coordinates:
+// 1. Batches updates by target location
+// 2. Derives communication protocols for each location
+// 3. Executes updates with proper ordering and consistency
+// 4. Returns unified result
+```
+
+## 6. Distributed Capability System
+
+### 6.1 Location-Aware Capabilities
+
+Capabilities now include location constraints and delegation mechanisms:
+
+```rust
+pub enum LocationConstraint {
+    /// Field must be accessed locally only
+    LocalOnly,
+    
+    /// Field can be accessed from specific locations
+    AllowedLocations(Vec<Location>),
+    
+    /// Field can be accessed from any location
+    AnyLocation,
+    
+    /// Field requires specific protocol for remote access
+    RequiresProtocol(SessionType),
+}
+
+pub enum RecordCapability {
+    // Traditional capabilities
+    ReadField(FieldName),
+    WriteField(FieldName),
+    
+    // Location-aware capabilities
+    DistributedAccess {
+        fields: Vec<FieldName>,
+        allowed_locations: Vec<Location>,
+        required_protocols: Vec<SessionType>,
+    },
+    
+    // Session-based delegation
+    SessionDelegation {
+        delegated_capabilities: Vec<RecordCapability>,
+        session_duration: Option<u64>,
+        target_location: Location,
+    },
+    
+    // Cross-location operations
+    CrossLocationUpdate {
+        source_location: Location,
+        target_location: Location,
+        fields: Vec<FieldName>,
+        consistency_model: ConsistencyModel,
+    },
+}
+```
+
+### 6.2 Cross-Location Capability Verification
+
+The capability system verifies distributed access across locations:
+
+```rust
+impl CapabilitySet {
+    /// Verify capability for cross-location access
+    pub fn verify_distributed_access(
+        &self,
+        field_name: &str,
+        from_location: &Location,
+        to_location: &Location,
+        operation: &str,
+    ) -> Result<bool, CapabilityError> {
+        // 1. Check if we have the basic capability for the field
+        let base_capability = self.get_field_capability(field_name)?;
+        
+        // 2. Verify location constraints
+        match &base_capability.location_constraint {
+            LocationConstraint::LocalOnly => {
+                if from_location != to_location {
+                    return Err(CapabilityError::RemoteAccessDenied);
+                }
+            }
+            LocationConstraint::AllowedLocations(allowed) => {
+                if !allowed.contains(to_location) {
+                    return Err(CapabilityError::LocationNotAllowed);
+                }
+            }
+            LocationConstraint::RequiresProtocol(required_protocol) => {
+                // Verify that the operation uses the required protocol
+                self.verify_protocol_compliance(required_protocol, operation)?;
+            }
+            LocationConstraint::AnyLocation => {
+                // No additional constraints
+            }
+        }
+        
+        // 3. Check for session delegation if needed
+        if from_location != to_location {
+            self.verify_session_delegation(from_location, to_location)?;
+        }
+        
+        Ok(true)
+    }
+}
+```
+
+### 6.3 Protocol Derivation from Row Operations
+
+Row operations automatically derive communication protocols:
+
+```rust
+// Field access pattern
+let field_access = FieldAccess {
+    field_name: "balance".to_string(),
+    access_type: AccessType::Read,
+    source_location: Location::Local,
+    target_location: Location::Remote("database".to_string()),
+};
+
+// Automatically derived protocol
+let derived_protocol = derive_field_access_protocol(&field_access)?;
+
+// Results in:
+// SessionType::Send(
+//     Box::new(TypeInner::Base(BaseType::Symbol)), // Field query
+//     Box::new(SessionType::Receive(
+//         Box::new(TypeInner::Base(BaseType::Int)), // Field value
+//         Box::new(SessionType::End)
+//     ))
+// )
+
+// Multi-field access pattern
+let multi_field_access = vec![
+    FieldAccess { field_name: "name".to_string(), access_type: AccessType::Read, .. },
+    FieldAccess { field_name: "email".to_string(), access_type: AccessType::Read, .. },
+    FieldAccess { field_name: "preferences".to_string(), access_type: AccessType::Write, .. },
+];
+
+// Automatically derives batched protocol
+let batched_protocol = derive_multi_field_protocol(&multi_field_access)?;
+
+// Results in optimized protocol:
+// SessionType::Send(
+//     Box::new(TypeInner::Product(
+//         Box::new(TypeInner::Base(BaseType::Symbol)), // Field list
+//         Box::new(TypeInner::Base(BaseType::Symbol))  // Update data
+//     )),
+//     Box::new(SessionType::Receive(
+//         Box::new(TypeInner::Product(
+//             Box::new(TypeInner::Base(BaseType::Symbol)), // Read results
+//             Box::new(TypeInner::Base(BaseType::Bool))     // Write confirmation
+//         )),
+//         Box::new(SessionType::End)
+//     ))
+// )
+```
+
+### 6.4 Cross-Location Constraint Examples
+
+Complex distributed operations with unified constraints:
+
+```rust
+// Example 1: Distributed transaction across multiple services
+let distributed_transaction = TransformConstraint::DistributedSync {
+    locations: vec![
+        Location::Remote("payment_service".to_string()),
+        Location::Remote("inventory_service".to_string()),
+        Location::Remote("shipping_service".to_string()),
+    ],
+    sync_type: TypeInner::Base(BaseType::Symbol),
+    consistency_model: "two_phase_commit".to_string(),
+};
+
+// Example 2: Cross-location data migration with consistency
+let migration_constraint = TransformConstraint::DataMigration {
+    from_location: Location::Remote("old_database".to_string()),
+    to_location: Location::Remote("new_database".to_string()),
+    data_type: TypeInner::Record(user_record_type),
+    migration_strategy: "online_migration".to_string(),
+};
+
+// Example 3: Capability delegation across security domains
+let delegation_constraint = TransformConstraint::CapabilityAccess {
+    resource: "sensitive_user_data".to_string(),
+    required_capability: Some(Capability {
+        name: "delegate_read_access".to_string(),
+        level: CapabilityLevel::High,
+        location_constraint: Some(LocationConstraint::RequiresProtocol(
+            SessionType::Send(
+                Box::new(TypeInner::Base(BaseType::Symbol)), // Delegation request
+                Box::new(SessionType::Receive(
+                    Box::new(TypeInner::Base(BaseType::Bool)), // Approval
+                    Box::new(SessionType::End)
+                ))
+            )
+        )),
+    }),
+    access_pattern: "time_limited_delegation".to_string(),
+};
+
+// Example 4: Multi-location aggregation query
+let aggregation_constraint = TransformConstraint::RemoteTransform {
+    source_location: Location::Local,
+    target_location: Location::Remote("analytics_cluster".to_string()),
+    source_type: TypeInner::Record(query_record_type),
+    target_type: TypeInner::Record(result_record_type),
+    protocol: TypeInner::Session(Box::new(SessionType::Send(
+        Box::new(TypeInner::Record(query_record_type)), // Aggregation query
+        Box::new(SessionType::Receive(
+            Box::new(TypeInner::Record(result_record_type)), // Aggregated results
+            Box::new(SessionType::End)
+        ))
+    ))),
+};
+```
+
+### 6.5 Unified Constraint Resolution
+
+All constraints are resolved through the same unified system:
+
+```rust
+// Single constraint solver handles all operation types
+let mut constraint_system = TransformConstraintSystem::new();
+
+// Add local field access
+constraint_system.add_constraint(TransformConstraint::LocalTransform {
+    source_type: TypeInner::Record(user_record_type.clone()),
+    target_type: TypeInner::Base(BaseType::Symbol),
+    transform: TransformDefinition::FunctionApplication {
+        function: "extract_name".to_string(),
+        argument: "user_record".to_string(),
+    },
+});
+
+// Add remote field access - same constraint language!
+constraint_system.add_constraint(TransformConstraint::RemoteTransform {
+    source_location: Location::Local,
+    target_location: Location::Remote("user_service".to_string()),
+    source_type: TypeInner::Base(BaseType::Symbol),
+    target_type: TypeInner::Base(BaseType::Symbol),
+    protocol: TypeInner::Session(Box::new(derived_protocol)),
+});
+
+// Add cross-location migration - same constraint language!
+constraint_system.add_constraint(migration_constraint);
+
+// Single solver resolves all constraints together
+let mut det_sys = DeterministicSystem::new();
+let resolved_operations = constraint_system.solve_constraints(&mut det_sys)?;
+
+// Results in unified execution plan that handles:
+// 1. Local field extraction
+// 2. Remote field access with proper protocol
+// 3. Data migration with consistency guarantees
+// 4. All using the same mathematical framework
+```
+
+## 7. Content-Addressed Schema Management
+
+### 7.1 Schema Content Addressing
 
 **All record schemas are content-addressed**, enabling global reuse:
 
@@ -226,16 +592,16 @@ assert_eq!(
 );
 ```
 
-### 5.2 Benefits of Content-Addressed Schemas
+### 7.2 Benefits of Content-Addressed Schemas
 
 1. **Global Deduplication**: Identical schemas share implementation across applications
 2. **Version Management**: Schema changes create new content IDs automatically
 3. **Cache Efficiency**: Common schemas can be cached by ID
 4. **ZK Optimization**: Identical schemas use same circuit patterns
 
-## 6. ZK Circuit Integration
+## 8. ZK Circuit Integration
 
-### 6.1 Static Layout for ZK Compatibility
+### 8.1 Static Layout for ZK Compatibility
 
 Row type resolution ensures **fixed memory layouts** for ZK circuit generation:
 
@@ -272,7 +638,7 @@ let circuit_constraints = vec![
 ];
 ```
 
-### 6.2 Circuit Optimization Through Schema Sharing
+### 8.2 Circuit Optimization Through Schema Sharing
 
 ```rust
 // Multiple functions using same schema → same circuit pattern
@@ -285,9 +651,9 @@ fn validate_account(account: StandardAccount) -> Bool;   // Schema A
 let standard_account_circuit = CircuitCache::get("StandardAccount_operations");
 ```
 
-## 7. Row Type Operations at Each Layer
+## 9. Row Type Operations at Each Layer
 
-### 7.1 Layer 2: Capability-Based Effects
+### 9.1 Layer 2: Capability-Based Effects
 
 ```rust
 // High-level capability-controlled operations
@@ -305,7 +671,7 @@ let updated_user = UpdateField {
 }.perform()?;
 ```
 
-### 7.2 Layer 1: Row Type Operations
+### 9.2 Layer 1: Row Type Operations
 
 ```rust
 // Direct row type manipulation (post-capability-resolution)
@@ -315,7 +681,7 @@ let restricted = user_row.restrict("internal_id")?;  // Remove sensitive field
 let extended = user_row.extend("preferences", preferences_type)?; // Add field
 ```
 
-### 7.3 Layer 0: Static Memory Operations
+### 9.3 Layer 0: Static Memory Operations
 
 ```rust
 // Compiled to register machine operations
@@ -327,9 +693,9 @@ let extended = user_row.extend("preferences", preferences_type)?; // Add field
 ]
 ```
 
-## 8. Advanced Row Type Features
+## 10. Advanced Row Type Features
 
-### 8.1 Row Constraints and Polymorphism
+### 10.1 Row Constraints and Polymorphism
 
 ```rust
 // Constraint: R must lack 'id' field (prevents conflicts)
@@ -350,7 +716,7 @@ where
 }
 ```
 
-### 8.2 Row Variables and Type Inference
+### 10.2 Row Variables and Type Inference
 
 ```rust
 // Open row types enable flexible composition
@@ -364,32 +730,32 @@ let user_with_prefs: Record<{ name: String, email: String, preferences: Prefs | 
 // r can still be extended with additional fields
 ```
 
-## 9. Implementation Benefits
+## 11. Implementation Benefits
 
-### 9.1 Performance Benefits
+### 11.1 Performance Benefits
 
 1. **Zero Runtime Cost**: All capability checks at compile time
 2. **Static Memory Layout**: No dynamic field lookup
 3. **Optimal ZK Circuits**: Fixed layouts enable constraint optimization
 4. **Cache Efficiency**: Content-addressed schemas enable global caching
 
-### 9.2 Safety Benefits
+### 11.2 Safety Benefits
 
 1. **Compile-Time Capability Verification**: No runtime access control failures
 2. **Type Safety**: Row operations prevent invalid field access
 3. **Linearity Preservation**: Row operations respect resource linearity
 4. **Content Integrity**: Schema content addressing prevents tampering
 
-### 9.3 Developer Experience Benefits
+### 11.3 Developer Experience Benefits
 
 1. **Polymorphic Functions**: Write once, work with many record types
 2. **Static Error Detection**: Catch capability/schema errors at compile time
 3. **IDE Support**: Complete type information enables rich tooling
 4. **Gradual Typing**: Start with open rows, close as requirements clarify
 
-## 10. Best Practices
+## 12. Best Practices
 
-### 10.1 Schema Design
+### 12.1 Schema Design
 
 ```rust
 // ✅ Good: Modular schema with clear capabilities
@@ -421,7 +787,7 @@ let monolithic_schema = RecordSchema {
 };
 ```
 
-### 10.2 Capability Granularity
+### 12.2 Capability Granularity
 
 ```rust
 // ✅ Good: Fine-grained capabilities
@@ -436,7 +802,7 @@ let capabilities = vec![
 let broad_capability = Capability::FullRecordAccess; // Too permissive
 ```
 
-## 11. Conclusion
+## 13. Conclusion
 
 Row types are **fundamental to Causality's architecture** because they provide the bridge between:
 

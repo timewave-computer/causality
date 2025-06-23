@@ -14,13 +14,13 @@
 use crate::{
     lambda::base::{SessionType, TypeInner, Location, BaseType},
     effect::{
-        row::{RowType, FieldType, FieldAccess},
-        location_row::{LocationAwareRowType, ProtocolType, GeneratedProtocol, MigrationSpec, MigrationStrategy},
+        row::{FieldType, FieldAccess},
+        location_row::{MigrationSpec, MigrationStrategy},
     },
     system::deterministic::DeterministicSystem,
 };
 use serde::{Serialize, Deserialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 /// Protocol derivation engine that generates session types from row operations
 #[derive(Debug, Clone)]
@@ -251,7 +251,7 @@ impl ProtocolDerivationEngine {
     /// Generate session type for field access protocol
     pub fn derive_field_access_protocol(
         &mut self,
-        field_name: &str,
+        _field_name: &str,
         field_type: &FieldType,
         source_location: &Location,
         target_location: &Location,
@@ -337,7 +337,7 @@ impl ProtocolDerivationEngine {
                 };
                 
                 return self.derive_field_access_protocol(
-                    field_name,
+                    _field_name,
                     &temp_field,
                     source_location,
                     target_location,
@@ -906,9 +906,9 @@ mod tests {
         );
         
         let access_pattern = AccessPattern {
-            fields: vec!["field1".to_string(), "field2".to_string()],
+            fields: vec!["field1".to_string()], // Single field to avoid batching optimization
             access_types: BTreeMap::new(),
-            frequency: 150, // High frequency
+            frequency: 150, // High frequency to trigger pipelining
             is_parallel: false,
         };
         

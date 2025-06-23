@@ -1,19 +1,12 @@
 //! Domain system for organizing resources and capabilities
 //!
-//! This module provides basic domain types for organizing
-//! resources and controlling access to operations.
-//! 
-//! The domain system is unified with the location system - domains
-//! are locations with additional capability and routing information.
-
-use crate::{
-    system::content_addressing::{Str},
-    lambda::base::Location,
-};
-use crate::effect::capability::{Capability, CapabilityLevel};
+//! This module provides the unified domain and routing system that enables
+//! location-aware computation and communication across distributed nodes.
+use std::collections::BTreeSet;
+use std::collections::BTreeMap;
+use crate::lambda::Location;
+use crate::system::{Str, EntityId};
 use ssz::{Encode, Decode};
-use std::collections::{BTreeMap, BTreeSet};
-
 /// A domain represents a scope for capability management and routing
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Domain {
@@ -29,7 +22,6 @@ pub struct Domain {
     /// Routing information for reaching this domain
     pub routing_info: RoutingInfo,
 }
-
 /// Routing information for domain communication
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoutingInfo {
@@ -48,7 +40,6 @@ pub struct RoutingInfo {
     /// Protocol preferences for communication
     pub protocols: BTreeSet<String>,
 }
-
 impl Default for RoutingInfo {
     fn default() -> Self {
         Self {
@@ -60,7 +51,6 @@ impl Default for RoutingInfo {
         }
     }
 }
-
 /// Unified routing system that merges domain-based and location-based routing
 #[derive(Debug, Clone)]
 pub struct UnifiedRouter {
@@ -73,7 +63,6 @@ pub struct UnifiedRouter {
     /// Default routing strategy
     default_strategy: RoutingStrategy,
 }
-
 /// A routing path between two locations
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoutingPath {
@@ -92,10 +81,22 @@ pub struct RoutingPath {
     /// Protocols supported on this path
     pub supported_protocols: BTreeSet<String>,
 }
-
 /// Strategy for routing between locations
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum RoutingStrategy {
+    /// Direct routing - send directly to target
+    #[default]
+    Direct,
+    
+    /// Flooding - broadcast to all neighbors
+    Flooding,
+    
+    /// Distance vector routing
+    DistanceVector,
+    
+    /// Link state routing
+    LinkState,
+    
     /// Minimize number of hops
     MinimizeHops,
     
@@ -108,31 +109,24 @@ pub enum RoutingStrategy {
     /// Prefer specific protocols
     PreferProtocols(BTreeSet<String>),
     
-    /// Custom routing function
+    /// Custom routing algorithm
     Custom(String),
 }
-
-impl Default for RoutingStrategy {
-    fn default() -> Self {
-        RoutingStrategy::MinimizeCost
-    }
-}
-
 impl Domain {
     /// Create a new domain with the given name and capabilities
     pub fn new(name: Str, capabilities: Vec<String>) -> Self {
         let name_str = name.as_str();
         let id = match name_str {
             "local" => Location::Local,
-            s if s.starts_with("remote:") => Location::Remote(s[7..].to_string()),
-            s => Location::Remote(s.to_string()),
+            s if s.starts_with("remote:") => Location::Remote(EntityId::from_content(&s[7..].as_bytes().to_vec())),
+            s => Location::Remote(EntityId::from_content(&s.as_bytes().to_vec())),
         };
         
         Self { id, name, capabilities, routing_info: Default::default() }
     }
     
     /// Create a default domain with basic capabilities
-    pub fn default() -> Self {
+    pub fn create_default() -> Self {
         let capabilities = vec![
             "read".to_string(),
             "write".to_string(),
@@ -152,18 +146,15 @@ impl Domain {
         self.capabilities.iter().find(|cap| cap.as_str() == name)
     }
 }
-
 impl Encode for Domain {
     fn is_ssz_fixed_len() -> bool {
         false
     }
-
     fn ssz_bytes_len(&self) -> usize {
         self.id.ssz_bytes_len() +
         self.name.ssz_bytes_len() + 
         4 + self.capabilities.iter().map(|c| 4 + c.len()).sum::<usize>()
     }
-
     fn ssz_append(&self, buf: &mut Vec<u8>) {
         self.id.ssz_append(buf);
         self.name.ssz_append(buf);
@@ -174,18 +165,15 @@ impl Encode for Domain {
         }
     }
 }
-
 impl Decode for Domain {
     fn is_ssz_fixed_len() -> bool {
         false
     }
-
     fn from_ssz_bytes(_bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
         // Simplified - return default domain for now
-        Ok(Self::default())
+        Ok(Self::create_default())
     }
 }
-
 impl UnifiedRouter {
     /// Create a new unified router
     pub fn new() -> Self {
@@ -340,12 +328,35 @@ impl UnifiedRouter {
     
     /// Compute path using specific strategy (fallback when no cached path)
     fn compute_path(&self, from: &Location, to: &Location, strategy: &RoutingStrategy) -> Option<RoutingPath> {
+        // Compute path using strategy
         match strategy {
+            RoutingStrategy::Direct => {
+                // Direct path if possible
+                if self.can_communicate_directly(from, to) {
+                    self.get_direct_cost(from, to).map(|cost| RoutingPath {
+                        hops: vec![from.clone(), to.clone()],
+                        total_cost: cost,
+                        estimated_latency: cost * 10,
+                        required_capabilities: BTreeSet::new(),
+                        supported_protocols: self.get_common_protocols(from, to),
+                    })
+                } else {
+                    None
+                }
+            }
+            RoutingStrategy::Flooding => {
+                // For flooding, we still find the shortest path but mark it as broadcast
+                self.compute_shortest_hop_path(from, to)
+            }
+            RoutingStrategy::DistanceVector | RoutingStrategy::LinkState => {
+                // For now, these use shortest hop path
+                self.compute_shortest_hop_path(from, to)
+            }
             RoutingStrategy::MinimizeHops => self.compute_shortest_hop_path(from, to),
             RoutingStrategy::MinimizeCost => self.compute_lowest_cost_path(from, to),
             RoutingStrategy::MinimizeLatency => self.compute_lowest_latency_path(from, to),
             RoutingStrategy::PreferProtocols(protocols) => self.compute_protocol_preferred_path(from, to, protocols),
-            RoutingStrategy::Custom(_) => self.compute_lowest_cost_path(from, to), // Fallback
+            RoutingStrategy::Custom(_) => self.compute_lowest_cost_path(from, to), // Default fallback
         }
     }
     
@@ -448,7 +459,6 @@ impl UnifiedRouter {
         }
     }
 }
-
 /// Statistics about the routing system
 #[derive(Debug, Clone)]
 pub struct RoutingStats {
@@ -457,17 +467,14 @@ pub struct RoutingStats {
     pub total_routes: usize,
     pub average_hops: f64,
 }
-
 impl Default for UnifiedRouter {
     fn default() -> Self {
         Self::new()
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn test_domain_creation() {
         let capabilities = vec![
@@ -487,7 +494,6 @@ mod tests {
         assert!(domain.routing_info.can_route);
         assert!(domain.routing_info.protocols.contains("session"));
     }
-
     #[test]
     fn test_default_domain() {
         let domain = Domain::default();
@@ -497,7 +503,6 @@ mod tests {
         assert!(domain.has_capability("execute"));
         assert_eq!(domain.id, Location::Remote("default".to_string()));
     }
-
     #[test]
     fn test_ssz_serialization() {
         let domain = Domain::default();

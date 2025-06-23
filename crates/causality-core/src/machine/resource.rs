@@ -96,13 +96,19 @@ pub struct ConsumptionResult {
 
 impl Resource {
     /// Create a new immutable resource with nullifier capability
-    pub fn new(resource_type: MachineValue, init_value: MachineValue) -> Self {
-        let counter = 1; // Simplified for now
+    pub fn new(resource_type: MachineValue, init_value: MachineValue, allocation_counter: u64) -> Self {
         let lamport_time = crate::system::deterministic::deterministic_lamport_time();
         
         // Generate deterministic ID and nullifier key
-        let id = ResourceId::new(counter);
-        let nullifier_key = [0u8; 32]; // Simplified for now
+        let id = ResourceId::new(allocation_counter);
+        let nullifier_key = {
+            let mut key_input = Vec::new();
+            key_input.extend_from_slice(&allocation_counter.to_le_bytes());
+            key_input.extend_from_slice(&lamport_time.to_le_bytes());
+            // Add some simple entropy based on the value type
+            key_input.extend_from_slice(b"nullifier_key_generation");
+            Sha256::digest(&key_input).into()
+        };
         
         Self {
             id,
@@ -401,13 +407,15 @@ impl ResourceManager {
     
     /// Allocate a new resource
     pub fn allocate(&mut self, resource_type: MachineValue, init_value: MachineValue) -> ResourceId {
-        let resource = Resource::new(resource_type, init_value);
-        let id = resource.id.clone();
-        
-        self.total_memory += resource.calculate_size();
+        // Increment allocation counter first
         self.allocation_counter += 1;
         
-        self.resources.insert(id.clone(), resource);
+        let resource = Resource::new(resource_type, init_value, self.allocation_counter);
+        let id = resource.id;
+        
+        self.total_memory += resource.calculate_size();
+        
+        self.resources.insert(id, resource);
         id
     }
     
@@ -429,7 +437,7 @@ impl ResourceManager {
         
         // Check if resource exists
         let resource = self.resources.get(&id)
-            .ok_or(ResourceError::NotFound(id.clone()))?;
+            .ok_or(ResourceError::NotFound(id))?;
         
         let consumption_time = crate::system::deterministic::deterministic_lamport_time();
         
@@ -458,7 +466,7 @@ impl ResourceManager {
         if let Some(resource) = self.resources.get(id) {
             Ok(&resource.value)
         } else {
-            Err(ResourceError::NotFound(id.clone()))
+            Err(ResourceError::NotFound(*id))
         }
     }
     
@@ -551,12 +559,12 @@ impl ResourceManager {
         
         // Add to dependency graph
         self.dependencies.entry(dependent)
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(dep_record);
         
         // Add to reverse dependency lookup
         self.reverse_dependencies.entry(dependency)
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(dependent);
         
         Ok(())
@@ -836,14 +844,13 @@ impl Nullifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lambda::Symbol;
     
     #[test]
     fn test_resource_creation() {
         let resource_type = MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int));
         let init_value = MachineValue::Int(42);
         
-        let resource = Resource::new(resource_type, init_value.clone());
+        let resource = Resource::new(resource_type, init_value.clone(), 1);
         
         assert_eq!(resource.value, init_value);
         assert!(resource.nullifier_key != [0u8; 32]); // Should have a real nullifier key
@@ -854,7 +861,7 @@ mod tests {
         let resource_type = MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int));
         let init_value = MachineValue::Int(42);
         
-        let resource = Resource::new(resource_type, init_value.clone());
+        let resource = Resource::new(resource_type, init_value.clone(), 1);
         let consumption_time = crate::system::deterministic::deterministic_lamport_time();
         let nullifier = resource.generate_nullifier(consumption_time).unwrap();
         
@@ -870,7 +877,7 @@ mod tests {
         let resource_type = MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int));
         let init_value = MachineValue::Int(42);
         
-        let resource = Resource::new(resource_type, init_value);
+        let resource = Resource::new(resource_type, init_value, 1);
         let consumption_time = crate::system::deterministic::deterministic_lamport_time();
         let nullifier = resource.generate_nullifier(consumption_time).unwrap();
         
@@ -903,7 +910,7 @@ mod tests {
         assert_eq!(peeked, &init_value);
         
         // Consume resource with nullifier generation
-        let consumption_result = manager.consume(id.clone()).unwrap();
+        let consumption_result = manager.consume(id).unwrap();
         assert_eq!(consumption_result.value, init_value);
         assert_eq!(manager.resource_count(), 0);
         assert_eq!(manager.nullifiers().len(), 1);
@@ -948,11 +955,13 @@ mod tests {
         // Create resources with different timestamps
         let resource1 = Resource::new(
             MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int)),
-            MachineValue::Int(1)
+            MachineValue::Int(1),
+            1
         );
         let resource2 = Resource::new(
             MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int)),
-            MachineValue::Int(2)
+            MachineValue::Int(2),
+            2
         );
         
         let time1 = crate::system::deterministic::deterministic_lamport_time();
@@ -980,7 +989,7 @@ mod tests {
         let id = manager.allocate(resource_type, init_value);
         
         // Consume resource
-        let consumption_result = manager.consume(id.clone()).unwrap();
+        let consumption_result = manager.consume(id).unwrap();
         
         // Try to add the same nullifier again (simulate double-spending)
         let double_spend_result = manager.nullifiers_mut()

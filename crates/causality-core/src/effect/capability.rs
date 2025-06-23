@@ -220,15 +220,15 @@ impl RecordCapability {
             }
             
             // Distributed access implications
-            (RecordCapability::DistributedAccess { fields: fields1, allowed_locations: locs1, .. }, 
+            (RecordCapability::DistributedAccess { fields: fields1, allowed_locations: _locs1, .. }, 
              RecordCapability::ReadField(f2)) => {
                 fields1.contains(f2) // Simplified - should also check location
             }
             
-            (RecordCapability::DistributedAccess { fields: fields1, allowed_locations: locs1, .. },
-             RecordCapability::DistributedAccess { fields: fields2, allowed_locations: locs2, .. }) => {
+            (RecordCapability::DistributedAccess { fields: fields1, allowed_locations: _locs1, .. },
+             RecordCapability::DistributedAccess { fields: fields2, allowed_locations: _locs2, .. }) => {
                 fields2.iter().all(|f| fields1.contains(f)) && 
-                locs2.iter().all(|l| locs1.contains(l))
+                _locs2.iter().all(|l| _locs1.contains(l))
             }
             
             // Session delegation implications
@@ -624,7 +624,7 @@ impl CapabilitySet {
     pub fn verify_cross_location_access(
         &self,
         field: &str,
-        from_location: &Location,
+        _from_location: &Location,
         to_location: &Location,
         required_protocol: Option<&SessionType>
     ) -> bool {

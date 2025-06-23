@@ -232,7 +232,7 @@ impl Timestamp {
     /// Current timestamp (requires std)
     #[cfg(feature = "std")]
     pub fn now() -> Self {
-        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::time::UNIX_EPOCH;
         let duration = crate::system::deterministic_system_time()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();

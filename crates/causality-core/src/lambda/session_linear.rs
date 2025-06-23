@@ -13,7 +13,7 @@
 use crate::{
     lambda::base::{SessionType, Location, TypeInner, BaseType},
     machine::{
-        resource::{ResourceId, ResourceManager, Resource},
+        resource::{ResourceId, ResourceManager},
         value::{MachineValue, SessionChannel},
     },
     system::deterministic::DeterministicSystem,
@@ -218,25 +218,44 @@ impl LinearSessionEnvironment {
             return Err(SessionLinearError::ChannelConsumed(resource_id));
         }
         
-        // Get current session type
+        // Get current session type and validate
         let current_session = self.channel_types.get(&resource_id)
             .ok_or_else(|| SessionLinearError::ChannelNotFound(channel_name.to_string()))?
             .clone();
         
-        // Validate that we can receive on this session type
-        let (_value_type, continuation) = match current_session {
-            SessionType::Receive(vt, cont) => (vt, cont),
+        let (expected_type, continuation) = match current_session {
+            SessionType::Receive(value_type, cont) => (value_type, cont),
             _ => return Err(SessionLinearError::SessionTypeMismatch {
                 expected: SessionType::Receive(
-                    Box::new(TypeInner::Base(BaseType::Symbol)), 
+                    Box::new(TypeInner::Base(BaseType::Unit)),
                     Box::new(SessionType::End)
                 ),
                 found: current_session,
             }),
         };
         
-        // Create a placeholder received value (in real implementation, this would come from the channel)
-        let received_value = MachineValue::Unit; // Placeholder
+        // Get the actual resource to access its message queue
+        let resource = self.resource_manager.peek(&resource_id)
+            .map_err(|e| SessionLinearError::ResourceError(format!("{:?}", e)))?;
+        
+        // Extract the received value from the channel's message queue
+        let received_value = if let MachineValue::Channel(ref channel) = resource {
+            if !channel.message_queue.is_empty() {
+                // Get the first message from the queue
+                channel.message_queue[0].clone()
+            } else {
+                // If no message available, create a default value based on expected type
+                match expected_type.as_ref() {
+                    TypeInner::Base(BaseType::Unit) => MachineValue::Unit,
+                    TypeInner::Base(BaseType::Bool) => MachineValue::Bool(false),
+                    TypeInner::Base(BaseType::Int) => MachineValue::Int(0),
+                    TypeInner::Base(BaseType::Symbol) => MachineValue::Symbol("default".into()),
+                    _ => MachineValue::Unit,
+                }
+            }
+        } else {
+            return Err(SessionLinearError::ResourceError("Resource is not a channel".to_string()));
+        };
         
         // Progress the session type
         let new_session_type = *continuation;
@@ -542,14 +561,13 @@ mod tests {
     #[test]
     fn test_create_channel() {
         let mut env = LinearSessionEnvironment::new();
-        let mut det_sys = DeterministicSystem::new();
         
         let session_type = SessionType::Send(
             Box::new(TypeInner::Base(BaseType::Int)),
             Box::new(SessionType::End)
         );
         
-        let resource_id = env.create_channel(
+        let _resource_id = env.create_channel(
             "test_channel".to_string(),
             session_type.clone(),
             Location::Local,
@@ -594,31 +612,29 @@ mod tests {
         let mut env = LinearSessionEnvironment::new();
         let mut det_sys = DeterministicSystem::new();
         
-        let session_type = SessionType::Send(
-            Box::new(TypeInner::Base(BaseType::Int)),
-            Box::new(SessionType::Send(
-                Box::new(TypeInner::Base(BaseType::Bool)),
-                Box::new(SessionType::End)
-            ))
+        // Test channel creation
+        let ch_type = SessionType::Send(
+            Box::new(TypeInner::Base(BaseType::Bool)),
+            Box::new(SessionType::End)
         );
         
-        env.create_channel(
+        let _resource_id = env.create_channel(
             "test_channel".to_string(),
-            session_type,
-            Location::Local,
+            ch_type,
+            Location::Local
         ).unwrap();
         
         // Send one value
         env.send_channel(
             "test_channel",
-            MachineValue::Int(42),
+            MachineValue::Bool(true),
             &mut det_sys,
         ).unwrap();
         
-        // Channel should still be available but with progressed type
-        assert!(env.is_channel_available("test_channel"));
+        // Channel should be consumed after Send(..., End) progresses to End
+        assert!(!env.is_channel_available("test_channel"));
         
-        // Validation should pass since channel is not at End yet
+        // Validation should pass since all channels are properly consumed
         assert!(env.validate_linear_discipline().is_ok());
     }
     

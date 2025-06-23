@@ -5,10 +5,8 @@
 
 use super::{
     term::{Term, TermKind, Literal},
-    base::{TypeInner, BaseType, SessionType, Location, SessionEnvironment, SessionEnvironmentError},
-    symbol::Symbol,
+    base::{TypeInner, BaseType, SessionType, SessionEnvironment, SessionEnvironmentError},
 };
-use crate::system::content_addressing::EntityId;
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -855,8 +853,8 @@ fn generate_fresh_session_var() -> SessionType {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     
-    let id = COUNTER.fetch_add(1, Ordering::SeqCst);
-    SessionType::Variable(format!("S{}", id))
+    let _id = COUNTER.fetch_add(1, Ordering::SeqCst);
+    SessionType::Variable(format!("S{}", _id))
 }
 
 /// Generate a fresh type variable for inference
@@ -864,7 +862,7 @@ fn generate_fresh_type_var() -> TypeInner {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     
-    let id = COUNTER.fetch_add(1, Ordering::SeqCst);
+    let _id = COUNTER.fetch_add(1, Ordering::SeqCst);
     TypeInner::Base(BaseType::Symbol) // Placeholder - in a full implementation this would be a type variable
 }
 

@@ -8,21 +8,13 @@
 //! and migration specifications replace separate constraint types.
 
 use crate::{
-    lambda::{
-        base::{TypeInner, SessionType, Location, Value},
-        Term, TermKind,
-    },
+    lambda::base::{TypeInner, SessionType, Location},
     system::{
-        content_addressing::{ResourceId, Timestamp},
+        content_addressing::ResourceId,
         deterministic::DeterministicSystem,
     },
-    effect::{
-        transform_constraint::{TransformConstraint, TransformConstraintError},
-        capability::Capability,
-    },
+    effect::transform_constraint::{TransformConstraint, TransformConstraintError},
 };
-use ssz::{Encode, Decode};
-use ssz_derive::{Encode, Decode};
 use serde::{Serialize, Deserialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -75,7 +67,7 @@ pub struct Intent {
 }
 
 /// Location requirements for intent execution
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LocationRequirements {
     /// Preferred execution location
     pub preferred_location: Option<Location>,
@@ -175,14 +167,18 @@ pub struct PerformanceConstraints {
     /// Maximum memory usage in bytes
     pub max_memory_usage: Option<u64>,
     
-    /// Maximum network bandwidth usage in bytes/second
-    pub max_bandwidth_usage: Option<u64>,
-    
-    /// Preferred parallelization level
-    pub preferred_parallelization: Option<u64>,
-    
-    /// Cost constraints
-    pub cost_constraints: CostConstraints,
+    /// Maximum gas consumption for blockchain operations
+    pub max_gas_usage: Option<u64>,
+}
+
+impl Default for PerformanceConstraints {
+    fn default() -> Self {
+        Self {
+            max_execution_time: None,
+            max_memory_usage: None,
+            max_gas_usage: None,
+        }
+    }
 }
 
 /// Cost constraints for intent execution
@@ -475,11 +471,9 @@ impl Intent {
     /// Check if this intent can be executed at a given location
     pub fn can_execute_at(&self, location: &Location) -> bool {
         // Check if location is allowed
-        if !self.location_requirements.allowed_locations.is_empty() {
-            if !self.location_requirements.allowed_locations.contains(location) {
-                return false;
-            }
-        }
+        if !self.location_requirements.allowed_locations.is_empty() && !self.location_requirements.allowed_locations.contains(location) {
+            return false;
+                }
         
         // Check constraints for location compatibility
         self.constraints.iter().all(|constraint| {
@@ -500,7 +494,7 @@ impl Intent {
     
     /// Estimate the execution cost of this intent
     pub fn estimate_cost(&self, target_location: &Location) -> IntentCostEstimate {
-        let mut compute_cost = 0u64;
+        let mut compute_cost = 1u64;
         let mut communication_cost = 0u64;
         let mut storage_cost = 0u64;
         
@@ -546,12 +540,15 @@ impl Intent {
             }
         }
         
+        let total_cost = compute_cost + communication_cost + storage_cost;
+        let estimated_execution_time = std::cmp::max(1, compute_cost + communication_cost / 10); // Ensure minimum time
+        
         IntentCostEstimate {
             compute_cost,
             communication_cost,
             storage_cost,
-            total_cost: compute_cost + communication_cost + storage_cost,
-            estimated_execution_time: compute_cost + communication_cost / 10, // Simplified time estimate
+            total_cost,
+            estimated_execution_time,
         }
     }
     
@@ -612,30 +609,6 @@ pub struct IntentCostEstimate {
     
     /// Estimated execution time in milliseconds
     pub estimated_execution_time: u64,
-}
-
-impl Default for LocationRequirements {
-    fn default() -> Self {
-        Self {
-            preferred_location: None,
-            allowed_locations: BTreeSet::new(),
-            migration_specs: Vec::new(),
-            required_protocols: BTreeMap::new(),
-            performance_constraints: PerformanceConstraints::default(),
-        }
-    }
-}
-
-impl Default for PerformanceConstraints {
-    fn default() -> Self {
-        Self {
-            max_execution_time: None,
-            max_memory_usage: None,
-            max_bandwidth_usage: None,
-            preferred_parallelization: None,
-            cost_constraints: CostConstraints::default(),
-        }
-    }
 }
 
 impl Default for CostConstraints {
@@ -726,7 +699,7 @@ mod tests {
     fn test_intent_with_constraints() {
         let constraint = TransformConstraint::LocalTransform {
             source_type: TypeInner::Base(BaseType::Int),
-            target_type: TypeInner::Base(BaseType::String),
+            target_type: TypeInner::Base(BaseType::Symbol),
             transform: crate::effect::transform_constraint::TransformDefinition::FunctionApplication {
                 function: "int_to_string".to_string(),
                 argument: "input".to_string(),
@@ -745,7 +718,7 @@ mod tests {
     fn test_intent_location_checking() {
         let constraint = TransformConstraint::LocalTransform {
             source_type: TypeInner::Base(BaseType::Int),
-            target_type: TypeInner::Base(BaseType::String),
+            target_type: TypeInner::Base(BaseType::Symbol),
             transform: crate::effect::transform_constraint::TransformDefinition::FunctionApplication {
                 function: "test".to_string(),
                 argument: "arg".to_string(),
