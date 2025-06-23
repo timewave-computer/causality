@@ -482,8 +482,11 @@ mod tests {
     fn test_simple_query_parsing() {
         let integrator = TraverseAlmanacIntegrator::new();
         
-        // Test valid balance query
-        let result = integrator.parse_simple_query("balances[0x742d35Cc6634C0532925a3b8D97C2e0D8b2D9C]");
+        // Test valid balance query - this should work with the current implementation
+        let result = integrator.parse_simple_query("balances[0x742d35Cc6634C0532925a3b8D97C2e0D8b2D9C12345678]");
+        // The current implementation expects 42 character addresses (0x + 40 hex chars)
+        let valid_address = "balances[0x742d35Cc6634C0532925a3b8D97C2e0D8b2D9C12]";
+        let result = integrator.parse_simple_query(valid_address);
         assert!(result.is_ok());
         
         // Test invalid query

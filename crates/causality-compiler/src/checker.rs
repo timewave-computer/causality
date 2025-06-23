@@ -618,11 +618,11 @@ mod tests {
     #[test]
     fn test_record_access_with_capability() {
         use std::collections::BTreeMap;
-        use causality_core::effect::{RowType, RecordType};
+        use causality_core::effect::{RowType, RecordType, FieldType};
         
         // Create a record type with a name field
         let mut fields = BTreeMap::new();
-        fields.insert("name".to_string(), TypeInner::Base(BaseType::Symbol));
+        fields.insert("name".to_string(), FieldType::simple(TypeInner::Base(BaseType::Symbol)));
         let row = RowType::with_fields(fields);
         let record_type = TypeInner::Record(RecordType { row });
         
@@ -647,11 +647,11 @@ mod tests {
     #[test]
     fn test_record_access_missing_capability() {
         use std::collections::BTreeMap;
-        use causality_core::effect::{RowType, RecordType};
+        use causality_core::effect::{RowType, RecordType, FieldType};
         
         // Create a record type with a name field
         let mut fields = BTreeMap::new();
-        fields.insert("name".to_string(), TypeInner::Base(BaseType::Symbol));
+        fields.insert("name".to_string(), FieldType::simple(TypeInner::Base(BaseType::Symbol)));
         let row = RowType::with_fields(fields);
         let record_type = TypeInner::Record(RecordType { row });
         
@@ -679,11 +679,11 @@ mod tests {
     #[test]
     fn test_record_write_missing_capability() {
         use std::collections::BTreeMap;
-        use causality_core::effect::{RowType, RecordType};
+        use causality_core::effect::{RowType, RecordType, FieldType};
         
         // Create a record type with a name field
         let mut fields = BTreeMap::new();
-        fields.insert("name".to_string(), TypeInner::Base(BaseType::Symbol));
+        fields.insert("name".to_string(), FieldType::simple(TypeInner::Base(BaseType::Symbol)));
         let row = RowType::with_fields(fields);
         let record_type = TypeInner::Record(RecordType { row });
         
@@ -732,21 +732,21 @@ mod tests {
     #[test]
     fn test_row_type_zero_runtime_overhead() {
         use std::collections::BTreeMap;
-        use causality_core::effect::RowType;
+        use causality_core::effect::{RowType, FieldType};
         
         // Capability checking should be compile-time only
         // This test verifies that the type checking works without runtime penalty
         
         let mut fields = BTreeMap::new();
-        fields.insert("x".to_string(), TypeInner::Base(BaseType::Int));
-        fields.insert("y".to_string(), TypeInner::Base(BaseType::Int));
+        fields.insert("x".to_string(), FieldType::simple(TypeInner::Base(BaseType::Int)));
+        fields.insert("y".to_string(), FieldType::simple(TypeInner::Base(BaseType::Int)));
         let row = RowType::with_fields(fields);
         
         // Row operations are all compile-time
         let project_result = row.project("x");
         assert!(matches!(project_result, RowOpResult::Success(_)));
         
-        let extend_result = row.extend("z".to_string(), TypeInner::Base(BaseType::Bool));
+        let extend_result = row.extend("z".to_string(), FieldType::simple(TypeInner::Base(BaseType::Bool)));
         assert!(matches!(extend_result, RowOpResult::Success(_)));
         
         // These operations have zero runtime cost - they're purely type-level

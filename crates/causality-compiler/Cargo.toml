@@ -11,7 +11,7 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 causality-core = { path = "../causality-core" }
 causality-lisp = { path = "../causality-lisp" }
-causality-zk = { path = "../causality-zk" }
+# # causality-zk = { path = "../causality-zk" }  # Temporarily disabled  # Temporarily disabled due to instruction API incompatibility
 tokio = { version = "1.0", features = ["full"] }
 anyhow = "1.0"
 thiserror = "1.0"

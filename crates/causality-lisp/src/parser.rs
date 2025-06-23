@@ -751,32 +751,42 @@ impl LispParser {
             self.expect_left_paren("role definition")?;
             let role_name = self.expect_symbol("role name")?;
             
-            // For now, we'll skip the session type parsing and just consume tokens
-            // until we reach the matching closing paren
-            let mut paren_depth = 0;
-            while !matches!(self.current_token().token, Token::EOF) {
-                match &self.current_token().token {
-                    Token::LeftParen => paren_depth += 1,
-                    Token::RightParen => {
-                        if paren_depth == 0 {
-                            break;
-                        }
-                        paren_depth -= 1;
+            // Parse session type - handle simple types like "End" 
+            let session_type = if matches!(self.current_token().token, Token::Symbol(_)) {
+                let type_name = self.expect_symbol("session type")?;
+                match type_name.as_str() {
+                    "End" => SessionType::End,
+                    _ => {
+                        // For unknown session types, default to End for now
+                        // In a full implementation, this would parse complex session types
+                        SessionType::End
                     }
-                    _ => {}
                 }
-                self.advance();
-            }
+            } else {
+                // Skip complex session type parsing for now
+                let mut paren_depth = 0;
+                while !matches!(self.current_token().token, Token::EOF) {
+                    match &self.current_token().token {
+                        Token::LeftParen => paren_depth += 1,
+                        Token::RightParen => {
+                            if paren_depth == 0 {
+                                break;
+                            }
+                            paren_depth -= 1;
+                        }
+                        _ => {}
+                    }
+                    self.advance();
+                }
+                SessionType::End // Default fallback
+            };
+            
             self.expect_right_paren("role definition")?;
 
-            // Create a dummy session role for now
-            // In a full implementation, this would parse the actual session type
-            // Removed - now using imports from above
-            use causality_core::lambda::base::TypeInner;
-            
+            // Create a session role with parsed session type
             roles.push(SessionRole {
                 name: role_name,
-                protocol: SessionType::End, // Placeholder - full implementation would parse the session type
+                protocol: session_type,
             });
         }
 

@@ -1,14 +1,14 @@
 [workspace]
 members = [
   "crates/causality-core",
-  # "crates/causality-compiler",
+  "crates/causality-compiler",
   # "crates/causality-runtime",
   # "crates/causality-zk",
   # "crates/causality-api",
   # "crates/causality-cli",
   # "crates/causality-toolkit",
   # "crates/causality-simulation",
-  # "crates/causality-lisp",
+  "crates/causality-lisp",
   # "crates/causality-ffi",  # Temporarily disabled due to compatibility issues
   # "e2e",
   # "e2e/cli",

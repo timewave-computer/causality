@@ -357,6 +357,7 @@ impl ProofPrimitiveCompiler {
     /// Convert storage layout to Traverse format
     fn to_traverse_layout(&self, layout: &StorageLayout) -> TraverseLayoutInfo {
         let traverse_layout = TraverseLayoutInfo {
+            contract_name: layout.contract_name.clone(),
             storage: layout.storage.iter().map(|entry| crate::storage_layout::TraverseStorageEntry {
                 label: entry.label.clone(),
                 slot: entry.slot.clone(),

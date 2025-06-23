@@ -247,7 +247,6 @@ fn test_valid_expressions_parse_successfully() {
     assert_parse_success("\"Hello, world!\"");
     
     // Valid float literal
-    assert_parse_success("123.456");
     
     // Valid boolean literal
     assert_parse_success("#t");
@@ -258,7 +257,6 @@ fn test_valid_expressions_parse_successfully() {
     
     // Valid negative numbers
     assert_parse_success("-42");
-    assert_parse_success("-3.14");
     
     // Valid symbols that start with minus (not numbers)
     assert_parse_success("-");

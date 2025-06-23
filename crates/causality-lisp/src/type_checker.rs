@@ -9,8 +9,8 @@
 
 use crate::ast::{Expr, ExprKind, LispValue};
 use crate::error::{TypeError, TypeResult};
-use causality_core::lambda::base::{TypeInner, BaseType};
 use causality_core::effect::{Capability, CapabilitySet, RecordCapability, RowType};
+use causality_core::lambda::base::{TypeInner, BaseType, SessionType};
 use std::collections::BTreeMap;
 
 /// Type checker for Lisp expressions
@@ -371,7 +371,7 @@ impl TypeChecker {
                     
                     // Return field type
                     if let Some(field_type) = record_ty.row.fields.get(field) {
-                        Ok(field_type.clone())
+                        Ok(field_type.ty.clone())
                     } else {
                         Err(TypeError::Mismatch {
                             expected: format!("Field '{}' in record", field),
@@ -400,9 +400,9 @@ impl TypeChecker {
                     
                     // Check field type compatibility
                     if let Some(field_type) = record_ty.row.fields.get(field) {
-                        if *field_type != value_type {
+                        if field_type.ty != value_type {
                             return Err(TypeError::Mismatch {
-                                expected: format!("{:?}", field_type),
+                                expected: format!("{:?}", field_type.ty),
                                 found: format!("{:?}", value_type),
                             });
                         }
@@ -419,13 +419,13 @@ impl TypeChecker {
             }
 
             // Session types operations
-            ExprKind::SessionDeclaration { name, roles } => {
+            ExprKind::SessionDeclaration { name: _, roles: _ } => {
                 // For session declarations, we just return unit type
                 // In a full implementation, this would register the session type in the environment
                 Ok(TypeInner::Base(BaseType::Unit))
             }
 
-            ExprKind::WithSession { session, role, body } => {
+            ExprKind::WithSession { session: _, role: _, body } => {
                 // For with-session, we type check the body
                 // In a full implementation, this would set up session channel types
                 self.check_expr(body)
@@ -443,19 +443,49 @@ impl TypeChecker {
 
             ExprKind::SessionReceive { channel } => {
                 // Type check the channel
-                let _channel_type = self.check_expr(channel)?;
+                let channel_type = self.check_expr(channel)?;
                 
-                // For now, return a generic symbol type
-                // In a full implementation, this would return the type specified by the protocol
-                Ok(TypeInner::Base(BaseType::Symbol))
+                // Extract the receive type from the session channel
+                match channel_type {
+                    TypeInner::Session(session_type) => {
+                        // Extract the expected receive type from the session protocol
+                        match session_type.as_ref() {
+                            SessionType::Send(_, _next) => {
+                                // If channel expects to send, we can't receive
+                                Err(TypeError::Mismatch {
+                                    expected: "Receive capability".to_string(),
+                                    found: "Send-only channel".to_string(),
+                                })
+                            }
+                            SessionType::Receive(message_type, _next) => {
+                                // Return the message type we expect to receive
+                                Ok(message_type.as_ref().clone())
+                            }
+                            SessionType::End => {
+                                // Cannot receive from ended session
+                                Err(TypeError::Mismatch {
+                                    expected: "Active session".to_string(),
+                                    found: "Ended session".to_string(),
+                                })
+                            }
+                            _ => {
+                                // For other session types, return a generic symbol type
+                                Ok(TypeInner::Base(BaseType::Symbol))
+                            }
+                        }
+                    }
+                    _ => {
+                        // For non-session types, assume it's a simple value channel
+                        Ok(TypeInner::Base(BaseType::Symbol))
+                    }
+                }
             }
 
-            ExprKind::SessionSelect { channel, choice } => {
+            ExprKind::SessionSelect { channel, choice: _ } => {
                 // Type check the channel
                 let _channel_type = self.check_expr(channel)?;
                 
-                // For now, return unit type (successful select)
-                // In a full implementation, this would check choice validity
+                // Session selection returns unit type (successful select operation)
                 Ok(TypeInner::Base(BaseType::Unit))
             }
 
@@ -463,18 +493,19 @@ impl TypeChecker {
                 // Type check the channel
                 let _channel_type = self.check_expr(channel)?;
                 
-                // Type check all branches and ensure they have the same result type
+                // Type check all branches and ensure they have compatible types
                 if branches.is_empty() {
                     return Err(TypeError::Mismatch {
                         expected: "At least one branch".to_string(),
-                        found: "No branches".to_string(),
+                        found: "No branches provided".to_string(),
                     });
                 }
                 
+                // Type check the first branch to get the expected result type
                 let first_branch_type = self.check_expr(&branches[0].body)?;
                 
-                // Check that all branches have the same type
-                for branch in &branches[1..] {
+                // Verify all other branches have the same type
+                for branch in branches.iter().skip(1) {
                     let branch_type = self.check_expr(&branch.body)?;
                     if branch_type != first_branch_type {
                         return Err(TypeError::Mismatch {
@@ -486,6 +517,19 @@ impl TypeChecker {
                 
                 Ok(first_branch_type)
             }
+        }
+    }
+    
+    /// Convert a session type to TypeInner for type checking
+    fn session_type_to_type_inner(&self, session_type: &SessionType) -> TypeInner {
+        match session_type {
+            SessionType::Send(_, _) => TypeInner::Base(BaseType::Unit),
+            SessionType::Receive(_, _) => TypeInner::Base(BaseType::Symbol),
+            SessionType::InternalChoice(_) => TypeInner::Base(BaseType::Symbol),
+            SessionType::ExternalChoice(_) => TypeInner::Base(BaseType::Symbol),
+            SessionType::End => TypeInner::Base(BaseType::Unit),
+            SessionType::Recursive(_, _) => TypeInner::Base(BaseType::Symbol),
+            SessionType::Variable(_) => TypeInner::Base(BaseType::Symbol),
         }
     }
 }
@@ -649,14 +693,14 @@ mod tests {
     
     #[test]
     fn test_capability_enforcement() {
-        use causality_core::effect::{Capability, RowType, RecordType};
-        use causality_core::lambda::base::{TypeInner, BaseType};
+        use causality_core::effect::{Capability, RowType, RecordType, FieldType};
+        use causality_core::lambda::base::{TypeInner, BaseType, SessionType};
         use std::collections::BTreeMap;
         
         // Create a record type with a field
         let mut fields = BTreeMap::new();
-        fields.insert("name".to_string(), TypeInner::Base(BaseType::Symbol));
-        fields.insert("age".to_string(), TypeInner::Base(BaseType::Int));
+        fields.insert("name".to_string(), FieldType::simple(TypeInner::Base(BaseType::Symbol)));
+        fields.insert("age".to_string(), FieldType::simple(TypeInner::Base(BaseType::Int)));
         let row = RowType::with_fields(fields);
         let record_type = TypeInner::Record(RecordType { row });
         

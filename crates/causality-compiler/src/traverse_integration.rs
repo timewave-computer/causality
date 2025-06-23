@@ -278,6 +278,7 @@ impl TraverseClient {
     /// Compile a storage layout for use with Traverse
     pub fn compile_layout(&mut self, layout: &StorageLayout) -> Result<TraverseLayoutInfo, TraverseIntegrationError> {
         let traverse_layout = TraverseLayoutInfo {
+            contract_name: layout.contract_name.clone(),
             storage: layout.storage.iter().map(|entry| crate::storage_layout::TraverseStorageEntry {
                 label: entry.label.clone(),
                 slot: entry.slot.clone(),
@@ -417,6 +418,7 @@ mod tests {
     
     fn create_test_compiled_proof() -> CompiledProof {
         let storage_layout = TraverseLayoutInfo {
+            contract_name: "usdc".to_string(),
             storage: vec![
                 crate::storage_layout::TraverseStorageEntry {
                     label: "balances".to_string(),

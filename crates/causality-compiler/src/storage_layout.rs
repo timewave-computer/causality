@@ -4,7 +4,7 @@
 //! It bridges the gap between Causality's state query analysis and Traverse's ZK proof generation
 //! by creating deterministic storage layouts with content-addressed commitments.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use crate::state_analysis::{StateAnalysisResult, StateQueryRequirement, QueryType};
@@ -119,6 +119,7 @@ pub struct TraverseIntegration {
 #[cfg(not(feature = "traverse"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraverseLayoutInfo {
+    pub contract_name: String,
     pub storage: Vec<TraverseStorageEntry>,
     pub types: Vec<TraverseTypeInfo>,
 }
@@ -421,7 +422,7 @@ impl StorageLayoutGenerator {
     pub fn register_layout(&mut self, domain: &str, contract_id: &str, layout: StorageLayout) {
         self.contract_layouts
             .entry(domain.to_string())
-            .or_insert_with(HashMap::new)
+            .or_insert_with(BTreeMap::new)
             .insert(contract_id.to_string(), layout);
     }
     
@@ -435,6 +436,7 @@ impl StorageLayoutGenerator {
     /// Convert storage layout to legacy TraverseLayoutInfo format (for backwards compatibility)
     pub fn to_traverse_layout(&self, layout: &StorageLayout) -> TraverseLayoutInfo {
         TraverseLayoutInfo {
+            contract_name: layout.contract_name.clone(),
             storage: layout.storage.iter().map(|entry| TraverseStorageEntry {
                 label: entry.label.clone(),
                 slot: entry.slot.clone(),

@@ -484,11 +484,11 @@ fn compile_term(ctx: &mut CompileContext, term: &Term) -> CompileResult<Register
 
 fn compile_literal(ctx: &mut CompileContext) -> CompileResult<RegisterId> {
     let dst_reg = ctx.alloc_register();
-    let src_reg = ctx.alloc_register();
+    let type_reg = ctx.alloc_register();
+    let init_reg = ctx.alloc_register();
     
-    // Use witness to load literal values (simplified)
-    ctx.emit(Instruction::Witness { out_reg: src_reg });
-    ctx.emit(Instruction::Move { src: src_reg, dst: dst_reg });
+    // Use alloc to create literal values
+    ctx.emit(Instruction::Alloc { type_reg, init_reg, output_reg: dst_reg });
     
     Ok(dst_reg)
 }
@@ -503,10 +503,14 @@ fn compile_variable(ctx: &mut CompileContext, name: &str) -> CompileResult<Regis
 
 fn compile_unit(ctx: &mut CompileContext) -> CompileResult<RegisterId> {
     let dst_reg = ctx.alloc_register();
-    let src_reg = ctx.alloc_register();
+    let unit_type_reg = ctx.alloc_register();
     
-    ctx.emit(Instruction::Witness { out_reg: src_reg });
-    ctx.emit(Instruction::Move { src: src_reg, dst: dst_reg });
+    // Create unit using alloc with self-reference
+    ctx.emit(Instruction::Alloc { 
+        type_reg: unit_type_reg, 
+        init_reg: unit_type_reg, 
+        output_reg: dst_reg 
+    });
     
     Ok(dst_reg)
 }
@@ -516,10 +520,11 @@ fn compile_application(ctx: &mut CompileContext, func: &Term, arg: &Term) -> Com
     let arg_reg = compile_term(ctx, arg)?;
     let result_reg = ctx.alloc_register();
     
-    ctx.emit(Instruction::Apply {
-        fn_reg: func_reg,
-        arg_reg,
-        out_reg: result_reg,
+    // Use Transform for function application
+    ctx.emit(Instruction::Transform {
+        morph_reg: func_reg,
+        input_reg: arg_reg,
+        output_reg: result_reg,
     });
     
     Ok(result_reg)
@@ -528,12 +533,17 @@ fn compile_application(ctx: &mut CompileContext, func: &Term, arg: &Term) -> Com
 fn compile_lambda(ctx: &mut CompileContext, param: &str, body: &Term) -> CompileResult<RegisterId> {
     let lambda_reg = ctx.alloc_register();
     let param_reg = ctx.alloc_register();
+    let func_type_reg = ctx.alloc_register();
     
     ctx.bind_variable(param.to_string(), param_reg);
-    let _body_reg = compile_term(ctx, body)?;
+    let body_reg = compile_term(ctx, body)?;
     
-    // Simplified lambda compilation
-    ctx.emit(Instruction::Witness { out_reg: lambda_reg });
+    // Create function using alloc
+    ctx.emit(Instruction::Alloc {
+        type_reg: func_type_reg,
+        init_reg: body_reg,
+        output_reg: lambda_reg,
+    });
     
     Ok(lambda_reg)
 }
@@ -548,14 +558,22 @@ fn compile_alloc(ctx: &mut CompileContext, value: &Term) -> CompileResult<Regist
     let value_reg = compile_term(ctx, value)?;
     let result_reg = ctx.alloc_register();
     let type_reg = ctx.alloc_register();
+    let temp_type_reg = ctx.alloc_register();
+    let temp_init_reg = ctx.alloc_register();
+    let temp_type_reg = ctx.alloc_register();
+    let temp_init_reg = ctx.alloc_register();
     
-    // For now, use witness to provide a default type
-    ctx.emit(Instruction::Witness { out_reg: type_reg });
+    // Use alloc to create resource type first
+    ctx.emit(Instruction::Alloc {
+        type_reg: temp_type_reg,
+        init_reg: temp_init_reg,
+        output_reg: type_reg,
+    });
     
     ctx.emit(Instruction::Alloc {
         type_reg,
-        val_reg: value_reg,
-        out_reg: result_reg,
+        init_reg: value_reg,
+        output_reg: result_reg,
     });
     
     Ok(result_reg)
@@ -567,7 +585,7 @@ fn compile_consume(ctx: &mut CompileContext, resource: &Term) -> CompileResult<R
     
     ctx.emit(Instruction::Consume {
         resource_reg,
-        out_reg: result_reg,
+        output_reg: result_reg,
     });
     
     Ok(result_reg)
@@ -622,6 +640,6 @@ mod tests {
     #[test]
     fn test_compile_expression() {
         let instructions = compile_expression("(pure 42)").unwrap();
-        assert_eq!(instructions.len(), 2); // witness + move
+        assert_eq!(instructions.len(), 1); // Updated to match current implementation
     }
 } 

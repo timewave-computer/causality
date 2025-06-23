@@ -8,11 +8,12 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use tokio::time::{timeout, Duration};
-use crate::proof_primitives::CompiledProof;
+use crate::proof_primitives::{CompiledProof, WitnessData, ProofGenerationConfig};
 use crate::traverse_integration::{ProofGenerationResponse, ProofData, VerificationInfo};
+use crate::almanac_schema::LayoutCommitment;
 
 // Use existing ZK infrastructure instead of reimplementing
-use causality_zk::{ZkProofGenerator, ZkProof, StorageProofGenerator};
+// use causality_zk::{ZkProofGenerator, ZkProof, StorageProofGenerator};
 
 // Conditional imports for Valence coprocessor
 #[cfg(feature = "valence")]
@@ -514,6 +515,7 @@ mod tests {
                 contract_address: "0xabc".to_string(),
             },
             storage_layout: TraverseLayoutInfo {
+                contract_name: "test_contract".to_string(),
                 storage: vec![],
                 types: vec![],
             },

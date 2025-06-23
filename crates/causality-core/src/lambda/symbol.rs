@@ -15,7 +15,7 @@ use serde::{Serialize, Deserialize};
 /// 
 /// Symbols are represented as fixed-size 32-byte hashes for ZK compatibility,
 /// but maintain optional human-readable names for development and debugging.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Symbol {
     /// Content hash of the symbol (ZK-compatible fixed size)
     pub hash: [u8; 32],

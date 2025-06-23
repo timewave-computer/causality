@@ -2,7 +2,7 @@
 //!
 //! Minimal compiler implementation following the three-layer architecture.
 //! Compiles Lisp source code through S-expressions and lambda calculus
-//! to verifiable register machine instructions.
+//! to verifiable register machine instructions using the new 5-instruction API.
 
 #![allow(clippy::result_large_err)]
 
@@ -10,7 +10,6 @@ pub mod error;
 pub mod pipeline;
 pub mod checker;
 pub mod artifact;
-pub mod enhanced_pipeline;
 pub mod types;
 pub mod valence_analysis;
 pub mod state_analysis;
@@ -28,7 +27,6 @@ pub mod valence_coprocessor_integration;
 pub mod proof_primitives;
 pub mod traverse_integration;
 
-
 #[cfg(test)]
 pub mod benchmarks;
 #[cfg(test)]
@@ -45,14 +43,11 @@ pub use artifact::{
     ContentAddressedArtifact, ContentHash, ArtifactCache,
     build_artifact, verify_artifact
 };
-pub use enhanced_pipeline::{
-    EnhancedCompilerPipeline, CompiledProgram, CompilationMetadata,
-    CodeGenerator, InstructionOptimizer, OptimizationPass
-};
+// pub use enhanced_pipeline::{
+//     EnhancedCompilerPipeline, CompiledProgram, CompilationMetadata,
+//     CodeGenerator, InstructionOptimizer, OptimizationPass
+// };
 pub use types::CompileResult as CompileResultEnum;
-
-// Export TEG compilation functions
-//pub use {compile_teg_definition, CompiledTeg};
 
 /// Minimal test function for E2E validation
 /// Compiles a simple expression and returns the instructions

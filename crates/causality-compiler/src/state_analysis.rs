@@ -7,7 +7,7 @@ use causality_core::lambda::Symbol;
 use serde::{Deserialize, Serialize};
 
 /// Represents a state query requirement identified during static analysis
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct StateQueryRequirement {
     /// The contract address or identifier
     pub contract: String,
@@ -22,7 +22,7 @@ pub struct StateQueryRequirement {
 }
 
 /// Types of state queries we can detect
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum QueryType {
     /// Token balance query
     TokenBalance,
@@ -208,7 +208,8 @@ impl StateQueryAnalyzer {
             ExprKind::RecordUpdate { record, value, .. } => {
                 self.analyze_expression(record, counter);
                 self.analyze_expression(value, counter);
-            }
+            }            // Handle all other expression kinds including session operations
+            _ => { /* No state queries in other expression types */ }
         }
     }
     

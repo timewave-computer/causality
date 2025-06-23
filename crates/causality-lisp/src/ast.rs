@@ -6,9 +6,9 @@
 //! plus session types integration for Layer 2 communication protocols.
 
 use causality_core::{
-    lambda::{Term, base::{BaseType, TypeInner, Value, SessionType}},
+    lambda::{Symbol, base::{TypeInner, Value}},
     system::content_addressing::{EntityId, Str},
-    effect::session_registry::{SessionRole, SessionDeclaration}, // Import session types
+    effect::session_registry::{SessionRole}, // Import session types
 };
 use std::collections::BTreeMap;
 
@@ -122,7 +122,7 @@ pub enum LispValue {
     Record(BTreeMap<Symbol, LispValue>),
     ResourceId(EntityId),
     ExprId(EntityId),
-    CoreValue(CoreValue), // Integration with core Value system
+    CoreValue(Value), // Integration with core Value system
 }
 
 /// Session branch for case operations
