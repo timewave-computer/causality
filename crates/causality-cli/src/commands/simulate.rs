@@ -34,7 +34,7 @@ pub struct SimulateCommand {
 impl SimulateCommand {
     pub async fn execute(&self) -> Result<()> {
         if self.verbose {
-            println!("🔬 Starting simulation analysis...");
+            println!("Starting simulation analysis...");
             println!("   Input: {}", self.input.display());
             println!("   Cost analysis: {}", self.cost_analysis);
             if let Some(chains) = &self.chains {
@@ -50,7 +50,7 @@ impl SimulateCommand {
             .map_err(|e| anyhow::anyhow!("Failed to read input file {}: {}", self.input.display(), e))?;
 
         if self.verbose {
-            println!("📝 IR content loaded ({} bytes)", ir_content.len());
+            println!("IR content loaded ({} bytes)", ir_content.len());
         }
 
         // Mock simulation analysis
@@ -61,7 +61,7 @@ impl SimulateCommand {
         let vault_apy = 8.5;
 
         if self.verbose {
-            println!("🔄 Running simulation...");
+            println!("Running simulation...");
         }
 
         // Print simulation results in the expected format
@@ -72,7 +72,7 @@ impl SimulateCommand {
         println!("Vault APY estimate: {:.1}%", vault_apy);
 
         if self.verbose {
-            println!("✅ Simulation analysis completed successfully!");
+            println!("Simulation analysis completed successfully!");
         }
 
         Ok(())

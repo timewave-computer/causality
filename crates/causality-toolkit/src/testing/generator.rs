@@ -1,3 +1,4 @@
+
 //! Test case generation for automatic effect testing
 
 use crate::{
@@ -9,7 +10,7 @@ use crate::{
 };
 use serde::{Serialize, Deserialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     time::Duration,
 };
 
@@ -73,7 +74,7 @@ pub enum TestPrioritization {
 }
 
 /// Types of test cases that can be generated
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum TestCaseType {
     /// Boundary value testing
     BoundaryValue,
@@ -354,7 +355,7 @@ impl TestGenerator {
             test_cases,
             coverage,
             metadata: TestGenerationMetadata {
-                generated_at: std::time::std::time::UNIX_EPOCH
+                generated_at: std::time::UNIX_EPOCH
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),

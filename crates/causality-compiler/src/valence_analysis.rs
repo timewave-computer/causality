@@ -6,8 +6,7 @@
 use std::collections::BTreeMap;
 use anyhow::{Result, anyhow};
 use serde::{Serialize, Deserialize};
-use causality_lisp::ast::{Expr, ExprKind, LispValue, Span};
-use causality_core::lambda::Symbol;
+use causality_lisp::ast::{Expr, ExprKind, LispValue};
 
 /// Valence account factory configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

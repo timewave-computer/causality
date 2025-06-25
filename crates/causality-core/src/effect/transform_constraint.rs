@@ -13,7 +13,7 @@ use crate::{
         // synthesis::{ConstraintSolver, FlowSynthesizer}, // Temporarily disabled
     },
     lambda::{
-        base::{TypeInner, Location},
+        base::{TypeInner, Location, SessionType},
         Term, TermKind,
     },
     system::deterministic::DeterministicSystem,
@@ -72,7 +72,7 @@ pub struct FieldDefinition {
 }
 
 /// Definition of a transform operation
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, )]
 pub enum TransformDefinition {
     /// Function application transform
     FunctionApplication {
@@ -101,25 +101,33 @@ pub enum TransformDefinition {
     },
 }
 
-/// Layer 1 operation that a transform can compile to
-#[derive(Debug, Clone)]
+/// Layer 1 operations that can be compiled to Layer 0
+#[derive(Debug, Clone, PartialEq)]
 pub enum Layer1Operation {
     /// Lambda calculus term
-    LambdaTerm(Term),
-    
-    /// Session type protocol
+    LambdaTerm(Box<Term>),
+
+    /// Session type operation
+    SessionOp(SessionType),
+
+    /// Session protocol operation
     SessionProtocol(TypeInner),
-    
+
+    /// Channel operation
+    ChannelOp {
+        operation: String,
+        channel_type: TypeInner,
+    },
+
     /// Resource allocation
     ResourceAlloc {
         resource_type: TypeInner,
         initial_value: String,
     },
-    
-    /// Channel operation
-    ChannelOp {
-        operation: String,
-        channel_type: TypeInner,
+
+    /// Resource consumption
+    ResourceConsume {
+        resource_id: String,
     },
 }
 
@@ -143,7 +151,7 @@ pub enum MathematicalProperty {
 }
 
 /// Unified constraint type for the transform-based system
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, )]
 pub enum TransformConstraint {
     /// Local transformation constraint
     LocalTransform {
@@ -214,7 +222,7 @@ pub enum SchemaConstraint {
 }
 
 /// Error types for the transform constraint system
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, )]
 pub enum TransformConstraintError {
     /// Unknown transform definition
     UnknownTransform(String),
@@ -448,7 +456,7 @@ impl TransformConstraintSystem {
         for _step in &plan.steps {
             // This would use the transform definitions to generate appropriate Layer 1 operations
             operations.push(Layer1Operation::LambdaTerm(
-                Term::new(TermKind::Unit)
+                Box::new(Term::new(TermKind::Unit))
             ));
         }
         

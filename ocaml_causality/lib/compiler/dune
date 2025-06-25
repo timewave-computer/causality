@@ -1,0 +1,3 @@
+(library
+ (name causality_compiler)
+ (libraries causality_core causality_lambda causality_machine causality_system))

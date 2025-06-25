@@ -521,6 +521,7 @@ impl TypeChecker {
     }
     
     /// Convert a session type to TypeInner for type checking
+    #[allow(dead_code)]
     fn session_type_to_type_inner(&self, session_type: &SessionType) -> TypeInner {
         match session_type {
             SessionType::Send(_, _) => TypeInner::Base(BaseType::Unit),

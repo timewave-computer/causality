@@ -1,7 +1,6 @@
 //! Cross-Language Integration Tools
 //!
 //! This module provides utilities for integrating with other programming languages
-//! and runtime environments.
 
 use causality_core::Value;
 use anyhow::Result;

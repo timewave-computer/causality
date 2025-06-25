@@ -10,7 +10,7 @@ repository = "https://github.com/timewave-computer/reverse-causality"
 [dependencies]
 # Core causality dependencies
 causality-core = { path = "../causality-core" }
-causality-zk = { path = "../causality-zk" }
+# causality-zk = { path = "../causality-zk" }  # Temporarily disabled due to API compatibility issues
 
 # Error handling
 thiserror = { workspace = true }

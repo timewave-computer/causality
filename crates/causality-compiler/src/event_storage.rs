@@ -2,7 +2,7 @@
 // Purpose: Real event storage and retrieval system for Almanac integration
 
 use std::sync::Arc;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use crate::storage_backend::StorageBackendManager;
@@ -13,6 +13,8 @@ use indexer_storage::{Event, EventFilter, EventQuery, Storage};
 
 /// Event storage manager
 pub struct EventStorageManager {
+    #[allow(dead_code)]
+    #[allow(dead_code)]
     storage_backend: Arc<StorageBackendManager>,
 }
 
@@ -67,7 +69,7 @@ impl EventStorageManager {
     }
 
     /// Retrieve events by filter
-    pub async fn get_events(&self, filter: EventFilter) -> Result<Vec<CausalityEvent>> {
+    pub async fn get_events(&self, _filter: EventFilter) -> Result<Vec<CausalityEvent>> {
         #[cfg(feature = "almanac")]
         {
             if let Some(storage) = self.storage_backend.storage() {
@@ -123,7 +125,7 @@ impl EventStorageManager {
     }
 
     /// Query events with complex filters
-    pub async fn query_events(&self, query: EventQuery) -> Result<EventQueryResult> {
+    pub async fn query_events(&self, _query: EventQuery) -> Result<EventQueryResult> {
         #[cfg(feature = "almanac")]
         {
             if let Some(storage) = self.storage_backend.storage() {
@@ -264,7 +266,7 @@ pub struct EventFilter {
 /// Event query for complex filtering
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventQuery {
-    pub filter: EventFilter,
+    pub _filter: EventFilter,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
     pub order_by: Option<EventOrderBy>,
@@ -360,6 +362,8 @@ impl EventSubscription {
 /// Event subscription manager
 pub struct EventSubscriptionManager {
     subscriptions: BTreeMap<String, EventSubscription>,
+    #[allow(dead_code)]
+    #[allow(dead_code)]
     storage_manager: Arc<EventStorageManager>,
 }
 

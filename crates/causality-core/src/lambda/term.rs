@@ -3,8 +3,9 @@
 //! This module defines the term language for the linear lambda calculus.
 //! These are the semantic terms that compile down to Layer 0 instructions.
 
-use super::{TypeInner, Symbol};
-use crate::MachineValue;
+use crate::lambda::base::TypeInner;
+use crate::lambda::symbol::Symbol;
+use crate::machine::MachineValue;
 
 //-----------------------------------------------------------------------------
 // Core Term Structure
@@ -407,7 +408,7 @@ impl From<Literal> for MachineValue {
 #[cfg(test)]
 mod tests {
     use super::{Term, TermKind, Literal}; // Items from the parent module (term.rs)
-    use crate::lambda::base::{BaseType, TypeInner}; // Types from elsewhere in the crate
+    use crate::lambda::base::{BaseType, TypeInner, Location}; // Types from elsewhere in the crate
     use crate::lambda::symbol::Symbol;  // Symbol type
 
     // --- Test Term Construction: Variables and Literals
@@ -827,7 +828,7 @@ mod tests {
         
         let input_type = TypeInner::Base(BaseType::Int);
         let output_type = TypeInner::Base(BaseType::Bool);
-        let location = Location::Remote("server".to_string());
+        let location = Location::remote("server");
         let body = Term::var("x");
         
         let transform_term = Term::transform(
@@ -873,7 +874,7 @@ mod tests {
     fn test_term_at() {
         use crate::lambda::base::Location;
         
-        let location = Location::Remote("compute_node".to_string());
+        let location = Location::remote("gpu_cluster");
         let body = Term::apply(Term::var("f"), Term::var("x"));
         
         let at_term = Term::at(location.clone(), body.clone());
@@ -917,7 +918,7 @@ mod tests {
         
         // Create a computation that runs on a remote server
         let remote_computation = Term::at(
-            Location::Remote("gpu_cluster".to_string()),
+            Location::remote("gpu_cluster"),
             Term::apply(
                 Term::var("expensive_computation"),
                 Term::var("large_dataset")

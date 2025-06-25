@@ -1,0 +1,14 @@
+{
+  "proof": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+  "public_inputs": [
+    "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "0x0000000000000000000000000000000000000000000000000000000000000002"
+  ],
+  "verification_key": "vk_12345",
+  "circuit_id": "causality_transfer_v1",
+  "metadata": {
+    "version": "1.0.0",
+    "timestamp": "2024-01-01T00:00:00Z",
+    "prover": "causality_prover"
+  }
+}

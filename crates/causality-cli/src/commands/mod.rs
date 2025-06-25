@@ -7,9 +7,13 @@ pub mod repl;
 pub mod test_effects;
 pub mod compile;
 pub mod simulate;
+pub mod zk;
+pub mod submit;
 
 // Re-export command structs
 pub use simulate::SimulateCommand;
+pub use zk::ProveCommand;
+pub use submit::SubmitCommand;
 
 // Re-export REPL command
 pub use repl::*; 

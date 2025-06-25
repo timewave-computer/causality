@@ -1,3 +1,4 @@
+
 //! Fungible Token Primitive
 //!
 //! A comprehensive fungible token implementation supporting standard ERC-20-like operations

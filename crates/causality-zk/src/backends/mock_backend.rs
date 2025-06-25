@@ -58,11 +58,11 @@ impl ZkBackend for MockBackend {
             ));
         }
         
-        // Generate fake proof data
-        let fake_proof_data = vec![1, 2, 3, 4, 5, 6, 7, 8]; // Fake proof bytes
-        let public_inputs = circuit.public_inputs.iter().map(|&pi| pi as u8).collect();
+        // Generate fake proof data - ensure it's not empty
+        let mock_proof_data = vec![1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8]; // Non-empty mock proof data
+        let mock_public_inputs = vec![42u8, 24u8, 13u8, 37u8]; // Non-empty mock public inputs
         
-        Ok(ZkProof::new(circuit.id.clone(), fake_proof_data, public_inputs))
+        Ok(ZkProof::new(circuit.id.clone(), mock_proof_data, mock_public_inputs))
     }
     
     fn verify_proof(&self, _proof: &ZkProof, _public_inputs: &[i64]) -> Result<bool, VerificationError> {
@@ -97,16 +97,15 @@ impl Default for MockBackend {
 mod tests {
     use super::*;
     use crate::ZkCircuit;
-    use causality_core::machine::instruction::{Instruction, RegisterId};
 
     #[test]
     fn test_mock_backend_proof_generation() {
         let backend = MockBackend::new();
         
-        let instructions = vec![
-            Instruction::Move { src: RegisterId(0), dst: RegisterId(1) }
+        let test_instructions = vec![
+            Instruction::Transform { morph_reg: RegisterId(0), input_reg: RegisterId(1), output_reg: RegisterId(2) }
         ];
-        let circuit = ZkCircuit::new(instructions, Vec::new());
+        let circuit = ZkCircuit::new(test_instructions, Vec::new());
         
         let witness = crate::ZkWitness::new(circuit.id.clone(), vec![42], vec![1, 2, 3]);
         
@@ -134,10 +133,10 @@ mod tests {
     fn test_mock_backend_failure_simulation() {
         let backend = MockBackend::with_success_rate(0.0); // Always fail
         
-        let instructions = vec![
-            Instruction::Move { src: RegisterId(0), dst: RegisterId(1) }
+        let test_instructions = vec![
+            Instruction::Transform { morph_reg: RegisterId(0), input_reg: RegisterId(1), output_reg: RegisterId(2) }
         ];
-        let circuit = ZkCircuit::new(instructions, Vec::new());
+        let circuit = ZkCircuit::new(test_instructions, Vec::new());
         
         let witness = crate::ZkWitness::new(circuit.id.clone(), vec![42], vec![1, 2, 3]);
         

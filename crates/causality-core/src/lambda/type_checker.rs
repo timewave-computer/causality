@@ -13,32 +13,47 @@ use thiserror::Error;
 /// Type checking errors
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum TypeCheckError {
-    #[error("Variable '{0}' not found")]
-    VariableNotFound(String),
-    
+    /// Type mismatch between expected and actual types
     #[error("Type mismatch: expected {expected:?}, got {actual:?}")]
     TypeMismatch {
-        expected: TypeInner,
-        actual: TypeInner,
+        expected: Box<TypeInner>,
+        actual: Box<TypeInner>,
     },
     
-    #[error("Cannot apply non-function type {0:?}")]
-    CannotApply(TypeInner),
+    /// Cannot apply function to argument
+    #[error("Cannot apply function to argument: {0:?}")]
+    CannotApply(Box<TypeInner>),
     
-    #[error("Invalid tensor elimination: expected product type, got {0:?}")]
-    InvalidTensorElimination(TypeInner),
+    /// Invalid tensor elimination
+    #[error("Invalid tensor elimination: {0:?}")]
+    InvalidTensorElimination(Box<TypeInner>),
     
-    #[error("Invalid case analysis: expected sum type, got {0:?}")]
-    InvalidCase(TypeInner),
+    /// Invalid case analysis
+    #[error("Invalid case analysis: {0:?}")]
+    InvalidCase(Box<TypeInner>),
+    
+    /// Variable not found in context
+    #[error("Variable not found: {0}")]
+    VariableNotFound(String),
+    
+    /// Invalid session operation
+    #[error("Invalid session operation: {0:?}")]
+    InvalidSessionOperation(Box<TypeInner>),
+    
+    /// Linearity violation
+    #[error("Linearity violation: {0}")]
+    LinearityViolation(String),
+    
+    /// Channel not found
+    #[error("Channel not found: {0}")]
+    ChannelNotFound(String),
+    
+    /// Session type error
+    #[error("Session type error: {0}")]
+    SessionTypeError(String),
     
     #[error("Session type error: {0}")]
     SessionError(#[from] SessionEnvironmentError),
-    
-    #[error("Channel '{0}' not found")]
-    ChannelNotFound(String),
-    
-    #[error("Invalid session operation: expected session type, got {0:?}")]
-    InvalidSessionOperation(TypeInner),
     
     #[error("Session protocol mismatch: cannot perform {operation} on {session_type:?}")]
     SessionProtocolMismatch {
@@ -205,8 +220,8 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
             let unit_ty = type_check(ctx, unit_term)?;
             if unit_ty != TypeInner::Base(BaseType::Unit) {
                 return Err(TypeCheckError::TypeMismatch {
-                    expected: TypeInner::Base(BaseType::Unit),
-                    actual: unit_ty,
+                    expected: Box::new(TypeInner::Base(BaseType::Unit)),
+                    actual: Box::new(unit_ty),
                 });
             }
             
@@ -229,7 +244,7 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                     ctx.bind_variable(right_var.clone(), *right_ty)?;
                     type_check(ctx, body)
                 }
-                _ => Err(TypeCheckError::InvalidTensorElimination(tensor_ty)),
+                _ => Err(TypeCheckError::InvalidTensorElimination(Box::new(tensor_ty))),
             }
         }
         
@@ -242,14 +257,14 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                         Ok(sum_type.clone())
                     } else {
                         Err(TypeCheckError::TypeMismatch {
-                            expected: *left_ty.clone(),
-                            actual: value_ty,
+                            expected: Box::new(*left_ty.clone()),
+                            actual: Box::new(value_ty),
                         })
                     }
                 }
                 _ => Err(TypeCheckError::TypeMismatch {
-                    expected: TypeInner::Sum(Box::new(TypeInner::Base(BaseType::Unit)), Box::new(TypeInner::Base(BaseType::Unit))),
-                    actual: sum_type.clone(),
+                    expected: Box::new(TypeInner::Sum(Box::new(TypeInner::Base(BaseType::Unit)), Box::new(TypeInner::Base(BaseType::Unit)))),
+                    actual: Box::new(sum_type.clone()),
                 }),
             }
         }
@@ -263,14 +278,14 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                         Ok(sum_type.clone())
                     } else {
                         Err(TypeCheckError::TypeMismatch {
-                            expected: *right_ty.clone(),
-                            actual: value_ty,
+                            expected: Box::new(*right_ty.clone()),
+                            actual: Box::new(value_ty),
                         })
                     }
                 }
                 _ => Err(TypeCheckError::TypeMismatch {
-                    expected: TypeInner::Sum(Box::new(TypeInner::Base(BaseType::Unit)), Box::new(TypeInner::Base(BaseType::Unit))),
-                    actual: sum_type.clone(),
+                    expected: Box::new(TypeInner::Sum(Box::new(TypeInner::Base(BaseType::Unit)), Box::new(TypeInner::Base(BaseType::Unit)))),
+                    actual: Box::new(sum_type.clone()),
                 }),
             }
         }
@@ -297,12 +312,12 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                         Ok(left_result_ty)
                     } else {
                         Err(TypeCheckError::TypeMismatch {
-                            expected: left_result_ty,
-                            actual: right_result_ty,
+                            expected: Box::new(left_result_ty),
+                            actual: Box::new(right_result_ty),
                         })
                     }
                 }
-                _ => Err(TypeCheckError::InvalidCase(scrutinee_ty)),
+                _ => Err(TypeCheckError::InvalidCase(Box::new(scrutinee_ty))),
             }
         }
         
@@ -328,12 +343,12 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                         Ok(*result_ty)
                     } else {
                         Err(TypeCheckError::TypeMismatch {
-                            expected: *param_ty,
-                            actual: arg_ty,
+                            expected: Box::new(*param_ty),
+                            actual: Box::new(arg_ty),
                         })
                     }
                 }
-                _ => Err(TypeCheckError::CannotApply(func_ty)),
+                _ => Err(TypeCheckError::CannotApply(Box::new(func_ty))),
             }
         }
         
@@ -380,8 +395,8 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                                 Ok(TypeInner::Base(BaseType::Unit))
                             } else {
                                 Err(TypeCheckError::TypeMismatch {
-                                    expected: *expected_ty,
-                                    actual: value_ty,
+                                    expected: Box::new(*expected_ty),
+                                    actual: Box::new(value_ty),
                                 })
                             }
                         }
@@ -391,7 +406,7 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                         }),
                     }
                 }
-                _ => Err(TypeCheckError::InvalidSessionOperation(channel_ty)),
+                _ => Err(TypeCheckError::InvalidSessionOperation(Box::new(channel_ty))),
             }
         }
         
@@ -414,7 +429,7 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                         }),
                     }
                 }
-                _ => Err(TypeCheckError::InvalidSessionOperation(channel_ty)),
+                _ => Err(TypeCheckError::InvalidSessionOperation(Box::new(channel_ty))),
             }
         }
         
@@ -446,7 +461,7 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                         }),
                     }
                 }
-                _ => Err(TypeCheckError::InvalidSessionOperation(channel_ty)),
+                _ => Err(TypeCheckError::InvalidSessionOperation(Box::new(channel_ty))),
             }
         }
         
@@ -491,8 +506,8 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                                 for ty in &result_types[1..] {
                                     if ty != first_ty {
                                         return Err(TypeCheckError::TypeMismatch {
-                                            expected: first_ty.clone(),
-                                            actual: ty.clone(),
+                                            expected: Box::new(first_ty.clone()),
+                                            actual: Box::new(ty.clone()),
                                         });
                                     }
                                 }
@@ -504,7 +519,7 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                         _ => Err(TypeCheckError::InvalidBranch(*session_ty)),
                     }
                 }
-                _ => Err(TypeCheckError::InvalidSessionOperation(channel_ty)),
+                _ => Err(TypeCheckError::InvalidSessionOperation(Box::new(channel_ty))),
             }
         }
         
@@ -527,7 +542,7 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                         }),
                     }
                 }
-                _ => Err(TypeCheckError::InvalidSessionOperation(channel_ty)),
+                _ => Err(TypeCheckError::InvalidSessionOperation(Box::new(channel_ty))),
             }
         }
         
@@ -567,7 +582,7 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                         }),
                     }
                 }
-                _ => Err(TypeCheckError::InvalidSessionOperation(channel_ty)),
+                _ => Err(TypeCheckError::InvalidSessionOperation(Box::new(channel_ty))),
             }
         }
         
@@ -586,8 +601,8 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
             if body_ty != *output_type {
                 ctx.exit_scope()?;
                 return Err(TypeCheckError::TypeMismatch {
-                    expected: output_type.clone(),
-                    actual: body_ty,
+                    expected: Box::new(output_type.clone()),
+                    actual: Box::new(body_ty),
                 });
             }
             
@@ -611,12 +626,12 @@ pub fn type_check(ctx: &mut TypeContext, term: &Term) -> Result<TypeInner, TypeC
                         Ok(*output)
                     } else {
                         Err(TypeCheckError::TypeMismatch {
-                            expected: *input,
-                            actual: arg_ty,
+                            expected: Box::new(*input),
+                            actual: Box::new(arg_ty),
                         })
                     }
                 }
-                _ => Err(TypeCheckError::CannotApply(transform_ty)),
+                _ => Err(TypeCheckError::CannotApply(Box::new(transform_ty))),
             }
         }
         
@@ -1179,8 +1194,8 @@ mod tests {
         assert!(result.is_err());
         
         if let Err(TypeCheckError::TypeMismatch { expected, actual }) = result {
-            assert_eq!(expected, TypeInner::Base(BaseType::Bool));
-            assert_eq!(actual, TypeInner::Base(BaseType::Int));
+            assert_eq!(expected, Box::new(TypeInner::Base(BaseType::Bool)));
+            assert_eq!(actual, Box::new(TypeInner::Base(BaseType::Int)));
         } else {
             panic!("Expected TypeMismatch error");
         }
@@ -1208,8 +1223,8 @@ mod tests {
         assert!(result.is_err());
         
         if let Err(TypeCheckError::TypeMismatch { expected, actual }) = result {
-            assert_eq!(expected, TypeInner::Base(BaseType::Int));
-            assert_eq!(actual, TypeInner::Base(BaseType::Bool));
+            assert_eq!(expected, Box::new(TypeInner::Base(BaseType::Int)));
+            assert_eq!(actual, Box::new(TypeInner::Base(BaseType::Bool)));
         } else {
             panic!("Expected TypeMismatch error");
         }
@@ -1221,7 +1236,7 @@ mod tests {
         
         // Create a computation that runs at a remote location
         let at_term = Term::at(
-            crate::lambda::base::Location::Remote("server".to_string()),
+            crate::lambda::base::Location::Remote(EntityId::from_content(&"server".as_bytes().to_vec())),
             Term::literal(Literal::Int(42))
         );
         
@@ -1238,7 +1253,7 @@ mod tests {
         let remote_transform = Term::transform(
             TypeInner::Base(BaseType::Int),
             TypeInner::Base(BaseType::Int),
-            crate::lambda::base::Location::Remote("gpu_server".to_string()),
+            crate::lambda::base::Location::Remote(EntityId::from_content(&"gpu_server".as_bytes().to_vec())),
             Term::var("x")
         );
         
@@ -1248,7 +1263,7 @@ mod tests {
         let transform_type = result.unwrap();
         match transform_type {
             TypeInner::Transform { location, .. } => {
-                assert_eq!(location, crate::lambda::base::Location::Remote("gpu_server".to_string()));
+                assert_eq!(location, crate::lambda::base::Location::Remote(EntityId::from_content(&"gpu_server".as_bytes().to_vec())));
             }
             _ => panic!("Expected Transform type"),
         }

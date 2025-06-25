@@ -8,22 +8,22 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use tokio::time::{timeout, Duration};
-use crate::proof_primitives::{CompiledProof, WitnessData, ProofGenerationConfig};
+use crate::proof_primitives::CompiledProof;
 use crate::traverse_integration::{ProofGenerationResponse, ProofData, VerificationInfo};
-use crate::almanac_schema::LayoutCommitment;
 
 // Use existing ZK infrastructure instead of reimplementing
 // use causality_zk::{ZkProofGenerator, ZkProof, StorageProofGenerator};
 
 // Conditional imports for Valence coprocessor
-#[cfg(feature = "valence")]
-use valence_coprocessor_core::{Context, Data, Domain, Hash, Registry, Smt, Vm, Zkvm};
+// use valence_coprocessor_core::{Context, Data, Domain, Hash, Registry, Smt, Vm, Zkvm};
 
 /// Valence coprocessor client for proof operations
 pub struct ValenceCoprocessorClient {
     /// Base URL for coprocessor API
+    #[allow(dead_code)]
     base_url: String,
     /// HTTP client for requests
+    #[allow(dead_code)]
     client: reqwest::Client,
     /// Client configuration
     config: CoprocessorClientConfig,
@@ -209,7 +209,8 @@ impl ValenceCoprocessorClient {
     }
     
     /// Create a new client with custom configuration
-    pub fn with_config(base_url: String, config: CoprocessorClientConfig) -> Self {
+    pub fn with_config(#[allow(dead_code)]
+    base_url: String, config: CoprocessorClientConfig) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_millis(config.timeout_ms))
             .build()
@@ -279,6 +280,8 @@ impl ValenceCoprocessorClient {
     }
     
     /// Get the status of a proof submission
+    #[allow(unused_variables)]
+    #[allow(unused_variables)]
     pub async fn get_proof_status(&mut self, submission_id: &str) -> Result<ProofStatus, CoprocessorError> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -316,7 +319,8 @@ impl ValenceCoprocessorClient {
         };
         
         // Check if status has changed and update tracking
-        if !matches!(current_status.clone(), new_status) {
+        let status_changed = !matches!(current_status.clone(), new_status);
+        if status_changed {
             if let Some(submission) = self.active_proofs.get_mut(submission_id) {
                 let old_status = format!("{:?}", current_status);
                 let new_status_str = format!("{:?}", new_status);

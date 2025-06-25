@@ -824,7 +824,7 @@ mod tests {
             "test_field",
             &field_type,
             &Location::Local,
-            &Location::Remote("server".to_string()),
+            &Location::remote("server"),
             &mut det_sys,
         ).unwrap();
         
@@ -849,7 +849,7 @@ mod tests {
         
         let migration_spec = MigrationSpec {
             from: Location::Local,
-            to: Location::Remote("backup".to_string()),
+            to: Location::remote("backup"),
             fields: vec!["data".to_string()],
             strategy: MigrationStrategy::Move,
             protocol: TypeInner::Base(BaseType::Unit), // Placeholder
@@ -874,8 +874,8 @@ mod tests {
         
         let participants = vec![
             Location::Local,
-            Location::Remote("node1".to_string()),
-            Location::Remote("node2".to_string()),
+            Location::remote("node1"),
+            Location::remote("node2"),
         ];
         
         let protocol = engine.derive_multiparty_sync_protocol(

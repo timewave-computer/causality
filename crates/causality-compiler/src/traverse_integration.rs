@@ -9,8 +9,7 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use crate::storage_layout::{StorageLayout, TraverseLayoutInfo};
-use crate::proof_primitives::{CompiledProof, WitnessData, ProofGenerationConfig};
-use crate::almanac_schema::LayoutCommitment;
+use crate::proof_primitives::{CompiledProof, WitnessData};
 
 /// Traverse client for interacting with Traverse services
 pub struct TraverseClient {

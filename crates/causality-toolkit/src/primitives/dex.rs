@@ -1,7 +1,6 @@
 //! DEX (Decentralized Exchange) Primitive
 //!
 //! A comprehensive AMM (Automated Market Maker) implementation with
-//! liquidity pools, token swaps, and fee collection mechanisms.
 
 use super::*;
 

@@ -1,8 +1,9 @@
+
 //! Utility functions for Causality development
 
 /// Helper function for generating unique identifiers
 pub fn generate_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::UNIX_EPOCH;
     let timestamp = std::time::UNIX_EPOCH
         .duration_since(UNIX_EPOCH)
         .unwrap()

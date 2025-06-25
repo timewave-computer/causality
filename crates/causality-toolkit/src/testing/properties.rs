@@ -1,3 +1,4 @@
+
 //! Property-based testing for algebraic effects
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
 };
 use serde::{Serialize, Deserialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     time::Duration,
 };
 
@@ -55,7 +56,7 @@ pub struct PropertyTestConfig {
 }
 
 /// Types of properties that can be tested
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum PropertyType {
     /// Conservation laws (e.g., total value is preserved)
     Conservation,

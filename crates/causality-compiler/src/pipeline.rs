@@ -431,6 +431,15 @@ fn compile_sexpr_to_term(expr: &SExpression) -> CompileResult<Term> {
                     // Create a consume term - we'll handle this in the term compilation
                     Ok(Term::consume(resource_term))
                 }
+                SExpression::Symbol(op) if op == "tensor" => {
+                    if elements.len() != 3 {
+                        return Err(CompileError::InvalidArity { expected: 2, found: elements.len() - 1, location: None });
+                    }
+                    let left_term = compile_sexpr_to_term(&elements[1])?;
+                    let right_term = compile_sexpr_to_term(&elements[2])?;
+                    // Create a tensor term - we'll handle this in the term compilation
+                    Ok(Term::tensor(left_term, right_term))
+                }
                 _ => {
                     // Default to function application
                     if elements.len() >= 2 {
@@ -475,6 +484,7 @@ fn compile_term(ctx: &mut CompileContext, term: &Term) -> CompileResult<Register
         TermKind::Let { var, value, body } => compile_let(ctx, var, value, body),
         TermKind::Alloc { value } => compile_alloc(ctx, value),
         TermKind::Consume { resource } => compile_consume(ctx, resource),
+        TermKind::Tensor { left, right } => compile_tensor(ctx, left, right),
         _ => Err(CompileError::Layer1Error {
             message: format!("Compilation not yet implemented for {:?}", term.kind),
             location: None,
@@ -560,8 +570,6 @@ fn compile_alloc(ctx: &mut CompileContext, value: &Term) -> CompileResult<Regist
     let type_reg = ctx.alloc_register();
     let temp_type_reg = ctx.alloc_register();
     let temp_init_reg = ctx.alloc_register();
-    let temp_type_reg = ctx.alloc_register();
-    let temp_init_reg = ctx.alloc_register();
     
     // Use alloc to create resource type first
     ctx.emit(Instruction::Alloc {
@@ -585,6 +593,20 @@ fn compile_consume(ctx: &mut CompileContext, resource: &Term) -> CompileResult<R
     
     ctx.emit(Instruction::Consume {
         resource_reg,
+        output_reg: result_reg,
+    });
+    
+    Ok(result_reg)
+}
+
+fn compile_tensor(ctx: &mut CompileContext, left: &Term, right: &Term) -> CompileResult<RegisterId> {
+    let left_reg = compile_term(ctx, left)?;
+    let right_reg = compile_term(ctx, right)?;
+    let result_reg = ctx.alloc_register();
+    
+    ctx.emit(Instruction::Tensor {
+        left_reg,
+        right_reg,
         output_reg: result_reg,
     });
     

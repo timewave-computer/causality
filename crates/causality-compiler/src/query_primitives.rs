@@ -255,7 +255,7 @@ impl QueryPrimitiveCompiler {
                 OptimizationHint::Priority(level) => {
                     // Adjust timeout based on priority
                     if *level > 7 {
-                        config.timeout_ms = config.timeout_ms * 2; // High priority gets more time
+                        config.timeout_ms *= 2; // High priority gets more time
                     }
                 }
                 _ => {} // Other hints handled elsewhere

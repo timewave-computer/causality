@@ -1,3 +1,4 @@
+
 //! Interface Synthesis Engine
 //!
 //! This module implements the interface synthesis engine that generates idiomatic,
@@ -34,7 +35,7 @@ pub enum SynthesisError {
 }
 
 /// Content-addressed identifier for layout commitments
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct LayoutCommitment([u8; 32]);
 
 impl LayoutCommitment {
@@ -54,7 +55,7 @@ impl Default for LayoutCommitment {
 }
 
 /// Contract identity using content-addressed versioning
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ContractIdentity {
     pub chain: String,
     pub address: String,
@@ -635,7 +636,7 @@ impl InterfaceSynthesisEngine {
             query_modules,
             layout_commitments: self.extract_layout_commitments(schemas),
             metadata: QueryInterfaceMetadata {
-                generated_at: std::time::std::time::UNIX_EPOCH
+                generated_at: std::time::UNIX_EPOCH
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_secs(),

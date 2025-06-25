@@ -12,7 +12,7 @@ Causality is built on linear resource programming: every resource is consumed ex
 
 The system employs a three-layer architecture where each layer has precise categorical foundations:
 
-**Layer 0: Register Machine** - Minimal execution substrate with 11 instructions (`move`, `apply`, `alloc`, `consume`, `match`, `select`, `witness`, `check`, `perform`, `labelmarker`, `return`) operating on a linear resource heap. Designed for deterministic execution and efficient zero-knowledge circuit generation.
+**Layer 0: Register Machine** - Minimal execution substrate with 5 fundamental instructions (`transform`, `alloc`, `consume`, `compose`, `tensor`) based on symmetric monoidal closed category theory, operating on a linear resource heap. Designed for deterministic execution and ZK proof generation.
 
 **Layer 1: Linear Lambda Calculus** - Pure functional programming with 11 primitives implementing Symmetric Monoidal Closed Category semantics. Provides unit types, tensor products, sum types, linear functions, and resource management. All operations compile to fixed-size ZK circuits.
 

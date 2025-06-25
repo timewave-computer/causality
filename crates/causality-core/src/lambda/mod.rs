@@ -1,6 +1,6 @@
 //! Layer 1: Linear Lambda Calculus
 //!
-//! This module implements the core linear lambda calculus with exactly 11 primitives.
+//! This module implements the core linear lambda calculus with exactly 11 primitives (Layer 1 Linear Lambda Calculus).
 //! Complex features like capabilities, objects, and record operations have been 
 //! moved to Layer 2 (effect module) for better architectural separation.
 

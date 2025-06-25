@@ -1,5 +1,0 @@
-(library
- (name ocaml_causality_interop)
- (public_name ocaml-causality.interop)
- (libraries ocaml_causality_core unix lwt yojson)
- (modules ffi bindings external_apis valence_ffi async_runtime gas_estimation query_primitives))

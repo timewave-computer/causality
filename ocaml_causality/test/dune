@@ -16,9 +16,20 @@
 (executable
  (public_name test_effects)
  (name test_effects)
- (libraries ocaml_causality_effects unix))
+ (libraries causality_effects unix))
 
 (executable
- (public_name test_ffi_roundtrip)
- (name test_ffi_roundtrip)
- (libraries ocaml_causality_interop unix))
+ (public_name test_layer2_e2e)
+ (name test_layer2_e2e)
+ (libraries ocaml_causality)
+ (foreign_stubs
+  (language c)
+  (names ffi_stubs_e2e)))
+
+(executable
+ (public_name test_layer2_compilation)
+ (name test_layer2_compilation)
+ (libraries ocaml_causality)
+ (foreign_stubs
+  (language c)
+  (names ffi_stubs_compilation)))

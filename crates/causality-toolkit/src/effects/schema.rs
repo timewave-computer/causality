@@ -1,7 +1,6 @@
 //! Effect schema system for automatic mock and test generation
 
 use crate::effects::core::{AlgebraicEffect, EffectCategory, FailureMode};
-use causality_core::system::content_addressing::{ContentAddressable, EntityId};
 use serde::{Serialize, Deserialize};
 use std::time::Duration;
 

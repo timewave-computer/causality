@@ -12,13 +12,12 @@ use crate::{
     engine::ExecutionState,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
-use uuid;
 
 /// Global counter for ensuring unique branch IDs
 static BRANCH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Unique identifier for a simulation branch
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct BranchId(pub String);
 
 impl BranchId {
@@ -30,7 +29,7 @@ impl BranchId {
     /// Generate a unique branch ID
     pub fn generate() -> Self {
         let counter = BRANCH_COUNTER.fetch_add(1, Ordering::SeqCst);
-        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::time::UNIX_EPOCH;
         let timestamp = std::time::UNIX_EPOCH
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -180,7 +179,7 @@ impl BranchingManager {
             id: root_id.clone(),
             name: "Root".to_string(),
             parent_id: None,
-            created_at: std::time::std::time::UNIX_EPOCH,
+            created_at: std::time::UNIX_EPOCH,
             execution_state: ExecutionState::new(),
             metadata: BranchMetadata {
                 description: "Root branch".to_string(),
@@ -224,7 +223,7 @@ impl BranchingManager {
             id: new_branch_id.clone(),
             name: branch_name.to_string(),
             parent_id: self.active_branch_id.clone(),
-            created_at: std::time::std::time::UNIX_EPOCH,
+            created_at: std::time::UNIX_EPOCH,
             execution_state,
             metadata: BranchMetadata {
                 description: branch_name.to_string(),

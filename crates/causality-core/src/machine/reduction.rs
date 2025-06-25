@@ -70,7 +70,7 @@ pub struct ExecutionTrace {
 }
 
 impl ExecutionTrace {
-    /// Create a new empty execution trace
+    /// Create a new execution trace
     pub fn new() -> Self {
         let empty_snapshot = MachineStateSnapshot {
             registers: BTreeMap::new(),
@@ -79,7 +79,7 @@ impl ExecutionTrace {
             lamport_clock: 0,
         };
         
-        Self {
+        ExecutionTrace {
             steps: Vec::new(),
             initial_state: empty_snapshot.clone(),
             final_state: empty_snapshot,
@@ -125,6 +125,12 @@ impl ExecutionTrace {
             instruction_pointer: 0,
             lamport_clock: 0,
         };
+    }
+}
+
+impl Default for ExecutionTrace {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

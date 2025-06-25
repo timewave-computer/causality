@@ -443,7 +443,7 @@ impl GenericEffect {
         match &self.transform {
             TransformDefinition::FunctionApplication { function: _, argument: _ } => {
                 Layer1Operation::LambdaTerm(
-                    crate::lambda::Term::new(crate::lambda::TermKind::Unit)
+                    Box::new(crate::lambda::Term::new(crate::lambda::TermKind::Unit))
                 )
             }
             
@@ -451,17 +451,31 @@ impl GenericEffect {
                 if let Some(session) = &self.required_session {
                     Layer1Operation::SessionProtocol(TypeInner::Session(Box::new(session.clone())))
                 } else {
+                    // Create a default session type for communication
+                    let default_session = crate::lambda::base::SessionType::Send(
+                        Box::new(message_type.clone()),
+                        Box::new(crate::lambda::base::SessionType::End)
+                    );
                     Layer1Operation::ChannelOp {
                         operation: "send".to_string(),
-                        channel_type: message_type.clone(),
+                        channel_type: TypeInner::Session(Box::new(default_session)),
                     }
                 }
             }
             
             TransformDefinition::CommunicationReceive { expected_type } => {
+                // Create a default session type for communication
+                let default_session = if let Some(session) = &self.required_session {
+                    session.clone()
+                } else {
+                    crate::lambda::base::SessionType::Receive(
+                        Box::new(expected_type.clone()),
+                        Box::new(crate::lambda::base::SessionType::End)
+                    )
+                };
                 Layer1Operation::ChannelOp {
                     operation: "receive".to_string(),
-                    channel_type: expected_type.clone(),
+                    channel_type: TypeInner::Session(Box::new(default_session)),
                 }
             }
             
@@ -831,7 +845,7 @@ mod tests {
         // Same transformation as distributed communication
         let remote_effect = Effect::new(
             Location::Local,
-            Location::Remote("compute_node".to_string()),
+            Location::remote("compute_node"),
             TypeInner::Base(BaseType::Int),
             TypeInner::Base(BaseType::Int),
             transform_def,
@@ -885,8 +899,8 @@ mod tests {
         );
         
         let cloud_effect = Effect::new(
-            Location::Remote("cloud".to_string()),
-            Location::Remote("cloud".to_string()),
+            Location::remote("cloud"),
+            Location::remote("cloud"),
             input_type.clone(),
             output_type.clone(),
             transform_def.clone(),
@@ -924,7 +938,7 @@ mod tests {
         // Create a remote communication effect without explicit protocol
         let remote_effect = GenericEffect::remote_communication(
             Location::Local,
-            Location::Remote("database".to_string()),
+            Location::remote("database"),
             TypeInner::Base(BaseType::Symbol), // Query
             TypeInner::Base(BaseType::Symbol), // Result
             SessionType::Send( // Basic request-response protocol
@@ -1008,9 +1022,11 @@ mod tests {
             // All should produce valid Layer 1 operations
             match layer1_op {
                 Layer1Operation::LambdaTerm(_) |
+                Layer1Operation::SessionOp(_) |
                 Layer1Operation::SessionProtocol(_) |
                 Layer1Operation::ChannelOp { .. } |
-                Layer1Operation::ResourceAlloc { .. } => {
+                Layer1Operation::ResourceAlloc { .. } |
+                Layer1Operation::ResourceConsume { .. } => {
                     // Valid operation types
                 }
             }
@@ -1037,7 +1053,7 @@ mod tests {
         
         let remote_effect = Effect::new(
             Location::Local,
-            Location::Remote("server".to_string()),
+            Location::remote("server"),
             TypeInner::Base(BaseType::Int),
             TypeInner::Base(BaseType::Int),
             TransformDefinition::CommunicationSend {
@@ -1060,7 +1076,7 @@ mod tests {
                 },
                 TransformConstraint::RemoteTransform {
                     source_location: Location::Local,
-                    target_location: Location::Remote("server".to_string()),
+                    target_location: Location::remote("server"),
                     source_type: TypeInner::Base(BaseType::Int),
                     target_type: TypeInner::Base(BaseType::Int),
                     protocol: TypeInner::Session(Box::new(SessionType::Send(

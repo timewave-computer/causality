@@ -119,6 +119,7 @@ impl CompilationContext {
     }
     
     /// Infer the proper type for a term
+    #[allow(clippy::only_used_in_recursion)]
     pub fn infer_type(&self, term: &Term) -> TypeInner {
         match &term.kind {
             TermKind::Literal(lit) => match lit {
@@ -135,7 +136,7 @@ impl CompilationContext {
             },
             TermKind::Apply { func, .. } => {
                 // For function application, infer from function type
-                let _func_type = self.infer_type(&func);
+                let _func_type = self.infer_type(func);
                 match _func_type {
                     TypeInner::LinearFunction(_, output) => *output,
                     _ => TypeInner::Base(BaseType::Unit),
@@ -174,13 +175,13 @@ fn compile_term_to_register(
     match &term.kind {
         // Variables - just return the bound register
         TermKind::Var(name) => {
-            ctx.get_var_register(&name)
+            ctx.get_var_register(name)
                 .ok_or_else(|| CompileError::UnboundVariable(name.clone()))
         }
         
         // Literals - allocate as resources
         TermKind::Literal(lit) => {
-            Ok(ctx.alloc_literal(&lit))
+            Ok(ctx.alloc_literal(lit))
         }
         
         // Unit values
@@ -191,8 +192,8 @@ fn compile_term_to_register(
         
         // Function application - use Transform instruction
         TermKind::Apply { func, arg } => {
-            let func_reg = compile_term_to_register(&func, ctx)?;
-            let arg_reg = compile_term_to_register(&arg, ctx)?;
+            let func_reg = compile_term_to_register(func, ctx)?;
+            let arg_reg = compile_term_to_register(arg, ctx)?;
             let result_reg = ctx.fresh_register();
             
             // Transform: apply function morphism to argument
@@ -207,8 +208,8 @@ fn compile_term_to_register(
         
         // Resource allocation - direct Alloc instruction
         TermKind::Alloc { value } => {
-            let value_reg = compile_term_to_register(&value, ctx)?;
-            let _inferred_type = ctx.infer_type(&value);
+            let value_reg = compile_term_to_register(value, ctx)?;
+            let _inferred_type = ctx.infer_type(value);
             let type_reg = ctx.fresh_register();
             let result_reg = ctx.fresh_register();
             
@@ -235,7 +236,7 @@ fn compile_term_to_register(
         
         // Resource consumption - direct Consume instruction
         TermKind::Consume { resource } => {
-            let resource_reg = compile_term_to_register(&resource, ctx)?;
+            let resource_reg = compile_term_to_register(resource, ctx)?;
             let result_reg = ctx.fresh_register();
             
             ctx.emit(Instruction::Consume {
@@ -249,7 +250,7 @@ fn compile_term_to_register(
         // Transform constructors - create morphisms using Compose
         TermKind::Transform { input_type: _, output_type: _, location: _, body } => {
             // Compile the transform body as a morphism
-            let body_reg = compile_term_to_register(&body, ctx)?;
+            let body_reg = compile_term_to_register(body, ctx)?;
             
             // Create a morphism by composing with identity
             let identity_reg = ctx.fresh_register();
@@ -278,8 +279,8 @@ fn compile_term_to_register(
         
         // Session send operation
         TermKind::Send { channel, value } => {
-            let channel_reg = compile_term_to_register(&channel, ctx)?;
-            let value_reg = compile_term_to_register(&value, ctx)?;
+            let channel_reg = compile_term_to_register(channel, ctx)?;
+            let value_reg = compile_term_to_register(value, ctx)?;
             let result_reg = ctx.fresh_register();
             
             // Use Transform instruction for session send
@@ -294,7 +295,7 @@ fn compile_term_to_register(
         
         // Session receive operation
         TermKind::Receive { channel } => {
-            let channel_reg = compile_term_to_register(&channel, ctx)?;
+            let channel_reg = compile_term_to_register(channel, ctx)?;
             let result_reg = ctx.fresh_register();
             
             // Use Transform instruction for session receive
@@ -309,20 +310,20 @@ fn compile_term_to_register(
         
         // Let binding - Sequential composition pattern
         TermKind::Let { var, value, body } => {
-            let value_reg = compile_term_to_register(&value, ctx)?;
+            let value_reg = compile_term_to_register(value, ctx)?;
             ctx.bind_var(var.clone(), value_reg);
-            compile_term_to_register(&body, ctx)
+            compile_term_to_register(body, ctx)
         }
         
         // Lambda abstraction - Create function morphism
         TermKind::Lambda { param: _, param_type, body } => {
-            let body_reg = compile_term_to_register(&body, ctx)?;
+            let body_reg = compile_term_to_register(body, ctx)?;
             
             // Create function type value
             let param_type_inner = param_type.clone()
                 .unwrap_or(TypeInner::Base(BaseType::Unit));
                  
-            let body_type_inner = ctx.infer_type(&body);
+            let body_type_inner = ctx.infer_type(body);
             
             let _func_type = TypeInner::LinearFunction(
                 Box::new(param_type_inner),
@@ -354,8 +355,8 @@ fn compile_term_to_register(
         
         // Product construction (pairs)
         TermKind::Tensor { left, right } => {
-            let left_reg = compile_term_to_register(&left, ctx)?;
-            let right_reg = compile_term_to_register(&right, ctx)?;
+            let left_reg = compile_term_to_register(left, ctx)?;
+            let right_reg = compile_term_to_register(right, ctx)?;
             let result_reg = ctx.fresh_register();
             
             // Use Tensor instruction for product construction
@@ -370,12 +371,12 @@ fn compile_term_to_register(
         
         // Case analysis/pattern matching
         TermKind::Case { scrutinee, left_var, left_body, .. } => {
-            let scrutinee_reg = compile_term_to_register(&scrutinee, ctx)?;
+            let scrutinee_reg = compile_term_to_register(scrutinee, ctx)?;
             
             // Simplified: just compile one branch for now
             // In a full implementation, this would generate conditional branching
             ctx.bind_var(left_var.clone(), scrutinee_reg);
-            let left_result = compile_term_to_register(&left_body, ctx)?;
+            let left_result = compile_term_to_register(left_body, ctx)?;
             
             // Create choice using Compose (simplified)
             let result_reg = ctx.fresh_register();

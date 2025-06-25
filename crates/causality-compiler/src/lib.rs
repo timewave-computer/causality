@@ -110,7 +110,7 @@ mod integration_tests {
 }
 
 // TEG compilation support for bridge tests
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::collections::BTreeMap;
 use causality_core::system::content_addressing::EntityId;
 
@@ -126,7 +126,7 @@ pub struct CompiledTeg {
 }
 
 /// Compile a TEG definition from file
-pub fn compile_teg_definition(path: &PathBuf, name: Option<String>) -> Result<CompiledTeg, CompileError> {
+pub fn compile_teg_definition(path: &Path, name: Option<String>) -> Result<CompiledTeg, CompileError> {
     // For now, return a mock implementation since TEG compilation isn't fully implemented
     let teg_name = name.unwrap_or_else(|| {
         path.file_stem()

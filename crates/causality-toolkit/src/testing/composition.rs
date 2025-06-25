@@ -1,3 +1,4 @@
+
 //! Effect composition testing for complex multi-effect scenarios
 
 use crate::{
@@ -15,7 +16,7 @@ use crate::{
 };
 use serde::{Serialize, Deserialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     time::Duration,
 };
 

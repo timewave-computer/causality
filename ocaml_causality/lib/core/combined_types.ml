@@ -74,11 +74,11 @@ type resource_flow = {
 }
 (** Resource flow specification. *)
 
-type nullifier = { resource_id : entity_id; nullifier_hash : bytes }
+type nullifier = { resource_id : Causality_system.System_content_addressing.EntityId.t; nullifier_hash : bytes }
 (** Nullifier representing proof that a resource has been consumed. *)
 
 type resource = {
-    id : entity_id
+    id : Causality_system.System_content_addressing.EntityId.t
   ; name : str_t
   ; domain_id : domain_id
   ; resource_type : str_t
@@ -90,7 +90,7 @@ type resource = {
 (* ------------ CORE CAUSALITY TYPES ------------ *)
 
 type intent = {
-    id : entity_id
+    id : Causality_system.System_content_addressing.EntityId.t
   ; name : str_t
   ; domain_id : domain_id
   ; priority : int
@@ -103,7 +103,7 @@ type intent = {
 (** Represents a desired outcome or goal in the system. *)
 
 type effect = {
-    id : entity_id
+    id : Causality_system.System_content_addressing.EntityId.t
   ; name : str_t
   ; domain_id : domain_id
   ; effect_type : str_t
@@ -116,7 +116,7 @@ type effect = {
 (** Represents a computational effect in the causality system. *)
 
 type handler = {
-    id : entity_id
+    id : Causality_system.System_content_addressing.EntityId.t
   ; name : str_t
   ; domain_id : domain_id
   ; handles_type : str_t
@@ -128,11 +128,11 @@ type handler = {
 (** Represents logic for processing effects or intents. *)
 
 type transaction = {
-    id : entity_id
+    id : Causality_system.System_content_addressing.EntityId.t
   ; name : str_t
   ; domain_id : domain_id
-  ; effects : entity_id list
-  ; intents : entity_id list
+  ; effects : Causality_system.System_content_addressing.EntityId.t list
+  ; intents : Causality_system.System_content_addressing.EntityId.t list
   ; inputs : resource_flow list
   ; outputs : resource_flow list
   ; timestamp : timestamp

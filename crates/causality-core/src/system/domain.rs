@@ -118,7 +118,7 @@ impl Domain {
         let name_str = name.as_str();
         let id = match name_str {
             "local" => Location::Local,
-            s if s.starts_with("remote:") => Location::Remote(EntityId::from_content(&s[7..].as_bytes().to_vec())),
+            s if s.starts_with("remote:") => Location::Remote(EntityId::from_content(&s.as_bytes()[7..].to_vec())),
             s => Location::Remote(EntityId::from_content(&s.as_bytes().to_vec())),
         };
         
@@ -496,16 +496,16 @@ mod tests {
     }
     #[test]
     fn test_default_domain() {
-        let domain = Domain::default();
+        let domain = Domain::create_default();
         assert_eq!(domain.name.as_str(), "default");
         assert!(domain.has_capability("read"));
         assert!(domain.has_capability("write"));
         assert!(domain.has_capability("execute"));
-        assert_eq!(domain.id, Location::Remote("default".to_string()));
+        assert_eq!(domain.id, Location::Remote(EntityId::from_content(&"default".as_bytes().to_vec())));
     }
     #[test]
     fn test_ssz_serialization() {
-        let domain = Domain::default();
+        let domain = Domain::create_default();
         let encoded = domain.as_ssz_bytes();
         let decoded = Domain::from_ssz_bytes(&encoded).unwrap();
         assert_eq!(domain, decoded);
@@ -517,20 +517,20 @@ mod tests {
         
         // Create test domains
         let mut domain_a = Domain::new(Str::new("domain_a"), vec!["read".to_string()]);
-        domain_a.id = Location::Remote("a".to_string());
-        domain_a.routing_info.connections = vec![Location::Remote("b".to_string())];
+        domain_a.id = Location::Remote(EntityId::from_content(&"a".as_bytes().to_vec()));
+        domain_a.routing_info.connections = vec![Location::Remote(EntityId::from_content(&"b".as_bytes().to_vec()))];
         
         let mut domain_b = Domain::new(Str::new("domain_b"), vec!["write".to_string()]);
-        domain_b.id = Location::Remote("b".to_string());
-        domain_b.routing_info.connections = vec![Location::Remote("a".to_string())];
+        domain_b.id = Location::Remote(EntityId::from_content(&"b".as_bytes().to_vec()));
+        domain_b.routing_info.connections = vec![Location::Remote(EntityId::from_content(&"a".as_bytes().to_vec()))];
         
         // Register domains
         router.register_domain(domain_a);
         router.register_domain(domain_b);
         
         // Test direct communication
-        let from = Location::Remote("a".to_string());
-        let to = Location::Remote("b".to_string());
+        let from = Location::Remote(EntityId::from_content(&"a".as_bytes().to_vec()));
+        let to = Location::Remote(EntityId::from_content(&"b".as_bytes().to_vec()));
         
         assert!(router.can_communicate_directly(&from, &to));
         
@@ -551,26 +551,35 @@ mod tests {
         
         // Create a triangle of domains
         let mut domain_a = Domain::new(Str::new("a"), vec![]);
-        domain_a.id = Location::Remote("a".to_string());
-        domain_a.routing_info.connections = vec![Location::Remote("b".to_string()), Location::Remote("c".to_string())];
+        domain_a.id = Location::Remote(EntityId::from_content(&"a".as_bytes().to_vec()));
+        domain_a.routing_info.connections = vec![
+            Location::Remote(EntityId::from_content(&"b".as_bytes().to_vec())), 
+            Location::Remote(EntityId::from_content(&"c".as_bytes().to_vec()))
+        ];
         domain_a.routing_info.base_cost = 1;
         
         let mut domain_b = Domain::new(Str::new("b"), vec![]);
-        domain_b.id = Location::Remote("b".to_string());
-        domain_b.routing_info.connections = vec![Location::Remote("a".to_string()), Location::Remote("c".to_string())];
+        domain_b.id = Location::Remote(EntityId::from_content(&"b".as_bytes().to_vec()));
+        domain_b.routing_info.connections = vec![
+            Location::Remote(EntityId::from_content(&"a".as_bytes().to_vec())), 
+            Location::Remote(EntityId::from_content(&"c".as_bytes().to_vec()))
+        ];
         domain_b.routing_info.base_cost = 5; // Higher cost
         
         let mut domain_c = Domain::new(Str::new("c"), vec![]);
-        domain_c.id = Location::Remote("c".to_string());
-        domain_c.routing_info.connections = vec![Location::Remote("a".to_string()), Location::Remote("b".to_string())];
+        domain_c.id = Location::Remote(EntityId::from_content(&"c".as_bytes().to_vec()));
+        domain_c.routing_info.connections = vec![
+            Location::Remote(EntityId::from_content(&"a".as_bytes().to_vec())), 
+            Location::Remote(EntityId::from_content(&"b".as_bytes().to_vec()))
+        ];
         domain_c.routing_info.base_cost = 1;
         
         router.register_domain(domain_a);
         router.register_domain(domain_b);
         router.register_domain(domain_c);
         
-        let from = Location::Remote("a".to_string());
-        let to = Location::Remote("c".to_string());
+        let from = Location::Remote(EntityId::from_content(&"a".as_bytes().to_vec()));
+        let to = Location::Remote(EntityId::from_content(&"c".as_bytes().to_vec()));
         
         // Test minimize cost strategy
         let cost_route = router.find_route_with_strategy(&from, &to, &RoutingStrategy::MinimizeCost);
@@ -592,20 +601,20 @@ mod tests {
         let mut router = UnifiedRouter::new();
         
         let mut domain_a = Domain::new(Str::new("a"), vec![]);
-        domain_a.id = Location::Remote("a".to_string());
+        domain_a.id = Location::Remote(EntityId::from_content(&"a".as_bytes().to_vec()));
         domain_a.routing_info.protocols = ["session".to_string(), "custom".to_string()].into_iter().collect();
-        domain_a.routing_info.connections = vec![Location::Remote("b".to_string())];
+        domain_a.routing_info.connections = vec![Location::Remote(EntityId::from_content(&"b".as_bytes().to_vec()))];
         
         let mut domain_b = Domain::new(Str::new("b"), vec![]);
-        domain_b.id = Location::Remote("b".to_string());
+        domain_b.id = Location::Remote(EntityId::from_content(&"b".as_bytes().to_vec()));
         domain_b.routing_info.protocols = ["session".to_string(), "direct".to_string()].into_iter().collect();
-        domain_b.routing_info.connections = vec![Location::Remote("a".to_string())];
+        domain_b.routing_info.connections = vec![Location::Remote(EntityId::from_content(&"a".as_bytes().to_vec()))];
         
         router.register_domain(domain_a);
         router.register_domain(domain_b);
         
-        let from = Location::Remote("a".to_string());
-        let to = Location::Remote("b".to_string());
+        let from = Location::Remote(EntityId::from_content(&"a".as_bytes().to_vec()));
+        let to = Location::Remote(EntityId::from_content(&"b".as_bytes().to_vec()));
         
         // Test protocol preferences
         let preferred_protocols = ["session".to_string()].into_iter().collect();
@@ -623,12 +632,12 @@ mod tests {
         // Add several domains
         for i in 0..3 {
             let mut domain = Domain::new(Str::new(&format!("domain_{}", i)), vec![]);
-            domain.id = Location::Remote(format!("domain_{}", i));
+            domain.id = Location::Remote(EntityId::from_content(&format!("domain_{}", i).as_bytes().to_vec()));
             if i > 0 {
-                domain.routing_info.connections.push(Location::Remote(format!("domain_{}", i - 1)));
+                domain.routing_info.connections.push(Location::Remote(EntityId::from_content(&format!("domain_{}", i - 1).as_bytes().to_vec())));
             }
             if i < 2 {
-                domain.routing_info.connections.push(Location::Remote(format!("domain_{}", i + 1)));
+                domain.routing_info.connections.push(Location::Remote(EntityId::from_content(&format!("domain_{}", i + 1).as_bytes().to_vec())));
             }
             router.register_domain(domain);
         }
@@ -659,7 +668,7 @@ mod tests {
         let router = UnifiedRouter::new();
         
         let local = Location::Local;
-        let remote = Location::Remote("unregistered".to_string());
+        let remote = Location::Remote(EntityId::from_content(&"unregistered".as_bytes().to_vec()));
         
         // Should allow communication between local and remote even if not registered
         assert!(router.can_communicate_directly(&local, &remote));

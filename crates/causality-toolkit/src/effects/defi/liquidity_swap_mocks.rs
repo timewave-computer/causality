@@ -1,3 +1,4 @@
+
 //! Mock implementations for LiquiditySwap effect with comprehensive strategies
 
 use super::liquidity_swap::{LiquiditySwap, SwapReceipt, SwapError, SwapLog, PoolInfo, DexProtocol};
@@ -164,7 +165,7 @@ impl LiquiditySwapMockHandler {
         let execution = SwapExecution {
             swap: swap.clone(),
             result: result.clone(),
-            timestamp: std::time::std::time::UNIX_EPOCH
+            timestamp: std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -202,7 +203,7 @@ impl LiquiditySwapMockHandler {
             gas_price: swap.gas_price.unwrap_or(25_000_000_000),
             protocol_fees: (swap.amount_in as f64 * 0.003) as u64, // 0.3% fee
             pool_state_after: self.update_pool_after_swap(&pool_info, swap, estimated_output),
-            timestamp: std::time::std::time::UNIX_EPOCH
+            timestamp: std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -416,7 +417,7 @@ impl LiquiditySwapMockHandler {
             gas_price: swap.gas_price.unwrap_or(min_gas_price),
             protocol_fees: self.calculate_protocol_fees(swap, &pool_info),
             pool_state_after: self.update_pool_after_swap(&pool_info, swap, estimated_output),
-            timestamp: std::time::std::time::UNIX_EPOCH
+            timestamp: std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),

@@ -5,22 +5,23 @@ edition = "2021"
 
 [dependencies]
 causality-core = { path = "../causality-core" }
+causality-lisp = { path = "../causality-lisp" }
 causality-compiler = { path = "../causality-compiler" }
 causality-runtime = { path = "../causality-runtime" }
+causality-simulation = { path = "../causality-simulation" }
 causality-toolkit = { path = "../causality-toolkit" }
-anyhow = { workspace = true }
-clap = { version = "4.3", features = ["derive"] }
-ethereum_ssz = { workspace = true }
-ethereum_ssz_derive = { workspace = true }
+causality-zk = { path = "../causality-zk" }
+causality-api = { path = "../causality-api" }
+anyhow = "1.0"
+clap = { version = "4.0", features = ["derive"] }
 async-trait = { workspace = true }
 indicatif = "0.16.2"
-tokio = { workspace = true, features = ["full", "macros"] }
+tokio = { version = "1.0", features = ["full"] }
 chrono = { workspace = true, features = ["serde"] }
 colored = "2.1.0"
-hex = { workspace = true }
 log = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 url = "2.4.1"
 rand = { workspace = true }
 dirs = "5.0"

@@ -21,7 +21,7 @@ impl Executor {
     /// Create a new executor with default machine state
     pub fn new() -> Self {
         Self {
-            machine_state: MachineState::new(),
+            machine_state: MachineState::new(Vec::new()),
             instructions: Vec::new(),
             pc: 0,
         }
@@ -30,7 +30,7 @@ impl Executor {
     /// Execute instructions sequentially and return the final result
     pub fn execute(&mut self, instructions: &[Instruction]) -> RuntimeResult<MachineValue> {
         // Reset machine state for fresh execution
-        self.machine_state = MachineState::new();
+        self.machine_state = MachineState::new(instructions.to_vec());
         self.instructions = instructions.to_vec();
         self.pc = 0;
         
@@ -57,55 +57,48 @@ impl Executor {
         self.pc += 1;
 
         match instruction {
-            Instruction::Move { src, dst } => {
-                if let Ok(value) = self.machine_state.load_register(*src) {
-                    self.machine_state.store_register(*dst, value.value.clone(), None);
+            Instruction::Transform { morph_reg: _, input_reg, output_reg } => {
+                if let Some(value) = self.machine_state.load_register(*input_reg) {
+                    self.machine_state.store_register(*output_reg, value.clone());
                 }
             }
-            Instruction::Witness { out_reg } => {
-                // Witness instruction produces a default value for testing
-                self.machine_state.store_register(*out_reg, MachineValue::Int(42), None);
-            }
-            Instruction::Alloc { type_reg: _, val_reg, out_reg } => {
-                // For now, just copy the value to the output register  
-                if let Ok(value) = self.machine_state.load_register(*val_reg) {
-                    self.machine_state.store_register(*out_reg, value.value.clone(), None);
+            Instruction::Alloc { type_reg: _, init_reg, output_reg } => {
+                // For now, just copy the init value to the output register  
+                if let Some(value) = self.machine_state.load_register(*init_reg) {
+                    self.machine_state.store_register(*output_reg, value.clone());
                 }
             }
-            Instruction::Consume { resource_reg, out_reg } => {
-                if let Ok(value) = self.machine_state.load_register(*resource_reg) {
-                    self.machine_state.store_register(*out_reg, value.value.clone(), None);
+            Instruction::Consume { resource_reg, output_reg } => {
+                if let Some(value) = self.machine_state.load_register(*resource_reg) {
+                    self.machine_state.store_register(*output_reg, value.clone());
                     // Mark the resource as consumed
-                    self.machine_state.store_register(*resource_reg, MachineValue::Unit, None);
+                    self.machine_state.store_register(*resource_reg, MachineValue::Unit);
                 }
             }
-            Instruction::Apply { fn_reg: _, arg_reg, out_reg } => {
-                if let Ok(arg_value) = self.machine_state.load_register(*arg_reg) {
-                    // For now, just copy the argument to the output
-                    self.machine_state.store_register(*out_reg, arg_value.value.clone(), None);
+            Instruction::Compose { first_reg: _, second_reg, output_reg } => {
+                if let Some(second_value) = self.machine_state.load_register(*second_reg) {
+                    // For now, just copy the second morphism to the output
+                    self.machine_state.store_register(*output_reg, second_value.clone());
                 }
             }
-            Instruction::Select { cond_reg, true_reg, false_reg, out_reg } => {
-                if let Ok(cond_value) = self.machine_state.load_register(*cond_reg) {
-                    let result_reg = if let MachineValue::Bool(true) = cond_value.value {
-                        *true_reg
-                    } else {
-                        *false_reg
-                    };
-                    
-                    if let Ok(result_value) = self.machine_state.load_register(result_reg) {
-                        self.machine_state.store_register(*out_reg, result_value.value.clone(), None);
-                    }
+            Instruction::Tensor { left_reg, right_reg, output_reg } => {
+                if let (Some(left_value), Some(right_value)) = (
+                    self.machine_state.load_register(*left_reg),
+                    self.machine_state.load_register(*right_reg)
+                ) {
+                    // Create a product value from the tensor operation
+                    let tensor_value = MachineValue::Product(
+                        Box::new(left_value.clone()), 
+                        Box::new(right_value.clone())
+                    );
+                    self.machine_state.store_register(*output_reg, tensor_value);
                 }
-            }
-            _ => {
-                // Handle other instruction variants as needed
             }
         }
 
         // Return the current value in register 0, if any
-        if let Ok(value) = self.machine_state.load_register(RegisterId(0)) {
-            Ok(Some(value.value.clone()))
+        if let Some(value) = self.machine_state.load_register(RegisterId(0)) {
+            Ok(Some(value.clone()))
         } else {
             Ok(Some(MachineValue::Unit))
         }
@@ -113,8 +106,8 @@ impl Executor {
 
     /// Get the final result from register 0
     pub fn get_result(&self) -> RuntimeResult<MachineValue> {
-        if let Ok(value) = self.machine_state.load_register(RegisterId(0)) {
-            Ok(value.value.clone())
+        if let Some(value) = self.machine_state.load_register(RegisterId(0)) {
+            Ok(value.clone())
         } else {
             Ok(MachineValue::Unit)
         }
@@ -145,7 +138,7 @@ mod tests {
     fn test_executor_creation() {
         let executor = Executor::new();
         // Test that we can access the machine state and it starts empty
-        assert!(executor.machine_state.load_register(RegisterId(0)).is_err());
+        assert!(executor.machine_state.load_register(RegisterId(0)).is_none());
     }
 
     #[test]
@@ -160,17 +153,21 @@ mod tests {
     }
 
     #[test]
-    fn test_witness_instruction() {
+    fn test_alloc_instruction() {
         let mut executor = Executor::new();
         
-        // Test with a witness instruction that should work
+        // Test with an alloc instruction that should work
         let instructions = vec![
-            Instruction::Witness { out_reg: RegisterId(0) }
+            Instruction::Alloc { 
+                type_reg: RegisterId(1), 
+                init_reg: RegisterId(2), 
+                output_reg: RegisterId(0) 
+            }
         ];
         
         let result = executor.execute(&instructions);
         assert!(result.is_ok());
-        // Result should be whatever the witness instruction produces
+        // Result should be whatever the alloc instruction produces
         println!("Result: {:?}", result.unwrap());
     }
 } 

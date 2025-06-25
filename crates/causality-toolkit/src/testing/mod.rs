@@ -1,7 +1,6 @@
 //! Test generation framework for automatic effect testing
 
 pub mod generator;
-pub mod properties;
 pub mod composition;
 
 pub use generator::{

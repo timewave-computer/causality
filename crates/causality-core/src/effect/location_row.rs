@@ -558,7 +558,7 @@ mod tests {
         let mut row = RowType::empty();
         row.add_field("data".to_string(), FieldType::simple(TypeInner::Base(crate::lambda::BaseType::Symbol)));
         
-        let remote_location = Location::Remote("server1".to_string());
+        let remote_location = Location::remote("server1");
         let location_row = LocationAwareRowType::remote(row, remote_location.clone());
         
         let target = Location::Local;
@@ -575,7 +575,7 @@ mod tests {
         row.add_field("value".to_string(), FieldType::simple(TypeInner::Base(crate::lambda::BaseType::Int)));
         
         let location_row = LocationAwareRowType::local(row);
-        let target = Location::Remote("backup".to_string());
+        let target = Location::remote("backup");
         
         let result = location_row.migrate(Location::Local, target.clone()).unwrap();
         

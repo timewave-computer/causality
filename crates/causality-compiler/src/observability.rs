@@ -46,7 +46,7 @@ impl MetricsCollector {
     pub fn record_histogram(&self, name: &str, value: f64, labels: Option<BTreeMap<String, String>>) {
         let metric_name = self.format_metric_name(name, labels);
         let mut histograms = self.histograms.lock().unwrap();
-        histograms.entry(metric_name).or_insert_with(Vec::new).push(value);
+        histograms.entry(metric_name).or_default().push(value);
     }
     
     /// Record operation duration
@@ -326,7 +326,7 @@ impl StructuredLogger {
             context.insert("status_code".to_string(), code.to_string());
         }
         
-        let level = if error.is_some() || status_code.map_or(false, |c| c >= 400) {
+        let level = if error.is_some() || status_code.is_some_and(|c| c >= 400) {
             LogLevel::Error
         } else {
             LogLevel::Info

@@ -11,8 +11,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 causality-core = { path = "../causality-core" }
 causality-compiler = { path = "../causality-compiler", optional = true }
-ssz = { workspace = true }
-ssz_derive = { workspace = true }
+causality-lisp = { path = "../causality-lisp", optional = true }
+ethereum_ssz = { workspace = true }
+ethereum_ssz_derive = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -22,6 +23,7 @@ rand = { workspace = true, optional = true }
 
 # OCaml bindings (optional)
 ocaml = { version = "1.0", optional = true }
+ocaml-derive = { version = "1.0", optional = true }
 
 # Valence integration (optional)
 valence-coprocessor = { version = "0.2.3", git = "https://github.com/timewave-computer/valence-coprocessor.git", tag = "v0.2.3", default-features = false, optional = true }
@@ -46,7 +48,7 @@ env_logger = { version = "0.11", optional = true }
 [features]
 default = ["c-ffi"]
 c-ffi = []
-ocaml-ffi = ["dep:ocaml"]
+ocaml-ffi = ["dep:ocaml", "dep:ocaml-derive", "dep:causality-lisp"]
 async = ["dep:tokio", "causality-compiler"]
 valence = ["dep:valence-coprocessor", "dep:valence-coprocessor-client", "async", "dep:rand"]
 almanac = ["dep:indexer-core", "dep:indexer-storage", "dep:indexer-api", "async"]

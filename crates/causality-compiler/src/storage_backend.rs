@@ -220,7 +220,7 @@ impl StorageBackendManager {
             storage.migrate().await?;
         }
 
-        self.storage = Some(Arc::new(storage));
+        self.storage = Some(Arc::new(_storage));
         Ok(())
     }
 
@@ -240,7 +240,7 @@ impl StorageBackendManager {
         let storage_config = StorageConfig::rocksdb(&rocksdb_config.path);
         let storage = RocksDbStorage::new(storage_config).await?;
 
-        self.storage = Some(Arc::new(storage));
+        self.storage = Some(Arc::new(_storage));
         Ok(())
     }
 
@@ -257,7 +257,7 @@ impl StorageBackendManager {
         {
             let storage_config = StorageConfig::in_memory();
             let storage = indexer_storage::InMemoryStorage::new(storage_config).await?;
-            self.storage = Some(Arc::new(storage));
+            self.storage = Some(Arc::new(_storage));
         }
         
         #[cfg(not(feature = "almanac"))]
@@ -281,15 +281,15 @@ impl StorageBackendManager {
 
     /// Test the storage connection
     pub async fn test_connection(&self) -> Result<bool> {
-        if let Some(storage) = &self.storage {
+        if let Some(_storage) = &self.storage {
             #[cfg(feature = "almanac")]
             {
-                storage.health_check().await.map_err(|e| anyhow!("Storage health check failed: {}", e))
+                _storage.health_check().await.map_err(|e| anyhow!("Storage health check failed: {}", e))
             }
             
             #[cfg(not(feature = "almanac"))]
             {
-                storage.health_check().await
+                _storage.health_check().await
             }
         } else {
             Err(anyhow!("Storage not initialized"))
@@ -298,10 +298,10 @@ impl StorageBackendManager {
 
     /// Get storage statistics
     pub async fn get_statistics(&self) -> Result<StorageStatistics> {
-        if let Some(storage) = &self.storage {
+        if let Some(_storage) = &self.storage {
             #[cfg(feature = "almanac")]
             {
-                let stats = storage.get_statistics().await?;
+                let stats = _storage.get_statistics().await?;
                 Ok(StorageStatistics {
                     total_events: stats.total_events,
                     total_accounts: stats.total_accounts,
@@ -351,6 +351,13 @@ pub struct MockStorage {
 }
 
 #[cfg(not(feature = "almanac"))]
+impl Default for MockStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(not(feature = "almanac"))]
 impl MockStorage {
     pub fn new() -> Self {
         Self {
@@ -374,6 +381,7 @@ impl MockStorage {
 
 /// Database migration utilities
 pub struct MigrationManager {
+    #[allow(dead_code)]
     config: MigrationConfig,
 }
 

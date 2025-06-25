@@ -25,7 +25,7 @@ Causality is motivated by several claims about what distributed programming shou
 Documentation is structured to build comprehension of the system layer-by-layer:
 
 *   **Design Principles (`001-`)**: A deeper dive into the foundational ideas.
-*   **Layered Architecture (`002-` to `005-`)**: Detailed explanations of Layer 0 (Execution Core), Layer 1 (Structured Types & Lisp), and Layer 2 (Transform-Based Effects & Intents).
-*   **Practical Guides (`006-` onwards)**: Tutorials, language specifications, toolkit usage, and advanced topics.
+*   **Layered Architecture (`002-`, `100-102`)**: Detailed explanations of Layer 0 (Execution Core), Layer 1 (Structured Types & Lisp), and Layer 2 (Transform-Based Effects & Intents).
+*   **Practical Guides (`003-004`, `300-` onwards)**: Tutorials, language specifications, toolkit usage, and advanced topics.
 
 Now time to get into Causality's [design principles](./001-design-principles.md).

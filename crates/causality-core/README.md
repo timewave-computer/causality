@@ -1,6 +1,78 @@
 # Causality Core
 
-The foundational implementation of the Causality framework's three-layer architecture, providing register machine execution, linear lambda calculus, and effect algebra for distributed, zero-knowledge verifiable computation.
+Foundational implementation of Causality's three-layer architecture providing unified transform-based computation and communication with content-addressed linear resources and zero-knowledge verifiability.
+
+## Architecture
+
+Causality implements three integrated computational layers:
+
+### Layer 0: Register Machine (5 Fundamental Instructions)
+Minimal register machine based on symmetric monoidal closed category theory:
+- `transform` - Apply morphisms (unifies function calls, effects, protocols)
+- `alloc` - Allocate linear resources (data, channels, functions)  
+- `consume` - Consume linear resources (deallocation, cleanup)
+- `compose` - Sequential composition (control flow, chaining)
+- `tensor` - Parallel composition (parallel data, concurrency)
+
+### Layer 1: Linear Lambda Calculus
+Content-addressed expressions with unified type system:
+- Linear type system with resource tracking
+- Content-addressed AST nodes via `ExprId(EntityId)`
+- Row types for records with location awareness
+- Session types for communication protocols
+- Compilation to Layer 0 instructions
+
+### Layer 2: Transform-Based Effects
+Unified computation and communication through transforms:
+- Location-transparent operations (`Effect<From, To>`)
+- Automatic protocol derivation from access patterns
+- Intent-based declarative programming
+- Capability-based access control
+- Cross-chain coordination
+
+## Core Components
+
+### Machine Layer (`machine/`)
+- **RegisterFile**: Fixed 32-register execution environment
+- **ResourceHeap**: Content-addressed linear resource storage
+- **Instruction**: 5 fundamental instruction types
+- **Reduction**: Deterministic execution engine
+
+### Lambda Layer (`lambda/`)  
+- **Term**: Content-addressed expression system
+- **TypeChecker**: Linear type inference and checking
+- **Location**: Location-aware type system
+- **SessionLinear**: Session type integration
+
+### Effect Layer (`effect/`)
+- **Transform**: Unified computation/communication operations
+- **Intent**: Declarative programming interface  
+- **Capability**: Fine-grained access control
+- **Record/Row**: Structured data with location awareness
+- **CrossChain**: Multi-chain coordination
+
+### System Layer (`system/`)
+- **ContentAddressing**: Deterministic entity identification
+- **Domain**: Capability domains and scoping
+- **Serialization**: SSZ-based deterministic encoding
+
+## Key Features
+
+- **Transform Unification**: Computation and communication as unified transformations
+- **Content Addressing**: All entities identified by cryptographic hash
+- **Linear Resources**: Use-once resource semantics with nullifier tracking
+- **Location Transparency**: Same API for local and distributed operations
+- **Automatic Protocols**: Communication protocols derived from transform patterns
+- **ZK Compatibility**: Circuit-friendly design throughout
+
+## Mathematical Foundation
+
+Built on symmetric monoidal closed category theory:
+- **Objects**: Linear resources (data, channels, functions, protocols)  
+- **Morphisms**: Transformations between resources
+- **Monoidal Structure**: Parallel composition (⊗)
+- **Closure**: Internal hom (→) for functions and protocols
+- **Symmetry**: Resource braiding and swapping
 
 ## Purpose
 
@@ -13,118 +85,6 @@ The `causality-core` crate serves as the architectural foundation of the Causali
 - **Effect Algebra**: Enable declarative programming through intent specification
 - **Resource Management**: Implement content-addressed, nullifier-based resource lifecycle management
 - **Domain Organization**: Provide capability-based access control and resource scoping
-
-## Architecture Overview
-
-The three-layer architecture represents different levels of computational abstraction:
-
-### Layer 0: Register Machine Foundation
-A minimal 11-instruction set virtual machine designed for verifiability and deterministic execution. This layer provides the computational foundation that can be easily proven in zero-knowledge systems.
-
-### Layer 1: Linear Lambda Calculus  
-A structured type system with configurable linearity constraints, enabling safe resource management and functional programming patterns while maintaining mathematical rigor.
-
-### Layer 2: Effect Algebra
-A declarative programming model where computations are expressed as effects that can be analyzed and optimized.
-
-## Core Components
-
-### Register Machine (`machine/`)
-
-The register machine implements a minimal instruction set designed for verifiable computation:
-
-```rust
-use causality_core::machine::{MachineState, Instruction, RegisterId};
-
-let mut machine = MachineState::new();
-
-// Basic register operations
-machine.execute_instruction(Instruction::Move { 
-    src: RegisterId(0), 
-    dst: RegisterId(1) 
-})?;
-
-// Resource lifecycle operations
-machine.execute_instruction(Instruction::Alloc { 
-    type_reg: RegisterId(2), 
-    val_reg: RegisterId(3), 
-    out_reg: RegisterId(4) 
-})?;
-```
-
-**Core Instruction Set (11 Instructions):**
-- **Movement**: `Move` for data movement between registers
-- **Resource Operations**: `Alloc`, `Consume` for resource lifecycle
-- **Control Flow**: `Apply`, `Match`, `Select`, `Return` for program control
-- **Constraints**: `Check` for runtime constraint verification
-- **Effects**: `Perform` for effect execution
-- **External Interface**: `Witness` for external data input
-
-### Linear Lambda Calculus (`lambda/`)
-
-A type system that enforces linearity constraints to ensure safe resource usage:
-
-```rust
-use causality_core::lambda::{Value, Type, Linearity};
-
-// Create values with linearity constraints
-let linear_value = Value::with_linearity(42, Linearity::Linear);
-```
-
-**Linearity Levels:**
-- **Linear**: Must be used exactly once
-- **Affine**: Can be used at most once  
-- **Relevant**: Must be used at least once
-- **Unrestricted**: Can be used any number of times
-
-### Effect Algebra (`effect/`)
-
-A declarative programming model based on effect expressions:
-
-```rust
-use causality_core::effect::{EffectExpr, EffectExprKind};
-
-// Define effect expressions
-let effect = EffectExpr::new(EffectExprKind::Effect {
-    name: "transfer".to_string(),
-    args: vec![],
-});
-```
-
-### Resource Model (`machine/resource.rs`)
-
-The resource system provides content-addressed, immutable entities with privacy-preserving consumption:
-
-```rust
-use causality_core::machine::{Resource, ResourceHeap, Nullifier};
-
-let mut heap = ResourceHeap::new();
-
-// Resources are content-addressed and immutable
-let resource = Resource::simple("test", vec![42]);
-let resource_id = heap.store_resource(resource)?;
-
-// Consumption uses nullifiers for privacy
-let nullifier = heap.consume_resource(&resource_id)?;
-```
-
-**Key Properties:**
-- **Content Addressing**: IDs determined by cryptographic hash of content
-- **Immutability**: Resources never change after creation
-- **Nullifier System**: Privacy-preserving consumption tracking
-- **Zero-Knowledge Compatibility**: Designed for efficient proof generation
-
-### Content Addressing System
-
-All entities use deterministic, content-based identifiers:
-
-```rust
-use causality_core::{EntityId, ContentAddressable};
-
-// IDs are deterministic based on content
-let resource = Resource::simple("test", vec![42]);
-let entity_id = resource.entity_id(); // SHA256 of content
-```
 
 ## Layer Integration
 

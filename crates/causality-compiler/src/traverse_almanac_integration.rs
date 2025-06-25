@@ -7,10 +7,9 @@
 use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
-use crate::state_analysis::{StateQueryRequirement, QueryType};
 use crate::storage_layout::{StorageLayout, StorageLayoutGenerator};
 use crate::almanac_schema::LayoutCommitment;
-use crate::proof_primitives::{WitnessData, ProofGenerationConfig};
+use crate::proof_primitives::WitnessData;
 
 // Conditional imports based on feature flags
 #[cfg(feature = "traverse")]
@@ -22,6 +21,7 @@ use crate::almanac_runtime::AlmanacRuntime;
 /// Integration coordinator between Traverse and Almanac
 pub struct TraverseAlmanacIntegrator {
     /// Storage layout generator
+    #[allow(dead_code)]
     layout_generator: StorageLayoutGenerator,
     /// Almanac runtime for state queries
     #[cfg(feature = "almanac")]

@@ -2,9 +2,9 @@
 name = "causality-toolkit"
 version = "0.1.0"
 edition = "2021"
-authors = ["Causality Team"]
+authors = ["Timewave Team"]
 description = "Development toolkit and utilities for Causality framework"
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0"
 repository = "https://github.com/timewave/reverse-causality"
 
 [dependencies]
@@ -22,7 +22,6 @@ rand = "0.8"
 tokio = { version = "1.0", features = ["time", "macros", "rt-multi-thread"] }
 hashbrown = "0.15"
 sha2 = "0.10"
-blake3 = "1.5"
 uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 

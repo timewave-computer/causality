@@ -76,7 +76,7 @@ pub struct StateQueryAnalyzer {
 #[derive(Debug, Clone)]
 struct AnalysisContext {
     /// Current function scope
-    current_function: Option<String>,
+    _current_function: Option<String>,
     /// Whether we're inside conditional logic
     in_conditional: bool,
     /// Current blockchain domain context
@@ -107,7 +107,7 @@ impl StateQueryAnalyzer {
         Self {
             requirements: BTreeSet::new(),
             context: AnalysisContext {
-                current_function: None,
+                _current_function: None,
                 in_conditional: false,
                 current_domain: None,
             },

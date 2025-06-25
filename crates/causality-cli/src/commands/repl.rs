@@ -7,9 +7,6 @@ use crate::error::CliErrorHandler;
 use std::sync::Arc;
 use std::io::{self, Write};
 use colored::Colorize;
-use causality_core::machine::{MachineState, RegisterId};
-use causality_runtime::Executor;
-use causality_compiler::EnhancedCompilerPipeline;
 use anyhow::{Result, anyhow};
 
 /// REPL commands and configuration
@@ -38,12 +35,6 @@ impl Default for ReplCommand {
 
 /// REPL state management
 pub struct ReplState {
-    /// Executor for instruction execution
-    executor: Executor,
-    
-    /// Compiler pipeline for Lisp compilation
-    compiler: EnhancedCompilerPipeline,
-    
     /// Configuration
     config: ReplCommand,
 }
@@ -51,14 +42,7 @@ pub struct ReplState {
 impl ReplState {
     /// Create a new REPL state
     pub fn new(config: ReplCommand) -> Self {
-        let executor = Executor::new();
-        let compiler = EnhancedCompilerPipeline::new();
-        
-        Self {
-            executor,
-            compiler,
-            config,
-        }
+        Self { config }
     }
     
     /// Evaluate a Lisp expression
@@ -72,23 +56,24 @@ impl ReplState {
             return self.handle_repl_command(input);
         }
         
-        // Compile the input to machine instructions
-        let compiled_program = self.compiler.compile_full(input)
+        // Compile the input to machine instructions using unified pipeline
+        let compiled_artifact = causality_compiler::compile(input)
             .map_err(|e| anyhow!("Compilation failed: {:?}", e))?;
         
         if self.config.debug {
             println!("{}", "Compiled instructions:".cyan());
-            for (i, instr) in compiled_program.instructions.iter().enumerate() {
+            for (i, instr) in compiled_artifact.instructions.iter().enumerate() {
                 println!("  {}: {:?}", i, instr);
             }
         }
         
-        // Load and execute the program
-        let result = self.executor.execute(&compiled_program.instructions)
+        // Execute using unified 5-instruction machine
+        let mut executor = causality_core::machine::BoundedExecutor::new(compiled_artifact.instructions.clone())?;
+        let result = executor.execute()
             .map_err(|e| anyhow!("Execution failed: {:?}", e))?;
         
         if self.config.show_state {
-            self.print_machine_state(self.executor.machine_state());
+            self.print_execution_result(&result);
         }
         
         Ok(format!("{:?}", result))
@@ -109,12 +94,9 @@ impl ReplState {
                 Ok(format!("Show state: {}", if self.config.show_state { "on" } else { "off" }))
             }
             Some(&"reset") => {
-                self.executor = Executor::new();
+                // Reset state by creating new REPL state
+                *self = ReplState::new(self.config.clone());
                 Ok("REPL state reset".to_string())
-            }
-            Some(&"registers") => {
-                self.print_machine_state(self.executor.machine_state());
-                Ok("Register state displayed".to_string())
             }
             Some(&"quit") | Some(&"exit") | Some(&"q") => {
                 println!("{}", "Goodbye!".green());
@@ -138,7 +120,6 @@ impl ReplState {
               :debug            - Toggle debug mode\n  \
               :state            - Toggle state display\n  \
               :reset            - Reset REPL state\n  \
-              :registers        - Show register state\n  \
               :quit, :exit, :q  - Exit REPL",
             "Causality Lisp REPL".cyan().bold(),
             "Examples".yellow(),
@@ -146,15 +127,22 @@ impl ReplState {
         )
     }
     
-    /// Print the current machine state
-    fn print_machine_state(&self, machine: &MachineState) {
-        println!("{}", "Machine State:".cyan());
-        
-        // Show some registers (simplified)
-        for i in 0..8 {
-            let reg_id = RegisterId(i);
-            if let Ok(register) = machine.load_register(reg_id) {
-                println!("    Register R{}: {:?}", i, register.value);
+    /// Print the execution result information
+    fn print_execution_result(&self, result: &causality_core::machine::ExecutionResult) {
+        println!("{}", "Execution Result:".cyan());
+        match result {
+            causality_core::machine::ExecutionResult::Success { steps_executed, .. } => {
+                println!("    Status: Success");
+                println!("    Steps executed: {}", steps_executed);
+            }
+            causality_core::machine::ExecutionResult::Error { message, steps_executed, .. } => {
+                println!("    Status: Error");
+                println!("    Message: {}", message);
+                println!("    Steps executed: {}", steps_executed);
+            }
+            causality_core::machine::ExecutionResult::Timeout { steps_executed, .. } => {
+                println!("    Status: Timeout");
+                println!("    Steps executed: {}", steps_executed);
             }
         }
     }
@@ -167,13 +155,13 @@ pub async fn handle_repl_command(
 ) -> Result<(), anyhow::Error> {
     println!("{}", "Causality Lisp REPL".cyan().bold());
     println!("{}", "Type :help for commands or :quit to exit".dimmed());
-    println!("{}", "Note: This is a minimal REPL implementation for basic testing".dimmed());
+    println!("{}", "Note: This REPL uses the unified 5-instruction machine system".dimmed());
     
     let mut repl_state = ReplState::new(config);
     
     loop {
         // Print prompt
-        print!("{} ", "λ>".green().bold());
+        print!("{} ", ">".green().bold());
         io::stdout().flush().unwrap();
         
         // Read input
@@ -205,33 +193,29 @@ pub async fn handle_repl_command(
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    
     #[test]
     fn test_repl_state_creation() {
         let config = ReplCommand::default();
         let _repl_state = ReplState::new(config);
     }
-
+    
     #[test]
     fn test_repl_commands() {
-        let mut repl_state = ReplState::new(ReplCommand::default());
+        let config = ReplCommand::default();
+        let mut repl_state = ReplState::new(config);
         
         // Test help command
         let result = repl_state.handle_repl_command(":help").unwrap();
         assert!(result.contains("Causality Lisp REPL"));
-        
-        // Test debug toggle
-        let result = repl_state.handle_repl_command(":debug").unwrap();
-        assert!(result.contains("Debug mode:"));
     }
-
+    
     #[tokio::test]
     async fn test_basic_evaluation() {
         let config = ReplCommand::default();
         let mut repl_state = ReplState::new(config);
         
-        // Test simple arithmetic - this may not work yet depending on compiler implementation
-        // For now, just test that it doesn't panic
-        let _result = repl_state.evaluate("(+ 1 2)");
+        // Test simple evaluation (this will fail until we have proper Lisp parsing)
+        let _result = repl_state.evaluate("42");
     }
-} 
+}

@@ -437,7 +437,7 @@ impl std::fmt::Display for DiagnosticReport {
             }
         }
 
-        writeln!(f, "📊 Resource Usage:")?;
+        writeln!(f, "Resource Usage:")?;
         writeln!(f, "  Allocations: {}", self.resource_usage.total_allocations)?;
         writeln!(f, "  Consumptions: {}", self.resource_usage.total_consumptions)?;
         writeln!(f, "  Live resources: {}", self.resource_usage.live_resources.len())?;

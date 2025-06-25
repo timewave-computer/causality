@@ -121,7 +121,7 @@ type resource_pattern = { resource_type : str_t; domain_id : domain_id option }
 (* ========================================= *)
 
 type intent = {
-    id : entity_id
+    id : Causality_system.System_content_addressing.EntityId.t
   ; name : str_t
   ; domain_id : domain_id
   ; priority : int
@@ -159,11 +159,11 @@ type handler = {
 (** Represents logic for processing effects or intents *)
 
 type transaction = {
-    id : entity_id
+    id : Causality_system.System_content_addressing.EntityId.t
   ; name : str_t
   ; domain_id : domain_id
   ; effects : effect_id list
-  ; intents : entity_id list
+  ; intents : Causality_system.System_content_addressing.EntityId.t list
   ; inputs : resource_flow list
   ; outputs : resource_flow list
   ; timestamp : timestamp

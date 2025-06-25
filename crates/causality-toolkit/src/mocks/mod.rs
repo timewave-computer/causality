@@ -1,7 +1,6 @@
 //! Mock generation system for automatic effect handler creation
 
 pub mod strategy;
-pub mod generator;
 pub mod blockchain;
 
 pub use strategy::{

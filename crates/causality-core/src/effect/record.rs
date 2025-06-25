@@ -32,7 +32,7 @@ pub enum RecordEffect {
     UpdateField {
         resource_id: EntityId,
         field: FieldName,
-        value: Term,
+        value: Box<Term>,
         capability: RecordCapability,
     },
     
@@ -108,7 +108,7 @@ pub struct CapabilityToken {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecordOperationResult {
     /// Successful field access
-    FieldValue(Term),
+    FieldValue(Box<Term>),
     /// Successful record projection
     RecordProjection(BTreeMap<FieldName, Term>),
     /// Successful record creation/modification
@@ -158,7 +158,7 @@ pub fn access_field(
 pub fn update_field(
     resource_id: EntityId,
     field: impl Into<FieldName>,
-    value: Term,
+    value: Box<Term>,
     capability: RecordCapability,
 ) -> EffectExpr {
     let field = field.into();
@@ -180,7 +180,7 @@ pub fn update_field(
     perform("record.update_field", vec![
         Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&resource_id.to_string()))),
         Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&field))),
-        value,
+        *value,
         Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!("{:?}", capability)))),
     ])
 }
@@ -603,193 +603,193 @@ impl CapabilityToken {
     }
 }
 
-//#[cfg(test)]
-//mod tests {
-//    use super::*;
-//    use crate::lambda::Literal;
-//    use crate::system::content_addressing::EntityId;
-//
-//    fn test_resource_id() -> EntityId {
-//        EntityId::from_bytes([1u8; 32])
-//    }
-//
-//    #[test]
-//    fn test_access_field_with_valid_capability() {
-//        let resource_id = test_resource_id();
-//        let capability = RecordCapability::ReadField("name".to_string());
-//        
-//        let effect = access_field(resource_id, "name", capability);
-//        
-//        // Should create a valid record access effect
-//        match effect.kind {
-//            EffectExpr::Perform { effect_tag, args } => {
-//                assert_eq!(effect_tag, "record.access_field");
-//                assert_eq!(args.len(), 3);
-//            }
-//            _ => panic!("Expected Perform effect"),
-//        }
-//    }
-//
-//    #[test]
-//    fn test_access_field_with_invalid_capability() {
-//        let resource_id = test_resource_id();
-//        let capability = RecordCapability::ReadField("age".to_string());
-//        
-//        let effect = access_field(resource_id, "name", capability); // Wrong field
-//        
-//        // Should create a capability error effect
-//        match effect.kind {
-//            EffectExpr::Perform { effect_tag, .. } => {
-//                assert_eq!(effect_tag, "capability_error");
-//            }
-//            _ => panic!("Expected capability error effect"),
-//        }
-//    }
-//
-//    #[test]
-//    fn test_update_field_with_write_capability() {
-//        let resource_id = test_resource_id();
-//        let capability = RecordCapability::WriteField("name".to_string());
-//        let value = Term::literal(Literal::Symbol(Symbol::new("John")));
-//        
-//        let effect = update_field(resource_id, "name", value, capability);
-//        
-//        match effect.kind {
-//            EffectExpr::Perform { effect_tag, args } => {
-//                assert_eq!(effect_tag, "record.update_field");
-//                assert_eq!(args.len(), 4);
-//            }
-//            _ => panic!("Expected Perform effect"),
-//        }
-//    }
-//
-//    #[test]
-//    fn test_project_record_with_valid_capability() {
-//        let resource_id = test_resource_id();
-//        let capability = RecordCapability::ProjectFields(vec!["name".to_string(), "age".to_string()]);
-//        
-//        let effect = project_record(resource_id, vec!["name", "age"], capability);
-//        
-//        match effect.kind {
-//            EffectExpr::Perform { effect_tag, args } => {
-//                assert_eq!(effect_tag, "record.project");
-//                assert!(args.len() >= 3); // resource_id + fields + capability
-//            }
-//            _ => panic!("Expected Perform effect"),
-//        }
-//    }
-//
-//    #[test]
-//    fn test_capability_token_validation() {
-//        let resource_id = test_resource_id();
-//        let capability = RecordCapability::ReadField("name".to_string());
-//        
-//        let token = CapabilityToken::new("test_token", Some(resource_id), capability.clone());
-//        
-//        // Should grant the exact capability
-//        assert!(token.grants(&capability, Some(resource_id)));
-//        
-//        // Should not grant different capability
-//        let other_capability = RecordCapability::ReadField("age".to_string());
-//        assert!(!token.grants(&other_capability, Some(resource_id)));
-//        
-//        // Should not grant for different resource
-//        let other_resource = EntityId::from_bytes([2u8; 32]);
-//        assert!(!token.grants(&capability, Some(other_resource)));
-//    }
-//
-//    #[test]
-//    fn test_capability_token_expiration() {
-//        let capability = RecordCapability::ReadField("name".to_string());
-//        let token = CapabilityToken::new("test_token", None, capability)
-//            .with_expiration(100);
-//        
-//        assert!(token.is_valid(50));  // Before expiration
-//        assert!(!token.is_valid(150)); // After expiration
-//    }
-//
-//    #[test]
-//    fn test_record_transaction() {
-//        let resource_id = test_resource_id();
-//        let read_cap = RecordCapability::ReadField("name".to_string());
-//        let write_cap = RecordCapability::WriteField("age".to_string());
-//        
-//        let effects = vec![
-//            access_field(resource_id, "name", read_cap),
-//            update_field(resource_id, "age", Term::literal(Literal::Int(30)), write_cap),
-//        ];
-//        
-//        let transaction = record_transaction(effects);
-//        
-//        // Should wrap effects in a transaction with handlers
-//        match transaction.kind {
-//            EffectExpr::Handle { .. } => {
-//                // Correct - transaction includes handlers
-//            }
-//            _ => panic!("Expected transaction to include handlers"),
-//        }
-//    }
-//
-//    #[test]
-//    fn test_validate_capabilities() {
-//        let operations = vec![
-//            RecordEffect::AccessField {
-//                resource_id: test_resource_id(),
-//                field: "name".to_string(),
-//                capability: RecordCapability::ReadField("name".to_string()),
-//            },
-//            RecordEffect::UpdateField {
-//                resource_id: test_resource_id(),
-//                field: "age".to_string(),
-//                value: Term::unit(),
-//                capability: RecordCapability::WriteField("age".to_string()),
-//            },
-//        ];
-//        
-//        let available_capabilities = vec![
-//            Capability::read_field("record", "name"),
-//            Capability::write_field("record", "age"),
-//        ];
-//        
-//        // Should validate successfully
-//        assert!(validate_capabilities(&operations, &available_capabilities).is_ok());
-//        
-//        // Should fail with insufficient capabilities
-//        let insufficient_capabilities = vec![
-//            Capability::read_field("record", "name"),
-//            // Missing write capability for age
-//        ];
-//        
-//        assert!(validate_capabilities(&operations, &insufficient_capabilities).is_err());
-//    }
-//
-//    #[test]
-//    fn test_full_record_access_capability() {
-//        let resource_id = test_resource_id();
-//        let full_access = RecordCapability::FullRecordAccess;
-//        
-//        // Full access should allow any field operation
-//        let read_effect = access_field(resource_id, "any_field", full_access.clone());
-//        let write_effect = update_field(
-//            resource_id, 
-//            "any_field", 
-//            Term::unit(), 
-//            full_access.clone()
-//        );
-//        
-//        // Both should succeed (not produce capability errors)
-//        match read_effect.kind {
-//            EffectExpr::Perform { effect_tag, .. } => {
-//                assert_eq!(effect_tag, "record.access_field");
-//            }
-//            _ => panic!("Expected successful access effect"),
-//        }
-//        
-//        match write_effect.kind {
-//            EffectExpr::Perform { effect_tag, .. } => {
-//                assert_eq!(effect_tag, "record.update_field");
-//            }
-//            _ => panic!("Expected successful update effect"),
-//        }
-//    }
-//} 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lambda::Literal;
+    use crate::system::content_addressing::EntityId;
+
+    fn test_resource_id() -> EntityId {
+        EntityId::from_bytes([1u8; 32])
+    }
+
+    #[test]
+    fn test_access_field_with_valid_capability() {
+        let resource_id = test_resource_id();
+        let capability = RecordCapability::ReadField("name".to_string());
+        
+        let effect = access_field(resource_id, "name", capability);
+        
+        // Should create a valid record access effect
+        match effect.kind {
+            EffectExprKind::Perform { effect_tag, args } => {
+                assert_eq!(effect_tag, "record.access_field");
+                assert_eq!(args.len(), 3);
+            }
+            _ => panic!("Expected Perform effect"),
+        }
+    }
+
+    #[test]
+    fn test_access_field_with_invalid_capability() {
+        let resource_id = test_resource_id();
+        let capability = RecordCapability::ReadField("age".to_string());
+        
+        let effect = access_field(resource_id, "name", capability); // Wrong field
+        
+        // Should create a capability error effect
+        match effect.kind {
+            EffectExprKind::Perform { effect_tag, .. } => {
+                assert_eq!(effect_tag, "capability_error");
+            }
+            _ => panic!("Expected capability error effect"),
+        }
+    }
+
+    #[test]
+    fn test_update_field_with_write_capability() {
+        let resource_id = test_resource_id();
+        let capability = RecordCapability::WriteField("name".to_string());
+        let value = Term::literal(Literal::Symbol(Symbol::new("John")));
+        
+        let effect = update_field(resource_id, "name", *value, capability);
+        
+        match effect.kind {
+            EffectExprKind::Perform { effect_tag, args } => {
+                assert_eq!(effect_tag, "record.update_field");
+                assert_eq!(args.len(), 4);
+            }
+            _ => panic!("Expected Perform effect"),
+        }
+    }
+
+    #[test]
+    fn test_project_record_with_valid_capability() {
+        let resource_id = test_resource_id();
+        let capability = RecordCapability::ProjectFields(vec!["name".to_string(), "age".to_string()]);
+        
+        let effect = project_record(resource_id, vec!["name", "age"], capability);
+        
+        match effect.kind {
+            EffectExprKind::Perform { effect_tag, args } => {
+                assert_eq!(effect_tag, "record.project");
+                assert!(args.len() >= 3); // resource_id + fields + capability
+            }
+            _ => panic!("Expected Perform effect"),
+        }
+    }
+
+    #[test]
+    fn test_capability_token_validation() {
+        let resource_id = test_resource_id();
+        let capability = RecordCapability::ReadField("name".to_string());
+        
+        let token = CapabilityToken::new("test_token", Some(resource_id), capability.clone());
+        
+        // Should grant the exact capability
+        assert!(token.grants(&capability, Some(resource_id)));
+        
+        // Should not grant different capability
+        let other_capability = RecordCapability::ReadField("age".to_string());
+        assert!(!token.grants(&other_capability, Some(resource_id)));
+        
+        // Should not grant for different resource
+        let other_resource = EntityId::from_bytes([2u8; 32]);
+        assert!(!token.grants(&capability, Some(other_resource)));
+    }
+
+    #[test]
+    fn test_capability_token_expiration() {
+        let capability = RecordCapability::ReadField("name".to_string());
+        let token = CapabilityToken::new("test_token", None, capability)
+            .with_expiration(100);
+        
+        assert!(token.is_valid(50));  // Before expiration
+        assert!(!token.is_valid(150)); // After expiration
+    }
+
+    #[test]
+    fn test_record_transaction() {
+        let resource_id = test_resource_id();
+        let read_cap = RecordCapability::ReadField("name".to_string());
+        let write_cap = RecordCapability::WriteField("age".to_string());
+        
+        let effects = vec![
+            access_field(resource_id, "name", read_cap),
+            update_field(resource_id, "age", Term::literal(Literal::Int(30)), write_cap),
+        ];
+        
+        let transaction = record_transaction(effects);
+        
+        // Should wrap effects in a transaction with handlers
+        match transaction.kind {
+            EffectExprKind::Handle { .. } => {
+                // Correct - transaction includes handlers
+            }
+            _ => panic!("Expected transaction to include handlers"),
+        }
+    }
+
+    #[test]
+    fn test_validate_capabilities() {
+        let operations = vec![
+            RecordEffect::AccessField {
+                resource_id: test_resource_id(),
+                field: "name".to_string(),
+                capability: RecordCapability::ReadField("name".to_string()),
+            },
+            RecordEffect::UpdateField {
+                resource_id: test_resource_id(),
+                field: "age".to_string(),
+                value: Term::unit(),
+                capability: RecordCapability::WriteField("age".to_string()),
+            },
+        ];
+        
+        let available_capabilities = vec![
+            Capability::read_field("record", "name"),
+            Capability::write_field("record", "age"),
+        ];
+        
+        // Should validate successfully
+        assert!(validate_capabilities(&operations, &available_capabilities).is_ok());
+        
+        // Should fail with insufficient capabilities
+        let insufficient_capabilities = vec![
+            Capability::read_field("record", "name"),
+            // Missing write capability for age
+        ];
+        
+        assert!(validate_capabilities(&operations, &insufficient_capabilities).is_err());
+    }
+
+    #[test]
+    fn test_full_record_access_capability() {
+        let resource_id = test_resource_id();
+        let full_access = RecordCapability::FullRecordAccess;
+        
+        // Full access should allow any field operation
+        let read_effect = access_field(resource_id, "any_field", full_access.clone());
+        let write_effect = update_field(
+            resource_id, 
+            "any_field", 
+            Term::unit(), 
+            full_access.clone()
+        );
+        
+        // Both should succeed (not produce capability errors)
+        match read_effect.kind {
+            EffectExprKind::Perform { effect_tag, .. } => {
+                assert_eq!(effect_tag, "record.access_field");
+            }
+            _ => panic!("Expected successful access effect"),
+        }
+        
+        match write_effect.kind {
+            EffectExprKind::Perform { effect_tag, .. } => {
+                assert_eq!(effect_tag, "record.update_field");
+            }
+            _ => panic!("Expected successful update effect"),
+        }
+    }
+} 

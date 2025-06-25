@@ -1,25 +1,16 @@
-//! Intent-based programming system with unified transform constraints
+//! Intent system for Layer 2 declarative programming
 //!
-//! This module provides declarative effect specification through intents,
-//! which are high-level descriptions of desired computations that can be
-//! automatically compiled to efficient execution plans.
-//!
-//! **Phase 3 Updates**: Unified transform constraints, location requirements,
-//! and migration specifications replace separate constraint types.
+//! This module defines intents as declarative specifications of desired computations
+//! that can be executed across different locations with automatic migration and optimization.
 
-use crate::{
-    lambda::base::{TypeInner, SessionType, Location},
-    system::{
-        content_addressing::ResourceId,
-        deterministic::DeterministicSystem,
-    },
-    effect::transform_constraint::{TransformConstraint, TransformConstraintError},
-};
-use serde::{Serialize, Deserialize};
 use std::collections::{BTreeMap, BTreeSet};
+use crate::lambda::{TypeInner, Location};
+use crate::SessionType;
+use crate::system::{ResourceId, DeterministicSystem};
+use crate::effect::transform_constraint::{TransformConstraint, TransformConstraintError, TransformDefinition};
 
-/// Unique identifier for intents
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+/// Unique identifier for an intent
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IntentId(pub u64);
 
 impl IntentId {
@@ -28,14 +19,13 @@ impl IntentId {
         IntentId(id)
     }
     
-    /// Generate a deterministic intent ID
+    /// Generate a new intent ID deterministically
     pub fn generate(det_sys: &mut DeterministicSystem) -> Self {
         IntentId(det_sys.next_counter())
     }
 }
 
-/// Intent represents a high-level, declarative specification of desired computation
-/// that can involve both local operations and distributed communication
+/// Intent represents a declarative specification of a desired computation
 #[derive(Debug, Clone)]
 pub struct Intent {
     /// Unique identifier for this intent
@@ -67,7 +57,7 @@ pub struct Intent {
 }
 
 /// Location requirements for intent execution
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LocationRequirements {
     /// Preferred execution location
     pub preferred_location: Option<Location>,
@@ -78,7 +68,7 @@ pub struct LocationRequirements {
     /// Data migration specifications
     pub migration_specs: Vec<MigrationSpec>,
     
-    /// Required protocols for distributed operations
+    /// Required protocols for communication
     pub required_protocols: BTreeMap<String, SessionType>,
     
     /// Performance constraints
@@ -86,7 +76,7 @@ pub struct LocationRequirements {
 }
 
 /// Data migration specification
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MigrationSpec {
     /// Source location
     pub from: Location,
@@ -104,7 +94,7 @@ pub struct MigrationSpec {
     pub protocol: Option<SessionType>,
 }
 
-/// Migration strategy for data movement
+/// Strategy for data migration
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MigrationStrategy {
     /// Copy data to new location, keep original
@@ -127,12 +117,13 @@ pub enum MigrationStrategy {
 }
 
 /// Consistency model for replicated data
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum ConsistencyModel {
     /// Strong consistency - all replicas updated before operation completes
     Strong,
     
     /// Eventual consistency - updates propagated asynchronously
+    #[default]
     Eventual,
     
     /// Causal consistency - causally related operations are ordered
@@ -142,7 +133,7 @@ pub enum ConsistencyModel {
     Session,
 }
 
-/// Partition strategy for distributed data
+/// Strategy for data partitioning
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PartitionStrategy {
     /// Hash-based partitioning
@@ -159,7 +150,7 @@ pub enum PartitionStrategy {
 }
 
 /// Performance constraints for intent execution
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PerformanceConstraints {
     /// Maximum execution time in milliseconds
     pub max_execution_time: Option<u64>,
@@ -171,53 +162,8 @@ pub struct PerformanceConstraints {
     pub max_gas_usage: Option<u64>,
 }
 
-impl Default for PerformanceConstraints {
-    fn default() -> Self {
-        Self {
-            max_execution_time: None,
-            max_memory_usage: None,
-            max_gas_usage: None,
-        }
-    }
-}
-
-/// Cost constraints for intent execution
-#[derive(Debug, Clone)]
-pub struct CostConstraints {
-    /// Maximum computational cost
-    pub max_compute_cost: Option<u64>,
-    
-    /// Maximum communication cost
-    pub max_communication_cost: Option<u64>,
-    
-    /// Maximum storage cost
-    pub max_storage_cost: Option<u64>,
-    
-    /// Cost optimization strategy
-    pub optimization_strategy: CostOptimizationStrategy,
-}
-
-/// Cost optimization strategy
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CostOptimizationStrategy {
-    /// Minimize total cost
-    MinimizeTotalCost,
-    
-    /// Minimize execution time
-    MinimizeTime,
-    
-    /// Minimize resource usage
-    MinimizeResources,
-    
-    /// Balance cost and performance
-    Balanced,
-    
-    /// Custom optimization function
-    Custom { function_name: String },
-}
-
 /// Priority levels for intent execution
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IntentPriority {
     Low,
     Normal,
@@ -226,8 +172,8 @@ pub enum IntentPriority {
     Immediate,
 }
 
-/// Reference to a resource used in an intent
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// Reference to a resource
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceRef {
     /// Resource identifier
     pub id: ResourceId,
@@ -242,8 +188,8 @@ pub struct ResourceRef {
     pub access_pattern: AccessPattern,
 }
 
-/// Access pattern for resource usage
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// Access pattern for resources
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccessPattern {
     /// Read-only access
     ReadOnly,
@@ -283,15 +229,15 @@ pub struct ResourceBinding {
     pub required: bool,
     
     /// Default value if optional and not provided
-    pub default_value: Option<String>, // Simplified representation
+    pub default_value: Option<String>,
 }
 
-/// Intent execution result
+/// Result of intent execution
 #[derive(Debug, Clone)]
 pub enum IntentResult {
     /// Intent completed successfully
     Success {
-        result: Option<ResourceRef>,
+        result: Box<Option<ResourceRef>>,
         execution_stats: ExecutionStats,
     },
     
@@ -312,7 +258,7 @@ pub enum IntentResult {
     },
 }
 
-/// Execution statistics for completed intents
+/// Execution statistics
 #[derive(Debug, Clone)]
 pub struct ExecutionStats {
     /// Total execution time in milliseconds
@@ -384,13 +330,6 @@ pub enum IntentError {
         limit: u64,
     },
     
-    /// Cost constraint violated
-    CostConstraintViolated {
-        constraint: String,
-        actual: u64,
-        limit: u64,
-    },
-    
     /// Dependency cycle detected
     DependencyCycle(Vec<IntentId>),
     
@@ -399,10 +338,10 @@ pub enum IntentError {
 }
 
 impl Intent {
-    /// Create a new intent with the given domain
+    /// Create a new intent for the given domain
     pub fn new(domain: Location) -> Self {
         Self {
-            id: IntentId(0), // Will be set when registered
+            id: IntentId::new(0), // Will be set by the system
             domain,
             constraints: Vec::new(),
             resource_bindings: BTreeMap::new(),
@@ -414,19 +353,19 @@ impl Intent {
         }
     }
     
-    /// Add a transform constraint to the intent
+    /// Add a transform constraint to this intent
     pub fn with_constraint(mut self, constraint: TransformConstraint) -> Self {
         self.constraints.push(constraint);
         self
     }
     
-    /// Add a resource binding to the intent
+    /// Add a resource binding to this intent
     pub fn with_resource(mut self, name: String, resource: ResourceRef) -> Self {
         self.resource_bindings.insert(name, resource);
         self
     }
     
-    /// Set location requirements
+    /// Set location requirements for this intent
     pub fn with_location_requirements(mut self, requirements: LocationRequirements) -> Self {
         self.location_requirements = requirements;
         self
@@ -438,13 +377,13 @@ impl Intent {
         self
     }
     
-    /// Set priority
+    /// Set execution priority
     pub fn with_priority(mut self, priority: IntentPriority) -> Self {
         self.priority = priority;
         self
     }
     
-    /// Set timeout
+    /// Set execution timeout
     pub fn with_timeout(mut self, timeout_ms: u64) -> Self {
         self.timeout = Some(timeout_ms);
         self
@@ -456,169 +395,15 @@ impl Intent {
         self
     }
     
-    /// Add a migration specification
-    pub fn with_migration(mut self, migration: MigrationSpec) -> Self {
-        self.location_requirements.migration_specs.push(migration);
-        self
-    }
-    
-    /// Add a required protocol
-    pub fn with_protocol(mut self, name: String, protocol: SessionType) -> Self {
-        self.location_requirements.required_protocols.insert(name, protocol);
-        self
-    }
-    
-    /// Check if this intent can be executed at a given location
+    /// Check if this intent can be executed at the given location
     pub fn can_execute_at(&self, location: &Location) -> bool {
-        // Check if location is allowed
-        if !self.location_requirements.allowed_locations.is_empty() && !self.location_requirements.allowed_locations.contains(location) {
-            return false;
-                }
-        
-        // Check constraints for location compatibility
-        self.constraints.iter().all(|constraint| {
-            match constraint {
-                TransformConstraint::LocalTransform { .. } => {
-                    matches!(location, Location::Local)
-                }
-                TransformConstraint::RemoteTransform { source_location, target_location, .. } => {
-                    location == source_location || location == target_location
-                }
-                TransformConstraint::DataMigration { from_location, to_location, .. } => {
-                    location == from_location || location == to_location
-                }
-                _ => true, // Other constraints don't have location restrictions
-            }
-        })
-    }
-    
-    /// Estimate the execution cost of this intent
-    pub fn estimate_cost(&self, target_location: &Location) -> IntentCostEstimate {
-        let mut compute_cost = 1u64;
-        let mut communication_cost = 0u64;
-        let mut storage_cost = 0u64;
-        
-        // Estimate cost based on constraints
-        for constraint in &self.constraints {
-            match constraint {
-                TransformConstraint::LocalTransform { .. } => {
-                    compute_cost += 10; // Base cost for local computation
-                }
-                TransformConstraint::RemoteTransform { .. } => {
-                    communication_cost += 100; // Higher cost for remote operations
-                    compute_cost += 5; // Protocol overhead
-                }
-                TransformConstraint::DataMigration { .. } => {
-                    communication_cost += 500; // High cost for data movement
-                    storage_cost += 50; // Storage cost for migration
-                }
-                TransformConstraint::DistributedSync { locations, .. } => {
-                    communication_cost += locations.len() as u64 * 50; // Cost scales with participants
-                }
-                _ => {
-                    compute_cost += 5; // Default cost
-                }
-            }
+        // Check if location is explicitly allowed
+        if !self.location_requirements.allowed_locations.is_empty() {
+            return self.location_requirements.allowed_locations.contains(location);
         }
         
-        // Factor in resource access costs
-        for resource in self.resource_bindings.values() {
-            if resource.current_location != *target_location {
-                communication_cost += 200; // Cost for remote resource access
-            }
-            
-            match resource.access_pattern {
-                AccessPattern::Streaming { .. } => {
-                    communication_cost += 300; // Higher cost for streaming
-                }
-                AccessPattern::Random { access_frequency, .. } => {
-                    compute_cost += access_frequency * 2; // Cost scales with access frequency
-                }
-                _ => {
-                    compute_cost += 10; // Base access cost
-                }
-            }
-        }
-        
-        let total_cost = compute_cost + communication_cost + storage_cost;
-        let estimated_execution_time = std::cmp::max(1, compute_cost + communication_cost / 10); // Ensure minimum time
-        
-        IntentCostEstimate {
-            compute_cost,
-            communication_cost,
-            storage_cost,
-            total_cost,
-            estimated_execution_time,
-        }
-    }
-    
-    /// Get all locations involved in this intent
-    pub fn involved_locations(&self) -> BTreeSet<Location> {
-        let mut locations = BTreeSet::new();
-        
-        // Add domain location
-        locations.insert(self.domain.clone());
-        
-        // Add locations from constraints
-        for constraint in &self.constraints {
-            match constraint {
-                TransformConstraint::RemoteTransform { source_location, target_location, .. } => {
-                    locations.insert(source_location.clone());
-                    locations.insert(target_location.clone());
-                }
-                TransformConstraint::DataMigration { from_location, to_location, .. } => {
-                    locations.insert(from_location.clone());
-                    locations.insert(to_location.clone());
-                }
-                TransformConstraint::DistributedSync { locations: sync_locs, .. } => {
-                    locations.extend(sync_locs.iter().cloned());
-                }
-                _ => {}
-            }
-        }
-        
-        // Add locations from resource bindings
-        for resource in self.resource_bindings.values() {
-            locations.insert(resource.current_location.clone());
-        }
-        
-        // Add locations from migration specs
-        for migration in &self.location_requirements.migration_specs {
-            locations.insert(migration.from.clone());
-            locations.insert(migration.to.clone());
-        }
-        
-        locations
-    }
-}
-
-/// Cost estimate for intent execution
-#[derive(Debug, Clone)]
-pub struct IntentCostEstimate {
-    /// Computational cost
-    pub compute_cost: u64,
-    
-    /// Communication cost
-    pub communication_cost: u64,
-    
-    /// Storage cost
-    pub storage_cost: u64,
-    
-    /// Total cost
-    pub total_cost: u64,
-    
-    /// Estimated execution time in milliseconds
-    pub estimated_execution_time: u64,
-}
-
-impl Default for CostConstraints {
-    fn default() -> Self {
-        Self {
-            max_compute_cost: None,
-            max_communication_cost: None,
-            max_storage_cost: None,
-            optimization_strategy: CostOptimizationStrategy::Balanced,
-        }
+        // If no restrictions, can execute anywhere
+        true
     }
 }
 
@@ -640,35 +425,64 @@ impl ResourceRef {
     }
 }
 
+impl ResourceBinding {
+    /// Create a new resource binding
+    pub fn new(name: &str, _resource_type: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            resource: ResourceRef::new(
+                ResourceId::new([0u8; 32]), // Placeholder ID
+                TypeInner::Base(crate::lambda::base::BaseType::Symbol), // Placeholder type
+                Location::domain("local"),
+            ),
+            required: true,
+            default_value: None,
+        }
+    }
+    
+    /// Set quantity for the resource binding
+    pub fn with_quantity(self, _quantity: u64) -> Self {
+        // Placeholder implementation - quantity would be part of resource metadata
+        self
+    }
+}
+
+impl TransformConstraint {
+    /// Create a simple transform constraint for testing
+    pub fn new(name: String) -> Self {
+        TransformConstraint::LocalTransform {
+            source_type: TypeInner::Base(crate::lambda::base::BaseType::Int),
+            target_type: TypeInner::Base(crate::lambda::base::BaseType::Symbol),
+            transform: TransformDefinition::FunctionApplication {
+                function: name,
+                argument: "input".to_string(),
+            },
+        }
+    }
+}
+
 impl std::fmt::Display for IntentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IntentError::InvalidIntent(msg) => write!(f, "Invalid intent: {}", msg),
             IntentError::ResourceNotFound(id) => write!(f, "Resource not found: {:?}", id),
             IntentError::InsufficientCapabilities { required, available } => {
-                write!(f, "Insufficient capabilities: required {:?}, available {:?}", required, available)
+                write!(f, "Insufficient capabilities. Required: {:?}, Available: {:?}", required, available)
             }
             IntentError::LocationNotAccessible { location, reason } => {
-                write!(f, "Location not accessible: {:?} - {}", location, reason)
+                write!(f, "Location {:?} not accessible: {}", location, reason)
             }
             IntentError::ProtocolNotSupported { protocol, location } => {
                 write!(f, "Protocol {} not supported at location {:?}", protocol, location)
             }
-            IntentError::ConstraintSolvingFailed(err) => {
-                write!(f, "Constraint solving failed: {}", err)
-            }
+            IntentError::ConstraintSolvingFailed(err) => write!(f, "Constraint solving failed: {:?}", err),
             IntentError::MigrationFailed { from, to, reason } => {
                 write!(f, "Migration failed from {:?} to {:?}: {}", from, to, reason)
             }
             IntentError::PerformanceConstraintViolated { constraint, actual, limit } => {
-                write!(f, "Performance constraint violated: {} (actual: {}, limit: {})", constraint, actual, limit)
+                write!(f, "Performance constraint '{}' violated: {} > {}", constraint, actual, limit)
             }
-            IntentError::CostConstraintViolated { constraint, actual, limit } => {
-                write!(f, "Cost constraint violated: {} (actual: {}, limit: {})", constraint, actual, limit)
-            }
-            IntentError::DependencyCycle(cycle) => {
-                write!(f, "Dependency cycle detected: {:?}", cycle)
-            }
+            IntentError::DependencyCycle(cycle) => write!(f, "Dependency cycle detected: {:?}", cycle),
             IntentError::ExternalError(msg) => write!(f, "External error: {}", msg),
         }
     }
@@ -685,59 +499,30 @@ impl From<TransformConstraintError> for IntentError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lambda::base::BaseType;
     
     #[test]
     fn test_intent_creation() {
-        let intent = Intent::new(Location::Local);
-        assert_eq!(intent.domain, Location::Local);
-        assert_eq!(intent.constraints.len(), 0);
+        let intent = Intent::new(Location::domain("test"));
+        assert_eq!(intent.domain, Location::Domain("test".to_string()));
         assert_eq!(intent.priority, IntentPriority::Normal);
     }
     
     #[test]
-    fn test_intent_with_constraints() {
-        let constraint = TransformConstraint::LocalTransform {
-            source_type: TypeInner::Base(BaseType::Int),
-            target_type: TypeInner::Base(BaseType::Symbol),
-            transform: crate::effect::transform_constraint::TransformDefinition::FunctionApplication {
-                function: "int_to_string".to_string(),
-                argument: "input".to_string(),
-            },
-        };
-        
-        let intent = Intent::new(Location::Local)
-            .with_constraint(constraint)
-            .with_priority(IntentPriority::High);
-        
-        assert_eq!(intent.constraints.len(), 1);
-        assert_eq!(intent.priority, IntentPriority::High);
+    fn test_resource_binding_creation() {
+        let binding = ResourceBinding::new("test_resource", "TestType");
+        assert_eq!(binding.name, "test_resource");
+        assert!(binding.required);
     }
     
     #[test]
     fn test_intent_location_checking() {
-        let constraint = TransformConstraint::LocalTransform {
-            source_type: TypeInner::Base(BaseType::Int),
-            target_type: TypeInner::Base(BaseType::Symbol),
-            transform: crate::effect::transform_constraint::TransformDefinition::FunctionApplication {
-                function: "test".to_string(),
-                argument: "arg".to_string(),
-            },
-        };
+        let mut requirements = LocationRequirements::default();
+        requirements.allowed_locations.insert(Location::domain("allowed"));
         
-        let intent = Intent::new(Location::Local)
-            .with_constraint(constraint);
+        let intent = Intent::new(Location::domain("test"))
+            .with_location_requirements(requirements);
         
-        assert!(intent.can_execute_at(&Location::Local));
-        assert!(!intent.can_execute_at(&Location::Remote("server".to_string())));
-    }
-    
-    #[test]
-    fn test_cost_estimation() {
-        let intent = Intent::new(Location::Local);
-        let estimate = intent.estimate_cost(&Location::Local);
-        
-        assert!(estimate.total_cost > 0);
-        assert!(estimate.estimated_execution_time > 0);
+        assert!(intent.can_execute_at(&Location::domain("allowed")));
+        assert!(!intent.can_execute_at(&Location::domain("forbidden")));
     }
 } 

@@ -152,11 +152,12 @@ pub struct GenerationMetadata {
 }
 
 /// Almanac schema generator
+#[allow(dead_code)]
 pub struct AlmanacSchemaGenerator {
     /// Known contract layouts
     contract_layouts: BTreeMap<String, LayoutCommitment>,
     /// Schema optimization settings
-    optimization_settings: OptimizationSettings,
+    ________optimization_settings: OptimizationSettings,
 }
 
 /// Settings for schema optimization
@@ -177,7 +178,7 @@ impl AlmanacSchemaGenerator {
     pub fn new() -> Self {
         Self {
             contract_layouts: BTreeMap::new(),
-            optimization_settings: OptimizationSettings::default(),
+            ________optimization_settings: OptimizationSettings::default(),
         }
     }
     
@@ -185,7 +186,7 @@ impl AlmanacSchemaGenerator {
     pub fn with_optimization_settings(settings: OptimizationSettings) -> Self {
         Self {
             contract_layouts: BTreeMap::new(),
-            optimization_settings: settings,
+            ________optimization_settings: settings,
         }
     }
     
@@ -228,7 +229,7 @@ impl AlmanacSchemaGenerator {
         &self,
         contract_id: &str,
         queries: &[StateQueryRequirement],
-        analysis: &StateAnalysisResult,
+        _analysis: &StateAnalysisResult,
     ) -> AlmanacSchema {
         let layout_commitment = self.contract_layouts
             .get(contract_id)
@@ -440,7 +441,7 @@ mod tests {
         let mut queries_by_contract = BTreeMap::new();
         queries_by_contract.insert("usdc".to_string(), queries.clone());
         
-        let analysis = StateAnalysisResult {
+        _analysis = StateAnalysisResult {
             required_queries: queries,
             queries_by_contract,
             queries_by_domain: BTreeMap::new(),
@@ -487,7 +488,7 @@ mod tests {
     }
     
     #[test]
-    fn test_optimization_settings() {
+    fn test_______optimization_settings() {
         let settings = OptimizationSettings {
             min_frequency_threshold: 50,
             max_storage_overhead: 0.1,

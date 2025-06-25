@@ -1,3 +1,4 @@
+
 //! Mock implementations for TokenTransfer effect with all strategies
 
 use super::transfer::{TokenTransfer, TransferReceipt, TransferError, TransferLog, TransferBalances};
@@ -124,7 +125,7 @@ impl TokenTransferMockHandler {
         let execution = TransferExecution {
             transfer: transfer.clone(),
             result: result.clone(),
-            timestamp: std::time::std::time::UNIX_EPOCH
+            timestamp: std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -145,7 +146,7 @@ impl TokenTransferMockHandler {
             gas_used: transfer.estimated_gas_cost(),
             gas_price: transfer.gas_price.unwrap_or(20_000_000_000),
             confirmations: transfer.confirmations.unwrap_or(12),
-            timestamp: std::time::std::time::UNIX_EPOCH
+            timestamp: std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -330,7 +331,7 @@ impl TokenTransferMockHandler {
             gas_used: transfer.estimated_gas_cost(),
             gas_price: transfer.gas_price.unwrap_or(min_gas_price),
             confirmations: confirmations_required,
-            timestamp: std::time::std::time::UNIX_EPOCH
+            timestamp: std::time::UNIX_EPOCH
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),

@@ -168,10 +168,10 @@ impl Location {
         
         match (self, other) {
             (Location::Local, Location::Remote(addr)) => {
-                Some(vec![Location::Local, Location::Remote(addr.clone())])
+                Some(vec![Location::Local, Location::Remote(*addr)])
             }
             (Location::Remote(addr), Location::Local) => {
-                Some(vec![Location::Remote(addr.clone()), Location::Local])
+                Some(vec![Location::Remote(*addr), Location::Local])
             }
             (Location::Local, Location::Domain(domain)) => {
                 Some(vec![Location::Local, Location::Domain(domain.clone())])
@@ -182,9 +182,9 @@ impl Location {
             (Location::Remote(addr1), Location::Remote(addr2)) => {
                 // Route via local (simplified routing)
                 Some(vec![
-                    Location::Remote(addr1.clone()),
+                    Location::Remote(*addr1),
                     Location::Local,
-                    Location::Remote(addr2.clone())
+                    Location::Remote(*addr2)
                 ])
             }
             (Location::Domain(d1), Location::Domain(d2)) => {
@@ -392,14 +392,19 @@ pub struct LocationContext {
     
     /// Deterministic system for generating fresh variables
     deterministic: DeterministicSystem,
+    
+    /// Current location
+    _current_location: Location,
 }
 
 impl LocationContext {
+    /// Create a new location context
     pub fn new() -> Self {
         LocationContext {
             bindings: BTreeMap::new(),
             constraints: Vec::new(),
             deterministic: DeterministicSystem::new(),
+            _current_location: Location::Local,
         }
     }
     
@@ -478,6 +483,12 @@ impl LocationContext {
         }
         
         Ok(())
+    }
+}
+
+impl Default for LocationContext {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

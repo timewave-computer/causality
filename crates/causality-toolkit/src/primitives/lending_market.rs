@@ -1,7 +1,6 @@
 //! Lending Market Primitive
 //!
 //! A comprehensive lending and borrowing implementation with
-//! interest rate models, liquidation mechanisms, and cross-chain collateral.
 
 use super::*;
 

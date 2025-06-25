@@ -1,7 +1,6 @@
 //! Fixed-point arithmetic for deterministic decimal calculations
 //!
 //! This module provides a FixedPoint type that enables precise decimal arithmetic
-//! without the non-determinism of floating point operations.
 
 use serde::{Serialize, Deserialize};
 use ssz::{Encode, Decode, DecodeError};
@@ -316,7 +315,7 @@ mod tests {
     #[test]
     fn test_percentage() {
         let value = FixedPoint::from_int(100);
-        let fifty_percent = FixedPoint::from_percentage(50);
+        let fifty_percent = FixedPoint::from_int(50); // 50 as percentage, not 0.5
         
         assert_eq!(value.percentage(fifty_percent), FixedPoint::from_int(50));
     }

@@ -1,3 +1,4 @@
+
 // ------------ ALMANAC SCHEMA GENERATION ------------ 
 // Purpose: Automatic Almanac schema generation from state query analysis
 
@@ -237,7 +238,7 @@ impl AlmanacSchemaGenerator {
             query_patterns,
             metadata: SchemaMetadata {
                 version: "1.0.0".to_string(),
-                generated_at: std::time::std::time::UNIX_EPOCH
+                generated_at: std::time::UNIX_EPOCH
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_secs(),
@@ -350,6 +351,8 @@ impl AlmanacSchemaGenerator {
                     .unwrap_or(FieldType::Bytes)
             }
             QueryType::Custom(_) => FieldType::Custom("unknown".to_string()),
+            QueryType::ContractState => FieldType::Bytes,
+            QueryType::EventLog => FieldType::String,
         }
     }
     
@@ -359,6 +362,8 @@ impl AlmanacSchemaGenerator {
             QueryType::TokenBalance | QueryType::TokenAllowance => IndexingStrategy::Mapping,
             QueryType::StorageSlot(_) => IndexingStrategy::Direct,
             QueryType::Custom(_) => IndexingStrategy::Custom("unknown".to_string()),
+            QueryType::ContractState => IndexingStrategy::Direct,
+            QueryType::EventLog => IndexingStrategy::EventBased,
         }
     }
     

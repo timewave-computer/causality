@@ -1,41 +1,23 @@
-//! Error Handling and Observability
-//!
-//! This module provides comprehensive error handling that integrates with real Almanac
-//! error types and includes proper error propagation from real APIs to OCaml layer.
-
-use thiserror::Error;
-use serde::{Deserialize, Serialize};
+/// Enhanced error handling for Causality compiler operations
+/// 
+/// This module provides comprehensive error handling and recovery mechanisms
+/// for the Causality compiler, including storage errors, network failures,
+/// and validation issues.
 use std::fmt;
-use std::time::Duration;
+use std::error::Error as StdError;
+use serde::{Deserialize, Serialize};
 
-/// Main error type for the causality compiler with real API integration
-#[derive(Error, Debug, Clone, Serialize, Deserialize)]
+/// Comprehensive error type for Causality compiler operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CausalityError {
-    /// Storage backend errors
-    #[error("Storage error: {message}")]
+    /// Storage-related errors
     Storage {
         message: String,
-        error_code: String,
+        details: Option<String>,
+        recoverable: bool,
     },
     
-    /// Event storage specific errors
-    #[error("Event storage error: {message}")]
-    EventStorage {
-        message: String,
-        event_type: Option<String>,
-        contract_id: Option<String>,
-    },
-    
-    /// Valence state persistence errors
-    #[error("Valence state error: {message}")]
-    ValenceState {
-        message: String,
-        account_id: Option<String>,
-        operation: Option<String>,
-    },
-    
-    /// Network and connectivity errors
-    #[error("Network error: {message}")]
+    /// Network-related errors
     Network {
         message: String,
         endpoint: Option<String>,
@@ -43,40 +25,22 @@ pub enum CausalityError {
         retry_count: u32,
     },
     
-    /// Database connection and query errors
-    #[error("Database error: {message}")]
-    Database {
+    /// Compilation errors
+    Compilation {
         message: String,
-        query: Option<String>,
-        connection_info: Option<String>,
-    },
-    
-    /// Configuration and setup errors
-    #[error("Configuration error: {message}")]
-    Configuration {
-        message: String,
-        config_key: Option<String>,
-        expected_type: Option<String>,
-    },
-    
-    /// Timeout errors for async operations
-    #[error("Timeout error: {message}")]
-    Timeout {
-        message: String,
-        operation: String,
-        timeout_duration_ms: u64,
+        line: Option<usize>,
+        column: Option<usize>,
+        source_context: Option<String>,
     },
     
     /// Serialization/deserialization errors
-    #[error("Serialization error: {message}")]
     Serialization {
         message: String,
+        format: String,
         data_type: Option<String>,
-        format: Option<String>,
     },
     
     /// Validation errors
-    #[error("Validation error: {message}")]
     Validation {
         message: String,
         field: Option<String>,
@@ -84,15 +48,143 @@ pub enum CausalityError {
         actual: Option<String>,
     },
     
-    /// Integration errors with external systems
-    #[error("Integration error: {message}")]
-    Integration {
+    /// Configuration errors
+    Configuration {
         message: String,
-        system: String,
-        operation: Option<String>,
-        details: Option<String>,
+        config_key: Option<String>,
+        config_file: Option<String>,
+    },
+    
+    /// Resource exhaustion errors
+    ResourceExhaustion {
+        message: String,
+        resource_type: String,
+        current_usage: Option<u64>,
+        limit: Option<u64>,
+    },
+    
+    /// Permission/authorization errors
+    Permission {
+        message: String,
+        required_permission: Option<String>,
+        current_role: Option<String>,
+    },
+    
+    /// Timeout errors
+    Timeout {
+        message: String,
+        operation: String,
+        duration_ms: u64,
+        timeout_ms: u64,
+    },
+    
+    /// Generic errors with structured context
+    Generic {
+        message: String,
+        error_code: Option<String>,
+        context: std::collections::HashMap<String, String>,
     },
 }
+
+impl fmt::Display for CausalityError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CausalityError::Storage { message, details, recoverable } => {
+                write!(f, "Storage error: {}", message)?;
+                if let Some(details) = details {
+                    write!(f, " ({})", details)?;
+                }
+                if *recoverable {
+                    write!(f, " [recoverable]")?;
+                }
+                Ok(())
+            }
+            CausalityError::Network { message, endpoint, status_code, retry_count } => {
+                write!(f, "Network error: {}", message)?;
+                if let Some(endpoint) = endpoint {
+                    write!(f, " (endpoint: {})", endpoint)?;
+                }
+                if let Some(code) = status_code {
+                    write!(f, " (status: {})", code)?;
+                }
+                if *retry_count > 0 {
+                    write!(f, " (retries: {})", retry_count)?;
+                }
+                Ok(())
+            }
+            CausalityError::Compilation { message, line, column, source_context } => {
+                write!(f, "Compilation error: {}", message)?;
+                if let (Some(line), Some(column)) = (line, column) {
+                    write!(f, " at line {}, column {}", line, column)?;
+                }
+                if let Some(context) = source_context {
+                    write!(f, "\nSource context: {}", context)?;
+                }
+                Ok(())
+            }
+            CausalityError::Serialization { message, format, data_type } => {
+                write!(f, "Serialization error ({}): {}", format, message)?;
+                if let Some(data_type) = data_type {
+                    write!(f, " for type {}", data_type)?;
+                }
+                Ok(())
+            }
+            CausalityError::Validation { message, field, expected, actual } => {
+                write!(f, "Validation error: {}", message)?;
+                if let Some(field) = field {
+                    write!(f, " (field: {})", field)?;
+                }
+                if let (Some(expected), Some(actual)) = (expected, actual) {
+                    write!(f, " (expected: {}, actual: {})", expected, actual)?;
+                }
+                Ok(())
+            }
+            CausalityError::Configuration { message, config_key, config_file } => {
+                write!(f, "Configuration error: {}", message)?;
+                if let Some(key) = config_key {
+                    write!(f, " (key: {})", key)?;
+                }
+                if let Some(file) = config_file {
+                    write!(f, " (file: {})", file)?;
+                }
+                Ok(())
+            }
+            CausalityError::ResourceExhaustion { message, resource_type, current_usage, limit } => {
+                write!(f, "Resource exhaustion ({}): {}", resource_type, message)?;
+                if let (Some(usage), Some(limit)) = (current_usage, limit) {
+                    write!(f, " ({}/{} used)", usage, limit)?;
+                }
+                Ok(())
+            }
+            CausalityError::Permission { message, required_permission, current_role } => {
+                write!(f, "Permission error: {}", message)?;
+                if let Some(permission) = required_permission {
+                    write!(f, " (required: {})", permission)?;
+                }
+                if let Some(role) = current_role {
+                    write!(f, " (current role: {})", role)?;
+                }
+                Ok(())
+            }
+            CausalityError::Timeout { message, operation, duration_ms, timeout_ms } => {
+                write!(f, "Timeout error in {}: {} ({}ms > {}ms)", 
+                       operation, message, duration_ms, timeout_ms)
+            }
+            CausalityError::Generic { message, error_code, context } => {
+                write!(f, "Error: {}", message)?;
+                if let Some(code) = error_code {
+                    write!(f, " (code: {})", code)?;
+                }
+                if !context.is_empty() {
+                    write!(f, " (context: {:?})", context)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl StdError for CausalityError {}
 
 /// Error context for better debugging and tracing
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -181,62 +273,13 @@ impl fmt::Display for ContextualError {
 
 impl std::error::Error for ContextualError {}
 
-/// Conversion functions for integrating with real Almanac error types
-#[cfg(feature = "almanac")]
-impl From<indexer_core::Error> for CausalityError {
-    fn from(error: indexer_core::Error) -> Self {
-        match error {
-            indexer_core::Error::Storage(msg) => CausalityError::Storage {
-                message: msg,
-                error_code: "ALMANAC_STORAGE_ERROR".to_string(),
-            },
-            indexer_core::Error::Network(msg) => CausalityError::Network {
-                message: msg,
-                endpoint: None,
-                status_code: None,
-                retry_count: 0,
-            },
-            indexer_core::Error::Serialization(msg) => CausalityError::Serialization {
-                message: msg,
-                data_type: None,
-                format: Some("almanac".to_string()),
-            },
-            indexer_core::Error::Validation(msg) => CausalityError::Validation {
-                message: msg,
-                field: None,
-                expected: None,
-                actual: None,
-            },
-            _ => CausalityError::Integration {
-                message: error.to_string(),
-                system: "almanac".to_string(),
-                operation: None,
-                details: None,
-            },
-        }
-    }
-}
-
-/// Mock Almanac error conversion for when almanac feature is not enabled
-#[cfg(not(feature = "almanac"))]
-impl From<String> for CausalityError {
-    fn from(error: String) -> Self {
-        CausalityError::Integration {
-            message: error,
-            system: "mock_almanac".to_string(),
-            operation: None,
-            details: None,
-        }
-    }
-}
-
 /// Conversion from common error types
 impl From<serde_json::Error> for CausalityError {
     fn from(error: serde_json::Error) -> Self {
         CausalityError::Serialization {
             message: error.to_string(),
+            format: "json".to_string(),
             data_type: None,
-            format: Some("json".to_string()),
         }
     }
 }
@@ -257,7 +300,8 @@ impl From<tokio::time::error::Elapsed> for CausalityError {
         CausalityError::Timeout {
             message: error.to_string(),
             operation: "unknown".to_string(),
-            timeout_duration_ms: 0,
+            duration_ms: 0,
+            timeout_ms: 0,
         }
     }
 }
@@ -370,34 +414,25 @@ impl CausalityError {
     pub fn error_type(&self) -> &'static str {
         match self {
             CausalityError::Storage { .. } => "storage",
-            CausalityError::EventStorage { .. } => "event_storage",
-            CausalityError::ValenceState { .. } => "valence_state",
             CausalityError::Network { .. } => "network",
-            CausalityError::Database { .. } => "database",
-            CausalityError::Configuration { .. } => "configuration",
-            CausalityError::Timeout { .. } => "timeout",
+            CausalityError::Compilation { .. } => "compilation",
             CausalityError::Serialization { .. } => "serialization",
             CausalityError::Validation { .. } => "validation",
-            CausalityError::Integration { .. } => "integration",
+            CausalityError::Configuration { .. } => "configuration",
+            CausalityError::ResourceExhaustion { .. } => "resource_exhaustion",
+            CausalityError::Permission { .. } => "permission",
+            CausalityError::Timeout { .. } => "timeout",
+            CausalityError::Generic { .. } => "generic",
         }
     }
     
     pub fn is_retryable(&self) -> bool {
-        match self {
-            CausalityError::Network { .. } => true,
-            CausalityError::Timeout { .. } => true,
-            CausalityError::Database { .. } => true,
-            _ => false,
-        }
+        matches!(self, CausalityError::Network { .. } | CausalityError::Timeout { .. } | CausalityError::Storage { .. })
     }
     
-    pub fn should_alert(&self) -> bool {
-        match self {
-            CausalityError::Storage { .. } => true,
-            CausalityError::Database { .. } => true,
-            CausalityError::Integration { .. } => true,
-            _ => false,
-        }
+    /// Check if error should trigger circuit breaker
+    pub fn should_break_circuit(&self) -> bool {
+        matches!(self, CausalityError::Storage { .. } | CausalityError::Network { .. } | CausalityError::Configuration { .. } | CausalityError::ResourceExhaustion { .. } | CausalityError::Permission { .. })
     }
 }
 
@@ -462,11 +497,10 @@ where
         }
     }
     
-    let final_error = last_error.unwrap_or_else(|| CausalityError::Integration {
+    let final_error = last_error.unwrap_or_else(|| CausalityError::Generic {
         message: "Retry operation failed without error".to_string(),
-        system: "retry_handler".to_string(),
-        operation: Some(operation_name.to_string()),
-        details: None,
+        error_code: None,
+        context: std::collections::HashMap::new(),
     });
     
     Err(error_handler.handle_error(final_error, operation_name))
@@ -516,18 +550,18 @@ impl HealthStatus {
 /// Health checker for external dependencies
 pub struct HealthChecker {
     component: String,
-    timeout: Duration,
+    timeout: chrono::Duration,
 }
 
 impl HealthChecker {
     pub fn new(component: &str) -> Self {
         Self {
             component: component.to_string(),
-            timeout: Duration::from_secs(5),
+            timeout: chrono::Duration::try_seconds(5).unwrap(),
         }
     }
     
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+    pub fn with_timeout(mut self, timeout: chrono::Duration) -> Self {
         self.timeout = timeout;
         self
     }
@@ -536,7 +570,7 @@ impl HealthChecker {
     pub async fn check_http_endpoint(&self, name: &str, url: &str) -> DependencyHealth {
         let start_time = std::time::Instant::now();
         
-        match tokio::time::timeout(self.timeout, reqwest::get(url)).await {
+        match tokio::time::timeout(std::time::Duration::from_millis(self.timeout.num_milliseconds() as u64), reqwest::get(url)).await {
             Ok(Ok(response)) => {
                 let response_time = start_time.elapsed().as_millis() as u64;
                 DependencyHealth {
@@ -559,7 +593,7 @@ impl HealthChecker {
             Err(_) => DependencyHealth {
                 name: name.to_string(),
                 is_healthy: false,
-                response_time_ms: Some(self.timeout.as_millis() as u64),
+                response_time_ms: Some(self.timeout.num_milliseconds() as u64),
                 error: Some("Timeout".to_string()),
             },
         }
@@ -593,7 +627,8 @@ mod tests {
     fn test_error_creation() {
         let error = CausalityError::Storage {
             message: "Test storage error".to_string(),
-            error_code: "TEST_ERROR".to_string(),
+            details: None,
+            recoverable: false,
         };
         
         assert_eq!(error.error_type(), "storage");

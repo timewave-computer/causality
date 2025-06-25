@@ -15,7 +15,7 @@ use crate::lambda::base::{Location, SessionType};
 pub type FieldName = String;
 
 /// Record schema definition for capability-based record operations
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct RecordSchema {
     /// Field name to type mapping
     pub fields: BTreeMap<FieldName, String>, // Type names as strings for simplicity
@@ -26,7 +26,7 @@ pub struct RecordSchema {
 }
 
 /// Location constraint for field access
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum LocationConstraint {
     /// Field must be accessed locally
     LocalOnly,
@@ -124,7 +124,7 @@ impl RecordSchema {
 /// Capability types for record operations
 /// These provide fine-grained access control for field operations that
 /// compile down to Layer 1 tensor operations
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RecordCapability {
     /// Read access to a specific field
     ReadField(FieldName),
@@ -294,7 +294,7 @@ impl RecordCapability {
 }
 
 /// Structured capability levels for common access patterns
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub enum CapabilityLevel {
     /// Read-only access
     Read,
@@ -312,7 +312,7 @@ pub enum CapabilityLevel {
 }
 
 /// Enhanced capability with structured levels and record operations
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Capability {
     /// Capability name
     pub name: String,

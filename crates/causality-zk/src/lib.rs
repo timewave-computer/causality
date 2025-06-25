@@ -12,12 +12,15 @@ pub mod cross_domain;
 pub mod proof_generation;
 pub mod verification;
 pub mod circuit;
-pub mod storage_proof;
+// pub mod storage_proof; // Disabled temporarily
 
 // Re-export core types
 pub use backends::{ZkBackend, BackendType};
 pub use error::{ZkError, CircuitError, ProofError, VerificationError};
 pub use cross_domain::{CrossDomainZkManager, DomainProof, CompositeProof, DomainPartition, DomainCoordinationResult};
+
+// Storage proof imports temporarily disabled - module under reconstruction
+// pub use storage_proof::{StorageProofGenerator, StorageProofConfig, ...};
 
 // Re-export key types from their respective modules
 pub use proof_generation::{ZkProofGenerator, ZkProof, ZkWitness};
@@ -26,17 +29,18 @@ pub use circuit::CircuitCompiler;
 pub use error::ProofResult;
 
 // Re-export storage proof types
-pub use storage_proof::{
-    StorageProofGenerator, StorageProofConfig, StorageCircuit, StorageZkProof,
-    StorageCircuitType, OptimizationLevel, EthereumKeyResolver, ContractAbi,
-    StorageVariable, StorageVariableType, StaticKeyPath, LayoutCommitment,
-    KeyDerivationStep, DerivationStepType, StorageProofFetcher, RpcClientConfig,
-    RawStorageProof, ValidatedStorageProof, ProofValidation, MerklePatriciaVerifier,
-    CoprocessorWitnessCreator, WitnessCreationConfig, CoprocessorWitness,
-    WitnessMetadata, WitnessType, WitnessVerificationData, VerificationConstraint,
-    ConstraintType, BatchStorageRequest, BatchStorageResult, BatchVerificationMetrics
-};
+// pub use storage_proof::{
+//     StorageProofGenerator, StorageProofConfig, StorageCircuit, StorageZkProof,
+//     StorageCircuitType, OptimizationLevel, EthereumKeyResolver, ContractAbi,
+//     StorageVariable, StorageVariableType, StaticKeyPath, LayoutCommitment,
+//     KeyDerivationStep, DerivationStepType, StorageProofFetcher, RpcClientConfig,
+//     RawStorageProof, ValidatedStorageProof, ProofValidation, MerklePatriciaVerifier,
+//     CoprocessorWitnessCreator, WitnessCreationConfig, CoprocessorWitness,
+//     WitnessMetadata, WitnessType, WitnessVerificationData, VerificationConstraint,
+//     ConstraintType, BatchStorageRequest, BatchStorageResult, BatchVerificationMetrics
+// };
 
+use causality_core::lambda::base::Value;
 use causality_core::machine::instruction::Instruction;
 use serde::{Serialize, Deserialize};
 use std::str;
@@ -81,28 +85,21 @@ pub struct ZkCircuit {
 }
 
 /// Instruction set for the VM that supports ZKP constraints
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// Updated to align with the new minimal 5-operation instruction set
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VMInstruction {
-    /// Move value between registers  
-    Move { from: u8, to: u8 },
-    /// Copy value to new register
-    Copy { from: u8, to: u8 },
-    /// Allocate new resource
-    Alloc { value_reg: u8, result_reg: u8 },
-    /// Consume resource
-    Consume { resource_reg: u8, result_reg: u8 },
-    /// Read field from value
-    ReadField { value_reg: u8, field: String, result_reg: u8 },
-    /// Update field in value
-    UpdateField { value_reg: u8, field: String, new_value_reg: u8, result_reg: u8 },
-    /// Apply function
-    Apply { func_reg: u8, arg_reg: u8, result_reg: u8 },
-    /// Conditional branch
-    BranchIf { condition_reg: u8, true_label: String, false_label: String },
-    /// Perform an effect
-    PerformEffect { effect_reg: u8, result_reg: u8 },
-    /// Load immediate value (for testing)
-    LoadImmediate(()),
+    /// Apply morphism (unified function application, effects, session operations)
+    Transform { morph_reg: u8, input_reg: u8, output_reg: u8 },
+    /// Allocate resource (unified data allocation, channel creation, function creation)
+    Alloc { type_reg: u8, init_reg: u8, output_reg: u8 },
+    /// Consume resource (unified deallocation, channel closing, function disposal)
+    Consume { resource_reg: u8, output_reg: u8 },
+    /// Sequential composition of morphisms
+    Compose { first_reg: u8, second_reg: u8, output_reg: u8 },
+    /// Parallel composition of resources (tensor product)
+    Tensor { left_reg: u8, right_reg: u8, output_reg: u8 },
+    /// Load immediate value (for testing and bootstrapping)
+    LoadImmediate(Value),
 }
 
 impl ZkCircuit {
@@ -150,8 +147,8 @@ mod tests {
     #[test]
     fn test_zk_circuit_creation() {
         let instructions = vec![
-            Instruction::Move { src: RegisterId(0), dst: RegisterId(1) },
-            Instruction::Apply { fn_reg: RegisterId(1), arg_reg: RegisterId(2), out_reg: RegisterId(3) },
+            Instruction::Transform { morph_reg: RegisterId(0), input_reg: RegisterId(1), output_reg: RegisterId(2) },
+            Instruction::Alloc { type_reg: RegisterId(1), init_reg: RegisterId(2), output_reg: RegisterId(3) },
         ];
         
         let public_inputs = vec![0];
@@ -244,10 +241,8 @@ mod zk_compilation_tests {
     fn compile_to_vm_instructions(_program: &str) -> Result<Vec<VMInstruction>, String> {
         // Simulate compilation to VM instructions
         Ok(vec![
-            VMInstruction::LoadImmediate(()),
-            VMInstruction::LoadImmediate(()),
-            VMInstruction::Add,
-            VMInstruction::Return,
+            VMInstruction::LoadImmediate(Value::Int(42)),
+            VMInstruction::LoadImmediate(Value::Int(84)),
         ])
     }
     
@@ -282,13 +277,5 @@ mod zk_compilation_tests {
     fn isolate_domain_effects(_combination: &BTreeMap<String, String>) -> Result<(), String> {
         // Simulate domain isolation
         Ok(())
-    }
-    
-    // Mock VM instruction type for testing
-    #[derive(Debug, Clone)]
-    enum VMInstruction {
-        LoadImmediate(()),
-        Add,
-        Return,
     }
 } 

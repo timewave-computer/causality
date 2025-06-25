@@ -19,7 +19,7 @@ use crate::{
     system::deterministic::DeterministicSystem,
 };
 use serde::{Serialize, Deserialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Linear session environment that tracks session channels as linear resources
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +38,15 @@ pub struct LinearSessionEnvironment {
     
     /// Resource manager for channel lifecycle
     pub resource_manager: ResourceManager,
+    
+    /// Type constraints for session channels
+    pub type_constraints: Vec<TypeInner>,
+    
+    /// Next channel ID for allocation
+    pub next_channel_id: usize,
+    
+    /// Closed channels
+    pub closed_channels: BTreeSet<String>,
 }
 
 /// Information about a linear variable in the session environment
@@ -106,6 +115,9 @@ impl LinearSessionEnvironment {
             channel_locations: BTreeMap::new(),
             linear_variables: BTreeMap::new(),
             resource_manager: ResourceManager::new(),
+            type_constraints: Vec::new(),
+            next_channel_id: 0,
+            closed_channels: BTreeSet::new(),
         }
     }
     
@@ -507,6 +519,12 @@ impl LinearSessionEnvironment {
         }
         
         Ok(())
+    }
+}
+
+impl Default for LinearSessionEnvironment {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

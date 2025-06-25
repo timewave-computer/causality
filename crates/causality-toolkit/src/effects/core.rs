@@ -1,3 +1,4 @@
+
 //! Core algebraic effect traits and types for automatic mock and test generation
 
 use causality_core::system::content_addressing::ContentAddressable;
@@ -20,7 +21,7 @@ pub enum EffectCategory {
 }
 
 /// Common failure modes for effects
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum FailureMode {
     // Asset/Token failures
     InsufficientBalance,

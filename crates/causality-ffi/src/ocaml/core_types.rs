@@ -1,18 +1,19 @@
-//! Core type definitions for OCaml FFI bridge
+//! Core FFI types for OCaml interop
 //!
-//! This module provides OCaml-compatible type definitions and conversion functions
-//! for core Causality types.
+//! This module defines the fundamental types used for FFI communication
+//! between Rust and OCaml, ensuring safe and efficient data exchange.
 
 use ocaml::{FromValue, ToValue};
 #[cfg(feature = "ocaml-ffi")]
 use ocaml_derive::{FromValue as DeriveFromValue, ToValue as DeriveToValue};
 
 use causality_core::{
-    lambda::base::Value as CoreValue,
+    Value as CoreValue,
     system::content_addressing::EntityId,
-    primitive::ids::ResourceId as CoreResourceId,
-    effect::EffectId as CoreEffectId,
 };
+
+use crate::ocaml::runtime::with_runtime_state;
+use crate::ocaml::error_handling::result_to_ocaml;
 
 /// OCaml-compatible wrapper for ResourceId
 #[cfg(feature = "ocaml-ffi")]
@@ -28,40 +29,7 @@ impl ResourceId {
         Self { id }
     }
     
-    pub fn from_core(core_id: &CoreResourceId) -> Self {
-        Self {
-            id: core_id.to_string(),
-        }
-    }
     
-    pub fn to_core(&self) -> CoreResourceId {
-        CoreResourceId::new(self.id.clone())
-    }
-}
-
-/// OCaml-compatible wrapper for EffectId
-#[cfg(feature = "ocaml-ffi")]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, DeriveFromValue, DeriveToValue)]
-pub struct EffectId {
-    /// Internal effect ID (as a string for OCaml compatibility)
-    pub id: String,
-}
-
-#[cfg(feature = "ocaml-ffi")]
-impl EffectId {
-    pub fn new(id: String) -> Self {
-        Self { id }
-    }
-    
-    pub fn from_core(core_id: &CoreEffectId) -> Self {
-        Self {
-            id: core_id.to_string(),
-        }
-    }
-    
-    pub fn to_core(&self) -> CoreEffectId {
-        CoreEffectId::new(self.id.clone())
-    }
 }
 
 /// OCaml-compatible wrapper for ExprId (expression identifier)
@@ -223,25 +191,6 @@ pub fn resource_id_to_string(res_id: ResourceId) -> String {
 #[cfg(feature = "ocaml-ffi")]
 #[ocaml::func]
 pub fn resource_id_equal(a: ResourceId, b: ResourceId) -> bool {
-    a == b
-}
-
-/// EffectId operations
-#[cfg(feature = "ocaml-ffi")]
-#[ocaml::func]
-pub fn effect_id_new(id: String) -> EffectId {
-    EffectId::new(id)
-}
-
-#[cfg(feature = "ocaml-ffi")]
-#[ocaml::func]
-pub fn effect_id_to_string(effect_id: EffectId) -> String {
-    effect_id.id
-}
-
-#[cfg(feature = "ocaml-ffi")]
-#[ocaml::func]
-pub fn effect_id_equal(a: EffectId, b: EffectId) -> bool {
     a == b
 }
 

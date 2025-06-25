@@ -558,28 +558,28 @@ impl LispCompiler {
         let type_reg = self.context.alloc_register();
         let init_reg = self.context.alloc_register();
         
-        let mut instructions = vec![];
-        
-        // Allocate type information for the session protocol
-        instructions.push(Instruction::Alloc { 
-            type_reg: self.context.alloc_register(),
-            init_reg: self.context.alloc_register(),
-            output_reg: type_reg 
-        });
-        
-        // Allocate initial protocol state
-        instructions.push(Instruction::Alloc { 
-            type_reg: self.context.alloc_register(),
-            init_reg: self.context.alloc_register(),
-            output_reg: init_reg 
-        });
-        
-        // Create the session declaration resource
-        instructions.push(Instruction::Alloc { 
-            type_reg,
-            init_reg,
-            output_reg: result_reg 
-        });
+        let instructions = vec![
+            // Allocate type information for the session protocol
+            Instruction::Alloc { 
+                type_reg: self.context.alloc_register(),
+                init_reg: self.context.alloc_register(),
+                output_reg: type_reg 
+            },
+            
+            // Allocate initial protocol state
+            Instruction::Alloc { 
+                type_reg: self.context.alloc_register(),
+                init_reg: self.context.alloc_register(),
+                output_reg: init_reg 
+            },
+            
+            // Create the session declaration resource
+            Instruction::Alloc { 
+                type_reg,
+                init_reg,
+                output_reg: result_reg 
+            }
+        ];
         
         Ok((instructions, result_reg))
     }

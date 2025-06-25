@@ -30,6 +30,7 @@ use crate::state_analysis::QueryType;
 
 /// Runtime integration manager for Almanac queries using real storage
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct AlmanacRuntime {
     /// Real Almanac storage backend
     #[cfg(feature = "almanac")]
@@ -86,7 +87,7 @@ impl AlmanacRuntime {
                 config: config.clone(),
                 query_cache: QueryCache::new(CacheConfig {
                     max_entries: 1000,
-                    default_ttl_seconds: config.cache_ttl_seconds,
+                    _default_ttl_seconds: config.cache_ttl_seconds,
                 }),
             })
         }
@@ -104,7 +105,7 @@ impl AlmanacRuntime {
                 config: config.clone(),
                 query_cache: QueryCache::new(CacheConfig {
                     max_entries: 1000,
-                    default_ttl_seconds: config.cache_ttl_seconds,
+                    _default_ttl_seconds: config.cache_ttl_seconds,
                 }),
             })
         }
@@ -250,7 +251,7 @@ impl AlmanacRuntime {
     }
     
     /// Store a Valence account using real Almanac storage
-    pub async fn store_valence_account(&self, account_info: ValenceAccountInfo, libraries: Vec<ValenceAccountLibrary>) -> AlmanacResult<()> {
+    pub async fn store_valence_account(&self, account_info: ValenceAccountInfo, _libraries: Vec<ValenceAccountLibrary>) -> AlmanacResult<()> {
         #[cfg(feature = "almanac")]
         {
             self.storage.store_valence_account_instantiation(account_info, libraries).await
@@ -342,7 +343,7 @@ impl AlmanacRuntime {
                       self.get_schema(&query.primitive.contract_id)
                           .map(|s| s.domain.clone())
                           .unwrap_or_else(|| "ethereum".to_string()));
-            grouped_queries.entry(key).or_insert_with(Vec::new).push(query);
+            grouped_queries.entry(key).or_default().push(query);
         }
         
         // Create execution stages
@@ -408,7 +409,7 @@ impl AlmanacRuntime {
         
         for query in queries {
             let commitment = query.layout_commitment.commitment_hash.clone();
-            commitment_groups.entry(commitment).or_insert_with(Vec::new).push(query);
+            commitment_groups.entry(commitment).or_default().push(query);
         }
         
         // Check consistency within each commitment group
@@ -507,7 +508,7 @@ struct CachedResult {
 #[derive(Debug, Clone)]
 struct CacheConfig {
     max_entries: usize,
-    default_ttl_seconds: u64,
+    _default_ttl_seconds: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -693,6 +694,12 @@ pub struct SubscriptionHandle {
     pub id: String,
 }
 
+impl Default for SubscriptionHandle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SubscriptionHandle {
     pub fn new() -> Self {
         Self {
@@ -705,9 +712,13 @@ impl SubscriptionHandle {
 struct SubscriptionConfig {
     contract_id: String,
     storage_slots: Vec<String>,
+    #[allow(dead_code)]
     callback: SubscriptionCallback,
+    #[allow(dead_code)]
     filter: Option<SubscriptionFilter>,
+    #[allow(dead_code)]
     batch_size: usize,
+    #[allow(dead_code)]
     max_frequency_hz: f64,
 }
 
@@ -720,6 +731,12 @@ pub struct QueryPlan {
     pub estimated_duration_ms: u64,
     /// Optimization metadata
     pub optimization_metadata: OptimizationMetadata,
+}
+
+impl Default for QueryPlan {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueryPlan {
@@ -793,6 +810,12 @@ pub struct ConsistencyReport {
     pub timing_check: Option<TimingConsistencyCheck>,
     /// Overall consistency status
     pub overall_status: ConsistencyStatus,
+}
+
+impl Default for ConsistencyReport {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConsistencyReport {
@@ -874,6 +897,12 @@ pub trait MockSchemaRegistry: Send + Sync + std::fmt::Debug {
 pub struct MockStorageBackendImpl;
 
 #[cfg(not(feature = "almanac"))]
+impl Default for MockStorageBackendImpl {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockStorageBackendImpl {
     pub fn new() -> Self {
         Self
@@ -892,6 +921,12 @@ impl MockStorageBackend for MockStorageBackendImpl {
 pub struct MockSchemaRegistryImpl;
 
 #[cfg(not(feature = "almanac"))]
+impl Default for MockSchemaRegistryImpl {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockSchemaRegistryImpl {
     pub fn new() -> Self {
         Self

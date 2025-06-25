@@ -1,365 +1,126 @@
-# End-to-End Testing Developer Guide
+# Causality E2E Tests
 
-This guide covers how to compile, deploy, and run the end-to-end tests for the Causality framework.
+This directory contains end-to-end tests for the Causality framework, organized into focused test suites with individual documentation.
 
-## Overview
+## Test Organization
 
-The e2e directory contains comprehensive integration tests that verify the complete workflow of the Causality framework, including:
+Each e2e test suite is now organized in its own subfolder with a dedicated README explaining what is tested and how to run it:
 
-- **Bridge E2E Test**: Tests cross-domain token transfers using the TEL (Temporal Effect Logic) system
-- **Compilation Pipeline**: Tests the TEG (Temporal Effect Graph) compilation process
-- **Runtime Integration**: Tests the Causality runtime with state management
-- **Cross-Domain Operations**: Tests TypedDomain interactions and ProcessDataflowBlock orchestration
+### 🧪 Test Suites
 
-## Prerequisites
+| Test Suite | Location | Description | Tests |
+|------------|----------|-------------|-------|
+| **Type System Consistency** | [`type_system_consistency/`](type_system_consistency/) | Cross-layer type system verification and consistency | 20 tests |
+| **Core Integration** | [`core_integration/`](core_integration/) | Integration between all core Causality components | 6 tests |
+| **Simulation ZK Integration** | [`simulation_zk_integration/`](simulation_zk_integration/) | Simulation engine with zero-knowledge proof integration | 3 tests |
+| **Comprehensive Compilation** | [`comprehensive_compilation_workflow/`](comprehensive_compilation_workflow/) | Complete compilation pipeline from Lisp to machine code | 3 tests |
+| **Simple Simulation** | [`simple_simulation/`](simple_simulation/) | Basic simulation engine functionality | 3 tests |
+| **OCaml Integration** | [`ocaml_harness/`](ocaml_harness/) | Cross-language OCaml ↔ Rust integration with DeFi scenarios | 2 executables |
 
-### Nix Environment (Recommended)
+**Total: 35 tests across 5 test suites + OCaml integration harness**
 
-This project uses Nix for reproducible builds. Ensure you have:
+## Quick Start
 
-1. **Nix with flakes enabled**:
-   ```bash
-   # Install Nix (if not already installed)
-   curl -L https://nixos.org/nix/install | sh
-   
-   # Enable flakes (add to ~/.config/nix/nix.conf)
-   experimental-features = nix-command flakes
-   ```
-
-2. **Enter the development shell**:
-   ```bash
-   # From the project root
-   nix develop
-   ```
-
-### Manual Setup (Alternative)
-
-If not using Nix, ensure you have:
-
-- **Rust toolchain** (stable, with clippy and rust-analyzer)
-- **OCaml 5.1+** with dune, findlib, and required packages
-- **Build tools**: cmake, pkg-config
-- **System libraries**: openssl, libiconv (macOS)
-
-## Project Structure
-
-```
-e2e/
-├── Cargo.toml              # E2E test dependencies and configuration
-├── README.md               # This guide
-└── tests/
-    └── bridge_e2e_test.rs   # Main bridge integration test
-```
-
-## Compilation
-
-### Using Nix (Recommended)
-
+### Run All E2E Tests
 ```bash
-# Enter the Nix development shell
-nix develop
-
-# Build the e2e tests
-cd e2e
-cargo build
-
-# Or build everything from the project root
-cargo build --package causality-e2e-tests
+cargo test --test comprehensive_compilation_workflow_e2e --test core_integration_e2e --test simulation_zk_integration_e2e --test type_system_consistency_e2e --test simple_simulation_test
 ```
 
-### Manual Compilation
-
+### Run Individual Test Suites
 ```bash
-# From the project root
-cd e2e
+# Type system consistency (most comprehensive)
+cargo test --test type_system_consistency_e2e
 
-# Build the e2e test crate
-cargo build
+# Core component integration
+cargo test --test core_integration_e2e
 
-# Build with verbose output for debugging
-cargo build --verbose
+# Simulation with ZK proofs
+cargo test --test simulation_zk_integration_e2e
+
+# Complete compilation workflow
+cargo test --test comprehensive_compilation_workflow_e2e
+
+# Basic simulation functionality
+cargo test --test simple_simulation_test
 ```
 
-### Compilation Troubleshooting
-
-**Missing Dependencies**:
+### Run with Verbose Output
 ```bash
-# Check if all causality crates are built
-cargo build --workspace
-
-# Verify OCaml environment (if using Nix)
-check-ocaml-paths
+cargo test --test type_system_consistency_e2e -- --nocapture
 ```
 
-**Build Errors**:
-```bash
-# Clean and rebuild
-cargo clean
-cargo build
-
-# Check for dependency conflicts
-cargo tree
-```
-
-## Running Tests
-
-### Basic Test Execution
-
-```bash
-# Run all e2e tests
-cargo test
-
-# Run specific test with output
-cargo test bridge_e2e_test -- --nocapture
-
-# Run with environment logging
-RUST_LOG=debug cargo test bridge_e2e_test -- --nocapture
-```
-
-### Individual Test Components
-
-The bridge e2e test includes several sub-tests that can be run individually:
-
-```bash
-# Test only compilation
-cargo test test_compilation_only -- --nocapture
-
-# Test runtime initialization
-cargo test test_runtime_initialization -- --nocapture
-
-# Test domain and resource modeling
-cargo test test_domain_resource_modeling -- --nocapture
-
-# Test dataflow definition creation
-cargo test test_dataflow_definition_creation -- --nocapture
-
-# Full end-to-end workflow
-cargo test test_bridge_e2e_workflow -- --nocapture
-```
-
-### Test Configuration
-
-The tests use several configuration options:
-
-```bash
-# Enable detailed logging
-export RUST_LOG=causality_e2e_tests=debug,causality_compiler=debug
-
-# Set test timeout (default: 30 seconds)
-export TEST_TIMEOUT_SECS=60
-
-# Use mock data (when example files are missing)
-export USE_MOCK_DATA=true
-```
-
-## Test Components
-
-### Bridge E2E Test (`bridge_e2e_test.rs`)
-
-This comprehensive test verifies:
-
-1. **TEG Compilation**: Compiles the cross-domain token transfer example
-2. **Runtime Setup**: Initializes mock state manager and TEL interpreter
-3. **Domain Creation**: Sets up test domains (Ethereum-like and Polygon-like)
-4. **Resource Management**: Creates and manages test accounts and tokens
-5. **Workflow Execution**: Executes the complete bridge transfer workflow
-6. **State Verification**: Verifies final state and execution results
-
-#### Test Flow
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Compilation   │───▶│  Runtime Setup   │───▶│   Execution     │
-│                 │    │                  │    │                 │
-│ • TEG parsing   │    │ • State manager  │    │ • Bridge flow   │
-│ • Validation    │    │ • TEL interpreter│    │ • Verification  │
-│ • Code gen      │    │ • Domain setup   │    │ • Results       │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
-
-### Mock Components
-
-The tests use mock implementations for components not yet fully integrated:
-
-- **MockStateManager**: Simulates state persistence and retrieval
-- **MockTelInterpreter**: Simulates TEL expression evaluation
-- **Mock Domains**: Represents different blockchain domains
-- **Mock Resources**: Represents accounts, tokens, and other resources
-
-## Deployment
-
-### Local Development
-
-```bash
-# Run tests in watch mode during development
-cargo watch -x "test --package causality-e2e-tests"
-
-# Run with specific features
-cargo test --features "mock-runtime"
-```
-
-### CI/CD Integration
-
-For continuous integration, use:
-
-```bash
-# In CI environment
-cargo test --package causality-e2e-tests --release
-
-# With coverage (requires cargo-tarpaulin)
-cargo tarpaulin --package causality-e2e-tests
-```
-
-### Docker Deployment
-
-```dockerfile
-# Example Dockerfile for e2e testing
-FROM nixos/nix:latest
-
-WORKDIR /app
-COPY . .
-
-RUN nix develop --command cargo test --package causality-e2e-tests
-```
-
-## Configuration
-
-### Test Dependencies
-
-The e2e tests depend on:
-
-- **causality-core**: Core type definitions
-- **causality-core**: Core functionality
-- **causality-compiler**: TEG compilation
-- **causality-lisp**: Lisp expression evaluation
-
-### Optional Dependencies
-
-Some dependencies are conditionally included:
-
-```toml
-# In Cargo.toml
-[dependencies]
-# causality-runtime = { path = "../crates/causality-runtime" } # Disabled
-# causality-zk = { path = "../crates/causality-zk", optional = true } # Disabled
-```
-
-### Environment Variables
-
-```bash
-# Logging configuration
-export RUST_LOG=debug
-export RUST_BACKTRACE=1
-
-# Test-specific configuration
-export CAUSALITY_TEST_MODE=true
-export CAUSALITY_MOCK_RUNTIME=true
-```
-
-## Debugging
-
-### Common Issues
-
-**Compilation Failures**:
-```bash
-# Check workspace dependencies
-cargo check --workspace
-
-# Verify feature flags
-cargo check --package causality-e2e-tests --all-features
-```
-
-**Test Failures**:
-```bash
-# Run with detailed output
-cargo test -- --nocapture --test-threads=1
-
-# Enable debug logging
-RUST_LOG=debug cargo test
-```
-
-**Missing Example Files**:
-The tests automatically fall back to mock data if example files are missing:
-```
-⚠️ Example file not found at "examples/cross_domain_token_transfer.teg", using mock
-```
-
-### Debug Output
-
-The tests provide detailed debug output:
-
-```
-📖 Found TEG example file at "examples/cross_domain_token_transfer.teg"
-✅ Successfully compiled TEG program
-🚀 Initializing Mock Causality Runtime
-✅ Mock state manager initialized
-✅ Mock TEL interpreter initialized
-🔄 Executing Bridge Transfer Workflow
-✅ Bridge transfer completed successfully
-```
-
-## Performance Considerations
-
-### Test Execution Time
-
-- **Compilation Test**: ~1-2 seconds
-- **Runtime Initialization**: ~100ms
-- **Full E2E Workflow**: ~5-10 seconds
-- **Complete Test Suite**: ~15-30 seconds
-
-### Resource Usage
-
-- **Memory**: ~50-100MB during test execution
-- **CPU**: Moderate usage during compilation phase
-- **Disk**: Minimal temporary file usage
-
-## Future Enhancements
-
-### Planned Improvements
-
-1. **Real Runtime Integration**: Replace mock components with actual runtime
-2. **ZK Integration**: Add zero-knowledge proof verification tests
-3. **Multi-Domain Tests**: Expand to test more complex cross-domain scenarios
-4. **Performance Benchmarks**: Add performance regression testing
-5. **Fuzz Testing**: Add property-based testing for robustness
-
-### Contributing
-
-When adding new e2e tests:
-
-1. Follow the existing test structure and naming conventions
-2. Include both positive and negative test cases
-3. Add appropriate debug output and error handling
-4. Update this README with new test descriptions
-5. Ensure tests work with both real and mock components
+## Test Suite Details
+
+### 🔍 Type System Consistency (20 tests)
+**Purpose**: Verifies type system correctness across all three layers
+- **Base Types**: Unit, Bool, Int, Symbol with serialization
+- **Product Types**: Tuple operations and tensor composition  
+- **Function Types**: Linear function types and application
+- **Session Types**: Communication protocols and role-based typing
+- **Record Types**: Structured data with field access
+- **Cross-Layer**: Consistency between Layer 0 ↔ Layer 1 ↔ Layer 2
+
+### 🔗 Core Integration (6 tests)
+**Purpose**: Tests integration between all core Causality components
+- **Cross-Module Integration**: Core ↔ Runtime ↔ Compiler ↔ ZK
+- **Linear Resource Management**: Resource lifecycle and cleanup
+- **Effect System**: Effect definition, composition, and execution
+- **Session Communication**: Protocol establishment and execution
+- **Content Addressing**: Deterministic content identification
+- **Error Handling**: Consistent error propagation across modules
+
+### ⚡ Simulation ZK Integration (3 tests)
+**Purpose**: Verifies simulation engine with zero-knowledge proof generation
+- **Effect Execution**: Running Layer 2 effects in simulation
+- **Proof Generation**: Creating ZK proofs for simulated executions
+- **Cross-Chain Operations**: Multi-domain effect coordination
+- **Verification Pipeline**: Complete proof verification workflow
+
+### 🔧 Comprehensive Compilation (3 tests)
+**Purpose**: Tests complete compilation from Causality Lisp to machine code
+- **Layer 2 → Layer 1**: Effects and intents to lambda calculus
+- **Layer 1 → Layer 0**: Lambda calculus to register machine instructions
+- **Optimization**: Code optimization and constraint solving
+- **Intent Resolution**: Declarative intent compilation
+
+### 🎯 Simple Simulation (3 tests)
+**Purpose**: Basic simulation engine functionality for learning and debugging
+- **Effect Creation**: Creating simple effects for testing
+- **Simulation Execution**: Running effects in simulation mode
+- **State Tracking**: Monitoring state changes during simulation
+- **Resource Management**: Basic linear resource handling
+
+## Documentation Structure
+
+Each test suite includes:
+- **README.md**: Detailed description of what is tested and how to run
+- **Test Organization**: Clear module structure and test categories
+- **Command Examples**: Copy-paste commands for different scenarios
+- **Expected Results**: What should happen when tests pass
+- **Dependencies**: Required components and their purposes
+
+## Development Workflow
+
+1. **Start with Simple Simulation** for basic understanding
+2. **Use Core Integration** to verify component interactions
+3. **Run Type System Consistency** for comprehensive type verification
+4. **Test Compilation Workflow** for end-to-end compilation
+5. **Verify Simulation ZK Integration** for cryptographic correctness
+
+## Continuous Integration
+
+All e2e tests are designed to:
+- ✅ Run independently without external dependencies
+- ✅ Complete in reasonable time (< 30 seconds total)
+- ✅ Provide clear failure messages with context
+- ✅ Maintain stability across different environments
+- ✅ Cover critical integration points and workflows
 
 ## Troubleshooting
 
-### Common Error Messages
-
-**"TEG compilation failed"**:
-- Check that the example file exists and is valid
-- Verify compiler dependencies are built
-- Enable debug logging to see detailed error messages
-
-**"Mock state manager initialization failed"**:
-- Usually indicates a dependency issue
-- Check that all required crates are built
-- Verify async runtime is properly configured
-
-**"Bridge transfer workflow failed"**:
-- Check test data setup
-- Verify domain and resource creation
-- Enable detailed logging to trace execution
-
-### Getting Help
-
-1. Check the test output for specific error messages
-2. Enable debug logging with `RUST_LOG=debug`
-3. Review the test code in `tests/bridge_e2e_test.rs`
-4. Check the project's main documentation
-5. File an issue with detailed error information
-
----
-
-For more information about the Causality framework, see the main project documentation. 
+If tests fail:
+1. Check individual test suite READMEs for specific guidance
+2. Run tests with `--nocapture` for detailed output
+3. Verify all dependencies compile correctly: `cargo check --all`
+4. Run individual test categories to isolate issues
+5. Check the test structure matches the documented organization 

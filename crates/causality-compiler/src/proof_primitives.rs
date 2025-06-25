@@ -8,7 +8,6 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use causality_lisp::ast::{Expr, ExprKind, LispValue};
-use crate::state_analysis::{StateQueryRequirement, QueryType};
 use crate::storage_layout::{StorageLayout, TraverseLayoutInfo};
 use crate::almanac_schema::LayoutCommitment;
 use crate::traverse_almanac_integration::{TraverseAlmanacIntegrator, WitnessGenerationRequest, IntegrationError};
@@ -295,7 +294,7 @@ impl ProofPrimitiveCompiler {
     }
     
     /// Generate witness data for the proof
-    fn generate_witness_data(&self, primitive: &ProveStatePrimitive, layout: &StorageLayout) -> Result<WitnessData, ProofCompileError> {
+    fn generate_witness_data(&self, primitive: &ProveStatePrimitive, _layout: &StorageLayout) -> Result<WitnessData, ProofCompileError> {
         // Mock witness generation - in real implementation would call Almanac
         Ok(WitnessData {
             storage_key: format!("0x{:064x}", 0x1234567890abcdefu64), // Mock storage key
@@ -310,13 +309,13 @@ impl ProofPrimitiveCompiler {
     }
     
     /// Generate witness data asynchronously using Traverse-Almanac integration
-    pub async fn generate_witness_data_async(&mut self, primitive: &ProveStatePrimitive, layout: &StorageLayout, block_number: u64, contract_address: &str) -> Result<WitnessData, ProofCompileError> {
+    pub async fn generate_witness_data_async(&mut self, primitive: &ProveStatePrimitive, _layout: &StorageLayout, block_number: u64, contract_address: &str) -> Result<WitnessData, ProofCompileError> {
         let request = WitnessGenerationRequest {
             contract_id: primitive.contract_id.clone(),
             query: primitive.storage_slot.clone(),
             block_number,
             contract_address: contract_address.to_string(),
-            layout_commitment: layout.layout_commitment.clone(),
+            layout_commitment: _layout.layout_commitment.clone(),
             parameters: BTreeMap::new(),
         };
         
@@ -324,7 +323,7 @@ impl ProofPrimitiveCompiler {
             Ok(result) => Ok(result.witness),
             Err(IntegrationError::FeatureNotEnabled(_)) => {
                 // Fall back to mock witness generation
-                self.generate_witness_data(primitive, layout)
+                self.generate_witness_data(primitive, _layout)
             },
             Err(e) => Err(ProofCompileError::WitnessGenerationFailed(format!("{:?}", e))),
         }
@@ -344,7 +343,7 @@ impl ProofPrimitiveCompiler {
                 ProofOptimizationHint::Priority(level) => {
                     // Adjust timeout based on priority
                     if *level > 7 {
-                        config.timeout_ms = config.timeout_ms * 2; // High priority gets more time
+                        config.timeout_ms *= 2; // High priority gets more time
                     }
                 }
                 _ => {} // Other hints handled elsewhere
@@ -355,16 +354,16 @@ impl ProofPrimitiveCompiler {
     }
     
     /// Convert storage layout to Traverse format
-    fn to_traverse_layout(&self, layout: &StorageLayout) -> TraverseLayoutInfo {
+    fn to_traverse_layout(&self, _layout: &StorageLayout) -> TraverseLayoutInfo {
         let traverse_layout = TraverseLayoutInfo {
-            contract_name: layout.contract_name.clone(),
-            storage: layout.storage.iter().map(|entry| crate::storage_layout::TraverseStorageEntry {
+            contract_name: _layout.contract_name.clone(),
+            storage: _layout.storage.iter().map(|entry| crate::storage_layout::TraverseStorageEntry {
                 label: entry.label.clone(),
                 slot: entry.slot.clone(),
                 offset: entry.offset as u32,
                 type_name: entry.type_name.clone(),
             }).collect(),
-            types: layout.types.iter().map(|type_info| crate::storage_layout::TraverseTypeInfo {
+            types: _layout.types.iter().map(|type_info| crate::storage_layout::TraverseTypeInfo {
                 type_name: type_info.label.clone(),
                 encoding: type_info.encoding.clone(),
                 number_of_bytes: type_info.number_of_bytes.clone(),

@@ -2,7 +2,7 @@
 // Purpose: State persistence system for Valence accounts with real storage integration
 
 use std::sync::Arc;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use crate::storage_backend::StorageBackendManager;
@@ -13,6 +13,7 @@ use indexer_storage::{ValenceAccountInfo, ValenceAccountState, ValenceAccountLib
 
 /// Valence state persistence manager
 pub struct ValenceStatePersistence {
+    #[allow(dead_code)]
     storage_backend: Arc<StorageBackendManager>,
 }
 
@@ -44,11 +45,11 @@ impl ValenceStatePersistence {
     }
 
     /// Store Valence account state
-    pub async fn store_account_state(&self, account_id: &str, state: CausalityValenceState) -> Result<()> {
+    pub async fn store_account_state(&self, account_id: &str, _state: CausalityValenceState) -> Result<()> {
         #[cfg(feature = "almanac")]
         {
             if let Some(storage) = self.storage_backend.storage() {
-                let almanac_state = self.convert_to_almanac_state(state)?;
+                let almanac_state = self.convert_to_almanac_state(_state)?;
                 storage.store_valence_account_state(account_id, almanac_state).await?;
             } else {
                 return Err(anyhow!("Storage backend not initialized"));
@@ -174,26 +175,26 @@ impl ValenceStatePersistence {
     }
 
     /// Update account state
-    pub async fn update_account_state(&self, account_id: &str, updates: StateUpdate) -> Result<()> {
+    pub async fn update_account_state(&self, account_id: &str, _updates: StateUpdate) -> Result<()> {
         #[cfg(feature = "almanac")]
         {
             if let Some(storage) = self.storage_backend.storage() {
                 // Get current state
                 if let Some(mut current_state) = storage.get_valence_account_state(account_id).await? {
                     // Apply updates
-                    if let Some(new_owner) = updates.new_owner {
+                    if let Some(new_owner) = _updates.new_owner {
                         current_state.current_owner = Some(new_owner);
                     }
-                    if let Some(pending_owner) = updates.pending_owner {
+                    if let Some(pending_owner) = _updates.pending_owner {
                         current_state.pending_owner = Some(pending_owner);
                     }
-                    if let Some(expiry) = updates.pending_owner_expiry {
+                    if let Some(expiry) = _updates.pending_owner_expiry {
                         current_state.pending_owner_expiry = Some(expiry);
                     }
-                    if let Some(block) = updates.last_updated_block {
+                    if let Some(block) = _updates.last_updated_block {
                         current_state.last_updated_block = block;
                     }
-                    if let Some(tx) = updates.last_updated_tx {
+                    if let Some(tx) = _updates.last_updated_tx {
                         current_state.last_updated_tx = tx;
                     }
 

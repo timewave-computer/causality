@@ -1,7 +1,6 @@
 //! Ergonomic macros for constructing Causality Lisp expressions
 //!
 //! This module provides Rust macros that make it easier to construct
-//! Causality Lisp AST expressions from Rust code.
 
 // Note: This file contains only macros, so normal imports aren't needed
 // The macros reference types directly in the expansion

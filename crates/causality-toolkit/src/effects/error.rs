@@ -1,7 +1,6 @@
 //! Error types for automatic mock and test generation
 
 use serde::{Serialize, Deserialize};
-
 /// Errors that can occur during mock generation
 #[derive(Debug, Clone, thiserror::Error, Serialize, Deserialize)]
 pub enum MockError {

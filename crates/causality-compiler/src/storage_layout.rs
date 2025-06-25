@@ -4,15 +4,12 @@
 //! It bridges the gap between Causality's state query analysis and Traverse's ZK proof generation
 //! by creating deterministic storage layouts with content-addressed commitments.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use crate::state_analysis::{StateAnalysisResult, StateQueryRequirement, QueryType};
-use crate::almanac_schema::{LayoutCommitment, AlmanacSchema};
+use crate::almanac_schema::LayoutCommitment;
 
-// Import Traverse core types for real integration
-#[cfg(feature = "traverse")]
-use traverse_core::{LayoutInfo as TraverseLayoutInfo, StorageEntry as TraverseStorageEntry, TypeInfo as TraverseTypeInfo};
 
 /// Traverse-compatible storage layout information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,10 +106,10 @@ pub struct LayoutGenerationMetadata {
 /// Integration with real Traverse system
 #[cfg(feature = "traverse")]
 pub struct TraverseIntegration {
-    /// Traverse layout compiler
-    layout_compiler: Box<dyn traverse_core::LayoutCompiler>,
-    /// Key resolver for storage queries
-    key_resolver: Box<dyn traverse_core::KeyResolver>,
+    /// Traverse layout compiler (placeholder - traverse_core not available)
+    layout_compiler: Option<()>, // Box<dyn traverse_core::LayoutCompiler>,
+    /// Key resolver for storage queries (placeholder - traverse_core not available)  
+    key_resolver: Option<()>, // Box<dyn traverse_core::KeyResolver>,
 }
 
 // Mock types when traverse feature is not enabled
@@ -353,7 +350,7 @@ impl StorageLayoutGenerator {
         for entry in &sorted_storage {
             hasher.update(entry.label.as_bytes());
             hasher.update(entry.slot.as_bytes());
-            hasher.update(&[entry.offset]);
+            hasher.update([entry.offset]);
             hasher.update(entry.type_name.as_bytes());
         }
         
@@ -422,7 +419,7 @@ impl StorageLayoutGenerator {
     pub fn register_layout(&mut self, domain: &str, contract_id: &str, layout: StorageLayout) {
         self.contract_layouts
             .entry(domain.to_string())
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .insert(contract_id.to_string(), layout);
     }
     

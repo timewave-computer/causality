@@ -1,7 +1,6 @@
 //! Token transfer effect example demonstrating complete AlgebraicEffect implementation
 
 use crate::effects::{
-    core::{AlgebraicEffect, EffectCategory, FailureMode},
     schema::{EffectSchema, ParameterDef, TypeDef, EffectMetadata},
 };
 use causality_core::system::content_addressing::{ContentAddressable, EntityId};

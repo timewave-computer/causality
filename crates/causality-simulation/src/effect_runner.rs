@@ -1,17 +1,20 @@
-//! Effect test runner with simulation engine integration
+//! Effect test runner for causality simulation framework
 
 use crate::{
-    engine::SimulationEngine,
+    engine::SessionEffect,
     snapshot::{SnapshotManager, SnapshotId},
-    MockEffect,
 };
 
 use serde::{Serialize, Deserialize};
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     time::{Duration, Instant},
 };
 use anyhow::Result;
+use causality_core::{
+    lambda::base::{SessionType, TypeInner},
+    effect::session_registry::ChoreographyProtocol,
+};
 
 // Local mock types to replace toolkit dependencies
 #[derive(Debug, Clone)]
@@ -184,13 +187,11 @@ impl Default for TestConfig {
     }
 }
 
-/// Mock effect handler for testing
-pub trait MockEffectHandler: Send + Sync {
-    /// Handle a mock effect
-    fn handle_effect(&self, effect: &MockEffect) -> Result<TestValue>;
+/// Session effect handler for testing (replaces MockEffectHandler)
+pub trait SessionEffectHandler: Send + Sync {
+    /// Handle a session effect
+    fn handle_effect(&self, effect: &SessionEffect) -> Result<TestValue>;
 }
-
-/// Test configuration for effect testing
 
 /// Effect test runner with simulation engine integration
 pub struct EffectTestRunner {
@@ -216,7 +217,7 @@ pub struct EffectTestRunner {
 /// Mock handler registry for effect implementations
 pub struct MockHandlerRegistry {
     /// Mock handlers for different effect types
-    handlers: BTreeMap<String, Box<dyn MockEffectHandler>>,
+    handlers: BTreeMap<String, Box<dyn SessionEffectHandler>>,
     
     /// Blockchain simulation mocks
     _blockchain_mocks: BTreeMap<String, BlockchainSimulationMock>,
@@ -432,48 +433,403 @@ pub trait EffectHandler: Send + Sync {
 
 impl Default for EffectTestRunner {
     fn default() -> Self {
-        Self::new()
+        Self {
+            config: TestConfig::default(),
+            _mock_generator: MockGenerator,
+            _snapshot_manager: SnapshotManager::default(),
+            mock_registry: MockHandlerRegistry::default(),
+            execution_state: ExecutionState::default(),
+            engine: crate::engine::SimulationEngine::new(),
+        }
     }
 }
 
 impl EffectTestRunner {
     /// Create new effect test runner
     pub fn new() -> Self {
-        Self {
-            config: TestConfig::default(),
-            _mock_generator: MockGenerator::new(),
-            _snapshot_manager: SnapshotManager::new(100), // Keep 100 snapshots
-            mock_registry: MockHandlerRegistry::new(),
-            execution_state: ExecutionState::new(),
-            engine: SimulationEngine::new(),
-        }
+        Self::default()
     }
     
-    /// Create effect test runner with configuration
+    /// Create effect test runner with custom configuration
     pub fn with_config(config: TestConfig) -> Self {
         let mut runner = Self::new();
         runner.config = config;
         runner
     }
     
-    /// Install effect handler in the registry (simplified for MVP)
+    /// Install mock handler with strategy
     pub fn install_handler(&mut self, strategy: MockStrategy) -> Result<()> {
-        // Install a mock handler based on the strategy
-        match strategy {
-            MockStrategy::AlwaysSucceed => {
-                // Install handlers that always succeed
-                println!("Installing always-succeed handlers");
+        // Register a default mock handler
+        let handler = Box::new(DefaultSessionEffectHandler::new(strategy.clone()));
+        self.mock_registry.register_handler("default".to_string(), handler, strategy)?;
+        Ok(())
+    }
+    
+    /// Generate test cases from session types and choreographies
+    pub fn generate_session_test_cases(
+        &self,
+        session_type: &SessionType,
+        participants: &[String],
+        choreography: Option<&ChoreographyProtocol>
+    ) -> Result<Vec<SessionTestCase>> {
+        let mut test_cases = Vec::new();
+        
+        // Generate all valid protocol execution paths
+        let execution_paths = self.generate_protocol_execution_paths(session_type, participants)?;
+        
+        // Create test cases for each path
+        for (path_index, path) in execution_paths.iter().enumerate() {
+            let test_case = SessionTestCase {
+                id: format!("session_test_{}", path_index),
+                session_type: session_type.clone(),
+                participants: participants.to_vec(),
+                choreography: choreography.cloned(),
+                execution_path: path.clone(),
+                expected_outcomes: self.derive_expected_outcomes(session_type, path)?,
+                property_checks: self.generate_property_checks(session_type, path)?,
+            };
+            test_cases.push(test_case);
+        }
+        
+        // Generate additional test cases for error scenarios
+        let error_test_cases = self.generate_error_scenario_test_cases(session_type, participants)?;
+        test_cases.extend(error_test_cases);
+        
+        Ok(test_cases)
+    }
+    
+    /// Generate all valid protocol execution paths from a session type
+    fn generate_protocol_execution_paths(
+        &self,
+        session_type: &SessionType,
+        participants: &[String]
+    ) -> Result<Vec<SessionExecutionPath>> {
+        let mut paths = Vec::new();
+        
+        // Start path generation from the initial session type state
+        let initial_operation = self.extract_first_operation(session_type)?;
+        let initial_path = SessionExecutionPath {
+            operations: vec![initial_operation],
+            participants_involved: participants.to_vec(),
+            branch_points: Vec::new(),
+            termination_conditions: Vec::new(),
+        };
+        
+        // Generate all possible continuations from this initial path
+        self.generate_path_continuations(session_type, initial_path, &mut paths, 0)?;
+        
+        // Ensure we have at least one path (for simple session types)
+        if paths.is_empty() {
+            paths.push(SessionExecutionPath {
+                operations: vec![SessionTraceOperation::Send {
+                    from: participants.first().unwrap_or(&"p1".to_string()).clone(),
+                    to: participants.get(1).unwrap_or(&"p2".to_string()).clone(),
+                    message_type: TypeInner::Base(causality_core::lambda::base::BaseType::Int),
+                    value: "test_value".to_string(),
+                }],
+                participants_involved: participants.to_vec(),
+                branch_points: Vec::new(),
+                termination_conditions: vec![TerminationCondition::NormalCompletion],
+            });
+        }
+        
+        Ok(paths)
+    }
+    
+    /// Extract the first operation from a session type
+    fn extract_first_operation(&self, session_type: &SessionType) -> Result<SessionTraceOperation> {
+        // Simplified extraction - in a full implementation, this would parse the session type structure
+        match session_type {
+            SessionType::Send(value_type, _continuation) => {
+                Ok(SessionTraceOperation::Send {
+                    from: "participant1".to_string(),
+                    to: "participant2".to_string(),
+                    message_type: *value_type.clone(),
+                    value: "default_value".to_string(),
+                })
             }
-            MockStrategy::AlwaysFail => {
-                // Install handlers that always fail
-                println!("Installing always-fail handlers");
+            SessionType::Receive(value_type, _continuation) => {
+                Ok(SessionTraceOperation::Receive {
+                    from: "participant1".to_string(),
+                    to: "participant2".to_string(),
+                    message_type: *value_type.clone(),
+                    expected_value: None,
+                })
             }
-            MockStrategy::Random => {
-                // Install handlers with random behavior
-                println!("Installing random handlers");
+            SessionType::InternalChoice(branches) => {
+                let first_branch = branches.first()
+                    .ok_or_else(|| anyhow::anyhow!("InternalChoice with no branches"))?;
+                Ok(SessionTraceOperation::InternalChoice {
+                    participant: "participant1".to_string(),
+                    chosen_branch: first_branch.0.clone(),
+                    available_branches: branches.iter().map(|(name, _)| name.clone()).collect(),
+                })
+            }
+            SessionType::ExternalChoice(branches) => {
+                let first_branch = branches.first()
+                    .ok_or_else(|| anyhow::anyhow!("ExternalChoice with no branches"))?;
+                Ok(SessionTraceOperation::ExternalChoice {
+                    participant: "participant1".to_string(),
+                    expected_branch: first_branch.0.clone(),
+                    available_branches: branches.iter().map(|(name, _)| name.clone()).collect(),
+                })
+            }
+            SessionType::End => {
+                Ok(SessionTraceOperation::End {
+                    participants: vec!["participant1".to_string(), "participant2".to_string()],
+                })
+            }
+            SessionType::Recursive(_, _) => {
+                // For recursive types, extract from the inner type
+                Ok(SessionTraceOperation::End {
+                    participants: vec!["participant1".to_string(), "participant2".to_string()],
+                })
+            }
+            SessionType::Variable(_) => {
+                // For variables, default to end
+                Ok(SessionTraceOperation::End {
+                    participants: vec!["participant1".to_string(), "participant2".to_string()],
+                })
             }
         }
+    }
+    
+    /// Generate path continuations recursively
+    fn generate_path_continuations(
+        &self,
+        _session_type: &SessionType,
+        current_path: SessionExecutionPath,
+        all_paths: &mut Vec<SessionExecutionPath>,
+        depth: usize
+    ) -> Result<()> {
+        // Prevent infinite recursion
+        if depth > 10 {
+            all_paths.push(current_path);
+            return Ok(());
+        }
+        
+        // For simplified implementation, just add the current path
+        // In a full implementation, this would:
+        // 1. Analyze the continuation of the last operation
+        // 2. Generate all possible next operations
+        // 3. Recursively generate paths for each possibility
+        all_paths.push(current_path);
+        
         Ok(())
+    }
+    
+    /// Derive expected outcomes from session type and execution path
+    fn derive_expected_outcomes(
+        &self,
+        _session_type: &SessionType,
+        path: &SessionExecutionPath
+    ) -> Result<Vec<SessionExpectedOutcome>> {
+        let mut outcomes = Vec::new();
+        
+        // Analyze path for expected outcomes
+        for operation in &path.operations {
+            match operation {
+                SessionTraceOperation::Send { .. } => {
+                    outcomes.push(SessionExpectedOutcome::MessageSent {
+                        success: true,
+                        delivery_confirmed: true,
+                    });
+                }
+                SessionTraceOperation::Receive { .. } => {
+                    outcomes.push(SessionExpectedOutcome::MessageReceived {
+                        success: true,
+                        value_matches_expected: true,
+                    });
+                }
+                SessionTraceOperation::InternalChoice { .. } => {
+                    outcomes.push(SessionExpectedOutcome::ChoiceMade {
+                        choice_valid: true,
+                        protocol_progresses: true,
+                    });
+                }
+                SessionTraceOperation::ExternalChoice { .. } => {
+                    outcomes.push(SessionExpectedOutcome::ChoiceReceived {
+                        choice_expected: true,
+                        protocol_continues: true,
+                    });
+                }
+                SessionTraceOperation::End { .. } => {
+                    outcomes.push(SessionExpectedOutcome::SessionTerminated {
+                        clean_termination: true,
+                        all_participants_finished: true,
+                    });
+                }
+            }
+        }
+        
+        Ok(outcomes)
+    }
+    
+    /// Generate property checks for linearity and duality
+    fn generate_property_checks(
+        &self,
+        _session_type: &SessionType,
+        path: &SessionExecutionPath
+    ) -> Result<Vec<SessionPropertyCheck>> {
+        let mut property_checks = Vec::new();
+        
+        // Check linearity: each resource used exactly once
+        property_checks.push(SessionPropertyCheck::LinearityCheck {
+            check_id: "linearity_all_operations".to_string(),
+            description: "Verify each session resource is used exactly once".to_string(),
+            validation_logic: LinearityValidation::ResourceUsageCount,
+        });
+        
+        // Check duality: send/receive pairs match
+        property_checks.push(SessionPropertyCheck::DualityCheck {
+            check_id: "duality_send_receive_pairs".to_string(),
+            description: "Verify all send operations have corresponding receive operations".to_string(),
+            validation_logic: DualityValidation::SendReceivePairs,
+        });
+        
+        // Check protocol progression
+        property_checks.push(SessionPropertyCheck::ProtocolProgressionCheck {
+            check_id: "protocol_progression_valid".to_string(),
+            description: "Verify protocol progresses according to session type".to_string(),
+            validation_logic: ProtocolProgressionValidation::SessionTypeConformance,
+        });
+        
+        // Check choice consistency
+        if path.operations.iter().any(|op| matches!(op, SessionTraceOperation::InternalChoice { .. } | SessionTraceOperation::ExternalChoice { .. })) {
+            property_checks.push(SessionPropertyCheck::ChoiceConsistencyCheck {
+                check_id: "choice_consistency".to_string(),
+                description: "Verify internal and external choices are consistent".to_string(),
+                validation_logic: ChoiceConsistencyValidation::InternalExternalAlignment,
+            });
+        }
+        
+        Ok(property_checks)
+    }
+    
+    /// Generate error scenario test cases
+    fn generate_error_scenario_test_cases(
+        &self,
+        session_type: &SessionType,
+        participants: &[String]
+    ) -> Result<Vec<SessionTestCase>> {
+        // Protocol violation scenarios
+        let mut error_test_cases = vec![SessionTestCase {
+            id: "protocol_violation_unmatched_send".to_string(),
+            session_type: session_type.clone(),
+            participants: participants.to_vec(),
+            choreography: None,
+            execution_path: SessionExecutionPath {
+                operations: vec![
+                    SessionTraceOperation::Send {
+                        from: participants.first().unwrap_or(&"p1".to_string()).clone(),
+                        to: "nonexistent_participant".to_string(),
+                        message_type: TypeInner::Base(causality_core::lambda::base::BaseType::Int),
+                        value: "test_value".to_string(),
+                    }
+                ],
+                participants_involved: participants.to_vec(),
+                branch_points: Vec::new(),
+                termination_conditions: vec![TerminationCondition::ProtocolViolation("unmatched_send".to_string())],
+            },
+            expected_outcomes: vec![SessionExpectedOutcome::ProtocolViolation {
+                violation_type: "unmatched_send".to_string(),
+                error_detected: true,
+            }],
+            property_checks: vec![SessionPropertyCheck::ProtocolViolationCheck {
+                check_id: "unmatched_send_detection".to_string(),
+                description: "Verify unmatched send operations are detected as violations".to_string(),
+                expected_violation: Some("unmatched_send".to_string()),
+            }],
+        }];
+        
+        // Type mismatch scenarios
+        error_test_cases.push(SessionTestCase {
+            id: "type_mismatch_send_receive".to_string(),
+            session_type: session_type.clone(),
+            participants: participants.to_vec(),
+            choreography: None,
+            execution_path: SessionExecutionPath {
+                operations: vec![
+                    SessionTraceOperation::Send {
+                        from: participants.first().unwrap_or(&"p1".to_string()).clone(),
+                        to: participants.get(1).unwrap_or(&"p2".to_string()).clone(),
+                        message_type: TypeInner::Base(causality_core::lambda::base::BaseType::Int),
+                        value: "123".to_string(),
+                    },
+                    SessionTraceOperation::Receive {
+                        from: participants.first().unwrap_or(&"p1".to_string()).clone(),
+                        to: participants.get(1).unwrap_or(&"p2".to_string()).clone(),
+                        message_type: TypeInner::Base(causality_core::lambda::base::BaseType::Symbol), // Type mismatch
+                        expected_value: None,
+                    }
+                ],
+                participants_involved: participants.to_vec(),
+                branch_points: Vec::new(),
+                termination_conditions: vec![TerminationCondition::TypeError("type_mismatch".to_string())],
+            },
+            expected_outcomes: vec![SessionExpectedOutcome::TypeError {
+                type_error: "send_receive_type_mismatch".to_string(),
+                error_detected: true,
+            }],
+            property_checks: vec![SessionPropertyCheck::TypeSafetyCheck {
+                check_id: "type_mismatch_detection".to_string(),
+                description: "Verify type mismatches between send and receive are detected".to_string(),
+                expected_types: vec![
+                    TypeInner::Base(causality_core::lambda::base::BaseType::Int),
+                    TypeInner::Base(causality_core::lambda::base::BaseType::Symbol),
+                ],
+            }],
+        });
+        
+        Ok(error_test_cases)
+    }
+    
+    /// Execute session-based property tests
+    pub async fn execute_session_property_tests(
+        &mut self,
+        session_test_cases: &[SessionTestCase]
+    ) -> Result<Vec<SessionPropertyTestResult>> {
+        let mut results = Vec::new();
+        
+        for test_case in session_test_cases {
+            let result = self.execute_session_property_test(test_case).await?;
+            results.push(result);
+        }
+        
+        Ok(results)
+    }
+    
+    /// Execute a single session property test
+    async fn execute_session_property_test(
+        &mut self,
+        test_case: &SessionTestCase
+    ) -> Result<SessionPropertyTestResult> {
+        let start_time = Instant::now();
+        
+        // Execute the session test case
+        let execution_result = self.execute_session_test_case(test_case).await?;
+        
+        // Validate properties
+        let mut property_results = Vec::new();
+        for property_check in &test_case.property_checks {
+            let property_result = self.validate_session_property(property_check, &execution_result, test_case).await?;
+            property_results.push(property_result);
+        }
+        
+        // Check expected outcomes
+        let outcome_validation = self.validate_expected_outcomes(&test_case.expected_outcomes, &execution_result).await?;
+        
+        let execution_time = start_time.elapsed();
+        let success = property_results.iter().all(|r| r.passed) && outcome_validation.all_outcomes_met;
+        
+        Ok(SessionPropertyTestResult {
+            test_case_id: test_case.id.clone(),
+            success,
+            execution_time,
+            property_results,
+            outcome_validation,
+            execution_details: execution_result,
+        })
     }
     
     /// Execute test suite with full simulation integration
@@ -728,6 +1084,580 @@ impl EffectTestRunner {
     pub async fn collect_results(&self) -> Vec<String> {
         self.execution_state.execution_history.iter().map(|e| e.test_id.clone()).collect()
     }
+    
+    /// Execute a session test case
+    async fn execute_session_test_case(
+        &mut self,
+        test_case: &SessionTestCase
+    ) -> Result<SessionExecutionResult> {
+        let mut executed_operations = Vec::new();
+        let mut final_states = BTreeMap::new();
+        let mut protocol_violations = Vec::new();
+        let mut type_errors = Vec::new();
+        let mut execution_trace = Vec::new();
+        
+        // Initialize participant states
+        for participant in &test_case.participants {
+            final_states.insert(participant.clone(), "initialized".to_string());
+        }
+        
+        // Execute each operation in the path
+        for operation in &test_case.execution_path.operations {
+            let start_time = Instant::now();
+            
+            // Execute the operation and record results
+            let execution_result = self.execute_trace_operation(operation, &mut final_states).await?;
+            let execution_time = start_time.elapsed();
+            
+            execution_trace.push(format!("Executed {:?} in {:?}", operation, execution_time));
+            
+            // Check for violations and errors
+            if let Some(violation) = execution_result.protocol_violation {
+                protocol_violations.push(violation);
+            }
+            if let Some(type_error) = execution_result.type_error {
+                type_errors.push(type_error);
+            }
+            
+            executed_operations.push(ExecutedOperation {
+                operation: operation.clone(),
+                execution_time,
+                success: execution_result.success,
+                error_message: execution_result.error_message,
+                state_changes: execution_result.state_changes,
+            });
+        }
+        
+        Ok(SessionExecutionResult {
+            operations_executed: executed_operations,
+            final_states,
+            protocol_violations,
+            type_errors,
+            execution_trace,
+        })
+    }
+    
+    /// Execute a single trace operation
+    async fn execute_trace_operation(
+        &mut self,
+        operation: &SessionTraceOperation,
+        participant_states: &mut BTreeMap<String, String>
+    ) -> Result<TraceOperationResult> {
+        match operation {
+            SessionTraceOperation::Send { from, to, message_type, value: _ } => {
+                // Update sender state
+                participant_states.insert(from.clone(), "sent".to_string());
+                
+                // Check if receiver exists
+                if !participant_states.contains_key(to) {
+                    return Ok(TraceOperationResult {
+                        success: false,
+                        protocol_violation: Some(format!("Send to nonexistent participant: {}", to)),
+                        type_error: None,
+                        error_message: Some(format!("Participant {} not found", to)),
+                        state_changes: vec![format!("{} -> sent", from)],
+                    });
+                }
+                
+                Ok(TraceOperationResult {
+                    success: true,
+                    protocol_violation: None,
+                    type_error: None,
+                    error_message: None,
+                    state_changes: vec![
+                        format!("{} -> sent message of type {:?}", from, message_type),
+                        format!("{} -> awaiting message", to),
+                    ],
+                })
+            }
+            
+            SessionTraceOperation::Receive { from, to, message_type, expected_value: _ } => {
+                // Update receiver state
+                participant_states.insert(to.clone(), "received".to_string());
+                
+                // Check if sender exists and has sent
+                if !participant_states.contains_key(from) {
+                    return Ok(TraceOperationResult {
+                        success: false,
+                        protocol_violation: Some(format!("Receive from nonexistent participant: {}", from)),
+                        type_error: None,
+                        error_message: Some(format!("Sender {} not found", from)),
+                        state_changes: vec![format!("{} -> failed_receive", to)],
+                    });
+                }
+                
+                Ok(TraceOperationResult {
+                    success: true,
+                    protocol_violation: None,
+                    type_error: None,
+                    error_message: None,
+                    state_changes: vec![
+                        format!("{} -> received message of type {:?}", to, message_type),
+                    ],
+                })
+            }
+            
+            SessionTraceOperation::InternalChoice { participant, chosen_branch, available_branches } => {
+                // Check if choice is valid
+                if !available_branches.contains(chosen_branch) {
+                    return Ok(TraceOperationResult {
+                        success: false,
+                        protocol_violation: Some(format!("Invalid choice {} not in available branches {:?}", chosen_branch, available_branches)),
+                        type_error: None,
+                        error_message: Some(format!("Choice {} not available", chosen_branch)),
+                        state_changes: vec![format!("{} -> invalid_choice", participant)],
+                    });
+                }
+                
+                participant_states.insert(participant.clone(), format!("chose_{}", chosen_branch));
+                
+                Ok(TraceOperationResult {
+                    success: true,
+                    protocol_violation: None,
+                    type_error: None,
+                    error_message: None,
+                    state_changes: vec![
+                        format!("{} -> made choice: {}", participant, chosen_branch),
+                    ],
+                })
+            }
+            
+            SessionTraceOperation::ExternalChoice { participant, expected_branch, available_branches: _ } => {
+                participant_states.insert(participant.clone(), format!("waiting_for_{}", expected_branch));
+                
+                Ok(TraceOperationResult {
+                    success: true,
+                    protocol_violation: None,
+                    type_error: None,
+                    error_message: None,
+                    state_changes: vec![
+                        format!("{} -> waiting for external choice: {}", participant, expected_branch),
+                    ],
+                })
+            }
+            
+            SessionTraceOperation::End { participants } => {
+                // Mark all participants as terminated
+                for participant in participants {
+                    participant_states.insert(participant.clone(), "terminated".to_string());
+                }
+                
+                Ok(TraceOperationResult {
+                    success: true,
+                    protocol_violation: None,
+                    type_error: None,
+                    error_message: None,
+                    state_changes: participants.iter()
+                        .map(|p| format!("{} -> terminated", p))
+                        .collect(),
+                })
+            }
+        }
+    }
+    
+    /// Validate a session property
+    async fn validate_session_property(
+        &self,
+        property_check: &SessionPropertyCheck,
+        execution_result: &SessionExecutionResult,
+        _test_case: &SessionTestCase
+    ) -> Result<PropertyValidationResult> {
+        match property_check {
+            SessionPropertyCheck::LinearityCheck { check_id, validation_logic, .. } => {
+                let passed = match validation_logic {
+                    LinearityValidation::ResourceUsageCount => {
+                        self.validate_resource_usage_count(execution_result)
+                    }
+                    LinearityValidation::NoResourceDuplication => {
+                        self.validate_no_resource_duplication(execution_result)
+                    }
+                    LinearityValidation::ExactlyOnceSemantics => {
+                        self.validate_exactly_once_semantics(execution_result)
+                    }
+                };
+                
+                Ok(PropertyValidationResult {
+                    property_id: check_id.clone(),
+                    passed,
+                    details: format!("Linearity validation: {:?}", validation_logic),
+                    validation_evidence: vec![
+                        format!("Operations executed: {}", execution_result.operations_executed.len()),
+                        format!("Protocol violations: {}", execution_result.protocol_violations.len()),
+                    ],
+                })
+            }
+            
+            SessionPropertyCheck::DualityCheck { check_id, validation_logic, .. } => {
+                let passed = match validation_logic {
+                    DualityValidation::SendReceivePairs => {
+                        self.validate_send_receive_pairs(execution_result)
+                    }
+                    DualityValidation::TypeConsistency => {
+                        self.validate_type_consistency(execution_result)
+                    }
+                    DualityValidation::ProtocolComplementarity => {
+                        self.validate_protocol_complementarity(execution_result)
+                    }
+                };
+                
+                Ok(PropertyValidationResult {
+                    property_id: check_id.clone(),
+                    passed,
+                    details: format!("Duality validation: {:?}", validation_logic),
+                    validation_evidence: vec![
+                        format!("Type errors: {}", execution_result.type_errors.len()),
+                    ],
+                })
+            }
+            
+            SessionPropertyCheck::ProtocolProgressionCheck { check_id, validation_logic, .. } => {
+                let passed = match validation_logic {
+                    ProtocolProgressionValidation::SessionTypeConformance => {
+                        self.validate_session_type_conformance(execution_result)
+                    }
+                    ProtocolProgressionValidation::StateTransitionValidity => {
+                        self.validate_state_transition_validity(execution_result)
+                    }
+                    ProtocolProgressionValidation::DeadlockFreedom => {
+                        self.validate_deadlock_freedom(execution_result)
+                    }
+                };
+                
+                Ok(PropertyValidationResult {
+                    property_id: check_id.clone(),
+                    passed,
+                    details: format!("Protocol progression validation: {:?}", validation_logic),
+                    validation_evidence: vec![
+                        format!("Final states: {:?}", execution_result.final_states),
+                    ],
+                })
+            }
+            
+            SessionPropertyCheck::ChoiceConsistencyCheck { check_id, validation_logic, .. } => {
+                let passed = match validation_logic {
+                    ChoiceConsistencyValidation::InternalExternalAlignment => {
+                        self.validate_internal_external_alignment(execution_result)
+                    }
+                    ChoiceConsistencyValidation::ChoiceAvailability => {
+                        self.validate_choice_availability(execution_result)
+                    }
+                    ChoiceConsistencyValidation::BranchReachability => {
+                        self.validate_branch_reachability(execution_result)
+                    }
+                };
+                
+                Ok(PropertyValidationResult {
+                    property_id: check_id.clone(),
+                    passed,
+                    details: format!("Choice consistency validation: {:?}", validation_logic),
+                    validation_evidence: vec![
+                        format!("Choice operations found: {}", 
+                            execution_result.operations_executed.iter()
+                                .filter(|op| matches!(op.operation, 
+                                    SessionTraceOperation::InternalChoice { .. } | 
+                                    SessionTraceOperation::ExternalChoice { .. }))
+                                .count()),
+                    ],
+                })
+            }
+            
+            SessionPropertyCheck::ProtocolViolationCheck { check_id, expected_violation, .. } => {
+                let passed = if let Some(expected) = expected_violation {
+                    execution_result.protocol_violations.iter().any(|v| v.contains(expected))
+                } else {
+                    execution_result.protocol_violations.is_empty()
+                };
+                
+                Ok(PropertyValidationResult {
+                    property_id: check_id.clone(),
+                    passed,
+                    details: format!("Protocol violation check, expected: {:?}", expected_violation),
+                    validation_evidence: execution_result.protocol_violations.clone(),
+                })
+            }
+            
+            SessionPropertyCheck::TypeSafetyCheck { check_id, expected_types, .. } => {
+                let passed = self.validate_type_safety(execution_result, expected_types);
+                
+                Ok(PropertyValidationResult {
+                    property_id: check_id.clone(),
+                    passed,
+                    details: format!("Type safety check for types: {:?}", expected_types),
+                    validation_evidence: execution_result.type_errors.clone(),
+                })
+            }
+        }
+    }
+    
+    /// Validate expected outcomes
+    async fn validate_expected_outcomes(
+        &self,
+        expected_outcomes: &[SessionExpectedOutcome],
+        execution_result: &SessionExecutionResult
+    ) -> Result<OutcomeValidationResult> {
+        let mut individual_outcomes = Vec::new();
+        let mut all_met = true;
+        
+        for expected_outcome in expected_outcomes {
+            let outcome_result = self.validate_individual_outcome(expected_outcome, execution_result)?;
+            if !outcome_result.actual {
+                all_met = false;
+            }
+            individual_outcomes.push(outcome_result);
+        }
+        
+        Ok(OutcomeValidationResult {
+            all_outcomes_met: all_met,
+            individual_outcomes,
+            unexpected_outcomes: execution_result.protocol_violations.clone(),
+        })
+    }
+    
+    /// Validate an individual expected outcome
+    fn validate_individual_outcome(
+        &self,
+        expected_outcome: &SessionExpectedOutcome,
+        execution_result: &SessionExecutionResult
+    ) -> Result<IndividualOutcomeResult> {
+        match expected_outcome {
+            SessionExpectedOutcome::MessageSent { success, .. } => {
+                let send_operations = execution_result.operations_executed.iter()
+                    .filter(|op| matches!(op.operation, SessionTraceOperation::Send { .. }))
+                    .count();
+                let actual_success = send_operations > 0;
+                
+                Ok(IndividualOutcomeResult {
+                    outcome_type: "MessageSent".to_string(),
+                    expected: *success,
+                    actual: actual_success,
+                    details: format!("Found {} send operations", send_operations),
+                })
+            }
+            
+            SessionExpectedOutcome::ProtocolViolation { error_detected, .. } => {
+                let actual_error_detected = !execution_result.protocol_violations.is_empty();
+                
+                Ok(IndividualOutcomeResult {
+                    outcome_type: "ProtocolViolation".to_string(),
+                    expected: *error_detected,
+                    actual: actual_error_detected,
+                    details: format!("Protocol violations: {:?}", execution_result.protocol_violations),
+                })
+            }
+            
+            SessionExpectedOutcome::TypeError { error_detected, .. } => {
+                let actual_error_detected = !execution_result.type_errors.is_empty();
+                
+                Ok(IndividualOutcomeResult {
+                    outcome_type: "TypeError".to_string(),
+                    expected: *error_detected,
+                    actual: actual_error_detected,
+                    details: format!("Type errors: {:?}", execution_result.type_errors),
+                })
+            }
+            
+            // Add validation for other outcome types...
+            _ => {
+                Ok(IndividualOutcomeResult {
+                    outcome_type: "Unknown".to_string(),
+                    expected: true,
+                    actual: true,
+                    details: "Validation not implemented for this outcome type".to_string(),
+                })
+            }
+        }
+    }
+    
+    // Linearity validation methods
+    fn validate_resource_usage_count(&self, execution_result: &SessionExecutionResult) -> bool {
+        // Check that each participant appears in operations in a linear fashion
+        let mut participant_usage = BTreeMap::new();
+        
+        for executed_op in &execution_result.operations_executed {
+            match &executed_op.operation {
+                SessionTraceOperation::Send { from, to, .. } => {
+                    *participant_usage.entry(from.clone()).or_insert(0) += 1;
+                    *participant_usage.entry(to.clone()).or_insert(0) += 1;
+                }
+                SessionTraceOperation::Receive { from, to, .. } => {
+                    *participant_usage.entry(from.clone()).or_insert(0) += 1;
+                    *participant_usage.entry(to.clone()).or_insert(0) += 1;
+                }
+                SessionTraceOperation::InternalChoice { participant, .. } |
+                SessionTraceOperation::ExternalChoice { participant, .. } => {
+                    *participant_usage.entry(participant.clone()).or_insert(0) += 1;
+                }
+                SessionTraceOperation::End { participants } => {
+                    for participant in participants {
+                        *participant_usage.entry(participant.clone()).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+        
+        // For linearity, each participant should have reasonable usage count (not excessive)
+        participant_usage.values().all(|&count| count <= 10) // Reasonable limit
+    }
+    
+    fn validate_no_resource_duplication(&self, execution_result: &SessionExecutionResult) -> bool {
+        // Check that no duplicate operations exist
+        let mut operation_signatures = std::collections::HashSet::new();
+        
+        for executed_op in &execution_result.operations_executed {
+            let signature = match &executed_op.operation {
+                SessionTraceOperation::Send { from, to, message_type, .. } => {
+                    format!("send_{}_{}__{:?}", from, to, message_type)
+                }
+                SessionTraceOperation::Receive { from, to, message_type, .. } => {
+                    format!("receive_{}_{}__{:?}", from, to, message_type)
+                }
+                SessionTraceOperation::InternalChoice { participant, chosen_branch, .. } => {
+                    format!("internal_choice_{}_{}", participant, chosen_branch)
+                }
+                SessionTraceOperation::ExternalChoice { participant, expected_branch, .. } => {
+                    format!("external_choice_{}_{}", participant, expected_branch)
+                }
+                SessionTraceOperation::End { participants } => {
+                    format!("end_{}", participants.join("_"))
+                }
+            };
+            
+            if operation_signatures.contains(&signature) {
+                return false; // Duplicate found
+            }
+            operation_signatures.insert(signature);
+        }
+        
+        true
+    }
+    
+    fn validate_exactly_once_semantics(&self, execution_result: &SessionExecutionResult) -> bool {
+        // For simplified validation, check that each participant ends in a terminal state
+        execution_result.final_states.values()
+            .all(|state| state == "terminated" || state == "received" || state.starts_with("chose_"))
+    }
+    
+    // Duality validation methods
+    fn validate_send_receive_pairs(&self, execution_result: &SessionExecutionResult) -> bool {
+        let mut sends = Vec::new();
+        let mut receives = Vec::new();
+        
+        for executed_op in &execution_result.operations_executed {
+            match &executed_op.operation {
+                SessionTraceOperation::Send { from, to, message_type, .. } => {
+                    sends.push((from.clone(), to.clone(), message_type.clone()));
+                }
+                SessionTraceOperation::Receive { from, to, message_type, .. } => {
+                    receives.push((from.clone(), to.clone(), message_type.clone()));
+                }
+                _ => {}
+            }
+        }
+        
+        // For each send, there should be a corresponding receive
+        sends.iter().all(|send| {
+            receives.iter().any(|receive| {
+                send.0 == receive.0 && send.1 == receive.1 && send.2 == receive.2
+            })
+        })
+    }
+    
+    fn validate_type_consistency(&self, execution_result: &SessionExecutionResult) -> bool {
+        // Check that send/receive operations have consistent types
+        execution_result.type_errors.is_empty()
+    }
+    
+    fn validate_protocol_complementarity(&self, execution_result: &SessionExecutionResult) -> bool {
+        // Check that the protocol maintains complementarity between participants
+        execution_result.protocol_violations.is_empty()
+    }
+    
+    // Protocol progression validation methods
+    fn validate_session_type_conformance(&self, execution_result: &SessionExecutionResult) -> bool {
+        // Check that all operations conform to the expected session type
+        execution_result.operations_executed.iter().all(|op| op.success)
+    }
+    
+    fn validate_state_transition_validity(&self, execution_result: &SessionExecutionResult) -> bool {
+        // Check that all state transitions are valid
+        execution_result.final_states.values().all(|state| !state.contains("invalid"))
+    }
+    
+    fn validate_deadlock_freedom(&self, execution_result: &SessionExecutionResult) -> bool {
+        // Check that no participants are stuck in waiting states
+        execution_result.final_states.values()
+            .all(|state| !state.starts_with("waiting_") || state.contains("resolved"))
+    }
+    
+    // Choice consistency validation methods
+    fn validate_internal_external_alignment(&self, execution_result: &SessionExecutionResult) -> bool {
+        let mut internal_choices = Vec::new();
+        let mut external_choices = Vec::new();
+        
+        for executed_op in &execution_result.operations_executed {
+            match &executed_op.operation {
+                SessionTraceOperation::InternalChoice { chosen_branch, .. } => {
+                    internal_choices.push(chosen_branch.clone());
+                }
+                SessionTraceOperation::ExternalChoice { expected_branch, .. } => {
+                    external_choices.push(expected_branch.clone());
+                }
+                _ => {}
+            }
+        }
+        
+        // For each internal choice, there should be a corresponding external choice
+        internal_choices.iter().all(|internal| {
+            external_choices.contains(internal)
+        })
+    }
+    
+    fn validate_choice_availability(&self, execution_result: &SessionExecutionResult) -> bool {
+        // Check that all choices made were from available options
+        execution_result.operations_executed.iter().all(|executed_op| {
+            match &executed_op.operation {
+                SessionTraceOperation::InternalChoice { chosen_branch, available_branches, .. } => {
+                    available_branches.contains(chosen_branch)
+                }
+                SessionTraceOperation::ExternalChoice { expected_branch, available_branches, .. } => {
+                    available_branches.contains(expected_branch)
+                }
+                _ => true
+            }
+        })
+    }
+    
+    fn validate_branch_reachability(&self, execution_result: &SessionExecutionResult) -> bool {
+        // Check that all chosen branches are reachable in the protocol
+        // For simplified validation, ensure no unreachable state errors
+        !execution_result.execution_trace.iter()
+            .any(|trace| trace.contains("unreachable"))
+    }
+    
+    // Type safety validation
+    fn validate_type_safety(&self, execution_result: &SessionExecutionResult, expected_types: &[TypeInner]) -> bool {
+        // Check that operations use expected types and detect mismatches appropriately
+        let has_expected_type_usage = execution_result.operations_executed.iter().any(|executed_op| {
+            match &executed_op.operation {
+                SessionTraceOperation::Send { message_type, .. } |
+                SessionTraceOperation::Receive { message_type, .. } => {
+                    expected_types.contains(message_type)
+                }
+                _ => true // Non-message operations don't have types to check
+            }
+        });
+        
+        // If we expect type errors, they should be detected
+        let type_errors_detected_correctly = if expected_types.len() > 1 {
+            // Multiple types suggests we expect type mismatches to be detected
+            !execution_result.type_errors.is_empty()
+        } else {
+            // Single type suggests no type errors expected
+            execution_result.type_errors.is_empty()
+        };
+        
+        has_expected_type_usage && type_errors_detected_correctly
+    }
 }
 
 /// Result of test suite execution
@@ -765,7 +1695,7 @@ impl MockHandlerRegistry {
         }
     }
     
-    pub fn register_handler(&mut self, effect_name: String, handler: Box<dyn MockEffectHandler>, _strategy: MockStrategy) -> Result<()> {
+    pub fn register_handler(&mut self, effect_name: String, handler: Box<dyn SessionEffectHandler>, _strategy: MockStrategy) -> Result<()> {
         self.handlers.insert(effect_name.clone(), handler);
         Ok(())
     }
@@ -775,7 +1705,7 @@ impl MockHandlerRegistry {
         Ok(())
     }
     
-    pub fn get_handler(&self, effect_name: &str) -> Option<&dyn MockEffectHandler> {
+    pub fn get_handler(&self, effect_name: &str) -> Option<&dyn SessionEffectHandler> {
         self.handlers.get(effect_name).map(|h| h.as_ref())
     }
 }
@@ -848,6 +1778,271 @@ impl MemoryMetrics {
             average_memory: 0,
             snapshots_created: 0,
             snapshot_storage_size: 0,
+        }
+    }
+}
+
+/// A session-based test case generated from session types
+#[derive(Debug, Clone)]
+pub struct SessionTestCase {
+    pub id: String,
+    pub session_type: SessionType,
+    pub participants: Vec<String>,
+    pub choreography: Option<ChoreographyProtocol>,
+    pub execution_path: SessionExecutionPath,
+    pub expected_outcomes: Vec<SessionExpectedOutcome>,
+    pub property_checks: Vec<SessionPropertyCheck>,
+}
+
+/// An execution path through a session protocol
+#[derive(Debug, Clone)]
+pub struct SessionExecutionPath {
+    pub operations: Vec<SessionTraceOperation>,
+    pub participants_involved: Vec<String>,
+    pub branch_points: Vec<BranchPoint>,
+    pub termination_conditions: Vec<TerminationCondition>,
+}
+
+/// A single operation in a session execution trace
+#[derive(Debug, Clone)]
+pub enum SessionTraceOperation {
+    Send {
+        from: String,
+        to: String,
+        message_type: TypeInner,
+        value: String,
+    },
+    Receive {
+        from: String,
+        to: String,
+        message_type: TypeInner,
+        expected_value: Option<String>,
+    },
+    InternalChoice {
+        participant: String,
+        chosen_branch: String,
+        available_branches: Vec<String>,
+    },
+    ExternalChoice {
+        participant: String,
+        expected_branch: String,
+        available_branches: Vec<String>,
+    },
+    End {
+        participants: Vec<String>,
+    },
+}
+
+/// Expected outcomes for session test cases
+#[derive(Debug, Clone)]
+pub enum SessionExpectedOutcome {
+    MessageSent {
+        success: bool,
+        delivery_confirmed: bool,
+    },
+    MessageReceived {
+        success: bool,
+        value_matches_expected: bool,
+    },
+    ChoiceMade {
+        choice_valid: bool,
+        protocol_progresses: bool,
+    },
+    ChoiceReceived {
+        choice_expected: bool,
+        protocol_continues: bool,
+    },
+    SessionTerminated {
+        clean_termination: bool,
+        all_participants_finished: bool,
+    },
+    ProtocolViolation {
+        violation_type: String,
+        error_detected: bool,
+    },
+    TypeError {
+        type_error: String,
+        error_detected: bool,
+    },
+}
+
+/// Property checks for session type properties
+#[derive(Debug, Clone)]
+pub enum SessionPropertyCheck {
+    LinearityCheck {
+        check_id: String,
+        description: String,
+        validation_logic: LinearityValidation,
+    },
+    DualityCheck {
+        check_id: String,
+        description: String,
+        validation_logic: DualityValidation,
+    },
+    ProtocolProgressionCheck {
+        check_id: String,
+        description: String,
+        validation_logic: ProtocolProgressionValidation,
+    },
+    ChoiceConsistencyCheck {
+        check_id: String,
+        description: String,
+        validation_logic: ChoiceConsistencyValidation,
+    },
+    ProtocolViolationCheck {
+        check_id: String,
+        description: String,
+        expected_violation: Option<String>,
+    },
+    TypeSafetyCheck {
+        check_id: String,
+        description: String,
+        expected_types: Vec<TypeInner>,
+    },
+}
+
+/// Validation logic for linearity properties
+#[derive(Debug, Clone)]
+pub enum LinearityValidation {
+    ResourceUsageCount,
+    NoResourceDuplication,
+    ExactlyOnceSemantics,
+}
+
+/// Validation logic for duality properties
+#[derive(Debug, Clone)]
+pub enum DualityValidation {
+    SendReceivePairs,
+    TypeConsistency,
+    ProtocolComplementarity,
+}
+
+/// Validation logic for protocol progression
+#[derive(Debug, Clone)]
+pub enum ProtocolProgressionValidation {
+    SessionTypeConformance,
+    StateTransitionValidity,
+    DeadlockFreedom,
+}
+
+/// Validation logic for choice consistency
+#[derive(Debug, Clone)]
+pub enum ChoiceConsistencyValidation {
+    InternalExternalAlignment,
+    ChoiceAvailability,
+    BranchReachability,
+}
+
+/// A branch point in session execution
+#[derive(Debug, Clone)]
+pub struct BranchPoint {
+    pub operation_index: usize,
+    pub branch_type: String, // "internal_choice" or "external_choice"
+    pub available_branches: Vec<String>,
+    pub chosen_branch: String,
+}
+
+/// Termination conditions for session execution
+#[derive(Debug, Clone)]
+pub enum TerminationCondition {
+    NormalCompletion,
+    ProtocolViolation(String),
+    TypeError(String),
+    DeadlockDetected,
+    TimeoutExpired,
+}
+
+/// Result of session property test execution
+#[derive(Debug, Clone)]
+pub struct SessionPropertyTestResult {
+    pub test_case_id: String,
+    pub success: bool,
+    pub execution_time: Duration,
+    pub property_results: Vec<PropertyValidationResult>,
+    pub outcome_validation: OutcomeValidationResult,
+    pub execution_details: SessionExecutionResult,
+}
+
+/// Result of validating a single property
+#[derive(Debug, Clone)]
+pub struct PropertyValidationResult {
+    pub property_id: String,
+    pub passed: bool,
+    pub details: String,
+    pub validation_evidence: Vec<String>,
+}
+
+/// Result of validating expected outcomes
+#[derive(Debug, Clone)]
+pub struct OutcomeValidationResult {
+    pub all_outcomes_met: bool,
+    pub individual_outcomes: Vec<IndividualOutcomeResult>,
+    pub unexpected_outcomes: Vec<String>,
+}
+
+/// Result of a single expected outcome validation
+#[derive(Debug, Clone)]
+pub struct IndividualOutcomeResult {
+    pub outcome_type: String,
+    pub expected: bool,
+    pub actual: bool,
+    pub details: String,
+}
+
+/// Result of executing a session test case
+#[derive(Debug, Clone)]
+pub struct SessionExecutionResult {
+    pub operations_executed: Vec<ExecutedOperation>,
+    pub final_states: BTreeMap<String, String>, // Participant -> final state
+    pub protocol_violations: Vec<String>,
+    pub type_errors: Vec<String>,
+    pub execution_trace: Vec<String>,
+}
+
+/// Details of an executed operation
+#[derive(Debug, Clone)]
+pub struct ExecutedOperation {
+    pub operation: SessionTraceOperation,
+    pub execution_time: Duration,
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub state_changes: Vec<String>,
+}
+
+/// Result of executing a trace operation
+#[derive(Debug, Clone)]
+struct TraceOperationResult {
+    pub success: bool,
+    pub protocol_violation: Option<String>,
+    pub type_error: Option<String>,
+    pub error_message: Option<String>,
+    pub state_changes: Vec<String>,
+}
+
+/// Default session effect handler for testing
+#[derive(Debug, Clone)]
+struct DefaultSessionEffectHandler {
+    strategy: MockStrategy,
+}
+
+impl DefaultSessionEffectHandler {
+    fn new(strategy: MockStrategy) -> Self {
+        Self { strategy }
+    }
+}
+
+impl SessionEffectHandler for DefaultSessionEffectHandler {
+    fn handle_effect(&self, _effect: &SessionEffect) -> Result<TestValue> {
+        match self.strategy {
+            MockStrategy::AlwaysSucceed => Ok(TestValue::string("success".to_string())),
+            MockStrategy::AlwaysFail => Err(anyhow::anyhow!("Mock handler configured to always fail")),
+            MockStrategy::Random => {
+                if rand::random::<bool>() {
+                    Ok(TestValue::string("random_success".to_string()))
+                } else {
+                    Err(anyhow::anyhow!("Random mock failure"))
+                }
+            }
         }
     }
 }

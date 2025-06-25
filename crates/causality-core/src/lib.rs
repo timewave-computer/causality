@@ -7,7 +7,7 @@
 //!
 //! The crate is organized into three distinct layers:
 //!
-//! - **`machine/`** - Layer 0: Register Machine (11 instructions, minimal verifiable execution)
+//! - **`machine/`** - Layer 0: Register Machine (5 fundamental instructions, minimal verifiable execution)
 //! - **`lambda/`** - Layer 1: Linear Lambda Calculus (type-safe functional programming)
 //! - **`effect/`** - Layer 2: Effect Algebra (domain-specific effect management)
 //! - **`system/`** - Cross-cutting system utilities (content addressing, errors, serialization)
@@ -45,7 +45,7 @@ pub use system::{
     StorageCommitment, StorageKeyDerivation, StorageKeyComponent, 
     StorageAddressable, StorageCommitmentBatch,
     // Errors (unified system)
-    error::{TypeError, MachineError, ReductionError, LinearityError},
+    error::{TypeError, LinearityError},
     // Content addressing and core types
     encode_fixed_bytes, decode_fixed_bytes, DecodeWithRemainder,
     encode_with_length, decode_with_length, encode_enum_variant, decode_enum_variant,
@@ -406,8 +406,4 @@ pub use effect::{
     Intent, TransformConstraint, TransformDefinition,
     synthesis, intent_evaluator, teg, transform_constraint, transform,
     capability, row, location_row, protocol_derivation, core as effect_core,
-};
-pub use system::{
-    DeterministicSystem,
-    content_addressing, deterministic, domain, error, utils,
 };

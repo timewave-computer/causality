@@ -6,7 +6,7 @@
 
     - {!module:System} - Cross-cutting system utilities (content addressing,
       errors, domains)
-    - {!module:Machine} - Layer 0: Register Machine (11 instructions, minimal
+    - {!module:Machine} - Layer 0: Register Machine (5 fundamental instructions, minimal
       verifiable execution)
     - {!module:Lambda} - Layer 1: Linear Lambda Calculus (type-safe functional
       programming)

@@ -1,7 +1,18 @@
-(** Layer 1: Linear Lambda Calculus Base Types
+(** Layer 1: Linear Lambda Calculus - Unified Type System
 
-    This module provides the foundation for the linear lambda calculus,
-    including linearity phantom types, base types, and value construction. *)
+    This module provides the foundation for the linear lambda calculus with
+    a unified type system that seamlessly integrates structured types, session 
+    types, and location awareness. *)
+
+(** {1 Location System} *)
+
+(** Location information for distributed computation *)
+type location =
+  | Local                    (** Local computation *)
+  | Remote of string        (** Specific remote location *)
+  | Domain of string        (** Logical domain *)
+  | Any                     (** Location-polymorphic *)
+[@@deriving show, eq]
 
 (** {1 Linearity Phantom Types} *)
 
@@ -22,21 +33,49 @@ type unrestricted = [ `Unrestricted ]
 (** Primitive base types *)
 type base_type = Unit | Bool | Int | Symbol [@@deriving show, eq]
 
-(** Core type expressions with linearity *)
-type type_inner =
-  | Base of base_type
-  | Product of type_inner * type_inner
-  | Sum of type_inner * type_inner
-  | LinearFunction of type_inner * type_inner
-  | Record of record_type
-  | ResourceType of string
+(** {1 Session Types} *)
+
+(** Session types for type-safe communication protocols *)
+type session_type =
+  | Send of type_inner * session_type     (** Send a value, continue with protocol *)
+  | Receive of type_inner * session_type  (** Receive a value, continue with protocol *)
+  | InternalChoice of (string * session_type) list  (** We choose *)
+  | ExternalChoice of (string * session_type) list  (** Other party chooses *)
+  | End                                    (** End of communication *)
+  | Recursive of string * session_type     (** Recursive protocols *)
+  | Variable of string                     (** Session variable *)
+
+(** Unified type expressions with linearity and location awareness *)
+and type_inner =
+  | Base of base_type                               (** Base primitive types *)
+  | Product of type_inner * type_inner             (** Linear product type (τ₁ ⊗ τ₂) *)
+  | Sum of type_inner * type_inner                 (** Sum type (τ₁ ⊕ τ₂) *)
+  | LinearFunction of type_inner * type_inner      (** Linear function type (τ₁ ⊸ τ₂) *)
+  | Record of record_type                           (** Record type with location-aware row polymorphism *)
+  | Session of session_type                         (** Session type - communication protocols *)
+  | Transform of {
+      input : type_inner;
+      output : type_inner;
+      location : location;
+    }
+  | Located of type_inner * location                (** Type with location annotation *)
 
 and record_type = {
-    fields : (string * type_inner) list
-  ; row_id : bytes option (* Content-addressed row type ID *)
+    fields : field_type list;
+    extension : row_variable option;  (** Optional row variable for polymorphism *)
 }
+
+and field_type = {
+    name : string;
+    ty : type_inner;
+    location : location option;       (** Location constraint for the field *)
+    access : field_access;            (** Access permissions *)
+}
+
+and field_access = Read | Write | ReadWrite
+
+and row_variable = string
 [@@deriving show, eq]
-(** Record type definition *)
 
 (** {1 Linearity-Tracked Types} *)
 
@@ -62,10 +101,16 @@ type value =
   | Product of value * value
   | Sum of { tag : int; value : value }
   | Record of { fields : (string * value) list }
-  | Closure of { params : string list; body : term } (* Renamed from Lambda *)
+  | Closure of { params : string list; body : term; env : (string * value) list }
   | ResourceRef of bytes
+  | SessionChannel of { protocol : session_type; state : channel_state }
 
-(** Lambda calculus terms *)
+(** Channel state for session types *)
+and channel_state = 
+  | Active of session_type  (** Current protocol state *)
+  | Closed                  (** Channel has been closed *)
+
+(** Lambda calculus terms - extended with unified operations *)
 and term =
   (* Core values and variables *)
   | Const of value
@@ -87,10 +132,19 @@ and term =
   (* Resource management *)
   | Alloc of term
   | Consume of term
-  (* Record operations *)
+  (* Record operations - location-aware *)
   | RecordCreate of (string * term) list
-  | RecordProject of term * string
+  | RecordProject of term * string * location option
   | RecordExtend of term * string * term
+  | RecordUpdate of term * string * term * location option
+  (* Session operations *)
+  | SessionNew of session_type * string  (** Create new session with role *)
+  | SessionSend of term * term           (** Send on channel *)
+  | SessionReceive of term               (** Receive from channel *)
+  | SessionClose of term                 (** Close session channel *)
+  (* Location operations *)
+  | AtLocation of term * location        (** Execute at specific location *)
+  | Migrate of term * location * location (** Migrate data between locations *)
 [@@deriving show, eq]
 
 (** {1 Value Operations} *)
@@ -108,11 +162,17 @@ module Value = struct
         Sum (get_type value, get_type value) (* Simplified *)
     | Record { fields } ->
         let field_types =
-          List.map (fun (name, v) -> (name, get_type v)) fields
+          List.map (fun (name, v) -> {
+            name;
+            ty = get_type v;
+            location = None;
+            access = ReadWrite;
+          }) fields
         in
-        Record { fields = field_types; row_id = None }
+        Record { fields = field_types; extension = None }
     | Closure _ -> LinearFunction (Base Unit, Base Unit) (* Placeholder *)
-    | ResourceRef _ -> ResourceType "generic"
+    | ResourceRef _ -> Base Symbol (* Simplified *)
+    | SessionChannel { protocol; _ } -> Session protocol
 
   (** Create product value *)
   let product (v1 : value) (v2 : value) : value = Product (v1, v2)

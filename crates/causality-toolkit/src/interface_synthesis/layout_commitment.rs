@@ -1,7 +1,6 @@
 /// Real Almanac schema format (matching indexer-core::ContractSchema)
 #[cfg(feature = "almanac")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AlmanacSchema {
     pub contract_address: String,
     pub chain_id: String,
     pub contract_name: Option<String>,

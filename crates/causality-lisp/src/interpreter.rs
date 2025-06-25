@@ -70,6 +70,7 @@ pub struct Interpreter {
 
 /// Session instance tracking for interpreter runtime
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SessionInstance {
     /// Session declaration name
     session_name: String,

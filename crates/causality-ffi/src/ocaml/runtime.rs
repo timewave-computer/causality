@@ -101,7 +101,7 @@ pub fn causality_cleanup() -> bool {
 }
 
 /// Execute operation with runtime state
-pub fn with_runtime_state<T, F>(f: F) -> Result<T, String>
+pub fn with_runtime_state<T, F>(_f: F) -> Result<T, String>
 where
     F: FnOnce(&mut RuntimeState) -> T,
 {
@@ -109,7 +109,7 @@ where
         .map_err(|_| "Failed to acquire runtime lock".to_string())?;
     
     match state_guard.as_ref() {
-        Some(state_arc) => {
+        Some(_state_arc) => {
             // For this simplified version, we'll return an error since we can't easily get mutable access
             Err("Runtime state access not implemented in simplified version".to_string())
         }

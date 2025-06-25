@@ -1,3 +1,4 @@
+
 //! Formal verification utilities for the Causality toolkit.
 
 use causality_core::{Value, EntityId};
