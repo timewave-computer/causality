@@ -131,24 +131,4 @@ The system emphasizes composition at every level:
 - **Nullifier Verification**: Constant-time verification operations
 - **Serialization**: Efficient encoding/decoding
 
-## Testing Framework
-
-The crate includes comprehensive testing infrastructure:
-
-```rust
-#[test]
-fn test_linearity_constraints() {
-    let mut state = MachineState::new();
-    
-    // Store value in register
-    state.store_register(RegisterId::new(1), MachineValue::Int(42), None);
-    
-    // Consume register
-    assert!(state.consume_register(RegisterId::new(1)).is_ok());
-    
-    // Try to consume again - should fail
-    assert!(state.consume_register(RegisterId::new(1)).is_err());
-}
-```
-
 This comprehensive foundation enables the construction of complex distributed systems while maintaining mathematical rigor and verifiability throughout.

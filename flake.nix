@@ -121,6 +121,48 @@
               ${pkgs.crate2nix}/bin/crate2nix generate
               echo "Cargo.nix file regenerated from Cargo.toml"
             '')
+            
+            # Add OCaml environment reload script
+            (pkgs.writeShellScriptBin "reload-ocaml-env" ''
+              set -euo pipefail
+              
+              echo "Reloading OCaml development environment..."
+              
+              # Kill any existing OCaml LSP processes
+              echo "Stopping OCaml Language Server processes..."
+              pkill -f "ocaml-lsp" || true
+              sleep 1
+              
+              # Clear all OCaml build and cache directories
+              echo "🧹 Clearing OCaml caches..."
+              rm -rf ./_build
+              rm -rf ./ocaml_causality/_build
+              rm -rf ./ocaml_ssz/_build
+              rm -rf ./e2e/ocaml_harness/_build
+              rm -rf ./.ocaml-lsp-cache
+              rm -rf ./.dune-cache
+              
+              # Recreate cache directories
+              mkdir -p ./.ocaml-lsp-cache
+              mkdir -p ./.dune-cache
+              
+              # Reload direnv environment
+              echo "🔄 Reloading direnv environment..."
+              ${pkgs.direnv}/bin/direnv reload
+              
+              echo "✅ OCaml environment reload complete!"
+              echo ""
+              echo "Next steps:"
+              echo "  1. Restart your editor/IDE"
+              echo "  2. The OCaml LSP will automatically restart with fresh cache"
+              echo "  3. Run 'dune build' to verify everything works"
+              echo ""
+              echo "Available commands in the shell:"
+              echo "  - clear-ocaml-caches: Clear all OCaml caches"
+              echo "  - restart-ocaml-lsp: Restart OCaml LSP with fresh cache"
+              echo "  - build-ocaml: Build OCaml components"
+              echo "  - start-utop: Start OCaml interactive session"
+            '')
           ] ++ ocamlLibDeps ++ ocamlToolDeps # Add lib and tool deps to shell packages
           ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
             pkgs.darwin.apple_sdk.frameworks.Security
@@ -134,6 +176,24 @@
             export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
             export OPENSSL_DIR=${pkgs.openssl.dev}
             export OPENSSL_LIB_DIR=${pkgs.openssl.out}/lib
+
+            # OCaml Language Server Cache Management
+            # Force LSP to use project-local cache directories
+            export OCAML_LSP_CACHE_DIR="$PWD/.ocaml-lsp-cache"
+            export DUNE_CACHE_ROOT="$PWD/.dune-cache"
+            export DUNE_CACHE=enabled
+            
+            # Clear stale cache on shell entry
+            if [ -d "$OCAML_LSP_CACHE_DIR" ]; then
+              echo "Clearing OCaml LSP cache..."
+              rm -rf "$OCAML_LSP_CACHE_DIR"
+            fi
+            mkdir -p "$OCAML_LSP_CACHE_DIR"
+            
+            # Ensure dune cache is properly initialized
+            if [ ! -d "$DUNE_CACHE_ROOT" ]; then
+              mkdir -p "$DUNE_CACHE_ROOT"
+            fi
 
             # --- Debugging OCAMLPATH Construction ---
             echo "---- START OCAMLPATH DEBUG ----"
@@ -150,6 +210,31 @@
             # OCaml environment variables - use ocamlLibDeps for paths
             export OCAMLPATH=${mkOcamlPath ocamlLibDeps}
             export CAML_LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath ocamlLibDeps}
+            
+            # Add helper function to clear all OCaml caches
+            clear-ocaml-caches() {
+              echo "Clearing all OCaml caches..."
+              rm -rf ./_build
+              rm -rf ./ocaml_causality/_build
+              rm -rf ./ocaml_ssz/_build
+              rm -rf ./e2e/ocaml_harness/_build
+              rm -rf "$OCAML_LSP_CACHE_DIR"
+              rm -rf "$DUNE_CACHE_ROOT"
+              mkdir -p "$OCAML_LSP_CACHE_DIR"
+              mkdir -p "$DUNE_CACHE_ROOT"
+              echo "All OCaml caches cleared and reinitialized"
+            }
+            export -f clear-ocaml-caches
+            
+            # Add helper function to restart OCaml LSP
+            restart-ocaml-lsp() {
+              echo "Restarting OCaml Language Server..."
+              pkill -f "ocaml-lsp" || true
+              clear-ocaml-caches
+              echo "OCaml LSP restart complete - cache cleared"
+              echo "Your editor should reconnect to a fresh LSP instance"
+            }
+            export -f restart-ocaml-lsp
             
             # Add helper function to regenerate Nix files from Cargo.toml
             generate-cargo-nix() {
@@ -215,6 +300,9 @@
             echo "Run 'build-ocaml' to build OCaml components."
             echo "Run 'start-utop' for OCaml interactive session."
             echo "Run 'check-ocaml-paths' for OCaml library path diagnostics."
+            echo "Run 'clear-ocaml-caches' to clear all OCaml build and LSP caches."
+            echo "Run 'restart-ocaml-lsp' to restart the OCaml Language Server with fresh cache."
+            echo "Run 'reload-ocaml-env' to completely reload the OCaml environment and clear all caches."
           '';
         };
       });

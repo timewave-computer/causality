@@ -11,6 +11,10 @@ _build/
 dune-project.lock
 *.merlin
 
+# OCaml LSP and Dune cache directories
+.ocaml-lsp-cache/
+.dune-cache/
+
 # Nix build outputs
 result
 result-*

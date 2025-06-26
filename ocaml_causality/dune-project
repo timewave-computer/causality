@@ -2,4 +2,4 @@
 
 (package
  (name causality-ocaml)
- (depends ocaml dune ppx_deriving))
+ (depends ocaml dune ppx_deriving zarith))
