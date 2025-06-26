@@ -2,13 +2,15 @@
 //!
 //! This module defines the AST types for the Causality Lisp language,
 //! containing exactly the 11 Layer 1 primitives that form the mathematical
-//! foundation of the linear lambda calculus with algebraic data types.
+//! foundation of the linear lambda calculus with algebraic data types,
+//! plus session types integration for Layer 2 communication protocols.
 
 use causality_core::{
-    lambda::{base::{TypeInner, Value as CoreValue}, Symbol},
+    lambda::{Symbol, base::{TypeInner, Value}},
     system::content_addressing::{EntityId, Str},
+    effect::session_registry::{SessionRole}, // Import session types
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Main expression type
 #[derive(Debug, Clone, PartialEq)]
@@ -18,9 +20,10 @@ pub struct Expr {
     pub span: Option<Span>,
 }
 
-/// Expression kinds - exactly 11 core Layer 1 primitives
+/// Expression kinds - 11 core Layer 1 primitives + session types integration
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
+    // Core Layer 1 primitives (11 total)
     // Literals and variables
     Const(LispValue),
     Var(Symbol),
@@ -56,6 +59,37 @@ pub enum ExprKind {
         field: String,
         value: Box<Expr>,
     },
+
+    // Session types integration (Layer 2)
+    // Session type declarations
+    SessionDeclaration {
+        name: String,
+        roles: Vec<SessionRole>,
+    },
+    
+    // Session usage
+    WithSession {
+        session: String,
+        role: String,
+        body: Box<Expr>,
+    },
+    
+    // Session operations
+    SessionSend { 
+        channel: Box<Expr>, 
+        value: Box<Expr> 
+    },
+    SessionReceive { 
+        channel: Box<Expr> 
+    },
+    SessionSelect { 
+        channel: Box<Expr>, 
+        choice: String 
+    },
+    SessionCase { 
+        channel: Box<Expr>, 
+        branches: Vec<SessionBranch> 
+    },
 }
 
 /// Function parameter
@@ -80,15 +114,32 @@ pub enum LispValue {
     Unit,
     Bool(bool),
     Int(i64),
-    Float(f64),
+
     String(Str),
     Symbol(Symbol),
     List(Vec<LispValue>),
-    Map(HashMap<Symbol, LispValue>),
-    Record(HashMap<Symbol, LispValue>),
+    Map(BTreeMap<Symbol, LispValue>),
+    Record(BTreeMap<Symbol, LispValue>),
     ResourceId(EntityId),
     ExprId(EntityId),
-    CoreValue(CoreValue), // Integration with core Value system
+    CoreValue(Value), // Integration with core Value system
+}
+
+/// Session branch for case operations
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionBranch {
+    pub label: String,
+    pub body: Expr,
+}
+
+impl SessionBranch {
+    /// Create a new session branch
+    pub fn new(label: impl Into<String>, body: Expr) -> Self {
+        Self {
+            label: label.into(),
+            body,
+        }
+    }
 }
 
 impl Expr {
@@ -234,6 +285,55 @@ impl Expr {
                 .fold(Self::unit(), |acc, elem| Self::tensor(elem, acc))
         }
     }
+
+    // Session types expressions
+    /// Create a session declaration
+    pub fn session_declaration(name: impl Into<String>, roles: Vec<SessionRole>) -> Self {
+        Self::new(ExprKind::SessionDeclaration {
+            name: name.into(),
+            roles,
+        })
+    }
+
+    /// Create a with-session expression
+    pub fn with_session(session: impl Into<String>, role: impl Into<String>, body: Expr) -> Self {
+        Self::new(ExprKind::WithSession {
+            session: session.into(),
+            role: role.into(),
+            body: Box::new(body),
+        })
+    }
+
+    /// Create a session send expression
+    pub fn session_send(channel: Expr, value: Expr) -> Self {
+        Self::new(ExprKind::SessionSend {
+            channel: Box::new(channel),
+            value: Box::new(value),
+        })
+    }
+
+    /// Create a session receive expression
+    pub fn session_receive(channel: Expr) -> Self {
+        Self::new(ExprKind::SessionReceive {
+            channel: Box::new(channel),
+        })
+    }
+
+    /// Create a session select expression
+    pub fn session_select(channel: Expr, choice: impl Into<String>) -> Self {
+        Self::new(ExprKind::SessionSelect {
+            channel: Box::new(channel),
+            choice: choice.into(),
+        })
+    }
+
+    /// Create a session case expression
+    pub fn session_case(channel: Expr, branches: Vec<SessionBranch>) -> Self {
+        Self::new(ExprKind::SessionCase {
+            channel: Box::new(channel),
+            branches,
+        })
+    }
 }
 
 impl Param {
@@ -261,7 +361,7 @@ impl LispValue {
             LispValue::Unit => false,
             LispValue::Bool(b) => *b,
             LispValue::Int(i) => *i != 0,
-            LispValue::Float(f) => *f != 0.0,
+
             LispValue::String(s) => !s.value.is_empty(),
             LispValue::Symbol(_) => true,
             LispValue::List(l) => !l.is_empty(),
@@ -279,7 +379,7 @@ impl LispValue {
             LispValue::Unit => "Unit",
             LispValue::Bool(_) => "Bool",
             LispValue::Int(_) => "Int",
-            LispValue::Float(_) => "Float",
+
             LispValue::String(_) => "String",
             LispValue::Symbol(_) => "Symbol",
             LispValue::List(_) => "List",
@@ -319,5 +419,41 @@ pub mod helpers {
     /// Create a unit constant
     pub fn unit() -> Expr {
         Expr::unit()
+    }
+
+    // Session types helpers
+    /// Create a session declaration with roles
+    pub fn def_session(name: impl Into<String>, roles: Vec<SessionRole>) -> Expr {
+        Expr::session_declaration(name, roles)
+    }
+
+    /// Create a with-session expression for session context
+    pub fn with_session(session: impl Into<String>, role: impl Into<String>, body: Expr) -> Expr {
+        Expr::with_session(session, role, body)
+    }
+
+    /// Create a session send operation
+    pub fn session_send(channel: Expr, value: Expr) -> Expr {
+        Expr::session_send(channel, value)
+    }
+
+    /// Create a session receive operation
+    pub fn session_recv(channel: Expr) -> Expr {
+        Expr::session_receive(channel)
+    }
+
+    /// Create a session select operation
+    pub fn session_select(channel: Expr, choice: impl Into<String>) -> Expr {
+        Expr::session_select(channel, choice)
+    }
+
+    /// Create a session case operation
+    pub fn session_case(channel: Expr, branches: Vec<SessionBranch>) -> Expr {
+        Expr::session_case(channel, branches)
+    }
+
+    /// Create a session branch for case operations
+    pub fn session_branch(label: impl Into<String>, body: Expr) -> SessionBranch {
+        SessionBranch::new(label, body)
     }
 } 

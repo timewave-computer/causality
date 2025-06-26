@@ -1,7 +1,7 @@
 //! Common error types for the Causality framework
 
 use std::fmt;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
 
 //-----------------------------------------------------------------------------
@@ -156,7 +156,7 @@ pub struct ErrorMetadata {
     pub category: ErrorCategory,
     
     /// Additional context fields
-    pub context: HashMap<String, String>,
+    pub context: BTreeMap<String, String>,
     
     /// Timestamp
     pub timestamp: u64,
@@ -166,7 +166,7 @@ impl ErrorMetadata {
     pub fn new(category: ErrorCategory) -> Self {
         Self {
             category,
-            context: HashMap::new(),
+            context: BTreeMap::new(),
             timestamp: crate::system::utils::get_current_time_ms(),
         }
     }

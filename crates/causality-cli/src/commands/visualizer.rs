@@ -9,7 +9,7 @@ use causality_core::{
     lambda::{Term, TermKind},
     machine::{Instruction, RegisterId},
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Visualization configuration
 #[derive(Debug, Clone)]
@@ -105,8 +105,8 @@ pub fn visualize_resources(
 fn build_resource_flow_graph(instructions: &[Instruction]) -> Result<ResourceFlowGraph> {
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
-    let mut register_map: HashMap<RegisterId, String> = HashMap::new();
-    let mut resource_allocations: HashMap<RegisterId, String> = HashMap::new();
+    let mut register_map: BTreeMap<RegisterId, String> = BTreeMap::new();
+    let mut resource_allocations: BTreeMap<RegisterId, String> = BTreeMap::new();
     
     // First pass: create nodes for each instruction
     for (i, instruction) in instructions.iter().enumerate() {
@@ -217,7 +217,7 @@ fn build_resource_flow_graph(instructions: &[Instruction]) -> Result<ResourceFlo
     }
     
     // Calculate metadata
-    let unique_registers: HashSet<_> = register_map.keys().collect();
+    let unique_registers: BTreeSet<_> = register_map.keys().collect();
     let resource_count = resource_allocations.len();
     
     Ok(ResourceFlowGraph {
@@ -257,7 +257,7 @@ fn find_register_producer(
 
 /// Calculate maximum number of live resources at any point
 fn calculate_max_live_resources(instructions: &[Instruction]) -> usize {
-    let mut live_resources = HashSet::new();
+    let mut live_resources = BTreeSet::new();
     let mut max_live = 0;
     
     for instruction in instructions {

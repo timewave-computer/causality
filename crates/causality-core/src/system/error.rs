@@ -1,253 +1,349 @@
-//! Unified error handling for causality-core
+//! Error handling for the Causality system
 //!
-//! This module provides a shared error pipeline using `thiserror` for structured
-//! error types and `anyhow` for error context and chaining.
+//! This module provides comprehensive error types and handling for all Causality operations,
+//! including type errors, resource management errors, and system-level failures.
 
 #![allow(clippy::result_large_err)]
 
-use crate::{
-    lambda::TypeInner,
-    machine::instruction::RegisterId,
-    system::content_addressing::ResourceId,
-};
 use thiserror::Error;
-use anyhow;
 
-/// Type alias for Results using our Error type
-pub type Result<T> = std::result::Result<T, Error>;
-
-/// Main error type for the causality-core crate
-#[derive(Error, Debug)]
+/// Core system error type
+///
+/// This error type encompasses all possible failures in the Causality system,
+/// from type checking errors to resource management failures.
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum Error {
     /// Type system errors
-    #[error("type error: {0}")]
-    Type(#[from] TypeError),
-    
-    /// Register machine errors
-    #[error("machine error: {0}")]
-    Machine(#[from] MachineError),
-    
-    /// Reduction/execution errors
-    #[error("reduction error: {0}")]
-    Reduction(#[from] ReductionError),
-    
-    /// Linearity errors
-    #[error("linearity error: {0}")]
+    #[error("Type error: {0}")]
+    Type(#[from] Box<TypeError>),
+
+    /// Resource management errors
+    #[error("Resource error: {message}")]
+    Resource { message: String },
+
+    /// Linear resource violations
+    #[error("Linear resource violation: {0}")]
     Linearity(#[from] LinearityError),
-    
-    /// IO errors
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-    
+
+    /// Content addressing errors
+    #[error("Content addressing error: {message}")]
+    ContentAddressing { message: String },
+
     /// Serialization errors
-    #[error("serialization error: {0}")]
-    Serialization(String),
-    
-    /// Generic errors with context
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    #[error("Serialization error: {message}")]
+    Serialization { message: String },
+
+    /// Storage errors
+    #[error("Storage error: {message}")]
+    Storage { message: String },
+
+    /// Network errors
+    #[error("Network error: {message}")]
+    Network { message: String },
+
+    /// Validation errors
+    #[error("Validation error: {message}")]
+    Validation { message: String },
+
+    /// Generic system error
+    #[error("System error: {message}")]
+    System { message: String },
 }
 
-/// Error kinds for categorization
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Type system error variants
+///
+/// Detailed error information for type checking and inference failures.
+#[derive(Error, Debug, Clone, PartialEq)]
+pub enum TypeError {
+    /// Type mismatch between expected and actual types
+    #[error("Type mismatch: expected {expected}, found {actual}")]
+    Mismatch { expected: String, actual: String },
+
+    /// Unification failure during type inference
+    #[error("Cannot unify types: {left} and {right}")]
+    UnificationFailure { left: String, right: String },
+
+    /// Unknown type variable
+    #[error("Unknown type variable: {name}")]
+    UnknownTypeVariable { name: String },
+
+    /// Occurs check failure (infinite type)
+    #[error("Occurs check failed: type variable {var} occurs in {type_expr}")]
+    OccursCheck { var: String, type_expr: String },
+
+    /// Kind mismatch (type vs kind level)
+    #[error("Kind mismatch: expected {expected}, found {actual}")]
+    KindMismatch { expected: String, actual: String },
+
+    /// Arity mismatch for type constructors
+    #[error("Arity mismatch for {constructor}: expected {expected} arguments, found {actual}")]
+    ArityMismatch {
+        constructor: String,
+        expected: usize,
+        actual: usize,
+    },
+
+    /// Linear resource type error
+    #[error("Linear resource error: {message}")]
+    LinearResource { message: String },
+
+    /// Session type error
+    #[error("Session type error: {message}")]
+    SessionType { message: String },
+
+    /// Effect type error
+    #[error("Effect type error: {message}")]
+    EffectType { message: String },
+
+    /// Row type error
+    #[error("Row type error: {message}")]
+    RowType { message: String },
+
+    /// Constraint solving error
+    #[error("Constraint solving error: {message}")]
+    ConstraintSolving { message: String },
+
+    /// Generic type error
+    #[error("Type error: {message}")]
+    Generic { message: String },
+}
+
+/// Linear resource management errors
+#[derive(Error, Debug, Clone, PartialEq)]
+pub enum LinearityError {
+    /// Resource used more than once
+    #[error("Resource used multiple times: {resource}")]
+    MultipleUse { resource: String },
+
+    /// Resource not used
+    #[error("Resource not used: {resource}")]
+    NotUsed { resource: String },
+
+    /// Resource used after being consumed
+    #[error("Resource used after consumption: {resource}")]
+    UseAfterConsumption { resource: String },
+
+    /// Generic linearity error
+    #[error("Linearity error: {message}")]
+    Generic { message: String },
+}
+
+/// Result type for Causality operations
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// Result type for type checking operations
+pub type TypeResult<T> = std::result::Result<T, TypeError>;
+
+/// Error classification for handling and recovery
+#[derive(Debug, Clone, PartialEq)]
 pub enum ErrorKind {
-    TypeError,
-    MachineError,
-    ReductionError,
-    LinearityError,
-    IoError,
+    /// Fatal errors that should stop execution
+    Fatal,
+    /// Recoverable errors that can be retried
+    Recoverable,
+    /// Validation errors from user input
+    Validation,
+    /// Type checking errors
+    Type,
+    /// Resource management errors
+    Resource,
+    /// Serialization/deserialization errors
     SerializationError,
-    Other,
 }
 
 impl Error {
-    /// Get the kind of this error
+    /// Get the error classification
     pub fn kind(&self) -> ErrorKind {
         match self {
-            Error::Type(_) => ErrorKind::TypeError,
-            Error::Machine(_) => ErrorKind::MachineError,
-            Error::Reduction(_) => ErrorKind::ReductionError,
-            Error::Linearity(_) => ErrorKind::LinearityError,
-            Error::Io(_) => ErrorKind::IoError,
-            Error::Serialization(_) => ErrorKind::SerializationError,
-            Error::Other(_) => ErrorKind::Other,
+            Error::Type(_) => ErrorKind::Type,
+            Error::Resource { .. } => ErrorKind::Resource,
+            Error::Linearity(_) => ErrorKind::Resource,
+            Error::ContentAddressing { .. } => ErrorKind::Resource,
+            Error::Serialization { .. } => ErrorKind::SerializationError,
+            Error::Storage { .. } => ErrorKind::Recoverable,
+            Error::Network { .. } => ErrorKind::Recoverable,
+            Error::Validation { .. } => ErrorKind::Validation,
+            Error::System { .. } => ErrorKind::Fatal,
         }
     }
-    
-    /// Create an error with additional context
-    pub fn context<C>(self, context: C) -> Self
-    where
-        C: std::fmt::Display + Send + Sync + 'static,
-    {
-        Error::Other(anyhow::Error::new(self).context(context))
-    }
-    
+
     /// Helper for serialization errors
     pub fn serialization<S: Into<String>>(msg: S) -> Self {
-        Error::Serialization(msg.into())
+        Error::Serialization { message: msg.into() }
+    }
+
+    /// Create a resource error
+    pub fn resource(message: impl Into<String>) -> Self {
+        Self::Resource {
+            message: message.into(),
+        }
+    }
+
+    /// Create a content addressing error
+    pub fn content_addressing(message: impl Into<String>) -> Self {
+        Self::ContentAddressing {
+            message: message.into(),
+        }
+    }
+
+    /// Create a storage error
+    pub fn storage(message: impl Into<String>) -> Self {
+        Self::Storage {
+            message: message.into(),
+        }
+    }
+
+    /// Create a network error
+    pub fn network(message: impl Into<String>) -> Self {
+        Self::Network {
+            message: message.into(),
+        }
+    }
+
+    /// Create a validation error
+    pub fn validation(message: impl Into<String>) -> Self {
+        Self::Validation {
+            message: message.into(),
+        }
+    }
+
+    /// Create a system error
+    pub fn system(message: impl Into<String>) -> Self {
+        Self::System {
+            message: message.into(),
+        }
     }
 }
 
-//-----------------------------------------------------------------------------
-// Type System Errors
-//-----------------------------------------------------------------------------
+impl TypeError {
+    /// Create a type mismatch error
+    pub fn mismatch(expected: impl Into<String>, actual: impl Into<String>) -> Self {
+        Self::Mismatch {
+            expected: expected.into(),
+            actual: actual.into(),
+        }
+    }
 
-/// Errors related to the type system
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum TypeError {
-    #[error("type mismatch: expected {expected:?}, found {found:?}")]
-    Mismatch {
-        expected: Box<TypeInner>,
-        found: Box<TypeInner>,
-    },
-    
-    #[error("unknown type: {0:?}")]
-    UnknownType(TypeInner),
-    
-    #[error("invalid type constructor")]
-    InvalidConstructor,
-    
-    #[error("type inference failed: {0}")]
-    InferenceFailed(String),
-    
-    /// Type mismatch error  
-    #[error("type mismatch: expected {expected:?}, found {found:?}")]
-    TypeMismatch {
-        expected: Box<TypeInner>,
-        found: Box<TypeInner>,
-    },
+    /// Create a unification failure error
+    pub fn unification_failure(left: impl Into<String>, right: impl Into<String>) -> Self {
+        Self::UnificationFailure {
+            left: left.into(),
+            right: right.into(),
+        }
+    }
+
+    /// Create an unknown type variable error
+    pub fn unknown_type_variable(name: impl Into<String>) -> Self {
+        Self::UnknownTypeVariable { name: name.into() }
+    }
+
+    /// Create an occurs check error
+    pub fn occurs_check(var: impl Into<String>, type_expr: impl Into<String>) -> Self {
+        Self::OccursCheck {
+            var: var.into(),
+            type_expr: type_expr.into(),
+        }
+    }
+
+    /// Create a kind mismatch error
+    pub fn kind_mismatch(expected: impl Into<String>, actual: impl Into<String>) -> Self {
+        Self::KindMismatch {
+            expected: expected.into(),
+            actual: actual.into(),
+        }
+    }
+
+    /// Create an arity mismatch error
+    pub fn arity_mismatch(
+        constructor: impl Into<String>,
+        expected: usize,
+        actual: usize,
+    ) -> Self {
+        Self::ArityMismatch {
+            constructor: constructor.into(),
+            expected,
+            actual,
+        }
+    }
+
+    /// Create a linear resource error
+    pub fn linear_resource(message: impl Into<String>) -> Self {
+        Self::LinearResource {
+            message: message.into(),
+        }
+    }
+
+    /// Create a session type error
+    pub fn session_type(message: impl Into<String>) -> Self {
+        Self::SessionType {
+            message: message.into(),
+        }
+    }
+
+    /// Create an effect type error
+    pub fn effect_type(message: impl Into<String>) -> Self {
+        Self::EffectType {
+            message: message.into(),
+        }
+    }
+
+    /// Create a row type error
+    pub fn row_type(message: impl Into<String>) -> Self {
+        Self::RowType {
+            message: message.into(),
+        }
+    }
+
+    /// Create a constraint solving error
+    pub fn constraint_solving(message: impl Into<String>) -> Self {
+        Self::ConstraintSolving {
+            message: message.into(),
+        }
+    }
+
+    /// Create a generic type error
+    pub fn generic(message: impl Into<String>) -> Self {
+        Self::Generic {
+            message: message.into(),
+        }
+    }
 }
 
-//-----------------------------------------------------------------------------
-// Machine Errors
-//-----------------------------------------------------------------------------
+impl LinearityError {
+    /// Create a multiple use error
+    pub fn multiple_use(resource: impl Into<String>) -> Self {
+        Self::MultipleUse {
+            resource: resource.into(),
+        }
+    }
 
-/// Errors that can occur during machine execution
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum MachineError {
-    #[error("invalid register: {0:?}")]
-    InvalidRegister(RegisterId),
-    
-    #[error("register {0:?} already consumed")]
-    AlreadyConsumed(RegisterId),
-    
-    #[error("invalid resource: {0:?}")]
-    InvalidResource(ResourceId),
-    
-    #[error("resource already consumed: {0:?}")]
-    ResourceAlreadyConsumed(ResourceId),
-    
-    #[error("type mismatch: expected {expected:?}, found {found:?}")]
-    TypeMismatch {
-        expected: Box<TypeInner>,
-        found: Box<TypeInner>,
-    },
-    
-    #[error("call stack overflow: maximum depth exceeded")]
-    CallStackOverflow,
-    
-    #[error("call stack underflow: no return address available")]
-    CallStackUnderflow,
-    
-    #[error("feature not implemented")]
-    NotImplemented,
-    
-    #[error("{0}")]
-    Generic(String),
+    /// Create a not used error
+    pub fn not_used(resource: impl Into<String>) -> Self {
+        Self::NotUsed {
+            resource: resource.into(),
+        }
+    }
+
+    /// Create a use after consumption error
+    pub fn use_after_consumption(resource: impl Into<String>) -> Self {
+        Self::UseAfterConsumption {
+            resource: resource.into(),
+        }
+    }
+
+    /// Create a generic linearity error
+    pub fn generic(message: impl Into<String>) -> Self {
+        Self::Generic {
+            message: message.into(),
+        }
+    }
 }
 
-//-----------------------------------------------------------------------------
-// Reduction Errors
-//-----------------------------------------------------------------------------
-
-/// Errors that can occur during reduction
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum ReductionError {
-    #[error("program counter out of bounds")]
-    ProgramCounterOutOfBounds,
-    
-    #[error("maximum reduction steps exceeded")]
-    MaxStepsExceeded,
-    
-    #[error("arity mismatch: expected {expected}, found {found}")]
-    ArityMismatch { expected: usize, found: usize },
-    
-    #[error("register {0:?} does not contain a function")]
-    NotAFunction(RegisterId),
-    
-    #[error("no matching pattern found")]
-    NoMatchingPattern,
-    
-    #[error("constraint violation")]
-    ConstraintViolation,
-    
-    #[error("not implemented: {0}")]
-    NotImplemented(String),
-    
-    #[error("register not found: {0:?}")]
-    RegisterNotFound(RegisterId),
-    
-    #[error("register already consumed: {0:?}")]
-    RegisterAlreadyConsumed(RegisterId),
-    
-    #[error("register consumption failed: {0:?}")]
-    RegisterConsumptionFailed(RegisterId),
-    
-    #[error("resource already consumed: {0:?}")]
-    ResourceAlreadyConsumed(ResourceId),
-    
-    #[error("invalid sum tag: {0}")]
-    InvalidSumTag(crate::lambda::Symbol),
-    
-    #[error("register {0:?} does not contain a sum value")]
-    NotASum(RegisterId),
-    
-    #[error("register {0:?} does not contain a resource")]
-    NotAResource(RegisterId),
-    
-    #[error("register {0:?} does not contain a boolean")]
-    NotABoolean(RegisterId),
-    
-    #[error("type mismatch in comparison")]
-    TypeMismatch,
-    
-    #[error("unknown builtin function: {0}")]
-    UnknownBuiltin(crate::lambda::Symbol),
-    
-    #[error("label not found: {0:?}")]
-    LabelNotFound(crate::machine::instruction::Label),
-    
-    #[error("effect precondition failed")]
-    EffectPreconditionFailed,
-    
-    #[error("no witness provider available")]
-    NoWitnessProvider,
-}
-
-//-----------------------------------------------------------------------------
-// Linearity Errors
-//-----------------------------------------------------------------------------
-
-/// Errors related to linear type checking
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum LinearityError {
-    #[error("linear resource used multiple times")]
-    MultipleUse,
-    
-    #[error("linear resource not consumed")]
-    NotConsumed,
-    
-    #[error("affine resource used after drop")]
-    UseAfterDrop,
-    
-    #[error("relevant resource not used")]
-    NotUsed,
-    
-    #[error("cannot copy linear resource")]
-    CannotCopy,
-    
-    #[error("linearity mismatch")]
-    LinearityMismatch,
+// Implement From<TypeError> for Error to handle the boxing
+impl From<TypeError> for Error {
+    fn from(err: TypeError) -> Self {
+        Self::Type(Box::new(err))
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -276,7 +372,10 @@ where
     where
         C: std::fmt::Display + Send + Sync + 'static,
     {
-        self.map_err(|e| e.into().context(context))
+        self.map_err(|e| {
+            let error = e.into();
+            Error::system(format!("{}: {}", context, error))
+        })
     }
     
     fn with_context<C, F>(self, f: F) -> Result<T>
@@ -284,7 +383,10 @@ where
         C: std::fmt::Display + Send + Sync + 'static,
         F: FnOnce() -> C,
     {
-        self.map_err(|e| e.into().context(f()))
+        self.map_err(|e| {
+            let error = e.into();
+            Error::system(format!("{}: {}", f(), error))
+        })
     }
 }
 

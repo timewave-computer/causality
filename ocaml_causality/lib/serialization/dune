@@ -1,3 +1,3 @@
 (library
- (name ocaml_causality_serialization)
- (libraries ocaml_causality_core digestif))
+ (name causality_serialization)
+ (libraries causality_system))

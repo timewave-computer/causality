@@ -9,16 +9,15 @@
 //! - Safe memory management between Rust and OCaml
 
 pub mod core_types;
+pub mod error_handling;
 pub mod layer1;
 pub mod layer2;
 pub mod memory_management;
-pub mod error_handling;
 pub mod runtime;
+pub mod unified_types;
 
 // Re-exports
-pub use core_types::*;
-pub use layer1::*;
-pub use layer2::*;
-pub use memory_management::*;
-pub use error_handling::*;
-pub use runtime::*; 
+pub use core_types::{LispValue, ResourceId, ExprId};
+pub use error_handling::result_to_ocaml;
+pub use runtime::{causality_init, causality_version, causality_cleanup, with_runtime_state};
+pub use unified_types::{OcamlLocation, OcamlTypeInner, OcamlSessionType};

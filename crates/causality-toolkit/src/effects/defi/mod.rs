@@ -1,7 +1,6 @@
 //! DeFi-specific effects for decentralized finance operations
 
 pub mod transfer;
-pub mod transfer_mocks;
 pub mod liquidity_swap;
 pub mod liquidity_swap_mocks;
 

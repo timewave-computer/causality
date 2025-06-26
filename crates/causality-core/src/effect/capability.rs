@@ -3,20 +3,39 @@
 //! This module provides structured capability levels and enhanced capability 
 //! checking for the Object system, with special support for record field access
 //! operations that compile to Layer 1 tensor operations.
+//!
+//! **Phase 3 Extensions**: Added distributed access capabilities, session-based
+//! capability delegation, and cross-location capability verification.
 
-use std::collections::{HashSet, HashMap};
+use std::collections::{BTreeSet, BTreeMap};
 use ssz::{Encode, Decode};
+use crate::lambda::base::{Location, SessionType};
 
 /// Field name type for record operations
 pub type FieldName = String;
 
 /// Record schema definition for capability-based record operations
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct RecordSchema {
     /// Field name to type mapping
-    pub fields: HashMap<FieldName, String>, // Type names as strings for simplicity
+    pub fields: BTreeMap<FieldName, String>, // Type names as strings for simplicity
     /// Required capabilities for schema operations
-    pub required_capabilities: HashSet<String>,
+    pub required_capabilities: BTreeSet<String>,
+    /// Location constraints for distributed access
+    pub location_constraints: BTreeMap<FieldName, LocationConstraint>,
+}
+
+/// Location constraint for field access
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub enum LocationConstraint {
+    /// Field must be accessed locally
+    LocalOnly,
+    /// Field can be accessed from specific locations
+    AllowedLocations(BTreeSet<Location>),
+    /// Field can be accessed from any location
+    AnyLocation,
+    /// Field requires specific protocol for remote access
+    RequiresProtocol(SessionType),
 }
 
 impl std::hash::Hash for RecordSchema {
@@ -34,6 +53,13 @@ impl std::hash::Hash for RecordSchema {
         for cap in capabilities {
             cap.hash(state);
         }
+        
+        let mut constraints: Vec<_> = self.location_constraints.iter().collect();
+        constraints.sort_by_key(|(k, _)| *k);
+        for (k, v) in constraints {
+            k.hash(state);
+            format!("{:?}", v).hash(state); // Simplified hash for location constraints
+        }
     }
 }
 
@@ -47,8 +73,9 @@ impl RecordSchema {
     /// Create a new record schema
     pub fn new() -> Self {
         Self {
-            fields: HashMap::new(),
-            required_capabilities: HashSet::new(),
+            fields: BTreeMap::new(),
+            required_capabilities: BTreeSet::new(),
+            location_constraints: BTreeMap::new(),
         }
     }
     
@@ -63,12 +90,41 @@ impl RecordSchema {
         self.required_capabilities.insert(capability.into());
         self
     }
+    
+    /// Add a location constraint for a field
+    pub fn with_location_constraint(mut self, field: impl Into<String>, constraint: LocationConstraint) -> Self {
+        self.location_constraints.insert(field.into(), constraint);
+        self
+    }
+    
+    /// Check if a field can be accessed from a given location
+    pub fn can_access_from_location(&self, field: &str, location: &Location) -> bool {
+        match self.location_constraints.get(field) {
+            Some(LocationConstraint::LocalOnly) => matches!(location, Location::Local),
+            Some(LocationConstraint::AllowedLocations(allowed)) => allowed.contains(location),
+            Some(LocationConstraint::AnyLocation) => true,
+            Some(LocationConstraint::RequiresProtocol(_)) => true, // Requires protocol validation
+            None => true, // No constraints = allowed from anywhere
+        }
+    }
+    
+    /// Get the required protocol for accessing a field from a remote location
+    pub fn required_protocol(&self, field: &str, from_location: &Location) -> Option<&SessionType> {
+        if matches!(from_location, Location::Local) {
+            return None; // No protocol needed for local access
+        }
+        
+        match self.location_constraints.get(field) {
+            Some(LocationConstraint::RequiresProtocol(protocol)) => Some(protocol),
+            _ => None,
+        }
+    }
 }
 
 /// Capability types for record operations
 /// These provide fine-grained access control for field operations that
 /// compile down to Layer 1 tensor operations
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RecordCapability {
     /// Read access to a specific field
     ReadField(FieldName),
@@ -86,6 +142,18 @@ pub enum RecordCapability {
     RestrictRecord(Vec<FieldName>),
     /// Full access to all record operations (administrative)
     FullRecordAccess,
+    /// Distributed access to fields across locations
+    DistributedAccess {
+        fields: Vec<FieldName>,
+        allowed_locations: BTreeSet<Location>,
+        required_protocol: Option<SessionType>,
+    },
+    /// Session-based capability delegation
+    SessionDelegation {
+        session_type: SessionType,
+        delegated_capabilities: Vec<RecordCapability>,
+        expiration: Option<u64>, // Timestamp for expiration
+    },
 }
 
 impl RecordCapability {
@@ -102,6 +170,32 @@ impl RecordCapability {
     /// Create a project capability for multiple fields
     pub fn project_fields(fields: Vec<impl Into<String>>) -> Self {
         RecordCapability::ProjectFields(fields.into_iter().map(|f| f.into()).collect())
+    }
+    
+    /// Create a distributed access capability
+    pub fn distributed_access(
+        fields: Vec<impl Into<String>>, 
+        locations: BTreeSet<Location>,
+        protocol: Option<SessionType>
+    ) -> Self {
+        RecordCapability::DistributedAccess {
+            fields: fields.into_iter().map(|f| f.into()).collect(),
+            allowed_locations: locations,
+            required_protocol: protocol,
+        }
+    }
+    
+    /// Create a session delegation capability
+    pub fn session_delegation(
+        session_type: SessionType,
+        capabilities: Vec<RecordCapability>,
+        expiration: Option<u64>
+    ) -> Self {
+        RecordCapability::SessionDelegation {
+            session_type,
+            delegated_capabilities: capabilities,
+            expiration,
+        }
     }
     
     /// Check if this capability implies another record capability
@@ -125,6 +219,32 @@ impl RecordCapability {
                 fields2.iter().all(|f| fields1.contains(f))
             }
             
+            // Distributed access implications
+            (RecordCapability::DistributedAccess { fields: fields1, allowed_locations: _locs1, .. }, 
+             RecordCapability::ReadField(f2)) => {
+                fields1.contains(f2) // Simplified - should also check location
+            }
+            
+            (RecordCapability::DistributedAccess { fields: fields1, allowed_locations: _locs1, .. },
+             RecordCapability::DistributedAccess { fields: fields2, allowed_locations: _locs2, .. }) => {
+                fields2.iter().all(|f| fields1.contains(f)) && 
+                _locs2.iter().all(|l| _locs1.contains(l))
+            }
+            
+            // Session delegation implications
+            (RecordCapability::SessionDelegation { delegated_capabilities, expiration, .. }, other) => {
+                // Check if not expired
+                if let Some(exp) = expiration {
+                    let expiry_time = crate::system::deterministic::deterministic_timestamp().as_secs();
+                    if expiry_time > *exp {
+                        return false; // Expired delegation
+                    }
+                }
+                
+                // Check if any delegated capability implies the required one
+                delegated_capabilities.iter().any(|cap| cap.implies(other))
+            }
+            
             // No other implications
             _ => false,
         }
@@ -135,14 +255,46 @@ impl RecordCapability {
         match self {
             RecordCapability::ReadField(f) | RecordCapability::WriteField(f) => vec![f.clone()],
             RecordCapability::ProjectFields(fields) => fields.clone(),
+            RecordCapability::DistributedAccess { fields, .. } => fields.clone(),
+            RecordCapability::SessionDelegation { delegated_capabilities, .. } => {
+                delegated_capabilities.iter()
+                    .flat_map(|cap| cap.accessible_fields())
+                    .collect()
+            }
             RecordCapability::FullRecordAccess => vec![], // Represents access to all fields
             _ => vec![],
+        }
+    }
+    
+    /// Check if this capability allows access from a specific location
+    pub fn allows_access_from(&self, location: &Location) -> bool {
+        match self {
+            RecordCapability::DistributedAccess { allowed_locations, .. } => {
+                allowed_locations.contains(location)
+            }
+            RecordCapability::SessionDelegation { delegated_capabilities, .. } => {
+                delegated_capabilities.iter().any(|cap| cap.allows_access_from(location))
+            }
+            _ => true, // Local capabilities allow access from any location by default
+        }
+    }
+    
+    /// Get the required protocol for this capability
+    pub fn required_protocol(&self) -> Option<&SessionType> {
+        match self {
+            RecordCapability::DistributedAccess { required_protocol, .. } => {
+                required_protocol.as_ref()
+            }
+            RecordCapability::SessionDelegation { session_type, .. } => {
+                Some(session_type)
+            }
+            _ => None,
         }
     }
 }
 
 /// Structured capability levels for common access patterns
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub enum CapabilityLevel {
     /// Read-only access
     Read,
@@ -152,10 +304,15 @@ pub enum CapabilityLevel {
     Execute,
     /// Administrative access (implies all others)
     Admin,
+    /// Distributed access with location constraints
+    Distributed {
+        base_level: Box<CapabilityLevel>,
+        allowed_locations: BTreeSet<Location>,
+    },
 }
 
 /// Enhanced capability with structured levels and record operations
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Capability {
     /// Capability name
     pub name: String,
@@ -163,6 +320,10 @@ pub struct Capability {
     pub level: CapabilityLevel,
     /// Optional record-specific capability
     pub record_capability: Option<RecordCapability>,
+    /// Location where this capability is valid
+    pub valid_at: Option<Location>,
+    /// Session type required for using this capability
+    pub required_session: Option<SessionType>,
 }
 
 impl Capability {
@@ -172,6 +333,8 @@ impl Capability {
             name: name.into(),
             level,
             record_capability: None,
+            valid_at: None,
+            required_session: None,
         }
     }
     
@@ -189,6 +352,30 @@ impl Capability {
     pub fn with_record_capability(mut self, record_cap: RecordCapability) -> Self {
         self.record_capability = Some(record_cap);
         self
+    }
+    
+    /// Create a capability valid at a specific location
+    pub fn at_location(mut self, location: Location) -> Self {
+        self.valid_at = Some(location);
+        self
+    }
+    
+    /// Create a capability that requires a specific session type
+    pub fn with_session(mut self, session_type: SessionType) -> Self {
+        self.required_session = Some(session_type);
+        self
+    }
+    
+    /// Create a distributed capability
+    pub fn distributed(
+        name: impl Into<String>, 
+        base_level: CapabilityLevel,
+        locations: BTreeSet<Location>
+    ) -> Self {
+        Self::new(name, CapabilityLevel::Distributed {
+            base_level: Box::new(base_level),
+            allowed_locations: locations,
+        })
     }
     
     /// Create a field read capability
@@ -209,6 +396,17 @@ impl Capability {
             .with_record_capability(RecordCapability::project_fields(fields))
     }
     
+    /// Create a distributed field access capability
+    pub fn distributed_field_access(
+        name: impl Into<String>,
+        fields: Vec<impl Into<String>>,
+        locations: BTreeSet<Location>,
+        protocol: Option<SessionType>
+    ) -> Self {
+        Self::new(name, CapabilityLevel::Read)
+            .with_record_capability(RecordCapability::distributed_access(fields, locations, protocol))
+    }
+    
     /// Check if this capability implies another capability
     pub fn implies(&self, other: &Capability) -> bool {
         if self.name != other.name {
@@ -226,7 +424,53 @@ impl Capability {
             (Some(self_rec), Some(other_rec)) => self_rec.implies(other_rec),
         };
         
-        level_implies && record_implies
+        // Check location validity
+        let location_valid = match (&self.valid_at, &other.valid_at) {
+            (None, _) => true, // Valid everywhere implies valid anywhere
+            (Some(_), None) => false, // Specific location doesn't imply everywhere
+            (Some(self_loc), Some(other_loc)) => self_loc == other_loc,
+        };
+        
+        level_implies && record_implies && location_valid
+    }
+    
+    /// Check if this capability can be used at a specific location
+    pub fn can_use_at(&self, location: &Location) -> bool {
+        match &self.valid_at {
+            None => true, // Valid everywhere
+            Some(valid_loc) => valid_loc == location,
+        }
+    }
+    
+    /// Check if this capability can be delegated via a session
+    pub fn can_delegate_via_session(&self, session_type: &SessionType) -> bool {
+        match &self.required_session {
+            None => true, // No session requirement
+            Some(required) => {
+                // Check if the provided session is compatible
+                // In a full implementation, this would check session type compatibility
+                required == session_type
+            }
+        }
+    }
+    
+    /// Delegate this capability via a session
+    pub fn delegate_via_session(&self, session_type: SessionType, expiration: Option<u64>) -> Capability {
+        let delegated_record_cap = self.record_capability.as_ref().map(|cap| {
+            RecordCapability::session_delegation(
+                session_type.clone(),
+                vec![cap.clone()],
+                expiration
+            )
+        });
+        
+        Capability {
+            name: format!("delegated_{}", self.name),
+            level: self.level.clone(),
+            record_capability: delegated_record_cap,
+            valid_at: self.valid_at.clone(),
+            required_session: Some(session_type),
+        }
     }
     
     /// Get the accessible fields from this capability
@@ -262,26 +506,59 @@ impl CapabilityLevel {
             Write => vec![Read, Write],
             Execute => vec![Read, Execute],
             Admin => vec![Read, Write, Execute, Admin],
+            Distributed { base_level, allowed_locations } => {
+                let mut implied = base_level.implies();
+                implied.push(Distributed {
+                    base_level: base_level.clone(),
+                    allowed_locations: allowed_locations.clone(),
+                });
+                implied
+            }
         }
     }
     
     /// Check if this level implies another level
     pub fn implies_level(&self, other: &CapabilityLevel) -> bool {
-        self.implies().contains(other)
+        match (self, other) {
+            // Distributed capabilities
+            (CapabilityLevel::Distributed { base_level: base1, allowed_locations: locs1 },
+             CapabilityLevel::Distributed { base_level: base2, allowed_locations: locs2 }) => {
+                base1.implies_level(base2) && locs2.iter().all(|loc| locs1.contains(loc))
+            }
+            
+            // Distributed implies base level
+            (CapabilityLevel::Distributed { base_level, .. }, other) => {
+                base_level.implies_level(other)
+            }
+            
+            // Regular implications
+            _ => self.implies().iter().any(|level| {
+                match (level, other) {
+                    (CapabilityLevel::Distributed { .. }, _) => false, // Skip distributed in regular check
+                    _ => level == other,
+                }
+            })
+        }
     }
 }
 
-/// Capability set with enhanced checking
+/// Enhanced capability set with location and session awareness
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CapabilitySet {
-    capabilities: HashSet<Capability>,
+    capabilities: BTreeSet<Capability>,
+    /// Current location for capability validation
+    current_location: Option<Location>,
+    /// Active session types for delegation
+    active_sessions: BTreeMap<String, SessionType>,
 }
 
 impl CapabilitySet {
     /// Create a new capability set
     pub fn new() -> Self {
         Self {
-            capabilities: HashSet::new(),
+            capabilities: BTreeSet::new(),
+            current_location: None,
+            active_sessions: BTreeMap::new(),
         }
     }
     
@@ -289,7 +566,21 @@ impl CapabilitySet {
     pub fn from_capabilities(capabilities: Vec<Capability>) -> Self {
         Self {
             capabilities: capabilities.into_iter().collect(),
+            current_location: None,
+            active_sessions: BTreeMap::new(),
         }
+    }
+    
+    /// Set the current location for capability validation
+    pub fn at_location(mut self, location: Location) -> Self {
+        self.current_location = Some(location);
+        self
+    }
+    
+    /// Add an active session for capability delegation
+    pub fn with_session(mut self, session_id: String, session_type: SessionType) -> Self {
+        self.active_sessions.insert(session_id, session_type);
+        self
     }
     
     /// Add a capability to the set
@@ -297,9 +588,31 @@ impl CapabilitySet {
         self.capabilities.insert(capability);
     }
     
-    /// Check if the set has a specific capability (with implication)
+    /// Check if the set has a specific capability (with implication and location checking)
     pub fn has_capability(&self, required: &Capability) -> bool {
-        self.capabilities.iter().any(|cap| cap.implies(required))
+        self.capabilities.iter().any(|cap| {
+            // Check basic implication
+            if !cap.implies(required) {
+                return false;
+            }
+            
+            // Check location constraints
+            if let Some(current_loc) = &self.current_location {
+                if !cap.can_use_at(current_loc) {
+                    return false;
+                }
+            }
+            
+            // Check session requirements
+            if let Some(required_session) = &required.required_session {
+                // Check if we have an active session that satisfies the requirement
+                return self.active_sessions.values().any(|session| {
+                    cap.can_delegate_via_session(session) && session == required_session
+                });
+            }
+            
+            true
+        })
     }
     
     /// Check if the set has all required capabilities
@@ -307,9 +620,52 @@ impl CapabilitySet {
         required.iter().all(|req| self.has_capability(req))
     }
     
+    /// Verify cross-location capability access
+    pub fn verify_cross_location_access(
+        &self,
+        field: &str,
+        _from_location: &Location,
+        to_location: &Location,
+        required_protocol: Option<&SessionType>
+    ) -> bool {
+        // Check if we have distributed access capability
+        let has_distributed_cap = self.capabilities.iter().any(|cap| {
+            match &cap.record_capability {
+                Some(RecordCapability::DistributedAccess { fields, allowed_locations, required_protocol: cap_protocol }) => {
+                    fields.contains(&field.to_string()) &&
+                    allowed_locations.contains(to_location) &&
+                    match (required_protocol, cap_protocol) {
+                        (Some(req), Some(cap)) => req == cap,
+                        (None, _) => true,
+                        (Some(_), None) => false,
+                    }
+                }
+                _ => false,
+            }
+        });
+        
+        if has_distributed_cap {
+            return true;
+        }
+        
+        // Check session-based delegation
+        if let Some(protocol) = required_protocol {
+            return self.active_sessions.values().any(|session| session == protocol);
+        }
+        
+        false
+    }
+    
     /// Get all capabilities in the set
-    pub fn capabilities(&self) -> &HashSet<Capability> {
+    pub fn capabilities(&self) -> &BTreeSet<Capability> {
         &self.capabilities
+    }
+    
+    /// Get capabilities valid at a specific location
+    pub fn capabilities_at(&self, location: &Location) -> Vec<&Capability> {
+        self.capabilities.iter()
+            .filter(|cap| cap.can_use_at(location))
+            .collect()
     }
 }
 
@@ -325,9 +681,13 @@ impl From<Vec<Capability>> for CapabilitySet {
     }
 }
 
-impl From<HashSet<Capability>> for CapabilitySet {
-    fn from(capabilities: HashSet<Capability>) -> Self {
-        Self { capabilities }
+impl From<BTreeSet<Capability>> for CapabilitySet {
+    fn from(capabilities: BTreeSet<Capability>) -> Self {
+        Self { 
+            capabilities,
+            current_location: None,
+            active_sessions: BTreeMap::new(),
+        }
     }
 }
 
@@ -347,6 +707,14 @@ impl Encode for CapabilityLevel {
             CapabilityLevel::Write => 1u8,
             CapabilityLevel::Execute => 2u8,
             CapabilityLevel::Admin => 3u8,
+            CapabilityLevel::Distributed { base_level, .. } => {
+                let mut byte = 4u8;
+                byte |= base_level.implies_level(&CapabilityLevel::Read) as u8;
+                byte |= (base_level.implies_level(&CapabilityLevel::Write) as u8) << 1;
+                byte |= (base_level.implies_level(&CapabilityLevel::Execute) as u8) << 2;
+                byte |= (base_level.implies_level(&CapabilityLevel::Admin) as u8) << 3;
+                byte
+            }
         };
         buf.push(byte);
     }
@@ -370,6 +738,22 @@ impl Decode for CapabilityLevel {
             1 => Ok(CapabilityLevel::Write),
             2 => Ok(CapabilityLevel::Execute),
             3 => Ok(CapabilityLevel::Admin),
+            4 => Ok(CapabilityLevel::Distributed {
+                base_level: Box::new(CapabilityLevel::Read),
+                allowed_locations: BTreeSet::new(),
+            }),
+            5 => Ok(CapabilityLevel::Distributed {
+                base_level: Box::new(CapabilityLevel::Write),
+                allowed_locations: BTreeSet::new(),
+            }),
+            6 => Ok(CapabilityLevel::Distributed {
+                base_level: Box::new(CapabilityLevel::Execute),
+                allowed_locations: BTreeSet::new(),
+            }),
+            7 => Ok(CapabilityLevel::Distributed {
+                base_level: Box::new(CapabilityLevel::Admin),
+                allowed_locations: BTreeSet::new(),
+            }),
             _ => Err(ssz::DecodeError::BytesInvalid("Invalid CapabilityLevel".to_string())),
         }
     }
@@ -381,13 +765,14 @@ impl Encode for Capability {
     }
 
     fn ssz_bytes_len(&self) -> usize {
-        4 + self.name.len() + 1
+        4 + self.name.len() + 1 // Simplified for compatibility
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
         (self.name.len() as u32).ssz_append(buf);
         buf.extend_from_slice(self.name.as_bytes());
         self.level.ssz_append(buf);
+        // Note: Simplified encoding - full implementation would include valid_at and required_session
     }
 }
 
@@ -417,7 +802,13 @@ impl Decode for Capability {
         
         let level = CapabilityLevel::from_ssz_bytes(&bytes[4 + name_len..4 + name_len + 1])?;
         
-        Ok(Capability { name, level, record_capability: None })
+        Ok(Capability { 
+            name, 
+            level, 
+            record_capability: None,
+            valid_at: None,
+            required_session: None,
+        })
     }
 }
 

@@ -1,0 +1,23 @@
+{
+  "proof": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+  "public_inputs": [
+    "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "0x0000000000000000000000000000000000000000000000000000000000000002",
+    "0x0000000000000000000000000000000000000000000000000000000000000003",
+    "0x1234567890abcdef1234567890abcdef12345678",
+    "0xfedcba0987654321fedcba0987654321fedcba09"
+  ],
+  "verification_key": "vk_complex_circuit_v2",
+  "circuit_id": "causality_defi_bridge_v2",
+  "metadata": {
+    "version": "2.1.0",
+    "timestamp": "2024-01-15T10:30:00Z",
+    "prover": "causality_prover_optimized",
+    "circuit_size": "2^20",
+    "proof_system": "groth16",
+    "trusted_setup": "ceremony_2024_01",
+    "constraints": "1048576",
+    "public_input_count": "5",
+    "witness_elements": "1048571"
+  }
+}

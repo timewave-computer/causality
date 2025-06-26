@@ -34,7 +34,16 @@ For data to be reliably stored, transmitted, and cryptographically hashed, it ne
 - **Interoperability:** A well-defined serialization format is crucial for communication between different components or implementations of Causality.
 - **Merkleization:** SSZ is designed to work seamlessly with Merkle tree structures, allowing for efficient proof of data inclusion and integrity. Crucially, SSZ provides stable tree structures that enable selective disclosure (proving knowledge of specific fields without revealing others), incremental verification (updating proofs as data changes), and compact ZK circuit generation. These properties are valuable for Causality's privacy-preserving resource management and zero-knowledge proof integration.
 
-## 5. Zero-Knowledge Proof (ZKP) Integration: Privacy and Scalability
+## 5. Computation-Communication Unification: Symmetric Operations
+
+Causality treats computation and communication as unified **transformations** rather than fundamentally different operations. This principle eliminates the artificial distinction between local and distributed programming:
+
+- **Location Transparency**: Operations work the same whether local or remote, with location awareness provided where needed through the type system.
+- **Automatic Protocol Derivation**: Communication protocols are automatically derived from data access patterns, eliminating the need for separate protocol specifications.
+- **Single Constraint Language**: The same constraint system works for both local field access and distributed communication, enabling seamless composition.
+- **Mathematical Elegance**: Based on symmetric monoidal closed category theory, providing a unified mathematical foundation for all operations.
+
+## 6. Zero-Knowledge Proof (ZKP) Integration: Privacy and Scalability
 
 Causality is designed with native support for Zero-Knowledge Proofs in mind. ZKPs allow one party to prove to another that a statement is true, without revealing any information beyond the validity of the statement itself.
 

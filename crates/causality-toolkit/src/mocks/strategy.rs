@@ -1,7 +1,6 @@
 //! Mock strategy framework for automatic effect handler generation
 
 use crate::effects::core::{EffectCategory, FailureMode};
-use serde::{Serialize, Deserialize};
 use std::time::Duration;
 
 /// Mock strategy configuration for effect handler generation

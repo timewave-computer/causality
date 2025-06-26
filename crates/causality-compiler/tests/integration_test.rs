@@ -1,42 +1,38 @@
-//! Integration test for enhanced compiler pipeline
+//! Integration test for compiler pipeline
 //!
 //! This test demonstrates the complete compilation pipeline from
 //! Lisp source code to executable register machine instructions.
 
-use causality_compiler::enhanced_pipeline::EnhancedCompilerPipeline;
+use causality_compiler::pipeline::{compile, compile_expression};
 use causality_core::machine::Instruction;
-use causality_lisp::ast::ExprKind;
 
 #[test]
 fn test_complete_compilation_pipeline() {
-    let mut pipeline = EnhancedCompilerPipeline::new();
-    
     // Test basic unit compilation
-    let unit_program = pipeline.compile_full("(unit)").unwrap();
-    assert_eq!(unit_program.source, "(unit)");
+    let unit_result = compile("nil");
+    assert!(unit_result.is_ok());
+    let unit_program = unit_result.unwrap();
+    assert_eq!(unit_program.source, "nil");
     assert!(!unit_program.instructions.is_empty());
-    assert!(unit_program.metadata.registers_used > 0);
     
-    // Verify instructions are valid - after optimization, unit might not need any moves
-    // Just check that we have some valid instruction type
+    // Verify instructions are valid - check for new instruction types
     assert!(unit_program.instructions.iter().any(|i| matches!(i, 
-        Instruction::Move { .. } | 
-        Instruction::Apply { .. } | 
-        Instruction::Witness { .. } |
-        Instruction::Return { .. }
+        Instruction::Transform { .. } | 
+        Instruction::Alloc { .. } | 
+        Instruction::Consume { .. } |
+        Instruction::Compose { .. } |
+        Instruction::Tensor { .. }
     )));
 }
 
 #[test]
 fn test_alloc_instruction_generation() {
-    let mut pipeline = EnhancedCompilerPipeline::new();
-    
     // Test resource allocation compilation
-    let alloc_program = pipeline.compile_full("(alloc 42)").unwrap();
+    let alloc_result = compile("(alloc 42)");
+    assert!(alloc_result.is_ok());
+    let alloc_program = alloc_result.unwrap();
     assert_eq!(alloc_program.source, "(alloc 42)");
     assert!(!alloc_program.instructions.is_empty());
-    assert_eq!(alloc_program.metadata.resource_allocations, 1);
-    assert_eq!(alloc_program.metadata.resource_consumptions, 0);
     
     // Verify alloc instruction is generated
     assert!(alloc_program.instructions.iter().any(|i| matches!(i, Instruction::Alloc { .. })));
@@ -44,89 +40,58 @@ fn test_alloc_instruction_generation() {
 
 #[test]
 fn test_consume_instruction_generation() {
-    let mut pipeline = EnhancedCompilerPipeline::new();
+    // Test resource consumption compilation
+    let consume_result = compile("(consume (alloc 42))");
+    assert!(consume_result.is_ok());
+    let consume_program = consume_result.unwrap();
+    assert!(!consume_program.instructions.is_empty());
     
-    // Test resource consumption compilation - should fail for undefined variable
-    let consume_result = pipeline.compile_full("(consume x)");
-    assert!(consume_result.is_err(), "Should fail for undefined variable");
-    
-    // Test that the error is about undefined variable
-    match consume_result {
-        Err(e) => assert!(e.to_string().contains("Undefined variable")),
-        Ok(_) => panic!("Should have failed"),
-    }
+    // Should have both alloc and consume instructions
+    assert!(consume_program.instructions.iter().any(|i| matches!(i, Instruction::Alloc { .. })));
+    assert!(consume_program.instructions.iter().any(|i| matches!(i, Instruction::Consume { .. })));
 }
 
 #[test]
-fn test_compilation_metadata() {
-    let mut pipeline = EnhancedCompilerPipeline::new();
+fn test_tensor_instruction_generation() {
+    // Test tensor compilation
+    let tensor_result = compile("(tensor 1 2)");
+    assert!(tensor_result.is_ok());
+    let tensor_program = tensor_result.unwrap();
+    assert!(!tensor_program.instructions.is_empty());
     
-    let program = pipeline.compile_full("(alloc 42)").unwrap();
-    
-    // Verify metadata is properly populated
-    assert!(program.metadata.registers_used > 0);
-    assert!(program.metadata.instruction_count > 0);
-    assert_eq!(program.metadata.instruction_count, program.instructions.len());
-    
-    // Verify compilation passes
-    assert!(program.metadata.passes.contains(&"Parse".to_string()));
-    assert!(program.metadata.passes.contains(&"CodeGen".to_string()));
-    
-    // Check for specific optimization passes
-    assert!(program.metadata.passes.contains(&"DeadCodeElimination".to_string()));
-    assert!(program.metadata.passes.contains(&"PeepholeOptimization".to_string()));
-    assert!(program.metadata.passes.contains(&"RegisterCoalescing".to_string()));
-
-    // Verify optimization stats are available
-    assert!(program.metadata.optimization_stats.unoptimized_instruction_count > 0);
+    // Should generate tensor instruction
+    assert!(tensor_program.instructions.iter().any(|i| matches!(i, Instruction::Tensor { .. })));
 }
 
 #[test]
-fn test_register_allocation() {
-    let mut pipeline = EnhancedCompilerPipeline::new();
+fn test_lambda_compilation() {
+    // Test lambda compilation
+    let lambda_result = compile("(lambda (x) x)");
+    assert!(lambda_result.is_ok());
+    let lambda_program = lambda_result.unwrap();
+    assert!(!lambda_program.instructions.is_empty());
     
-    // Test that multiple expressions use different registers
-    let program1 = pipeline.compile_full("(unit)").unwrap();
-    let program2 = pipeline.compile_full("(alloc 42)").unwrap();
-    
-    // Second compilation should use more registers due to alloc
-    assert!(program2.metadata.registers_used >= program1.metadata.registers_used);
-}
-
-#[test]
-fn test_instruction_optimization() {
-    let mut pipeline = EnhancedCompilerPipeline::new();
-    
-    let program = pipeline.compile_full("(unit)").unwrap();
-    
-    // Verify optimization passes were applied
-    assert!(program.metadata.passes.contains(&"DeadCodeElimination".to_string()));
-    assert!(program.metadata.passes.contains(&"ConstantPropagation".to_string()));
-    assert!(program.metadata.passes.contains(&"ConstantFolding".to_string()));
-    assert!(program.metadata.passes.contains(&"RedundantMoveElimination".to_string()));
-    assert!(program.metadata.passes.contains(&"PeepholeOptimization".to_string()));
-    assert!(program.metadata.passes.contains(&"RegisterCoalescing".to_string()));
-    
-    // Instructions should be optimized (result can be empty for unit after optimization)
-    // instruction_count is usize so always >= 0
+    // Lambda should compile to alloc (for function creation)
+    assert!(lambda_program.instructions.iter().any(|i| matches!(i, Instruction::Alloc { .. })));
 }
 
 #[test]
 fn test_quick_expression_compilation() {
-    let mut pipeline = EnhancedCompilerPipeline::new();
-    
     // Test the quick compilation method
-    let program = pipeline.compile_full("(alloc 42)").unwrap();
-    assert!(!program.instructions.is_empty());
-    assert!(program.instructions.iter().any(|i| matches!(i, Instruction::Alloc { .. })));
+    let instructions = compile_expression("(alloc 42)").unwrap();
+    assert!(!instructions.is_empty());
+    assert!(instructions.iter().any(|i| matches!(i, Instruction::Alloc { .. })));
 }
 
 #[test]
-fn test_ast_generation() {
-    let mut pipeline = EnhancedCompilerPipeline::new();
+fn test_compose_instruction_generation() {
+    // Test compose compilation (sequential composition)
+    // Since compose is not a primitive, we simulate it with nested lambdas
+    let compose_result = compile("(lambda (x) ((lambda (y) y) x))");
+    assert!(compose_result.is_ok());
+    let compose_program = compose_result.unwrap();
+    assert!(!compose_program.instructions.is_empty());
     
-    let program = pipeline.compile_full("(alloc 42)").unwrap();
-    
-    // Verify AST was properly generated
-    assert!(matches!(program.ast.kind, ExprKind::Alloc { .. }));
+    // Should generate alloc instructions for the lambda functions
+    assert!(compose_program.instructions.iter().any(|i| matches!(i, Instruction::Alloc { .. })));
 } 

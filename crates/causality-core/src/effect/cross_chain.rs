@@ -3,7 +3,7 @@
 //! This module implements coordination of effects across multiple blockchain domains,
 //! enabling atomic execution with rollback and recovery mechanisms.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::time::{Duration, SystemTime};
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +23,7 @@ pub struct DomainConfig {
     pub rpc_endpoint: String,
     
     /// Chain-specific configuration
-    pub chain_config: HashMap<String, String>,
+    pub chain_config: BTreeMap<String, String>,
     
     /// Storage proof format
     pub proof_format: String,
@@ -221,13 +221,13 @@ pub enum ConstraintType {
 #[derive(Debug)]
 pub struct CrossChainCoordinator {
     /// Active cross-chain operations
-    active_operations: HashMap<EntityId, CrossChainEffect>,
+    active_operations: BTreeMap<EntityId, CrossChainEffect>,
     
     /// Operation execution queue
     execution_queue: VecDeque<EntityId>,
     
     /// Proof verification cache
-    proof_cache: HashMap<String, (Value, SystemTime)>,
+    proof_cache: BTreeMap<String, (Value, SystemTime)>,
     
     /// Cache TTL in seconds
     cache_ttl: Duration,
@@ -236,19 +236,19 @@ pub struct CrossChainCoordinator {
     max_concurrent: usize,
     
     /// Currently executing operations
-    executing: HashMap<EntityId, SystemTime>,
+    executing: BTreeMap<EntityId, SystemTime>,
 }
 
 impl CrossChainCoordinator {
     /// Create a new cross-chain coordinator
     pub fn new() -> Self {
         Self {
-            active_operations: HashMap::new(),
+            active_operations: BTreeMap::new(),
             execution_queue: VecDeque::new(),
-            proof_cache: HashMap::new(),
+            proof_cache: BTreeMap::new(),
             cache_ttl: Duration::from_secs(300), // 5 minutes
             max_concurrent: 10,
-            executing: HashMap::new(),
+            executing: BTreeMap::new(),
         }
     }
     
@@ -445,7 +445,7 @@ impl CrossChainCoordinator {
                             self.active_operations.remove(&operation_id);
                             self.executing.remove(&operation_id);
                         } else {
-                            self.executing.insert(operation_id, SystemTime::now());
+                            self.executing.insert(operation_id, crate::system::deterministic_system_time());
                         }
                     }
                 } else {
@@ -579,8 +579,8 @@ impl CrossChainCoordinator {
     }
     
     /// Verify storage proofs for the operation
-    fn verify_storage_proofs(&self, operation: &CrossChainEffect) -> Result<HashMap<String, Value>> {
-        let mut proof_data = HashMap::new();
+    fn verify_storage_proofs(&self, operation: &CrossChainEffect) -> Result<BTreeMap<String, Value>> {
+        let mut proof_data = BTreeMap::new();
         
         for requirement in &operation.proof_requirements {
             let cache_key = format!("{}:{}:{}", 
@@ -690,7 +690,7 @@ impl CrossChainCoordinator {
     
     /// Clean up expired operations
     fn cleanup_expired_operations(&mut self) {
-        let now = SystemTime::now();
+        let now = crate::system::deterministic_system_time();
         let mut expired_operations = Vec::new();
         
         for (operation_id, operation) in &self.active_operations {
@@ -765,7 +765,7 @@ pub struct CrossChainExecutionResult {
     pub error: Option<String>,
     
     /// Proof data if applicable
-    pub proof_data: Option<HashMap<String, Value>>,
+    pub proof_data: Option<BTreeMap<String, Value>>,
 }
 
 /// Statistics about the cross-chain coordinator

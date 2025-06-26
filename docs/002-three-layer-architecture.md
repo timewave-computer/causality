@@ -92,7 +92,7 @@ graph TB
     end
     
     subgraph "Layer 1: Linear Lambda Calculus"
-        COMPILE_L2 --> AST[11 Core Primitives]
+        COMPILE_L2 --> AST[Layer 1 Constructs]
         AST --> TC[Type Checker]
         TC --> OPT[Optimizer]
         OPT --> COMPILE_L1[Compile to Layer 0]
@@ -102,7 +102,7 @@ graph TB
     end
     
     subgraph "Layer 0: Register Machine"
-        COMPILE_L1 --> INSTR[11 Core Instructions]
+        COMPILE_L1 --> INSTR[5 Fundamental Instructions]
         INSTR --> EXEC[Execution Engine]
         EXEC --> HEAP[Linear Resource Heap]
         EXEC --> REG[Register Bank]
@@ -199,29 +199,21 @@ Key properties:
 - **Deduplication**: Identical resources automatically share storage
 - **Immutability**: Resources cannot be modified, only consumed and replaced
 
-### The 11 Core Instructions
+### The 5 Fundamental Instructions
 
-The power of Layer 0 lies in its radical simplicity. Rather than providing hundreds of instructions like traditional processors, Causality's register machine operates with just eleven carefully chosen instructions. This minimalism isn't a limitation—it's a feature that enables complete formal verification while remaining expressive enough to compile any higher-level computation.
+The power of Layer 0 lies in its radical simplicity. Rather than providing hundreds of instructions like traditional processors, Causality's register machine operates with just **5 carefully chosen instructions** based on symmetric monoidal closed category theory. This minimalism enables complete formal verification while remaining expressive enough to compile any higher-level computation.
 
-Each instruction serves a specific purpose in the linear resource model, ensuring that resources can be safely managed at the lowest level. The instruction set is designed around three core principles: preserving linearity (resources used exactly once), maintaining determinism (same inputs always produce same outputs), and enabling verification (each operation can be formally proven correct).
-
-Two additional instructions (`LabelMarker` and `Return`) were added beyond the original minimal set of 9 to support user-defined function calls in a zero-knowledge proof compatible manner, enabling functions to reference code locations via labels rather than embedding instructions directly.
+Each instruction serves a specific purpose in the unified transform model, ensuring that all operations - whether local computation or distributed communication - can be expressed through the same mathematical framework.
 
 | Instruction | Purpose | Description |
 |-------------|---------|-------------|
-| `move r_src r_dest` | Register transfer | Copies value from `r_src` to `r_dest` |
-| `apply r_fn r_arg r_out` | Function application | Applies function in `r_fn` to argument in `r_arg`, result in `r_out` |
-| `match r_sum r_l r_r l_label r_label` | Sum type elimination | Inspects sum type; branches based on `inl`/`inr` variant |
-| `alloc r_val r_out` | Resource allocation | Allocates `r_val` on heap, `r_out` receives `ResourceId` |
-| `consume r_res r_out` | Resource consumption | Marks resource as consumed, extracts value (key to linearity) |
-| `check r_bool` | Assertion | Halts with error if value is not true |
-| `perform effect_data r_out` | Effect execution | Triggers external effect, result in `r_out` |
-| `select r_cond r_true r_false r_out` | Conditional selection | Selects value based on boolean condition |
-| `witness r_out` | External data input | Reads external witness value (for untrusted data) |
-| `labelmarker label` | Control flow label | Marks a location in the program for function calls and jumps |
-| `return result_reg` | Function return | Returns from function call, optionally with result value |
+| `transform morph input output` | Apply morphism | Unifies function application, effects, session operations |
+| `alloc type init output` | Allocate resource | Unifies data allocation, channel creation, function creation |
+| `consume resource output` | Consume resource | Unifies deallocation, channel closing, function disposal |
+| `compose f g output` | Sequential composition | Unifies control flow, session sequencing, protocol chaining |
+| `tensor left right output` | Parallel composition | Unifies parallel data, concurrent sessions, resource pairing |
 
-These instructions form a complete computational basis—any program that can be expressed in higher layers ultimately reduces to sequences of these eleven operations. The `alloc` and `consume` instructions are particularly crucial as they implement the core linearity guarantees that make Causality's resource model possible. The `labelmarker` and `return` instructions enable efficient user-defined function calls that are compatible with zero-knowledge proof generation, where functions reference code locations rather than embedding instruction sequences. Together, they ensure that every resource has a clear lifecycle: allocation, potential transformation, and eventual consumption.
+These instructions form a complete computational basis—any program that can be expressed in higher layers ultimately reduces to sequences of these five operations. The mathematical foundation ensures that **computation and communication are unified** as transformations that differ only in their source and target locations.
 
 - **Minimal Instruction Set:** The register machine operates with a small, carefully chosen set of instructions. This minimalism is key to its verifiability and makes it a suitable target for formal analysis.
 - **Deterministic Execution:** Every operation at Layer 0 is strictly deterministic, ensuring that given the same initial state and inputs, the outcome is always identical. This predictability is crucial for a system designed around verifiable causality.
@@ -322,145 +314,230 @@ Resource operations work seamlessly with content addressing:
 - **Resource Tracking**: Linear resources tracked by their content-addressed identifier
 - **Zero-Copy Resource Passing**: Large resources passed by reference, not value
 
-## Layer 2: Effect Algebra & Domain Logic - Modeling Complex Interactions
+## Layer 2: Transform-Based Effects & Intents
 
-Layer 2 is the most abstract and application-focused layer, operating entirely within the content-addressed ecosystem. It introduces an Effect Algebra and provides the tools for defining sophisticated domain-specific logic, including capability-based access control, complex data operations, and a rich Intent system for declarative programming.
+**Purpose**: Declarative programming through unified transformations that eliminate the distinction between computation and communication.
 
-Where Layers 0 and 1 focus on the "how" of computation—the mechanics of execution and the mathematics of resource flow—Layer 2 is concerned with the "what"—the actual business logic and real-world effects that applications need to perform. This layer provides the conceptual tools for modeling complex interactive systems while maintaining the guarantees established by the lower layers and preserving content addressability throughout.
+**Key Innovation**: All operations are **transformations** - local computation and distributed communication are unified under a single mathematical framework based on symmetric monoidal closed category theory.
 
-The key insight of Layer 2 is the separation between describing what you want to happen (effects and intents) and deciding how it should happen (handlers and interpreters). This separation enables powerful composition patterns and makes it possible to verify high-level properties of your application without getting lost in implementation details.
+### Computation/Communication Symmetry
 
-- **Mathematical Basis**: Kleisli category for an effect monad operating over content-addressed values. Models effects, handlers, and proofs as categorical constructs (e.g., functors, natural transformations).
-- **Role**: Manages domain-specific effects, resource transformations, causality, transaction orchestration, capability-based access control, and high-level program intent through a sophisticated Intent system.
-- **Components**:
-    - **Content-Addressed Effects**: All effects identified by `EffectId(EntityId)` for global reference and deduplication
-    - **Intent System**: Rich declarative programming model with input/output bindings, constraints, and optimization
-    - **Effects (`Effect`)**: Typed descriptions of operations, including parameters, pre-conditions, post-conditions, and optimization hints. Effects are pure data.
-    - **Handlers (`Handler`)**: Pure functions that transform effects (effect-to-effect composition). They define the interpretation of effects.
-    - **Capability System**: Fine-grained access control for resource fields and operations, including record schema management and field-level permissions based on row types.
-    - **Object Model**: Linear objects with capability-based access patterns and linearity enforcement (Linear, Affine, Relevant, Unrestricted).
-    - **Record Operations**: Row polymorphism and record manipulation that compiles to static Layer 1 structures through capability resolution.
-    - **Temporal Effect Graph (TEG)**: A data structure representing a computation as a graph of effect nodes and resource-flow edges, capturing causal and temporal dependencies.
-
-### Intent System - Declarative Programming Model
-
-The Intent system is a major feature of Layer 2 that enables declarative specification of computational goals with automatic planning and optimization:
+The fundamental breakthrough of Layer 2 is the recognition that **computation and communication are the same operation**, differing only by location:
 
 ```rust
-Intent {
-    // Input/Output Bindings
-    input_bindings: HashMap<BindingName, ResourceConstraint>,
-    output_bindings: HashMap<BindingName, ResourceConstraint>,
+// Local computation - same transform applied locally
+Effect::new(
+    Location::Local,
+    Location::Local,        // Same location = computation
+    input_type,
+    output_type,
+    transform_definition
+)
+
+// Distributed communication - same transform across locations  
+Effect::new(
+    Location::Local,
+    Location::Remote("server"),  // Different location = communication
+    input_type,
+    output_type,
+    transform_definition         // Same transform!
+)
+```
+
+This unification eliminates artificial distinctions and provides:
+- **Single API**: No separate interfaces for computation vs communication
+- **Location Transparency**: Operations work the same locally and remotely
+- **Automatic Protocols**: Communication protocols derived from transform patterns
+- **Mathematical Elegance**: Perfect symmetry through category theory
+- **Zero Overhead**: Local operations maintain full performance
+
+### Unified Transform Model
+
+All Layer 2 operations are expressed as transformations `T: A → B` where:
+
+#### Transform Types
+```rust
+enum TransformDefinition {
+    // Function application (local computation)
+    FunctionApplication { function: String, argument: String },
     
-    // Constraint System
-    resource_constraints: Vec<ResourceConstraint>,
-    conservation_constraints: Vec<ConservationConstraint>,
-    temporal_constraints: Vec<TemporalConstraint>,
+    // Communication operations (distributed)
+    CommunicationSend { message_type: TypeInner },
+    CommunicationReceive { expected_type: TypeInner },
     
-    // Effect Sequence
-    effects: Vec<EffectId>,
-    
-    // Optimization Hints
-    optimization_hints: Vec<OptimizationHint>,
+    // Resource management (unified)
+    StateAllocation { initial_value: String },
+    ResourceConsumption { resource_type: String },
 }
 ```
 
-#### Resource Constraints and References
+#### Effect Composition
+Transforms compose naturally through category theory:
+- **Sequential**: `f.then(g)` creates `g ∘ f`
+- **Parallel**: `f.parallel_with(g)` creates `f ⊗ g`
+- **Mixed**: Local and distributed transforms compose seamlessly
 
-The Intent system includes sophisticated constraint solving:
+#### Location-Aware Type System
 
-- **Resource References**: Content-addressed references to specific resources with linearity tracking
-- **Conservation Constraints**: Ensure resource conservation laws (e.g., total value preservation)
-- **Temporal Constraints**: Specify before/after relationships and causality requirements
-- **Access Constraints**: Capability-based restrictions on resource field access
+The type system extends to include location information:
 
-#### Intent Compilation Process
+```rust
+// Base types remain the same
+TypeInner::Base(BaseType::Int)
 
-Intents undergo a sophisticated compilation process:
+// Located types carry location information
+TypeInner::Located(
+    Box::new(TypeInner::Base(BaseType::Int)),
+    Location::Remote("database")
+)
 
-1. **Constraint Analysis**: Solve resource and temporal constraints to determine feasible execution plans
-2. **Capability Resolution**: Resolve field access requirements into concrete row type operations
-3. **Effect Ordering**: Establish causal ordering of effects based on resource dependencies
-4. **Monomorphization**: Convert polymorphic operations to concrete field access patterns
-5. **Layer 1 Generation**: Compile resolved intent to content-addressed Layer 1 expressions
-6. **Optimization**: Apply optimizations based on content addressing and structural sharing
-
-### Content-Addressed Effect System
-
-All effects in Layer 2 are content-addressed, enabling sophisticated composition and optimization:
-
-```
-Effect = EffectId(EntityId)  -- All effects identified by content hash
-
-EffectValue = 
-  | BuiltinEffect(ResourceAccess | FieldUpdate | CapabilityCheck | ...)
-  | CustomEffect(effect_type, parameters: List<Value>)
-  | CompoundEffect(composition_op, subeffect_ids: List<EffectId>)
-```
-
-Benefits of content-addressed effects:
-- **Effect Deduplication**: Identical effects automatically share implementation
-- **Global Effect Registry**: Effects can be referenced across application boundaries
-- **Deterministic Execution**: Same effect always produces same result
-- **Caching and Memoization**: Effect results can be cached by effect ID
-
-### Core Layer 2 Operations
-
-Layer 2's operations fall into several categories, all operating within the content-addressed value system:
-
-| Category | Operation | Purpose | Content-Addressed |
-|----------|-----------|---------|-------------------|
-| **Effect Monad** | `pure v` | Lifts value into effectful computation | ✓ |
-| | `bind m f` | Sequences effectful computations | ✓ |
-| **Effect Execution** | `perform effect_id` | Submits content-addressed effect for execution | ✓ |
-| | `handle effect_id with handler_id` | Applies content-addressed handler to computation | ✓ |
-| **Resource Algebra** | `produce`, `transform`, `combine`, `split` | Common resource transformations | ✓ |
-| **Capability System** | `access_field`, `update_field`, `require_capability`, `grant_capability` | Safe field access with capability checking | ✓ |
-| **Intent Operations** | `declare_intent`, `solve_constraints`, `execute_plan` | Declarative programming interface | ✓ |
-| **Verification** | `check constraint`, `depend e₁ e₂`, `verify proof` | Causality and conservation checks | ✓ |
-| **Orchestration** | `transact`, `atomic`, `commit` | Transaction management | ✓ |
-| **Combinators** | `parallel`, `race`, `sequence` | Effect composition | ✓ |
-
-### Capability-Based Access Control with Row Types
-
-Layer 2 includes a sophisticated capability system built on row types that provides fine-grained access control over resource fields:
-
-#### Capability Effects
-| Capability Effect | Type | Purpose | Content-Addressed |
-|------------------|------|---------|-------------------|
-| `AccessField` | `ResourceRef × FieldName ⊸ Effect (Option B)` | Safe field access with capability checking | ✓ |
-| `UpdateField` | `ResourceRef × FieldName × B × Capability ⊸ Effect ResourceRef` | Capability-controlled field updates | ✓ |
-| `RequireCapability` | `CapabilityName ⊸ Effect Capability` | Demand capability for subsequent operations | ✓ |
-| `GrantCapability` | `ResourceRef × CapabilityName ⊸ Effect Capability` | Extract capability from resource ownership | ✓ |
-
-#### Row Type Integration
-
-The capability system is deeply integrated with Layer 1's row type system:
-
-- **Schema Resolution**: Capability requirements determine static record schemas
-- **Monomorphization**: Polymorphic row operations become concrete field access patterns
-- **Compile-Time Verification**: All field access patterns resolved before execution
-- **ZK Circuit Compatibility**: Fixed record structures enable efficient circuit generation
-
-### Temporal Effect Graphs (TEGs)
-
-TEGs represent computations as directed graphs with content-addressed nodes:
-
-```
-TEGNode = EffectId(EntityId)          -- Content-addressed effect nodes
-TEGEdge = (source: TEGNode, target: TEGNode, resource_flow: ResourceRef)
-
-TEG = {
-    nodes: Set<TEGNode>,
-    edges: Set<TEGEdge>,
-    temporal_constraints: Set<TemporalConstraint>
+// Transform types unify functions and protocols
+TypeInner::Transform {
+    input: Box::new(TypeInner::Base(BaseType::String)),
+    output: Box::new(TypeInner::Base(BaseType::Int)),
+    location: Location::Remote("compute_cluster"),
 }
 ```
 
-TEG properties:
-- **Causal Ordering**: Edges represent causal dependencies between effects
-- **Resource Flow**: Resources tracked as they flow between effects
-- **Parallel Execution**: Independent subgraphs can execute concurrently
-- **Verification**: TEG structure enables formal verification of temporal properties
+**Location-Aware Row Types** enable the same field operations on both local and remote data:
 
-By clearly delineating responsibilities across these three layers, Causality achieves a remarkable balance of expressive power, formal rigor, and practical usability.
+```rust
+// Local row access
+row.project_local("field_name")
+
+// Remote row access - same API, different location
+row.project_remote("field_name", Location::Remote("server"))
+
+// Distributed update across locations
+row.distributed_update(field_updates, target_locations)
+
+// Automatic migration when needed
+row.migrate(from_location, to_location, migration_strategy)
+```
+
+### Protocol Derivation from Transforms
+
+Communication protocols are **automatically derived** from data access patterns:
+
+#### Field Access Patterns → Protocols
+```rust
+// Field read access pattern
+field_access_pattern = ReadField { 
+    field: "balance", 
+    location: Remote("database") 
+}
+
+// Automatically derives protocol:
+protocol = SessionType::Send(
+    Box::new(TypeInner::Base(BaseType::Symbol)), // Field query
+    Box::new(SessionType::Receive(
+        Box::new(TypeInner::Base(BaseType::Int)), // Field value
+        Box::new(SessionType::End)
+    ))
+)
+```
+
+#### Transform Composition → Protocol Composition
+```rust
+// Composed transforms
+let workflow = preprocess
+    .then(remote_compute)
+    .then(postprocess);
+
+// Automatically derives composed protocol:
+// 1. Send preprocessed data
+// 2. Receive computation request
+// 3. Send computation result  
+// 4. Receive final output
+```
+
+#### Migration Patterns → Migration Protocols
+```rust
+// Data migration specification
+migration_spec = MigrationSpec {
+    from: Location::Local,
+    to: Location::Remote("fast_storage"),
+    strategy: MigrationStrategy::Copy,
+    fields: vec!["large_dataset"],
+}
+
+// Automatically derives migration protocol:
+// 1. Send migration request
+// 2. Stream data chunks
+// 3. Receive confirmation
+// 4. Update location metadata
+```
+
+### Core Components
+
+1. **Unified Transform System**
+   - `Effect<From, To>` where location determines operation type:
+     - Local computation: `Effect<Local, Local>`  
+     - Remote communication: `Effect<Local, Remote>`
+     - Data migration: `Effect<LocationA, LocationB>`
+   - Single constraint language for all operations
+   - Automatic protocol derivation from data access patterns
+
+2. **Transform Constraint System**
+   ```rust
+   enum TransformConstraint {
+       LocalTransform { source_type, target_type, transform },
+       RemoteTransform { source_location, target_location, protocol, .. },
+       DataMigration { from_location, to_location, migration_strategy, .. },
+       DistributedSync { locations, consistency_model, .. },
+       ProtocolRequirement { required_protocol, capability },
+       CapabilityAccess { resource, required_capability, .. },
+   }
+   ```
+
+3. **Intent-Based Programming**
+   - Declarative specification of desired outcomes
+   - Transform constraints replace separate constraint types
+   - Location requirements and migration specifications
+   - Cost estimation and execution planning
+
+4. **Location-Aware Capabilities**
+   - Distributed access control with session delegation
+   - Cross-location verification
+   - Time-limited capability delegation
+   - Field-level location constraints
+
+### Mathematical Foundation
+
+Based on **Symmetric Monoidal Closed Category Theory**:
+- **Objects**: Linear resources (data, channels, functions, protocols)
+- **Morphisms**: Transformations between resources
+- **Monoidal Structure**: Parallel composition (⊗)
+- **Symmetry**: Resource braiding/swapping
+- **Closure**: Internal hom (→) for functions and protocols
+
+### Compilation Pipeline
+
+Layer 2 transforms compile to Layer 1 through a unified pipeline:
+
+```
+Intent (Layer 2)
+    ↓ constraint analysis
+Location-Aware Transform Constraints
+    ↓ capability resolution  
+Distributed Capability Requirements
+    ↓ protocol derivation
+Local Functions + Communication Protocols
+    ↓ monomorphization
+Concrete Row Operations + Session Operations
+    ↓ Layer 1 compilation
+Linear Lambda Terms + Session Terms
+    ↓ Layer 0 compilation
+5 Fundamental Instructions
+```
+
+### Benefits of Unification
+
+- **Location Transparency**: Operations work the same locally and remotely
+- **Automatic Protocols**: Communication protocols derived from transform patterns
+- **Single API**: No separate interfaces for computation vs communication
+- **Mathematical Elegance**: Perfect symmetry through category theory
+- **Zero Overhead**: Local operations maintain full performance
+- **Seamless Composition**: Local and distributed operations compose naturally
+- **Unified Constraints**: Same constraint language for all operation types
+- **Simplified Programming**: No need to distinguish computation from communication

@@ -106,8 +106,32 @@ pub fn concurrent(event_a: Term, event_b: Term) -> EffectExpr {
 }
 
 /// Create a causal barrier that ensures all prior effects complete
-pub fn causal_barrier(_effects: Vec<Term>) -> EffectExpr {
-    perform("causal_barrier", vec![Term::var("effects")]) // Placeholder
+pub fn causal_barrier(effects: Vec<Term>) -> EffectExpr {
+    if effects.is_empty() {
+        pure(Term::unit())
+    } else {
+        // Create a proper causal barrier by sequencing all effects
+        let mut barrier_effect = pure(Term::unit());
+        
+        for effect in effects {
+            barrier_effect = bind(
+                barrier_effect,
+                "_",
+                bind(
+                    perform("wait_for_completion", vec![effect]),
+                    "_",
+                    pure(Term::unit())
+                )
+            );
+        }
+        
+        // Add final synchronization barrier
+        bind(
+            barrier_effect,
+            "_",
+            perform("synchronize_barrier", vec![])
+        )
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -115,8 +139,45 @@ pub fn causal_barrier(_effects: Vec<Term>) -> EffectExpr {
 //-----------------------------------------------------------------------------
 
 /// Verify that a set of operations maintains causal consistency
-pub fn verify_causal_consistency(_operations: Vec<Term>) -> EffectExpr {
-    perform("verify_consistency", vec![Term::var("ops")]) // Placeholder
+pub fn verify_causal_consistency(operations: Vec<Term>) -> EffectExpr {
+    if operations.is_empty() {
+        pure(Term::unit())
+    } else {
+        // Build dependency graph from operations
+        let operations_term = if operations.is_empty() {
+            Term::unit()
+        } else {
+            // Represent list as nested tensor products: (op1, (op2, (op3, unit)))
+            operations.into_iter().fold(Term::unit(), |acc, op| {
+                Term::tensor(op, acc)
+            })
+        };
+        
+        let dependency_check = perform("build_dependency_graph", vec![
+            Term::lambda("ops", operations_term.clone())
+        ]);
+        
+        // Verify no cycles exist in the dependency graph
+        let cycle_check = bind(
+            dependency_check,
+            "dep_graph",
+            perform("check_acyclic", vec![Term::var("dep_graph")])
+        );
+        
+        // Verify all causality constraints are satisfied
+        bind(
+            cycle_check,
+            "acyclic_proof",
+            bind(
+                perform("verify_constraints", vec![
+                    Term::lambda("ops", operations_term),
+                    Term::var("acyclic_proof")
+                ]),
+                "constraint_proof",
+                pure(Term::var("constraint_proof"))
+            )
+        )
+    }
 }
 
 /// Create a causal snapshot of the current state

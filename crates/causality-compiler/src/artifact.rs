@@ -11,7 +11,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 /// Content hash for compilation artifacts
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ContentHash(pub u64);
 
 impl std::fmt::Display for ContentHash {
@@ -88,7 +88,7 @@ fn compute_content_hash(artifact: &CompiledArtifact) -> ContentHash {
 /// content-addressable storage system.
 #[derive(Debug, Default)]
 pub struct ArtifactCache {
-    artifacts: std::collections::HashMap<ContentHash, ContentAddressedArtifact>,
+    artifacts: std::collections::BTreeMap<ContentHash, ContentAddressedArtifact>,
 }
 
 impl ArtifactCache {

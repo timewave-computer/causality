@@ -1,245 +1,327 @@
-//! Computational metering
+//! Gas metering for the minimal 5-operation instruction set
 //!
-//! This module implements computational metering for the register machine.
-//! The compute budget is tracked as a linear resource that is consumed by
-//! each instruction execution.
+//! This module implements gas metering and cost calculation for the
+//! mathematically minimal instruction set.
 
-use super::{
-    instruction::Instruction,
-    resource::ResourceManager,
-    state::MachineState,
-    value::MachineValue,
-};
-use crate::lambda::{TypeInner, BaseType, Value};
-use crate::system::{content_addressing::ResourceId, error::MachineError};
+use crate::machine::instruction::Instruction;
+use serde::{Serialize, Deserialize};
 
-/// Compute budget resource that tracks remaining computational steps
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ComputeBudget {
-    /// Remaining compute units
-    pub remaining: u64,
-    
-    /// Total compute units allocated
-    pub total: u64,
-}
-
-impl ComputeBudget {
-    /// Create a new compute budget
-    pub fn new(total: u64) -> Self {
-        Self {
-            remaining: total,
-            total,
-        }
-    }
-    
-    /// Consume compute units
-    pub fn consume(&mut self, amount: u64) -> Result<(), MachineError> {
-        if self.remaining >= amount {
-            self.remaining -= amount;
-            Ok(())
-        } else {
-            Err(MachineError::Generic("Compute budget exhausted".to_string()))
-        }
-    }
-    
-    /// Get the amount consumed so far
-    pub fn consumed(&self) -> u64 {
-        self.total - self.remaining
-    }
-    
-    /// Check if budget is exhausted
-    pub fn is_exhausted(&self) -> bool {
-        self.remaining == 0
-    }
-}
-
-/// Metering system for the register machine
-#[derive(Debug)]
-pub struct Metering {
-    /// Compute budget resource ID
-    budget_resource_id: Option<ResourceId>,
-    
-    /// Cost per instruction type
-    instruction_costs: InstructionCosts,
-}
-
-/// Fixed costs for each instruction type
+/// Gas metering for the minimal instruction set
 #[derive(Debug, Clone)]
+pub struct GasMeter {
+    /// Current gas consumed
+    pub gas_used: u64,
+    
+    /// Gas limit for execution
+    pub gas_limit: u64,
+    
+    /// Instruction costs for the 5 operations
+    pub instruction_costs: InstructionCosts,
+}
+
+/// Cost configuration for the 5 minimal operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstructionCosts {
-    pub move_cost: u64,
-    pub apply_cost: u64,
-    pub match_cost: u64,
+    /// Cost for Transform operations (morphism application)
+    pub transform_cost: u64,
+    
+    /// Cost for Alloc operations (resource creation)
     pub alloc_cost: u64,
+    
+    /// Cost for Consume operations (resource destruction)
     pub consume_cost: u64,
-    pub check_cost: u64,
-    pub perform_cost: u64,
-    pub select_cost: u64,
-    pub witness_cost: u64,
+    
+    /// Cost for Compose operations (morphism composition)
+    pub compose_cost: u64,
+    
+    /// Cost for Tensor operations (parallel composition)
+    pub tensor_cost: u64,
 }
 
 impl Default for InstructionCosts {
     fn default() -> Self {
         Self {
-            move_cost: 1,
-            apply_cost: 10,
-            match_cost: 5,
-            alloc_cost: 20,
-            consume_cost: 10,
-            check_cost: 5,
-            perform_cost: 50,
-            select_cost: 3,
-            witness_cost: 100,
+            transform_cost: 3,  // Transform is the most general operation
+            alloc_cost: 5,      // Resource allocation is expensive
+            consume_cost: 2,    // Resource deallocation is cheaper
+            compose_cost: 1,    // Composition is just creating a new morphism
+            tensor_cost: 2,     // Tensor product is structural
         }
     }
 }
 
-impl Default for Metering {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Metering {
-    /// Create a new metering system
-    pub fn new() -> Self {
+impl GasMeter {
+    /// Create a new gas meter with the given limit
+    pub fn new(gas_limit: u64) -> Self {
         Self {
-            budget_resource_id: None,
+            gas_used: 0,
+            gas_limit,
             instruction_costs: InstructionCosts::default(),
         }
     }
     
-    /// Initialize the compute budget as a linear resource
-    pub fn initialize_budget(&mut self, state: &mut MachineState, budget: u64) -> Result<(), MachineError> {
-        // Create compute budget value
-        let budget_value = MachineValue::Int(budget as u32);
+    /// Create a gas meter with custom instruction costs
+    pub fn with_costs(gas_limit: u64, costs: InstructionCosts) -> Self {
+        Self {
+            gas_used: 0,
+            gas_limit,
+            instruction_costs: costs,
+        }
+    }
+    
+    /// Check if we have enough gas for an instruction
+    pub fn can_execute(&self, instruction: &Instruction) -> bool {
+        let cost = self.instruction_cost(instruction);
+        self.gas_used + cost <= self.gas_limit
+    }
+    
+    /// Consume gas for an instruction
+    pub fn consume_gas(&mut self, instruction: &Instruction) -> Result<(), GasError> {
+        let cost = self.instruction_cost(instruction);
         
-        // Allocate as a linear resource on the heap
-        let resource_id = state.alloc_resource(
-            budget_value,
-            TypeInner::Base(BaseType::Int)
-        );
+        if self.gas_used + cost > self.gas_limit {
+            return Err(GasError::OutOfGas {
+                required: cost,
+                available: self.gas_limit - self.gas_used,
+            });
+        }
         
-        self.budget_resource_id = Some(resource_id);
+        self.gas_used += cost;
         Ok(())
     }
     
-    /// Get the cost of an instruction
+    /// Get the gas cost for an instruction
     pub fn instruction_cost(&self, instruction: &Instruction) -> u64 {
         match instruction {
-            Instruction::Move { .. } => self.instruction_costs.move_cost,
-            Instruction::Apply { .. } => self.instruction_costs.apply_cost,
-            Instruction::Match { .. } => self.instruction_costs.match_cost,
+            Instruction::Transform { .. } => self.instruction_costs.transform_cost,
             Instruction::Alloc { .. } => self.instruction_costs.alloc_cost,
             Instruction::Consume { .. } => self.instruction_costs.consume_cost,
-            Instruction::Check { .. } => self.instruction_costs.check_cost,
-            Instruction::Perform { .. } => self.instruction_costs.perform_cost,
-            Instruction::Select { .. } => self.instruction_costs.select_cost,
-            Instruction::Witness { .. } => self.instruction_costs.witness_cost,
-            Instruction::LabelMarker(_) => 0, // Label markers have no execution cost
-            Instruction::Return { .. } => 1, // Return instructions have minimal cost
+            Instruction::Compose { .. } => self.instruction_costs.compose_cost,
+            Instruction::Tensor { .. } => self.instruction_costs.tensor_cost,
         }
     }
     
-    /// Consume compute budget for an instruction
-    pub fn consume_for_instruction(
-        &self,
-        state: &mut MachineState,
-        instruction: &Instruction
-    ) -> Result<(), MachineError> {
-        let cost = self.instruction_cost(instruction);
-        
-        if let Some(budget_id) = &self.budget_resource_id {
-            // Check if we can peek at the resource
-            let remaining = self.get_remaining_budget(state)?;
-            
-            if remaining >= cost {
-                // We need to consume and re-allocate since we can't modify in place
-                let _ = state.consume_resource(*budget_id)?;
-                
-                // Allocate new budget with reduced amount
-                let new_remaining = (remaining - cost) as u32;
-                let new_value = MachineValue::Int(new_remaining);
-                let new_id = state.alloc_resource(
-                    new_value,
-                    TypeInner::Base(BaseType::Int)
-                );
-                
-                // Update our tracked budget ID
-                // Note: This is a limitation - we're modifying through a shared reference
-                // In a real implementation, we'd need a different approach
-                // For now, we'll just not update the ID and accept the limitation
-                let _ = new_id;
-                
-                Ok(())
-            } else {
-                Err(MachineError::Generic("Insufficient compute budget".to_string()))
-            }
+    /// Get remaining gas
+    pub fn remaining_gas(&self) -> u64 {
+        self.gas_limit.saturating_sub(self.gas_used)
+    }
+    
+    /// Get gas usage percentage
+    pub fn usage_percentage(&self) -> f64 {
+        if self.gas_limit == 0 {
+            0.0
         } else {
-            // No budget tracking initialized
-            Ok(())
+            (self.gas_used as f64 / self.gas_limit as f64) * 100.0
         }
     }
     
-    /// Get remaining compute budget
-    pub fn get_remaining_budget(&self, state: &MachineState) -> Result<u64, MachineError> {
-        if let Some(budget_id) = &self.budget_resource_id {
-            let peek_result = state.resources.peek_resource(*budget_id);
-            match peek_result {
-                Ok(resource) => {
-                    // Check if this resource represents gas/compute credits
-                    match &resource.data {
-                        Value::Int(remaining) => Ok(*remaining as u64),
-                        _ => Ok(0), // No gas remaining if not an integer
-                    }
-                }
-                Err(_) => Ok(0), // Resource doesn't exist or is already consumed
+    /// Reset gas usage
+    pub fn reset(&mut self) {
+        self.gas_used = 0;
+    }
+    
+    /// Estimate gas for a sequence of instructions
+    pub fn estimate_gas(&self, instructions: &[Instruction]) -> u64 {
+        instructions.iter()
+            .map(|instr| self.instruction_cost(instr))
+            .sum()
+    }
+}
+
+/// Gas-related errors
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GasError {
+    /// Out of gas error
+    OutOfGas {
+        required: u64,
+        available: u64,
+    },
+    
+    /// Gas limit exceeded
+    GasLimitExceeded {
+        limit: u64,
+        used: u64,
+    },
+}
+
+impl std::fmt::Display for GasError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GasError::OutOfGas { required, available } => {
+                write!(f, "Out of gas: required {}, available {}", required, available)
             }
-        } else {
-            // No budget tracking initialized, return unlimited
-            Ok(u64::MAX)
+            GasError::GasLimitExceeded { limit, used } => {
+                write!(f, "Gas limit exceeded: limit {}, used {}", limit, used)
+            }
         }
     }
 }
 
-//-----------------------------------------------------------------------------
-// Tests
-//-----------------------------------------------------------------------------
+impl std::error::Error for GasError {}
+
+/// Gas accounting for complex operations
+impl GasMeter {
+    /// Calculate gas for morphism application based on complexity
+    pub fn morphism_application_cost(&self, complexity: MorphismComplexity) -> u64 {
+        let base_cost = self.instruction_costs.transform_cost;
+        
+        match complexity {
+            MorphismComplexity::Simple => base_cost,
+            MorphismComplexity::Moderate => base_cost * 2,
+            MorphismComplexity::Complex => base_cost * 5,
+            MorphismComplexity::Composition(depth) => base_cost * (1 + depth as u64),
+            MorphismComplexity::Tensor(components) => base_cost * components as u64,
+        }
+    }
+    
+    /// Calculate gas for resource operations based on resource type
+    pub fn resource_operation_cost(&self, operation: ResourceOperation, size: u64) -> u64 {
+        let base_cost = match operation {
+            ResourceOperation::Alloc => self.instruction_costs.alloc_cost,
+            ResourceOperation::Consume => self.instruction_costs.consume_cost,
+        };
+        
+        // Scale cost by resource size (with a minimum)
+        base_cost + (size / 1024).max(1)
+    }
+}
+
+/// Morphism complexity for gas calculation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MorphismComplexity {
+    /// Simple morphism (identity, basic function)
+    Simple,
+    
+    /// Moderate complexity (protocol, effect)
+    Moderate,
+    
+    /// Complex morphism (nested protocols, complex effects)
+    Complex,
+    
+    /// Composed morphism with given depth
+    Composition(u32),
+    
+    /// Tensor product with given number of components
+    Tensor(u32),
+}
+
+/// Resource operation type
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResourceOperation {
+    /// Resource allocation
+    Alloc,
+    
+    /// Resource consumption
+    Consume,
+}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::machine::instruction::RegisterId;
+    use super::*;
     
     #[test]
-    fn test_compute_budget() {
-        let mut budget = ComputeBudget::new(100);
-        assert_eq!(budget.remaining, 100);
-        assert_eq!(budget.total, 100);
+    fn test_basic_gas_metering() {
+        let mut meter = GasMeter::new(100);
         
-        assert!(budget.consume(50).is_ok());
-        assert_eq!(budget.remaining, 50);
-        assert_eq!(budget.consumed(), 50);
+        let transform = Instruction::Transform {
+            morph_reg: RegisterId::new(1),
+            input_reg: RegisterId::new(2),
+            output_reg: RegisterId::new(3),
+        };
         
-        assert!(budget.consume(50).is_ok());
-        assert_eq!(budget.remaining, 0);
-        assert!(budget.is_exhausted());
+        assert!(meter.can_execute(&transform));
+        assert_eq!(meter.instruction_cost(&transform), 3);
         
-        assert!(budget.consume(1).is_err());
+        meter.consume_gas(&transform).unwrap();
+        assert_eq!(meter.gas_used, 3);
+        assert_eq!(meter.remaining_gas(), 97);
     }
     
     #[test]
-    fn test_instruction_costs() {
-        let metering = Metering::new();
+    fn test_out_of_gas() {
+        let mut meter = GasMeter::new(2);
         
-        let move_instr = Instruction::Move {
-            src: RegisterId::new(1),
-            dst: RegisterId::new(2),
+        let alloc = Instruction::Alloc {
+            type_reg: RegisterId::new(1),
+            init_reg: RegisterId::new(2),
+            output_reg: RegisterId::new(3),
         };
-        assert_eq!(metering.instruction_cost(&move_instr), 1);
         
-        let witness_instr = Instruction::Witness {
-            out_reg: RegisterId::new(1),
+        assert!(!meter.can_execute(&alloc));
+        
+        let result = meter.consume_gas(&alloc);
+        assert!(matches!(result, Err(GasError::OutOfGas { .. })));
+    }
+    
+    #[test]
+    fn test_gas_estimation() {
+        let meter = GasMeter::new(1000);
+        
+        let instructions = vec![
+            Instruction::Alloc {
+                type_reg: RegisterId::new(1),
+                init_reg: RegisterId::new(2),
+                output_reg: RegisterId::new(3),
+            },
+            Instruction::Transform {
+                morph_reg: RegisterId::new(3),
+                input_reg: RegisterId::new(4),
+                output_reg: RegisterId::new(5),
+            },
+            Instruction::Consume {
+                resource_reg: RegisterId::new(3),
+                output_reg: RegisterId::new(6),
+            },
+        ];
+        
+        let estimated = meter.estimate_gas(&instructions);
+        assert_eq!(estimated, 5 + 3 + 2); // alloc + transform + consume
+    }
+    
+    #[test]
+    fn test_custom_costs() {
+        let custom_costs = InstructionCosts {
+            transform_cost: 10,
+            alloc_cost: 20,
+            consume_cost: 5,
+            compose_cost: 3,
+            tensor_cost: 7,
         };
-        assert_eq!(metering.instruction_cost(&witness_instr), 100);
+        
+        let meter = GasMeter::with_costs(1000, custom_costs);
+        
+        let tensor = Instruction::Tensor {
+            left_reg: RegisterId::new(1),
+            right_reg: RegisterId::new(2),
+            output_reg: RegisterId::new(3),
+        };
+        
+        assert_eq!(meter.instruction_cost(&tensor), 7);
+    }
+    
+    #[test]
+    fn test_morphism_complexity_costs() {
+        let meter = GasMeter::new(1000);
+        
+        assert_eq!(meter.morphism_application_cost(MorphismComplexity::Simple), 3);
+        assert_eq!(meter.morphism_application_cost(MorphismComplexity::Moderate), 6);
+        assert_eq!(meter.morphism_application_cost(MorphismComplexity::Complex), 15);
+        assert_eq!(meter.morphism_application_cost(MorphismComplexity::Composition(3)), 12);
+        assert_eq!(meter.morphism_application_cost(MorphismComplexity::Tensor(4)), 12);
+    }
+    
+    #[test]
+    fn test_resource_operation_costs() {
+        let meter = GasMeter::new(1000);
+        
+        // Small resource
+        assert_eq!(meter.resource_operation_cost(ResourceOperation::Alloc, 100), 6); // 5 + 1
+        
+        // Large resource
+        assert_eq!(meter.resource_operation_cost(ResourceOperation::Alloc, 2048), 7); // 5 + 2
+        
+        // Consume is cheaper
+        assert_eq!(meter.resource_operation_cost(ResourceOperation::Consume, 100), 3); // 2 + 1
     }
 } 

@@ -2,14 +2,15 @@
 name = "causality-toolkit"
 version = "0.1.0"
 edition = "2021"
-authors = ["Causality Team"]
+authors = ["Timewave Team"]
 description = "Development toolkit and utilities for Causality framework"
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0"
 repository = "https://github.com/timewave/reverse-causality"
 
 [dependencies]
 causality-core = { version = "0.1.0", path = "../causality-core" }
 causality-lisp = { path = "../causality-lisp" }
+causality-compiler = { path = "../causality-compiler" }
 anyhow = "1.0"
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -21,7 +22,6 @@ rand = "0.8"
 tokio = { version = "1.0", features = ["time", "macros", "rt-multi-thread"] }
 hashbrown = "0.15"
 sha2 = "0.10"
-blake3 = "1.5"
 uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 
@@ -31,4 +31,11 @@ tokio = { version = "1.0", features = ["time", "macros", "rt-multi-thread"] }
 
 [[example]]
 name = "cross_chain_defi_bridge"
-path = "examples/cross_chain_defi_bridge.rs" 
+path = "examples/cross_chain_defi_bridge.rs"
+
+[features]
+default = []
+mocks = []
+testing = []
+almanac = []
+proof-interfaces = ["causality-compiler/traverse"] 

@@ -52,6 +52,12 @@ pub enum CompileError {
         message: String,
         location: Option<Location>,
     },
+    
+    /// Validation error for account factory operations
+    ValidationError {
+        message: String,
+        location: Option<Location>,
+    },
 }
 
 /// Location in source code
@@ -119,6 +125,13 @@ impl fmt::Display for CompileError {
                     write!(f, "Compilation error at {}:{}: {}", loc.line, loc.column, message)
                 } else {
                     write!(f, "Compilation error: {}", message)
+                }
+            }
+            CompileError::ValidationError { message, location } => {
+                if let Some(loc) = location {
+                    write!(f, "Validation error at {}:{}: {}", loc.line, loc.column, message)
+                } else {
+                    write!(f, "Validation error: {}", message)
                 }
             }
         }

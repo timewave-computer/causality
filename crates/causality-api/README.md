@@ -1,251 +1,247 @@
 # Causality API
 
-External interface layer for the Causality framework that provides HTTP APIs and ZK coprocessor interaction for seamless integration with external systems while maintaining the verifiable properties of the resource model.
-
-## Purpose
-
-The `causality-api` crate serves as the **external integration gateway** for the Causality system, providing standardized interfaces that enable external systems to interact with the three-layer architecture. It bridges the gap between the internal resource model and external infrastructure including coprocessors and traditional applications.
-
-### Key Responsibilities
-
-- **HTTP API Gateway**: Provide RESTful interfaces for resource operations
-- **ZK Coprocessor Interface**: Facilitate communication with zero-knowledge coprocessors
-- **Session Management**: Handle execution sessions and state management
-- **Protocol Translation**: Convert between internal resource representations and external formats
-
-## Architecture Overview
-
-The API layer is designed around several integration patterns:
-
-### HTTP REST Interface
-Standard RESTful APIs for resource operations:
-- **Resource Management**: Create, read, update, and consume resources
-- **Session Handling**: Manage execution sessions and state
-- **System Operations**: Health checks and system monitoring
-
-### Coprocessor Integration
-Specialized interfaces for computational coprocessors:
-- **ZK Proof Coordination**: Manage zero-knowledge proof generation workflows
-- **Computation Offloading**: Delegate intensive computations to coprocessors
-- **Result Verification**: Verify coprocessor computation results
+HTTP API and coprocessor integration gateway providing external interfaces for resource operations, session management, zero-knowledge proof coordination, and multi-chain blockchain interactions.
 
 ## Core Components
 
-### HTTP API Server (`server.rs`)
-
-RESTful API server for resource and session operations:
+### HTTP API Server
+RESTful interface for resource and session operations:
 
 ```rust
 use causality_api::{CausalityApi, ApiConfig};
 
-let config = ApiConfig {
+let api = CausalityApi::new(ApiConfig {
     bind_address: "0.0.0.0:8080".to_string(),
     enable_cors: true,
-};
-
-let api = CausalityApi::new(config);
+});
 api.start().await?;
 ```
 
-**API Endpoints:**
-- **Resource Operations**: Create, read, update, and consume resources
-- **Session Management**: Create and manage execution sessions
-- **System Monitoring**: Health checks and system metrics
-
-### Session Management (`session.rs`)
-
-Execution session handling for stateful operations:
+### Session Management
+Stateful execution contexts with timeout handling:
 
 ```rust
 use causality_api::{ExecutionSession, SessionConfig};
 
-// Create execution session
 let session = ExecutionSession::new(SessionConfig {
     timeout: Duration::from_secs(300),
     max_operations: 1000,
 });
-
-// Execute operations within session
-let result = session.execute_operation(operation).await?;
 ```
 
-**Session Features:**
-- **State Management**: Maintain execution state across operations
-- **Timeout Handling**: Automatic session cleanup and timeout management
-- **Operation Tracking**: Track operations and resource usage
-
-### ZK Coprocessor Interface (`coprocessor.rs`)
-
-Integration with zero-knowledge coprocessors:
+### ZK Coprocessor Interface
+Integration with zero-knowledge proving services:
 
 ```rust
 use causality_api::{CoprocessorService, CoprocessorConfig};
 
-let coprocessor = CoprocessorService::new(CoprocessorConfig {
-    endpoint: "https://coprocessor.valence.xyz".to_string(),
-    timeout: Duration::from_secs(600),
-})?;
-
-// Submit proof generation request
+let coprocessor = CoprocessorService::new(config)?;
 let proof_id = coprocessor.submit_proof_request(circuit, witness).await?;
-
-// Check proof status
-let status = coprocessor.get_proof_status(proof_id).await?;
 ```
 
-**Coprocessor Features:**
-- **Async Proof Generation**: Non-blocking proof generation with status tracking
-- **Error Recovery**: Robust error handling and retry mechanisms
-- **Result Caching**: Intelligent caching of proof results
+### Blockchain Client Interface
+Multi-chain transaction submission and monitoring:
 
-### Client Interface (`client.rs`)
+```rust
+use causality_api::{ChainClient, ChainConfig, TransactionRequest};
 
-Client library for interacting with the API:
+let client = ChainClient::new(ChainConfig {
+    chain: "ethereum".to_string(),
+    rpc_url: "https://mainnet.infura.io/v3/YOUR_KEY".to_string(),
+    gas_strategy: GasStrategy::Aggressive,
+});
+
+let tx_request = TransactionRequest {
+    proof_data: proof_bytes,
+    gas_limit: Some(500_000),
+    max_fee_per_gas: Some(100_000_000_000), // 100 gwei
+    max_priority_fee_per_gas: Some(2_000_000_000), // 2 gwei
+};
+
+let tx_hash = client.submit_transaction(tx_request).await?;
+```
+
+### Client Library
+Type-safe client for API interaction:
 
 ```rust
 use causality_api::{CausalityClient, ClientConfig};
 
-let client = CausalityClient::new(ClientConfig {
-    base_url: "http://localhost:8080".to_string(),
-    timeout: Duration::from_secs(30),
-});
-
-// Create resource
+let client = CausalityClient::new(config);
 let resource_id = client.create_resource(resource_data).await?;
-
-// Read resource
-let resource = client.get_resource(resource_id).await?;
 ```
 
-## Configuration Management
-
-### API Configuration
-
-```toml
-[api]
-bind_address = "0.0.0.0:8080"
-enable_cors = true
-max_request_size = "10MB"
-
-[session]
-default_timeout = "300s"
-max_operations = 1000
-cleanup_interval = "60s"
-
-[coprocessor]
-endpoint = "https://coprocessor.valence.xyz"
-timeout = "600s"
-retry_attempts = 3
-```
-
-## REST API Specification
+## REST API Endpoints
 
 ### Resource Operations
 ```http
 GET    /api/v1/resources/{id}           # Retrieve resource
-POST   /api/v1/resources               # Create resource
+POST   /api/v1/resources               # Create resource  
 PUT    /api/v1/resources/{id}          # Update resource
 DELETE /api/v1/resources/{id}          # Consume resource
 ```
 
-### Session Operations
+### Session Operations  
 ```http
 POST   /api/v1/sessions                # Create session
 GET    /api/v1/sessions/{id}           # Get session status
-DELETE /api/v1/sessions/{id}           # End session
 POST   /api/v1/sessions/{id}/execute   # Execute operation
+DELETE /api/v1/sessions/{id}           # End session
+```
+
+### Blockchain Operations
+```http
+POST   /api/v1/transactions            # Submit transaction to blockchain
+GET    /api/v1/transactions/{hash}     # Get transaction status
+POST   /api/v1/transactions/estimate   # Estimate gas costs
+GET    /api/v1/chains                  # List supported chains
+GET    /api/v1/chains/{chain}/status   # Get chain status and gas prices
 ```
 
 ### System Operations
 ```http
 GET    /api/v1/health                  # Health check
 GET    /api/v1/metrics                 # System metrics
-GET    /api/v1/version                 # API version
+GET    /api/v1/version                 # API version info
 ```
 
-## Error Handling and Response Formats
+## Blockchain Integration
 
-### Standardized Error Responses
+### Supported Chains
+- **Ethereum**: Mainnet, Goerli, Sepolia
+- **Polygon**: Mainnet, Mumbai
+- **Arbitrum**: Mainnet, Goerli
+- **Optimism**: Mainnet, Goerli
 
-```json
-{
-  "error": {
-    "code": "RESOURCE_NOT_FOUND",
-    "message": "Resource with ID res_123 not found",
-    "details": {
-      "resource_id": "res_123",
-      "timestamp": "2024-01-15T10:30:00Z"
-    }
-  }
-}
+### Transaction Types
+- **ZK Proof Submission**: Submit zero-knowledge proofs with verification
+- **Resource Operations**: Create, update, consume linear resources on-chain
+- **Cross-Chain Coordination**: Coordinate operations across multiple chains
+
+### Gas Management
+- **Automatic Gas Estimation**: EIP-1559 compatible gas pricing
+- **Gas Optimization**: Dynamic gas price adjustment based on network conditions
+- **Priority Fee Management**: Configurable priority fees for transaction speed
+- **Gas Limit Calculation**: Automatic gas limit estimation with safety margins
+
+### Transaction Monitoring
+- **Real-time Status**: WebSocket updates for transaction status
+- **Confirmation Tracking**: Configurable confirmation requirements
+- **Error Recovery**: Automatic retry with exponential backoff
+- **Receipt Validation**: Full transaction receipt verification
+
+## Key Features
+
+- **Resource Management**: Create, read, update, consume linear resources
+- **Session Handling**: Stateful execution with automatic cleanup
+- **ZK Integration**: Async proof generation with status tracking
+- **Multi-Chain Support**: Submit transactions to multiple blockchains simultaneously
+- **Gas Optimization**: Intelligent gas pricing and limit management
+- **Transaction Monitoring**: Real-time transaction status and confirmation tracking
+- **Error Recovery**: Comprehensive error handling with retry logic
+- **Protocol Translation**: Internal resource model to external format conversion
+
+## Configuration
+
+```toml
+[api]
+bind_address = "0.0.0.0:8080"
+enable_cors = true
+
+[session]  
+default_timeout = "300s"
+max_operations = 1000
+
+[coprocessor]
+endpoint = "https://coprocessor.valence.xyz"
+timeout = "600s"
+
+[blockchain]
+# Default chain for operations
+default_chain = "ethereum"
+
+# Chain-specific configurations
+[blockchain.ethereum]
+rpc_url = "https://mainnet.infura.io/v3/YOUR_KEY"
+chain_id = 1
+gas_strategy = "aggressive"
+max_fee_per_gas = 100_000_000_000  # 100 gwei
+max_priority_fee_per_gas = 2_000_000_000  # 2 gwei
+confirmation_blocks = 12
+
+[blockchain.polygon]
+rpc_url = "https://polygon-mainnet.infura.io/v3/YOUR_KEY"
+chain_id = 137
+gas_strategy = "standard"
+max_fee_per_gas = 50_000_000_000  # 50 gwei
+max_priority_fee_per_gas = 1_000_000_000  # 1 gwei
+confirmation_blocks = 64
+
+[blockchain.arbitrum]
+rpc_url = "https://arbitrum-mainnet.infura.io/v3/YOUR_KEY"
+chain_id = 42161
+gas_strategy = "standard"
+confirmation_blocks = 1
+
+[blockchain.optimism]
+rpc_url = "https://optimism-mainnet.infura.io/v3/YOUR_KEY"
+chain_id = 10
+gas_strategy = "standard"
+confirmation_blocks = 1
 ```
 
-**Error Categories:**
-- **Client Errors (4xx)**: Invalid requests, authentication failures
-- **Server Errors (5xx)**: Internal errors, external service failures
-- **Coprocessor Errors**: Proof generation and verification errors
+## Usage Examples
 
-## Design Philosophy
-
-### Simplicity First
-The API layer prioritizes simplicity and ease of use:
-- **RESTful Design**: Follow standard REST conventions
-- **Clear Error Messages**: Provide actionable error information
-- **Minimal Configuration**: Sensible defaults with simple configuration
-
-### Extensibility
-Built for future expansion:
-- **Modular Design**: Easy addition of new endpoints and features
-- **Protocol Agnostic**: Design allows for additional protocols
-- **Backend Independence**: Abstract over different backend systems
-
-### Reliability
-Designed for production use:
-- **Error Recovery**: Comprehensive error handling and recovery
-- **Timeout Management**: Configurable timeouts with graceful handling
-- **Resource Cleanup**: Automatic cleanup of resources and sessions
-
-## Testing Framework
-
-Comprehensive testing across all API components:
-
+### Submit ZK Proof to Multiple Chains
 ```rust
-#[tokio::test]
-async fn test_resource_lifecycle() {
-    let api = setup_test_api().await;
-    
-    // Create resource
-    let resource_id = api.create_resource(test_resource_data()).await?;
-    
-    // Read resource
-    let resource = api.get_resource(resource_id).await?;
-    assert_eq!(resource.data, test_resource_data());
-    
-    // Consume resource
-    api.consume_resource(resource_id).await?;
-    
-    // Verify resource is consumed
-    assert!(api.get_resource(resource_id).await.is_err());
-}
+use causality_api::{ChainClient, TransactionRequest, ProofData};
 
-#[tokio::test]
-async fn test_coprocessor_integration() {
-    let coprocessor = setup_test_coprocessor().await;
-    
-    let proof_id = coprocessor.submit_proof_request(test_circuit(), test_witness()).await?;
-    
-    // Wait for proof completion
-    loop {
-        let status = coprocessor.get_proof_status(proof_id).await?;
-        if status.is_complete() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    
-    let proof = coprocessor.get_proof(proof_id).await?;
-    assert!(proof.verify(&public_inputs));
-}
+// Create proof data
+let proof_data = ProofData {
+    proof: proof_bytes,
+    public_inputs: public_inputs,
+    verification_key: vk_bytes,
+};
+
+// Submit to Ethereum
+let eth_client = ChainClient::ethereum(config.clone()).await?;
+let eth_tx = eth_client.submit_proof_transaction(proof_data.clone()).await?;
+
+// Submit to Polygon
+let polygon_client = ChainClient::polygon(config.clone()).await?;
+let polygon_tx = polygon_client.submit_proof_transaction(proof_data).await?;
+
+// Monitor both transactions
+let eth_receipt = eth_client.wait_for_confirmation(eth_tx, 12).await?;
+let polygon_receipt = polygon_client.wait_for_confirmation(polygon_tx, 64).await?;
 ```
 
-This comprehensive API layer enables seamless integration between the Causality system and external infrastructure while maintaining the verifiable and deterministic properties of the resource model.
+### Gas Price Optimization
+```rust
+use causality_api::{GasEstimator, GasStrategy};
+
+let estimator = GasEstimator::new("ethereum").await?;
+
+// Get current gas prices
+let gas_prices = estimator.get_gas_prices().await?;
+println!("Base fee: {} gwei", gas_prices.base_fee / 1_000_000_000);
+println!("Priority fee: {} gwei", gas_prices.priority_fee / 1_000_000_000);
+
+// Optimize for speed vs cost
+let optimized = estimator.optimize_gas(GasStrategy::Fast).await?;
+```
+
+### Cross-Chain Resource Coordination
+```rust
+use causality_api::{ResourceCoordinator, ChainSet};
+
+let coordinator = ResourceCoordinator::new(vec![
+    ChainClient::ethereum(config.clone()).await?,
+    ChainClient::polygon(config.clone()).await?,
+    ChainClient::arbitrum(config.clone()).await?,
+]).await?;
+
+// Coordinate resource operations across chains
+let resource_id = coordinator.create_cross_chain_resource(resource_spec).await?;
+let operations = coordinator.execute_cross_chain_operations(resource_id, operations).await?;
+```

@@ -1,7 +1,6 @@
 //! Algebraic effects for automatic mock and test generation
 
 pub mod core;
-pub mod schema;
 pub mod error;
 pub mod defi;
 

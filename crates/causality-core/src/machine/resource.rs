@@ -1,480 +1,1000 @@
-//! Resource management for the register machine
+//! Linear resource management for the minimal instruction set
 //!
-//! This module handles linear and affine resources in the register machine,
-//! ensuring proper resource consumption and preventing use-after-free.
-
-#![allow(clippy::result_large_err)]
-#![allow(clippy::too_many_arguments)]
+//! This module implements linear resource tracking with integrated nullifiers,
+//! providing cryptographic proof of consumption for the zkVM environment.
+//! 
+//! **Mathematical Foundation**:
+//! - Resources are objects in our symmetric monoidal closed category
+//! - Nullifiers are morphisms that prove consumption without revealing resource identity
+//! - Consumption is a linear transformation: Resource → (Value, Nullifier)
+//! - The Lamport clock provides deterministic ordering for ZK proofs
 
 use crate::{
+    machine::value::MachineValue,
     system::{
-        content_addressing::{ResourceId, Timestamp, DomainId, Str},
-        causality::CausalProof,
-        error::MachineError,
+        content_addressing::EntityId,
+        deterministic::DeterministicSystem,
     },
-    lambda::{
-        TypeInner, Symbol, 
-        base::Value,
-    },
-    machine::{
-        value::MachineValue,
-        nullifier::NullifierSet,
-    },
+    lambda::TypeInner,
 };
-use std::collections::BTreeMap;
+use serde::{Serialize, Deserialize};
+use std::collections::{BTreeMap, BTreeSet};
 use ssz::{Encode, Decode};
+use sha2::{Sha256, Digest};
 
-/// Linear resource with full architectural metadata (immutable)
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Resource identifier (wrapper around EntityId)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct ResourceId(pub EntityId);
+
+impl ResourceId {
+    /// Create a new ResourceId from a unique identifier
+    pub fn new(id: u64) -> Self {
+        // Create content from the ID for content addressing
+        let content = id; // Use the u64 directly for content addressing
+        ResourceId(EntityId::from_content(&content))
+    }
+    
+    pub fn inner(&self) -> &EntityId {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for ResourceId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ResourceId({})", self.0)
+    }
+}
+
+/// Zero-knowledge nullifier for proving resource consumption
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct Nullifier {
+    /// Cryptographic commitment to the consumed resource
+    pub commitment: [u8; 32],
+    
+    /// Lamport timestamp when consumption occurred
+    pub lamport_time: u64,
+    
+    /// Nullifier hash (prevents double-spending)
+    pub nullifier_hash: [u8; 32],
+    
+    /// Optional: ZK proof of valid consumption
+    pub proof: Option<Vec<u8>>,
+}
+
+/// Linear resource (completely immutable)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Resource {
-    /// Unique identifier for this resource (content-addressed)
+    /// Unique identifier for this resource
     pub id: ResourceId,
     
-    /// Human-readable name or description  
-    pub name: Str,
+    /// Type of the resource
+    pub resource_type: TypeInner,
     
-    /// Domain this resource belongs to
-    pub domain: DomainId,
+    /// Current value of the resource
+    pub value: MachineValue,
     
-    /// Resource type identifier (e.g., "token", "bandwidth")
-    pub label: Str,
-
-    /// Whether this resource is ephemeral (created and destroyed instantaneously during a transaction)
-    pub ephemeral: bool,
-
-    /// Current quantity/amount of this resource (for quantifiable assets)
-    pub quantity: u64,
+    /// Lamport timestamp when resource was created
+    pub created_at: u64,
     
-    /// When this resource was created or last updated
-    pub timestamp: Timestamp,
-    
-    /// A Product row type instance defining associated capabilities (used for capability patterns)
-    pub capabilities: Value,
-    
-    /// A Product row type instance holding the intrinsic data of the resource
-    pub data: Value,
-    
-    /// Cryptographic proof of its origin and transformation history
-    pub causality: CausalProof,
-    
-    /// Optional: if this resource also represents a computational budget
-    pub budget: Option<u64>,
+    /// Secret key for nullifier generation (ephemeral, not serialized)
+    #[serde(skip)]
+    pub nullifier_key: [u8; 32],
 }
 
-/// Resource heap with nullifier-based consumption tracking and external state management
-#[derive(Debug, Clone)]
-pub struct ResourceHeap {
-    /// Map from resource IDs to immutable resources
+/// Resource consumption result with nullifier
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsumptionResult {
+    /// The extracted value from the consumed resource
+    pub value: MachineValue,
+    
+    /// Nullifier proving consumption
+    pub nullifier: Nullifier,
+    
+    /// Lamport timestamp of consumption
+    pub consumed_at: u64,
+}
+
+impl Resource {
+    /// Create a new immutable resource with nullifier capability
+    pub fn new(resource_type: MachineValue, init_value: MachineValue, allocation_counter: u64) -> Self {
+        let lamport_time = crate::system::deterministic::deterministic_lamport_time();
+        
+        // Generate deterministic ID and nullifier key
+        let id = ResourceId::new(allocation_counter);
+        let nullifier_key = {
+            let mut key_input = Vec::new();
+            key_input.extend_from_slice(&allocation_counter.to_le_bytes());
+            key_input.extend_from_slice(&lamport_time.to_le_bytes());
+            // Add some simple entropy based on the value type
+            key_input.extend_from_slice(b"nullifier_key_generation");
+            Sha256::digest(&key_input).into()
+        };
+        
+        Self {
+            id,
+            resource_type: resource_type.get_type(),
+            value: init_value,
+            created_at: lamport_time,
+            nullifier_key,
+        }
+    }
+    
+    /// Generate a nullifier for consumption (pure function)
+    pub fn generate_nullifier(&self, consumption_time: u64) -> Result<Nullifier, ResourceError> {
+        // Create commitment to resource (hiding resource identity)
+        let mut commitment_input = Vec::new();
+        commitment_input.extend_from_slice(self.id.inner().as_bytes());
+        commitment_input.extend_from_slice(&self.created_at.to_le_bytes());
+        commitment_input.extend_from_slice(&self.nullifier_key);
+        
+        let commitment: [u8; 32] = Sha256::digest(&commitment_input).into();
+        
+        // Create nullifier hash (prevents double-spending)
+        let mut nullifier_input = Vec::new();
+        nullifier_input.extend_from_slice(&commitment);
+        nullifier_input.extend_from_slice(&consumption_time.to_le_bytes());
+        nullifier_input.extend_from_slice(&self.nullifier_key);
+        
+        let nullifier_hash: [u8; 32] = Sha256::digest(&nullifier_input).into();
+        
+        Ok(Nullifier {
+            commitment,
+            lamport_time: consumption_time,
+            nullifier_hash,
+            proof: None, // ZK proof would be generated here in full implementation
+        })
+    }
+    
+    /// Calculate approximate size for gas calculation
+    pub fn calculate_size(&self) -> u64 {
+        match &self.value {
+            MachineValue::Unit => 1,
+            MachineValue::Bool(_) => 1,
+            MachineValue::Int(_) => 4,
+            MachineValue::Symbol(s) => s.as_str().len() as u64,
+            MachineValue::Product(l, r) => {
+                Self::calculate_value_size(l) + Self::calculate_value_size(r)
+            }
+            MachineValue::Sum { value, .. } => {
+                8 + Self::calculate_value_size(value) // tag + value
+            }
+            MachineValue::Tensor(l, r) => {
+                Self::calculate_value_size(l) + Self::calculate_value_size(r)
+            }
+            MachineValue::ResourceRef(_) => 32, // EntityId size
+            MachineValue::MorphismRef(_) => 4,  // RegisterId size
+            MachineValue::Type(_) => 16,        // Approximate type size
+            MachineValue::Channel(_) => 64,     // Approximate channel size
+            MachineValue::Function { params, body, captured_env } => {
+                let params_size = params.len() as u64 * 4;
+                let body_size = body.len() as u64 * 32; // Approximate instruction size
+                let env_size = captured_env.iter()
+                    .map(|(_, v)| Self::calculate_value_size(v))
+                    .sum::<u64>();
+                params_size + body_size + env_size
+            }
+        }
+    }
+    
+    fn calculate_value_size(value: &MachineValue) -> u64 {
+        match value {
+            MachineValue::Unit => 1,
+            MachineValue::Bool(_) => 1,
+            MachineValue::Int(_) => 4,
+            MachineValue::Symbol(s) => s.as_str().len() as u64,
+            MachineValue::Product(l, r) => {
+                Self::calculate_value_size(l) + Self::calculate_value_size(r)
+            }
+            MachineValue::Sum { value, .. } => {
+                8 + Self::calculate_value_size(value)
+            }
+            MachineValue::Tensor(l, r) => {
+                Self::calculate_value_size(l) + Self::calculate_value_size(r)
+            }
+            MachineValue::ResourceRef(_) => 32,
+            MachineValue::MorphismRef(_) => 4,
+            MachineValue::Type(_) => 16,
+            MachineValue::Channel(_) => 64,
+            MachineValue::Function { params, body, captured_env } => {
+                let params_size = params.len() as u64 * 4;
+                let body_size = body.len() as u64 * 32;
+                let env_size = captured_env.iter()
+                    .map(|(_, v)| Self::calculate_value_size(v))
+                    .sum::<u64>();
+                params_size + body_size + env_size
+            }
+        }
+    }
+}
+
+/// Nullifier set for tracking consumed resources
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct NullifierSet {
+    /// Set of nullifier hashes (prevents double-spending)
+    nullifiers: BTreeMap<[u8; 32], Nullifier>,
+    
+    /// Lamport clock for ordering
+    current_time: u64,
+}
+
+impl NullifierSet {
+    /// Create a new nullifier set
+    pub fn new() -> Self {
+        Self {
+            nullifiers: BTreeMap::new(),
+            current_time: 0,
+        }
+    }
+    
+    /// Add a nullifier to the set
+    pub fn add_nullifier(&mut self, nullifier: Nullifier) -> Result<(), ResourceError> {
+        // Check for double-spending
+        if self.nullifiers.contains_key(&nullifier.nullifier_hash) {
+            return Err(ResourceError::DoubleSpending(nullifier.nullifier_hash));
+        }
+        
+        // Update Lamport clock
+        self.current_time = self.current_time.max(nullifier.lamport_time) + 1;
+        
+        // Add nullifier
+        self.nullifiers.insert(nullifier.nullifier_hash, nullifier);
+        
+        Ok(())
+    }
+    
+    /// Check if a nullifier exists (resource was consumed)
+    pub fn contains(&self, nullifier_hash: &[u8; 32]) -> bool {
+        self.nullifiers.contains_key(nullifier_hash)
+    }
+    
+    /// Get all nullifiers (for ZK proof generation)
+    pub fn get_all(&self) -> impl Iterator<Item = &Nullifier> {
+        self.nullifiers.values()
+    }
+    
+    /// Get nullifier count
+    pub fn len(&self) -> usize {
+        self.nullifiers.len()
+    }
+    
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        self.nullifiers.is_empty()
+    }
+    
+    /// Get current Lamport time
+    pub fn current_time(&self) -> u64 {
+        self.current_time
+    }
+
+    /// Generate ZK proof of nullifier set validity
+    pub fn generate_proof(&self) -> Vec<u8> {
+        // In a full implementation, this would generate a ZK-SNARK proof
+        // that all nullifiers in the set are valid without revealing resource details
+        
+        // For now, return a deterministic "proof" based on the nullifier set
+        let mut proof_input = Vec::new();
+        for nullifier in self.nullifiers.values() {
+            proof_input.extend_from_slice(&nullifier.commitment);
+            proof_input.extend_from_slice(&nullifier.nullifier_hash);
+        }
+        
+        Sha256::digest(&proof_input).to_vec()
+    }
+}
+
+/// Resource dependency tracking for lifecycle management
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceDependency {
+    /// The resource that depends on another
+    pub dependent: ResourceId,
+    
+    /// The resource being depended upon
+    pub dependency: ResourceId,
+    
+    /// Type of dependency relationship
+    pub dependency_type: DependencyType,
+    
+    /// When this dependency was created
+    pub created_at: u64,
+}
+
+/// Types of resource dependencies
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DependencyType {
+    /// Resource A contains a reference to resource B
+    Contains,
+    
+    /// Resource A was derived from resource B
+    DerivedFrom,
+    
+    /// Resource A requires resource B to remain valid
+    Requires,
+    
+    /// Resource A and B must be consumed together
+    LinkedConsumption,
+    
+    /// Resource A is a channel endpoint paired with resource B
+    ChannelPair,
+}
+
+impl PartialEq for ResourceDependency {
+    fn eq(&self, other: &Self) -> bool {
+        self.dependent == other.dependent && self.dependency == other.dependency
+    }
+}
+
+impl Eq for ResourceDependency {}
+
+impl PartialOrd for ResourceDependency {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ResourceDependency {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.dependent.cmp(&other.dependent)
+            .then_with(|| self.dependency.cmp(&other.dependency))
+            .then_with(|| self.dependency_type.cmp(&other.dependency_type))
+    }
+}
+
+impl PartialOrd for DependencyType {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for DependencyType {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        use DependencyType::*;
+        match (self, other) {
+            (Contains, Contains) => std::cmp::Ordering::Equal,
+            (Contains, _) => std::cmp::Ordering::Less,
+            (DerivedFrom, Contains) => std::cmp::Ordering::Greater,
+            (DerivedFrom, DerivedFrom) => std::cmp::Ordering::Equal,
+            (DerivedFrom, _) => std::cmp::Ordering::Less,
+            (Requires, Contains) | (Requires, DerivedFrom) => std::cmp::Ordering::Greater,
+            (Requires, Requires) => std::cmp::Ordering::Equal,
+            (Requires, _) => std::cmp::Ordering::Less,
+            (LinkedConsumption, ChannelPair) => std::cmp::Ordering::Less,
+            (LinkedConsumption, LinkedConsumption) => std::cmp::Ordering::Equal,
+            (LinkedConsumption, _) => std::cmp::Ordering::Greater,
+            (ChannelPair, ChannelPair) => std::cmp::Ordering::Equal,
+            (ChannelPair, _) => std::cmp::Ordering::Greater,
+        }
+    }
+}
+
+/// Resource manager for tracking linear resources
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceManager {
+    /// Active resources (immutable)
     resources: BTreeMap<ResourceId, Resource>,
     
-    /// Nullifier set tracking consumed resources
+    /// Nullifier set for consumed resources
     nullifiers: NullifierSet,
     
-    /// External state tracking for resources (mutable state machine states)
-    /// Maps resource ID to current state value
-    resource_states: BTreeMap<ResourceId, Value>,
+    /// Resource allocation counter
+    allocation_counter: u64,
     
-    /// Default domain for new resources
-    default_domain: DomainId,
+    /// Total memory used by resources
+    total_memory: u64,
+    
+    /// Resource dependency graph
+    dependencies: BTreeMap<ResourceId, BTreeSet<ResourceDependency>>,
+    
+    /// Reverse dependency lookup (what depends on this resource)
+    reverse_dependencies: BTreeMap<ResourceId, BTreeSet<ResourceId>>,
 }
 
-impl ResourceHeap {
-    /// Create a new empty resource heap
+/// Resource store (alias for ResourceManager for compatibility)
+pub type ResourceStore = ResourceManager;
+
+impl ResourceManager {
+    /// Create a new resource manager
     pub fn new() -> Self {
         Self {
             resources: BTreeMap::new(),
             nullifiers: NullifierSet::new(),
-            resource_states: BTreeMap::new(),
-            default_domain: DomainId::from_bytes([0; 32]), // Default domain ID
+            allocation_counter: 0,
+            total_memory: 0,
+            dependencies: BTreeMap::new(),
+            reverse_dependencies: BTreeMap::new(),
         }
     }
     
-    /// Create a resource heap with a specific default domain
-    pub fn with_domain(domain: DomainId) -> Self {
-        Self {
-            resources: BTreeMap::new(),
-            nullifiers: NullifierSet::new(),
-            resource_states: BTreeMap::new(),
-            default_domain: domain,
-        }
-    }
-    
-    /// Allocate a resource on the heap (creates immutable resource)
-    pub fn alloc_resource(&mut self, value: MachineValue, resource_type: TypeInner) -> ResourceId {
-        let resource = Resource::simple(value, resource_type, self.default_domain);
+    /// Allocate a new resource
+    pub fn allocate(&mut self, resource_type: MachineValue, init_value: MachineValue) -> ResourceId {
+        // Increment allocation counter first
+        self.allocation_counter += 1;
+        
+        let resource = Resource::new(resource_type, init_value, self.allocation_counter);
         let id = resource.id;
+        
+        self.total_memory += resource.calculate_size();
+        
         self.resources.insert(id, resource);
         id
     }
     
-    /// Allocate a resource with full metadata
-    pub fn alloc_full_resource(&mut self, resource: Resource) -> ResourceId {
-        let id = resource.id;
-        self.resources.insert(id, resource);
-        id
+    /// Allocate a placeholder resource (for testing)
+    pub fn allocate_placeholder(&mut self, _det_sys: &mut DeterministicSystem) -> Result<ResourceId, ResourceError> {
+        let placeholder_type = MachineValue::Unit;
+        let placeholder_value = MachineValue::Unit;
+        Ok(self.allocate(placeholder_type, placeholder_value))
     }
     
-    /// Consume a resource using nullifier-based tracking
-    pub fn consume_resource(&mut self, id: ResourceId) -> Result<MachineValue, MachineError> {
+    /// Consume a resource with nullifier generation and dependency validation
+    pub fn consume(&mut self, id: ResourceId) -> Result<ConsumptionResult, ResourceError> {
+        // Validate that consumption is allowed based on dependencies
+        if !self.can_consume(&id)? {
+            return Err(ResourceError::OperationFailed(
+                format!("Cannot consume resource {:?} due to dependency constraints", id)
+            ));
+        }
+        
         // Check if resource exists
         let resource = self.resources.get(&id)
-            .ok_or(MachineError::InvalidResource(id))?;
+            .ok_or(ResourceError::NotFound(id))?;
         
-        // Check if already consumed via nullifier
-        if self.nullifiers.is_resource_consumed(id, "consume", None) {
-            return Err(MachineError::ResourceAlreadyConsumed(id));
+        let consumption_time = crate::system::deterministic::deterministic_lamport_time();
+        
+        // Generate nullifier for this consumption
+        let nullifier = resource.generate_nullifier(consumption_time)?;
+        
+        // Check for double-spending by trying to add nullifier
+        self.nullifiers.add_nullifier(nullifier.clone())?;
+        
+        // Extract the value and remove from active resources
+        let consumed_resource = self.resources.remove(&id).unwrap();
+        self.total_memory -= consumed_resource.calculate_size();
+        
+        // Clean up dependencies involving this resource
+        self.cleanup_dependencies(&id);
+        
+        Ok(ConsumptionResult {
+            value: consumed_resource.value,
+            nullifier,
+            consumed_at: consumption_time,
+        })
+    }
+    
+    /// Peek at a resource without consuming it
+    pub fn peek(&self, id: &ResourceId) -> Result<&MachineValue, ResourceError> {
+        if let Some(resource) = self.resources.get(id) {
+            Ok(&resource.value)
+        } else {
+            Err(ResourceError::NotFound(*id))
         }
-        
-        // Get the machine value before any mutable operations
-        let machine_value = resource.as_machine_value();
-        
-        // Generate and add nullifier for consumption
-        self.nullifiers.consume_resource(id, "consume", None)
-            .map_err(|_| MachineError::ResourceAlreadyConsumed(id))?;
-        
-        // Clear any external state tracking for this resource
-        self.clear_resource_state(id);
-        
-        // Return the resource's data (resource itself remains in heap, immutable)
-        Ok(machine_value)
     }
     
-    /// Check if a resource exists and hasn't been consumed
-    pub fn is_available(&self, id: ResourceId) -> bool {
-        self.resources.contains_key(&id) && !self.nullifiers.is_resource_consumed(id, "consume", None)
+    /// Check if a resource is available (exists and not consumed)
+    pub fn is_available(&self, id: &ResourceId) -> bool {
+        self.resources.contains_key(id)
     }
     
-    /// Get a reference to a resource without consuming it
-    pub fn peek_resource(&self, id: ResourceId) -> Result<&Resource, MachineError> {
-        self.resources.get(&id)
-            .ok_or(MachineError::InvalidResource(id))
+    /// Check if a resource has been consumed (nullifier exists)
+    pub fn is_consumed(&self, id: &ResourceId) -> bool {
+        // To check if consumed, we'd need to generate the nullifier hash
+        // and check if it exists in the nullifier set.
+        // For now, we consider it consumed if it's not in active resources
+        // and we have some nullifiers (simplified check)
+        !self.resources.contains_key(id) && !self.nullifiers.is_empty()
     }
     
-    /// Check if a resource has been consumed
-    pub fn is_consumed(&self, id: ResourceId) -> bool {
-        self.nullifiers.is_resource_consumed(id, "consume", None)
-    }
-    
-    /// Get the nullifier set (for ZK proof generation)
-    pub fn get_nullifiers(&self) -> &NullifierSet {
-        &self.nullifiers
-    }
-    
-    /// Get mutable access to nullifiers (for advanced operations)
-    pub fn get_nullifiers_mut(&mut self) -> &mut NullifierSet {
-        &mut self.nullifiers
-    }
-    
-    /// Get total number of resources allocated
-    pub fn total_resources(&self) -> usize {
+    /// Get resource count
+    pub fn resource_count(&self) -> usize {
         self.resources.len()
     }
     
-    /// Get number of consumed resources
-    pub fn consumed_count(&self) -> usize {
-        self.nullifiers.size()
+    /// Get total memory usage
+    pub fn total_memory(&self) -> u64 {
+        self.total_memory
     }
     
-    /// Get number of available (unconsumed) resources
-    pub fn available_count(&self) -> usize {
-        self.total_resources() - self.consumed_count()
+    /// Get the nullifier set (for ZK proof generation)
+    pub fn nullifiers(&self) -> &NullifierSet {
+        &self.nullifiers
     }
     
-    /// Set the state for a resource (external state tracking)
-    pub fn set_resource_state(&mut self, id: ResourceId, state: Value) -> Result<(), MachineError> {
-        // Verify resource exists
-        if !self.resources.contains_key(&id) {
-            return Err(MachineError::InvalidResource(id));
+    /// Get mutable access to nullifiers (for verification)
+    pub fn nullifiers_mut(&mut self) -> &mut NullifierSet {
+        &mut self.nullifiers
+    }
+    
+    /// Generate ZK proof of all resource operations
+    pub fn generate_resource_proof(&self) -> Vec<u8> {
+        self.nullifiers.generate_proof()
+    }
+    
+    /// Verify a nullifier against the set
+    pub fn verify_nullifier(&self, nullifier_hash: &[u8; 32]) -> bool {
+        self.nullifiers.contains(nullifier_hash)
+    }
+    
+    /// Get allocation statistics
+    pub fn allocation_stats(&self) -> AllocationStats {
+        AllocationStats {
+            total_allocated: self.allocation_counter,
+            active_count: self.resources.len() as u64,
+            consumed_count: self.nullifiers.len() as u64,
+            total_memory: self.total_memory,
+        }
+    }
+    
+    /// Get all active resource IDs
+    pub fn active_resources(&self) -> Vec<ResourceId> {
+        self.resources.keys().cloned().collect()
+    }
+    
+    /// Create a snapshot of the resource store state
+    pub fn snapshot(&self) -> ResourceStoreSnapshot {
+        ResourceStoreSnapshot {
+            resource_count: self.resources.len(),
+            total_memory: self.total_memory,
+            allocation_counter: self.allocation_counter,
+            nullifier_count: self.nullifiers.len(),
+        }
+    }
+    
+    /// Add a dependency relationship between resources
+    pub fn add_dependency(&mut self, dependent: ResourceId, dependency: ResourceId, dep_type: DependencyType) -> Result<(), ResourceError> {
+        // Verify both resources exist
+        if !self.resources.contains_key(&dependent) {
+            return Err(ResourceError::NotFound(dependent));
+        }
+        if !self.resources.contains_key(&dependency) {
+            return Err(ResourceError::NotFound(dependency));
         }
         
-        self.resource_states.insert(id, state);
+        // Create dependency record
+        let dep_record = ResourceDependency {
+            dependent,
+            dependency,
+            dependency_type: dep_type,
+            created_at: 0, // Simplified for now
+        };
+        
+        // Add to dependency graph
+        self.dependencies.entry(dependent)
+            .or_default()
+            .insert(dep_record);
+        
+        // Add to reverse dependency lookup
+        self.reverse_dependencies.entry(dependency)
+            .or_default()
+            .insert(dependent);
+        
         Ok(())
     }
     
-    /// Get the current state for a resource
-    pub fn get_resource_state(&self, id: ResourceId) -> Option<&Value> {
-        self.resource_states.get(&id)
+    /// Get all resources that depend on the given resource
+    pub fn get_dependents(&self, resource_id: &ResourceId) -> Vec<ResourceId> {
+        self.reverse_dependencies.get(resource_id)
+            .map(|deps| deps.iter().cloned().collect())
+            .unwrap_or_default()
     }
     
-    /// Remove state tracking for a resource (typically when consumed)
-    pub fn clear_resource_state(&mut self, id: ResourceId) {
-        self.resource_states.remove(&id);
+    /// Get all resources that the given resource depends on
+    pub fn get_dependencies(&self, resource_id: &ResourceId) -> Vec<ResourceDependency> {
+        self.dependencies.get(resource_id)
+            .map(|deps| deps.iter().cloned().collect())
+            .unwrap_or_default()
     }
     
-    /// Get all resources with their current states
-    pub fn get_resources_with_states(&self) -> impl Iterator<Item = (&Resource, Option<&Value>)> {
-        self.resources.values().map(move |resource| {
-            let state = self.resource_states.get(&resource.id);
-            (resource, state)
-        })
+    /// Check if consuming a resource would violate dependencies
+    pub fn can_consume(&self, resource_id: &ResourceId) -> Result<bool, ResourceError> {
+        // Check if any resources depend on this one
+        let dependents = self.get_dependents(resource_id);
+        
+        for dependent_id in dependents {
+            // Get the dependency type
+            if let Some(deps) = self.dependencies.get(&dependent_id) {
+                for dep in deps {
+                    if dep.dependency == *resource_id {
+                        match dep.dependency_type {
+                            DependencyType::Requires => {
+                                // Cannot consume if another resource requires it
+                                return Ok(false);
+                            }
+                            DependencyType::LinkedConsumption => {
+                                // Must consume both together - check if dependent is also being consumed
+                                // For now, allow consumption but this should be coordinated
+                                continue;
+                            }
+                            DependencyType::ChannelPair => {
+                                // Channel pairs should be consumed together
+                                return Ok(false);
+                            }
+                            _ => {
+                                // Other dependency types don't prevent consumption
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    /// Validate consumption order based on dependencies
+    pub fn validate_consumption_order(&self, resource_id: &ResourceId) -> Result<Vec<ResourceId>, ResourceError> {
+        let mut consumption_order = Vec::new();
+        let mut visited = BTreeSet::new();
+        
+        self.build_consumption_order(resource_id, &mut consumption_order, &mut visited)?;
+        
+        Ok(consumption_order)
+    }
+    
+    /// Recursively build the consumption order based on dependencies
+    fn build_consumption_order(&self, resource_id: &ResourceId, order: &mut Vec<ResourceId>, visited: &mut BTreeSet<ResourceId>) -> Result<(), ResourceError> {
+        if visited.contains(resource_id) {
+            // Cycle detected - this is an error in dependency management
+            return Err(ResourceError::OperationFailed(
+                format!("Circular dependency detected involving resource {:?}", resource_id)
+            ));
+        }
+        
+        visited.insert(*resource_id);
+        
+        // First, add all dependencies that must be consumed after this resource
+        if let Some(deps) = self.dependencies.get(resource_id) {
+            for dep in deps {
+                match dep.dependency_type {
+                    DependencyType::DerivedFrom => {
+                        // Derived resources should be consumed before their sources
+                        self.build_consumption_order(&dep.dependency, order, visited)?;
+                    }
+                    DependencyType::LinkedConsumption => {
+                        // Linked resources must be consumed together
+                        if !order.contains(&dep.dependency) {
+                            self.build_consumption_order(&dep.dependency, order, visited)?;
+                        }
+                    }
+                    _ => {
+                        // Other types don't affect consumption order
+                    }
+                }
+            }
+        }
+        
+        // Add this resource to the consumption order
+        if !order.contains(resource_id) {
+            order.push(*resource_id);
+        }
+        
+        visited.remove(resource_id);
+        Ok(())
+    }
+    
+    /// Remove all dependencies involving a consumed resource
+    fn cleanup_dependencies(&mut self, consumed_resource: &ResourceId) {
+        // Remove from dependency graph
+        self.dependencies.remove(consumed_resource);
+        
+        // Remove from reverse dependencies
+        self.reverse_dependencies.remove(consumed_resource);
+        
+        // Remove this resource from other resources' dependency lists
+        for (_, deps) in self.dependencies.iter_mut() {
+            deps.retain(|dep| dep.dependency != *consumed_resource);
+        }
+        
+        // Remove this resource from reverse dependency lists
+        for (_, reverse_deps) in self.reverse_dependencies.iter_mut() {
+            reverse_deps.remove(consumed_resource);
+        }
+    }
+
+    /// Create a simple resource (for bounded execution)
+    pub fn create_resource(&mut self) -> ResourceId {
+        let placeholder_type = MachineValue::Unit;
+        let placeholder_value = MachineValue::Unit;
+        self.allocate(placeholder_type, placeholder_value)
+    }
+    
+    /// Simple resource consumption (for bounded execution)
+    pub fn consume_resource(&mut self, id: ResourceId) {
+        // Simple consumption without error handling for bounded execution
+        let _ = self.consume(id);
     }
 }
 
-impl Default for ResourceHeap {
+impl Default for ResourceManager {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// Helper trait for machine state to manage resources
-pub trait ResourceManager {
-    /// Allocate a resource on the heap
-    fn alloc_resource(&mut self, value: MachineValue, resource_type: TypeInner) -> ResourceId;
-    
-    /// Consume a resource from the heap
-    fn consume_resource(&mut self, id: ResourceId) -> Result<MachineValue, MachineError>;
+/// Snapshot of resource store state for execution tracing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceStoreSnapshot {
+    pub resource_count: usize,
+    pub total_memory: u64,
+    pub allocation_counter: u64,
+    pub nullifier_count: usize,
 }
 
-impl Resource {
-    /// Create a new resource with minimal data (for compatibility with existing code)
-    pub fn simple(value: MachineValue, resource_type: TypeInner, domain: DomainId) -> Self {
-        let name = Str::new("resource");
-        let resource_type_str = Str::new(&format!("{:?}", resource_type));
-        let timestamp = Timestamp::now();
-        let causality = CausalProof::genesis("alloc");
-        
-        // Convert MachineValue to Layer 1 Value for data field
-        let data_value = match value {
-            MachineValue::Unit => Value::Unit,
-            MachineValue::Bool(b) => Value::Bool(b),
-            MachineValue::Int(i) => Value::Int(i),
-            MachineValue::Symbol(s) => Value::Symbol(Str::new(s.name().unwrap_or("unknown"))),
-            _ => Value::Unit, // Fallback for complex types
-        };
-        
-        let mut resource = Self {
-            id: ResourceId::from_bytes([0; 32]), // Placeholder, will be computed
-            name,
-            domain,
-            label: resource_type_str,
-            quantity: 1,
-            timestamp,
-            capabilities: Value::Unit, // Default empty capabilities
-            data: data_value,
-            causality,
-            budget: None,
-            ephemeral: false,
-        };
-        
-        // Compute content-addressed ID based on resource content
-        resource.id = resource.compute_id();
-        resource
-    }
+/// Resource allocation statistics
+#[derive(Debug, Clone)]
+pub struct AllocationStats {
+    pub total_allocated: u64,
+    pub active_count: u64,
+    pub consumed_count: u64,
+    pub total_memory: u64,
+}
+
+/// Resource-related errors
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResourceError {
+    /// Resource not found
+    NotFound(ResourceId),
     
-    /// Create a new resource with full metadata
-    pub fn new(
-        name: impl Into<String>,
-        domain: DomainId,
-        resource_type: impl Into<String>,
-        quantity: u64,
-        capabilities: Value,
-        data: Value,
-        causality: CausalProof,
-        budget: Option<u64>,
-        ephemeral: bool,
-    ) -> Self {
-        let name = Str::new(&name.into());
-        let resource_type = Str::new(&resource_type.into());
-        let timestamp = Timestamp::now();
-        
-        let mut resource = Self {
-            id: ResourceId::from_bytes([0; 32]), // Placeholder
-            name,
-            domain,
-            label: resource_type,
-            quantity,
-            timestamp,
-            capabilities,
-            data,
-            causality,
-            budget,
-            ephemeral,
-        };
-        
-        // Compute content-addressed ID
-        resource.id = resource.compute_id();
-        resource
-    }
+    /// Resource already consumed
+    AlreadyConsumed(ResourceId),
     
-    /// Create an ephemeral resource (convenience method)
-    pub fn ephemeral(
-        name: impl Into<String>,
-        domain: DomainId,
-        resource_type: impl Into<String>,
-        data: Value,
-    ) -> Self {
-        Self::new(
-            name,
-            domain,
-            resource_type,
-            1, // Ephemeral resources typically have quantity 1
-            Value::Unit, // No special capabilities needed
-            data,
-            CausalProof::genesis("ephemeral_alloc"),
-            None, // No budget
-            true, // Mark as ephemeral
-        )
-    }
+    /// Double-spending detected (nullifier already exists)
+    DoubleSpending([u8; 32]),
     
-    /// Get the underlying data as a MachineValue (for compatibility)
-    pub fn as_machine_value(&self) -> MachineValue {
-        match &self.data {
-            Value::Unit => MachineValue::Unit,
-            Value::Bool(b) => MachineValue::Bool(*b),
-            Value::Int(i) => MachineValue::Int(*i),
-            Value::Symbol(s) => MachineValue::Symbol(Symbol::new(s.as_str())),
-            _ => MachineValue::Unit, // Fallback for complex types
+    /// Resource type mismatch
+    TypeMismatch {
+        expected: String,
+        found: String,
+    },
+    
+    /// Resource operation failed
+    OperationFailed(String),
+    
+    /// ZK proof verification failed
+    ProofVerificationFailed,
+}
+
+impl std::fmt::Display for ResourceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResourceError::NotFound(id) => write!(f, "Resource not found: {:?}", id),
+            ResourceError::AlreadyConsumed(id) => write!(f, "Resource already consumed: {:?}", id),
+            ResourceError::DoubleSpending(hash) => write!(f, "Double-spending detected: {:?}", hash),
+            ResourceError::TypeMismatch { expected, found } => {
+                write!(f, "Resource type mismatch: expected {}, found {}", expected, found)
+            }
+            ResourceError::OperationFailed(msg) => write!(f, "Resource operation failed: {}", msg),
+            ResourceError::ProofVerificationFailed => write!(f, "ZK proof verification failed"),
         }
     }
-    
-    /// Compute the content-addressed ID for this resource
-    fn compute_id(&self) -> ResourceId {
-        // Use SSZ serialization for deterministic content addressing
-        // Note: All fields are included since resources are immutable
-        // State is NOT included since it's tracked externally
-        let data_for_hash = (
-            &self.name,
-            &self.domain,
-            &self.label,
-            &self.quantity,
-            &self.timestamp,
-            &self.capabilities,
-            &self.data,
-            &self.causality,
-            &self.budget,
-            &self.ephemeral,
-        );
-        
-        ResourceId::from_content(&data_for_hash)
-    }
 }
 
-impl Encode for Resource {
+impl std::error::Error for ResourceError {}
+
+// SSZ encoding for nullifiers
+impl Encode for Nullifier {
     fn is_ssz_fixed_len() -> bool {
         false
     }
 
     fn ssz_bytes_len(&self) -> usize {
-        // Simple length calculation for basic fields
-        32 + // id
-        self.name.ssz_bytes_len() +
-        32 + // domain_id  
-        self.label.ssz_bytes_len() +
-        8 + // quantity (u64)
-        8 + // timestamp (simplified)
-        1 + // capabilities (simplified as unit)
-        1 + // data (simplified as unit)
-        1 + // causality (simplified)
-        9 + // budget (Option<u64>)
-        1 // ephemeral (bool)
+        32 + 8 + 32 + 4 + self.proof.as_ref().map_or(0, |p| p.len())
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
-        self.id.ssz_append(buf);
-        self.name.ssz_append(buf);
-        self.domain.ssz_append(buf);
-        self.label.ssz_append(buf);
-        self.quantity.ssz_append(buf);
-        
-        // Simplified encoding for complex types
-        self.timestamp.ssz_append(buf);
-        0u8.ssz_append(buf); // capabilities placeholder
-        0u8.ssz_append(buf); // data placeholder
-        0u8.ssz_append(buf); // causality placeholder
-        self.budget.ssz_append(buf);
-        self.ephemeral.ssz_append(buf);
+        self.commitment.ssz_append(buf);
+        self.lamport_time.ssz_append(buf);
+        self.nullifier_hash.ssz_append(buf);
+        self.proof.ssz_append(buf);
     }
 }
 
-impl Decode for Resource {
+impl Decode for Nullifier {
     fn is_ssz_fixed_len() -> bool {
         false
     }
 
-    fn from_ssz_bytes(_bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        // For now, return a simple error since complex decoding isn't needed
-        // This can be improved later when we have proper DecodeWithRemainder implementations
-        Err(ssz::DecodeError::BytesInvalid("Complex Resource decoding not yet implemented".to_string()))
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+        if bytes.len() < 72 { // 32 + 8 + 32
+            return Err(ssz::DecodeError::BytesInvalid("Nullifier too short".to_string()));
+        }
+        
+        let mut offset = 0;
+        
+        let mut commitment = [0u8; 32];
+        commitment.copy_from_slice(&bytes[offset..offset + 32]);
+        offset += 32;
+        
+        let lamport_time = u64::from_ssz_bytes(&bytes[offset..offset + 8])?;
+        offset += 8;
+        
+        let mut nullifier_hash = [0u8; 32];
+        nullifier_hash.copy_from_slice(&bytes[offset..offset + 32]);
+        offset += 32;
+        
+        let proof = if offset < bytes.len() {
+            Some(bytes[offset..].to_vec())
+        } else {
+            None
+        };
+        
+        Ok(Nullifier {
+            commitment,
+            lamport_time,
+            nullifier_hash,
+            proof,
+        })
+    }
+}
+
+impl Nullifier {
+    /// Create a simple nullifier from a hash (for basic use cases)
+    pub fn from_hash(hash: [u8; 32]) -> Self {
+        let lamport_time = crate::system::deterministic::deterministic_lamport_time();
+        
+        Self {
+            commitment: hash,
+            lamport_time,
+            nullifier_hash: hash, // Use same hash for both commitment and nullifier
+            proof: None,
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lambda::base::Value;
-
+    
     #[test]
-    fn test_ephemeral_resource_creation() {
-        let domain = DomainId::from_bytes([1; 32]);
+    fn test_resource_creation() {
+        let resource_type = MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int));
+        let init_value = MachineValue::Int(42);
         
-        // Create a regular resource
-        let regular_resource = Resource::simple(
-            MachineValue::Int(42),
-            TypeInner::Base(crate::lambda::BaseType::Int),
-            domain
-        );
-        assert!(!regular_resource.ephemeral);
+        let resource = Resource::new(resource_type, init_value.clone(), 1);
         
-        // Create an ephemeral resource using the convenience method
-        let ephemeral_resource = Resource::ephemeral(
-            "temp_computation",
-            domain,
-            "ComputationResult",
-            Value::Int(100)
-        );
-        assert!(ephemeral_resource.ephemeral);
-        assert_eq!(ephemeral_resource.quantity, 1);
-        assert_eq!(ephemeral_resource.name.as_str(), "temp_computation");
-        assert_eq!(ephemeral_resource.label.as_str(), "ComputationResult");
+        assert_eq!(resource.value, init_value);
+        assert!(resource.nullifier_key != [0u8; 32]); // Should have a real nullifier key
+    }
+    
+    #[test]
+    fn test_resource_nullifier_generation() {
+        let resource_type = MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int));
+        let init_value = MachineValue::Int(42);
         
-        // Create an ephemeral resource using the full constructor
-        let full_ephemeral = Resource::new(
-            "full_ephemeral",
-            domain,
-            "TempData",
-            5,
-            Value::Unit,
-            Value::Bool(true),
-            CausalProof::genesis("test"),
-            None,
-            true // ephemeral
-        );
-        assert!(full_ephemeral.ephemeral);
-        assert_eq!(full_ephemeral.quantity, 5);
+        let resource = Resource::new(resource_type, init_value.clone(), 1);
+        let consumption_time = crate::system::deterministic::deterministic_lamport_time();
+        let nullifier = resource.generate_nullifier(consumption_time).unwrap();
+        
+        assert_ne!(nullifier.commitment, [0u8; 32]);
+        assert_ne!(nullifier.nullifier_hash, [0u8; 32]);
+        assert_eq!(nullifier.lamport_time, consumption_time);
+    }
+    
+    #[test]
+    fn test_nullifier_set() {
+        let mut nullifier_set = NullifierSet::new();
+        
+        let resource_type = MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int));
+        let init_value = MachineValue::Int(42);
+        
+        let resource = Resource::new(resource_type, init_value, 1);
+        let consumption_time = crate::system::deterministic::deterministic_lamport_time();
+        let nullifier = resource.generate_nullifier(consumption_time).unwrap();
+        
+        // Add nullifier to set
+        nullifier_set.add_nullifier(nullifier.clone()).unwrap();
+        
+        // Check nullifier exists
+        assert!(nullifier_set.contains(&nullifier.nullifier_hash));
+        assert_eq!(nullifier_set.len(), 1);
+        
+        // Try to add same nullifier again (should fail)
+        let double_spend_result = nullifier_set.add_nullifier(nullifier);
+        assert!(matches!(double_spend_result, Err(ResourceError::DoubleSpending(_))));
+    }
+    
+    #[test]
+    fn test_resource_manager_with_nullifiers() {
+        let mut manager = ResourceManager::new();
+        
+        let resource_type = MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int));
+        let init_value = MachineValue::Int(42);
+        
+        // Allocate resource
+        let id = manager.allocate(resource_type, init_value.clone());
+        assert_eq!(manager.resource_count(), 1);
+        assert!(manager.is_available(&id));
+        
+        // Peek at resource
+        let peeked = manager.peek(&id).unwrap();
+        assert_eq!(peeked, &init_value);
+        
+        // Consume resource with nullifier generation
+        let consumption_result = manager.consume(id).unwrap();
+        assert_eq!(consumption_result.value, init_value);
+        assert_eq!(manager.resource_count(), 0);
+        assert_eq!(manager.nullifiers().len(), 1);
+        assert!(!manager.is_available(&id));
+        
+        // Verify nullifier exists
+        assert!(manager.verify_nullifier(&consumption_result.nullifier.nullifier_hash));
+        
+        // Try to consume again (should fail)
+        let result = manager.consume(id);
+        assert!(matches!(result, Err(ResourceError::NotFound(_))));
     }
 
     #[test]
-    fn test_ephemeral_resource_heap_operations() {
-        let mut heap = ResourceHeap::new();
+    fn test_zk_proof_generation() {
+        let mut manager = ResourceManager::new();
         
-        // Create and allocate ephemeral resource
-        let ephemeral_resource = Resource::ephemeral(
-            "temp_data",
-            DomainId::from_bytes([2; 32]),
-            "TempType",
-            Value::Int(123)
+        // Create and consume multiple resources
+        for i in 0..5 {
+            let resource_type = MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int));
+            let init_value = MachineValue::Int(i);
+            
+            let id = manager.allocate(resource_type, init_value);
+            manager.consume(id).unwrap();
+        }
+        
+        // Generate proof of all operations
+        let proof = manager.generate_resource_proof();
+        assert!(!proof.is_empty());
+        assert_eq!(manager.nullifiers().len(), 5);
+        
+        // Proof should be deterministic
+        let proof2 = manager.generate_resource_proof();
+        assert_eq!(proof, proof2);
+    }
+
+    #[test]
+    fn test_lamport_clock_ordering() {
+        let mut nullifier_set = NullifierSet::new();
+        let initial_time = nullifier_set.current_time();
+        
+        // Create resources with different timestamps
+        let resource1 = Resource::new(
+            MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int)),
+            MachineValue::Int(1),
+            1
+        );
+        let resource2 = Resource::new(
+            MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int)),
+            MachineValue::Int(2),
+            2
         );
         
-        let resource_id = heap.alloc_full_resource(ephemeral_resource.clone());
+        let time1 = crate::system::deterministic::deterministic_lamport_time();
+        let time2 = crate::system::deterministic::deterministic_lamport_time();
         
-        // Verify resource exists and is available
-        assert!(heap.is_available(resource_id));
-        assert_eq!(heap.total_resources(), 1);
-        assert_eq!(heap.available_count(), 1);
+        let nullifier1 = resource1.generate_nullifier(time1).unwrap();
+        let nullifier2 = resource2.generate_nullifier(time2).unwrap();
         
-        // Check that we can peek at the ephemeral resource
-        let peeked = heap.peek_resource(resource_id).unwrap();
-        assert!(peeked.ephemeral);
-        assert_eq!(peeked.name.as_str(), "temp_data");
+        // Add nullifiers in order
+        nullifier_set.add_nullifier(nullifier1).unwrap();
+        nullifier_set.add_nullifier(nullifier2).unwrap();
         
-        // Consume the ephemeral resource
-        let consumed_value = heap.consume_resource(resource_id).unwrap();
-        assert_eq!(consumed_value, MachineValue::Int(123));
+        // Lamport clock should have advanced
+        assert!(nullifier_set.current_time() > initial_time);
+    }
+    
+    #[test]
+    fn test_double_spending_prevention() {
+        let mut manager = ResourceManager::new();
         
-        // Verify resource is now consumed
-        assert!(!heap.is_available(resource_id));
-        assert!(heap.is_consumed(resource_id));
-        assert_eq!(heap.consumed_count(), 1);
-        assert_eq!(heap.available_count(), 0);
+        let resource_type = MachineValue::Type(TypeInner::Base(crate::lambda::BaseType::Int));
+        let init_value = MachineValue::Int(42);
+        
+        // Allocate resource
+        let id = manager.allocate(resource_type, init_value);
+        
+        // Consume resource
+        let consumption_result = manager.consume(id).unwrap();
+        
+        // Try to add the same nullifier again (simulate double-spending)
+        let double_spend_result = manager.nullifiers_mut()
+            .add_nullifier(consumption_result.nullifier);
+        
+        assert!(matches!(double_spend_result, Err(ResourceError::DoubleSpending(_))));
     }
 } 

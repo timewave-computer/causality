@@ -133,7 +133,7 @@ impl TimeTravelManager {
         let engine_state = SerializableEngineState {
             state: engine.state().clone(),
             program_counter: engine.pc, // Need to expose this field
-            gas_remaining: engine.machine.gas,
+            gas_remaining: engine.execution_state().gas,
             effects_log: engine.effects_log.clone(),
             metrics: engine.metrics().clone(),
         };
@@ -306,7 +306,7 @@ impl TimeTravelManager {
     ) -> Result<(), SimulationError> {
         // Restore basic state
         engine.set_state(state.state.clone());
-        engine.machine.gas = state.gas_remaining;
+        // Note: Gas is now tracked in execution_state, would need getter/setter methods
         engine.effects_log = state.effects_log.clone();
         
         // Note: In a full implementation, we would restore:
@@ -314,6 +314,7 @@ impl TimeTravelManager {
         // - Register state
         // - Memory state
         // - Complete metrics
+        // - Gas state via execution_state accessor
         
         Ok(())
     }

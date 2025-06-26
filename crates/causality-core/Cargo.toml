@@ -65,8 +65,8 @@ dashu = { version = "0.4", default-features = false, features = ["std"] }
 # Optional tokio support for async tests
 tokio = { workspace = true, optional = true }
 
-# Sparse Merkle Tree implementation
-valence-coprocessor = { version = "0.1.13", git = "https://github.com/timewave-computer/valence-coprocessor.git", tag = "v0.1.13", default-features = false, features = ["std"] }
+# Sparse Merkle Tree implementation - updated to match Almanac version (v0.2.3)
+valence-coprocessor = { version = "0.2.3", git = "https://github.com/timewave-computer/valence-coprocessor.git", tag = "v0.2.3", default-features = false, features = ["std"] }
 sha2 = "0.10.8"
 
 [dev-dependencies]

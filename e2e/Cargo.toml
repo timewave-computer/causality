@@ -37,16 +37,24 @@ tokio-test = { workspace = true }
 
 [[test]]
 name = "comprehensive_compilation_workflow_e2e"
-path = "tests/comprehensive_compilation_workflow_e2e.rs"
+path = "comprehensive_compilation_workflow/comprehensive_compilation_workflow_e2e.rs"
 
 [[test]]
 name = "simulation_zk_integration_e2e"
-path = "tests/simulation_zk_integration_e2e.rs"
+path = "simulation_zk_integration/simulation_zk_integration_e2e.rs"
+
+[[test]]
+name = "core_integration_e2e"
+path = "core_integration/core_integration_e2e.rs"
+
+[[test]]
+name = "type_system_consistency_e2e"
+path = "type_system_consistency/type_system_consistency_e2e.rs"
+
+[[test]]
+name = "simple_simulation_test"
+path = "simple_simulation/simple_simulation_test.rs"
 
 # [[test]]
 # name = "ocaml_interop_ffi_e2e"
 # path = "tests/ocaml_interop_ffi_e2e.rs"  # Temporarily disabled due to FFI compatibility issues
-
-[[test]]
-name = "core_integration_e2e"
-path = "tests/core_integration_e2e.rs"

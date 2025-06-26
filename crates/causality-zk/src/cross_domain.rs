@@ -5,13 +5,15 @@
 
 use crate::{ZkBackend, ZkCircuit, ZkProof, ZkWitness, ProofResult, ProofError};
 use causality_core::machine::instruction::Instruction;
-use std::collections::HashMap;
+use causality_core::lambda::base::Location;
+use causality_core::system::serialization::SszEncode;
+use std::collections::BTreeMap;
 use sha2::{Sha256, Digest};
 use chrono;
 use serde::{Serialize, Deserialize};
 
 /// Domain identifier for effect isolation
-pub type DomainId = String;
+pub type DomainId = Location;
 
 /// Domain-specific proof artifact
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,7 +41,7 @@ pub struct CompositeProof {
     pub id: String,
     
     /// Individual domain proofs
-    pub domain_proofs: HashMap<DomainId, DomainProof>,
+    pub domain_proofs: BTreeMap<DomainId, DomainProof>,
     
     /// Cross-domain consistency proof
     pub consistency_proof: Vec<u8>,
@@ -66,12 +68,11 @@ pub enum DomainPartition {
     ByDataFlow,
     
     /// Custom partition strategy with explicit domain assignments
-    Custom(HashMap<String, DomainId>),
+    Custom(BTreeMap<String, DomainId>),
     
     /// Partition by circuit size
     ByCircuitSize { threshold: usize },
 }
-
 
 /// Mock backend for testing
 #[derive(Debug)]
@@ -119,7 +120,7 @@ impl ZkBackend for MockBackend {
 /// Cross-domain zero-knowledge coordination manager
 pub struct CrossDomainZkManager {
     /// Domain-specific ZK backends
-    backends: HashMap<String, Box<dyn ZkBackend>>,
+    backends: BTreeMap<DomainId, Box<dyn ZkBackend>>,
     
     /// Cross-domain proof aggregation
     #[allow(dead_code)]
@@ -131,7 +132,7 @@ pub struct CrossDomainZkManager {
     
     /// Circuit cache for reusing compiled circuits
     #[allow(dead_code)]
-    circuit_cache: HashMap<String, ZkCircuit>,
+    circuit_cache: BTreeMap<String, ZkCircuit>,
     
     /// Domain partition strategy
     partition_strategy: DomainPartition,
@@ -152,10 +153,10 @@ impl CrossDomainZkManager {
     /// Create a new cross-domain ZK manager with a specific partition
     pub fn new_with_partition(partition_strategy: DomainPartition) -> Self {
         Self {
-            backends: HashMap::new(),
+            backends: BTreeMap::new(),
             aggregator: ProofAggregator::new(),
             verification_coordinator: VerificationCoordinator::new(),
-            circuit_cache: HashMap::new(),
+            circuit_cache: BTreeMap::new(),
             partition_strategy,
         }
     }
@@ -166,8 +167,8 @@ impl CrossDomainZkManager {
     }
     
     /// Partition instructions across domains
-    pub fn partition_instructions(&self, instructions: &[Instruction]) -> HashMap<DomainId, Vec<Instruction>> {
-        let mut partitions = HashMap::new();
+    pub fn partition_instructions(&self, instructions: &[Instruction]) -> BTreeMap<DomainId, Vec<Instruction>> {
+        let mut partitions = BTreeMap::new();
         
         match &self.partition_strategy {
             DomainPartition::ByEffectType => {
@@ -181,9 +182,9 @@ impl CrossDomainZkManager {
                 let complexity_threshold = instructions.len() / 2;
                 for (i, instruction) in instructions.iter().enumerate() {
                     let domain = if i < complexity_threshold {
-                        "simple".to_string()
+                        Location::Domain("simple".to_string())
                     } else {
-                        "complex".to_string()
+                        Location::Domain("complex".to_string())
                     };
                     partitions.entry(domain).or_insert_with(Vec::new).push(instruction.clone());
                 }
@@ -191,7 +192,7 @@ impl CrossDomainZkManager {
             DomainPartition::ByDataFlow => {
                 // Group instructions by data dependencies
                 for (i, instruction) in instructions.iter().enumerate() {
-                    let domain = format!("flow_{}", i % 3); // Simple 3-way split
+                    let domain = Location::Domain(format!("flow_{}", i % 3)); // Simple 3-way split
                     partitions.entry(domain).or_insert_with(Vec::new).push(instruction.clone());
                 }
             }
@@ -200,7 +201,7 @@ impl CrossDomainZkManager {
                     let instruction_key = format!("instruction_{}", i);
                     let domain = mapping.get(&instruction_key)
                         .cloned()
-                        .unwrap_or_else(|| "default".to_string());
+                        .unwrap_or_else(|| Location::Domain("default".to_string()));
                     partitions.entry(domain).or_insert_with(Vec::new).push(instruction.clone());
                 }
             }
@@ -208,9 +209,9 @@ impl CrossDomainZkManager {
                 // Partition by circuit size
                 for instruction in instructions {
                     let domain = if self.calculate_circuit_size(instruction) > *threshold {
-                        "large".to_string()
+                        Location::Domain("large".to_string())
                     } else {
-                        "small".to_string()
+                        Location::Domain("small".to_string())
                     };
                     partitions.entry(domain).or_insert_with(Vec::new).push(instruction.clone());
                 }
@@ -222,14 +223,11 @@ impl CrossDomainZkManager {
     
     /// Classify an instruction to determine its domain
     fn classify_instruction_domain(&self, instruction: &Instruction) -> DomainId {
-        use causality_core::machine::instruction::Instruction;
-        
         match instruction {
-            Instruction::Alloc { .. } | Instruction::Consume { .. } => "resource".to_string(),
-            Instruction::Apply { .. } => "computation".to_string(),
-            Instruction::Move { .. } => "data".to_string(),
-            Instruction::Witness { .. } => "verification".to_string(),
-            _ => "general".to_string(),
+            Instruction::Alloc { .. } | Instruction::Consume { .. } => Location::Domain("resource".to_string()),
+            Instruction::Transform { .. } => Location::Domain("computation".to_string()),
+            Instruction::Compose { .. } => Location::Domain("control".to_string()),
+            Instruction::Tensor { .. } => Location::Domain("parallel".to_string()),
         }
     }
     
@@ -243,14 +241,14 @@ impl CrossDomainZkManager {
         let partitions = self.partition_instructions(&instructions);
         
         // Step 2: Generate individual domain proofs
-        let mut domain_proofs = HashMap::new();
+        let mut domain_proofs = BTreeMap::new();
         
         for (domain_id, domain_instructions) in partitions {
             // Create domain-specific circuit
             let circuit = ZkCircuit::new(domain_instructions, vec![]); // Public inputs TBD
             
             // Create domain-specific witness (simplified)
-            let _witness = ZkWitness::new(
+            let witness = ZkWitness::new(
                 circuit.id.clone(),
                 global_witness.private_inputs.clone(),
                 global_witness.execution_trace.clone(),
@@ -258,7 +256,7 @@ impl CrossDomainZkManager {
             
             // Generate proof for this domain
             if let Some(backend) = self.backends.get(&domain_id) {
-                let proof = backend.generate_proof(&circuit, &_witness)?;
+                let proof = backend.generate_proof(&circuit, &witness)?;
                 
                 let domain_proof = DomainProof {
                     domain_id: domain_id.clone(),
@@ -292,7 +290,7 @@ impl CrossDomainZkManager {
     }
     
     /// Generate consistency proof for cross-domain interactions
-    fn generate_consistency_proof(&self, domain_proofs: &HashMap<DomainId, DomainProof>) -> ProofResult<Vec<u8>> {
+    fn generate_consistency_proof(&self, domain_proofs: &BTreeMap<DomainId, DomainProof>) -> ProofResult<Vec<u8>> {
         // Simplified consistency proof generation
         // In a real implementation, this would verify that:
         // 1. All domain interfaces match
@@ -303,7 +301,9 @@ impl CrossDomainZkManager {
         
         for (domain_id, domain_proof) in domain_proofs {
             // Add domain ID and proof hash to consistency data
-            consistency_data.extend_from_slice(domain_id.as_bytes());
+            let mut domain_bytes = Vec::new();
+            domain_id.ssz_append(&mut domain_bytes);
+            consistency_data.extend_from_slice(&domain_bytes);
             consistency_data.extend_from_slice(&domain_proof.proof.proof_data[..std::cmp::min(32, domain_proof.proof.proof_data.len())]);
         }
         
@@ -372,7 +372,7 @@ impl CrossDomainZkManager {
         // Partition instructions by domain
         let partitions = self.partition_instructions(instructions);
         
-        let mut domain_proofs = HashMap::new();
+        let mut domain_proofs = BTreeMap::new();
         
         // Generate proofs for each domain
         for (domain_id, domain_instructions) in partitions {
@@ -381,7 +381,7 @@ impl CrossDomainZkManager {
             // Ensure backend exists for this domain
             if !self.backends.contains_key(&domain_id) {
                 let backend = Box::new(MockBackend::new());
-                self.backends.insert(domain_id.to_string(), backend);
+                self.backends.insert(domain_id.clone(), backend);
             }
             
             // Generate domain-specific proof data
@@ -395,7 +395,7 @@ impl CrossDomainZkManager {
             );
             
             let domain_proof = DomainProof {
-                domain_id: domain_id.to_string(),
+                domain_id: domain_id.clone(),
                 proof: zk_proof,
                 interface_constraints: vec![
                     "cross_domain_consistency".to_string(),
@@ -577,15 +577,20 @@ mod tests {
         let manager = CrossDomainZkManager::new_with_partition(DomainPartition::ByComplexity);
         
         let instructions = vec![
-            Instruction::Witness { out_reg: causality_core::machine::RegisterId(1) },
-            Instruction::Move { 
-                src: causality_core::machine::RegisterId(1), 
-                dst: causality_core::machine::RegisterId(2) 
+            Instruction::Transform { 
+                morph_reg: causality_core::machine::RegisterId(1),
+                input_reg: causality_core::machine::RegisterId(2),
+                output_reg: causality_core::machine::RegisterId(3),
             },
             Instruction::Alloc { 
                 type_reg: causality_core::machine::RegisterId(1),
-                val_reg: causality_core::machine::RegisterId(2),
-                out_reg: causality_core::machine::RegisterId(3),
+                init_reg: causality_core::machine::RegisterId(2),
+                output_reg: causality_core::machine::RegisterId(3),
+            },
+            Instruction::Tensor { 
+                left_reg: causality_core::machine::RegisterId(1),
+                right_reg: causality_core::machine::RegisterId(2),
+                output_reg: causality_core::machine::RegisterId(3),
             },
         ];
         
@@ -603,20 +608,21 @@ mod tests {
         
         let alloc_instruction = Instruction::Alloc { 
             type_reg: causality_core::machine::RegisterId(1),
-            val_reg: causality_core::machine::RegisterId(2),
-            out_reg: causality_core::machine::RegisterId(3),
+            init_reg: causality_core::machine::RegisterId(2),
+            output_reg: causality_core::machine::RegisterId(3),
         };
         
         let domain = manager.classify_instruction_domain(&alloc_instruction);
-        assert_eq!(domain, "resource");
+        assert_eq!(domain, Location::Domain("resource".to_string()));
         
-        let move_instruction = Instruction::Move { 
-            src: causality_core::machine::RegisterId(1), 
-            dst: causality_core::machine::RegisterId(2) 
+        let transform_instruction = Instruction::Transform { 
+            morph_reg: causality_core::machine::RegisterId(1),
+            input_reg: causality_core::machine::RegisterId(2),
+            output_reg: causality_core::machine::RegisterId(3),
         };
         
-        let domain = manager.classify_instruction_domain(&move_instruction);
-        assert_eq!(domain, "data");
+        let domain = manager.classify_instruction_domain(&transform_instruction);
+        assert_eq!(domain, Location::Domain("computation".to_string()));
     }
     
     #[test]
@@ -624,15 +630,15 @@ mod tests {
         let mut manager = CrossDomainZkManager::new_with_partition(DomainPartition::ByEffectType);
         
         // Register mock backends for different domains
-        manager.register_backend("resource".to_string(), create_backend(crate::BackendType::Mock));
-        manager.register_backend("computation".to_string(), create_backend(crate::BackendType::Mock));
-        manager.register_backend("data".to_string(), create_backend(crate::BackendType::Mock));
+        manager.register_backend(Location::Domain("resource".to_string()), create_backend(crate::BackendType::Mock));
+        manager.register_backend(Location::Domain("computation".to_string()), create_backend(crate::BackendType::Mock));
+        manager.register_backend(Location::Domain("parallel".to_string()), create_backend(crate::BackendType::Mock));
         
         let instructions = vec![
             Instruction::Alloc { 
                 type_reg: causality_core::machine::RegisterId(1),
-                val_reg: causality_core::machine::RegisterId(2),
-                out_reg: causality_core::machine::RegisterId(3),
+                init_reg: causality_core::machine::RegisterId(2),
+                output_reg: causality_core::machine::RegisterId(3),
             },
         ];
         
@@ -648,12 +654,12 @@ mod tests {
         
         // Verify that the instruction was properly classified
         let alloc_domain = manager.classify_instruction_domain(&instructions[0]);
-        assert_eq!(alloc_domain, "resource");
+        assert_eq!(alloc_domain, Location::Domain("resource".to_string()));
         
         // Test that we have backends registered for the domains we need
-        assert!(manager.backends.contains_key("resource"));
-        assert!(manager.backends.contains_key("computation"));
-        assert!(manager.backends.contains_key("data"));
+        assert!(manager.backends.contains_key(&Location::Domain("resource".to_string())));
+        assert!(manager.backends.contains_key(&Location::Domain("computation".to_string())));
+        assert!(manager.backends.contains_key(&Location::Domain("parallel".to_string())));
         
         println!("✓ Cross-domain proof generation setup completed successfully");
     }

@@ -12,7 +12,7 @@ module EntityId = struct
   type t = string (* 32-byte SHA256 hash as hex string for now *)
 
   (** Create an EntityId from raw bytes *)
-  let from_bytes (bytes : bytes) : t = bytes |> Bytes.to_string |> Digest.to_hex
+  let from_bytes (bytes : bytes) : t = bytes |> Digest.bytes |> Digest.to_hex
 
   (** Create an EntityId from the content hash of SSZ-serializable data *)
   let from_content (content : 'a) : t =
@@ -202,8 +202,8 @@ module Hash = struct
 
   (** Compute SHA256-like hash and return as hex string *)
   let hash_to_hex (data : bytes) : string =
-    let hash = hash_bytes data in
-    Bytes.to_string hash |> Digest.to_hex
+    let hash = Digest.bytes data in
+    Digest.to_hex hash
 end
 
 (** Proper SSZ serialization + SHA256 hashing *)

@@ -1,7 +1,6 @@
 //! TokenTransfer effect implementation for asset transfer operations
 
 use crate::effects::{AlgebraicEffect, EffectCategory, FailureMode};
-use causality_core::system::content_addressing::{ContentAddressable, EntityId};
 use serde::{Serialize, Deserialize};
 use std::time::Duration;
 use std::hash::{Hash, Hasher};

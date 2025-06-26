@@ -7,7 +7,7 @@
 //!
 //! The crate is organized into three distinct layers:
 //!
-//! - **`machine/`** - Layer 0: Register Machine (11 instructions, minimal verifiable execution)
+//! - **`machine/`** - Layer 0: Register Machine (5 fundamental instructions, minimal verifiable execution)
 //! - **`lambda/`** - Layer 1: Linear Lambda Calculus (type-safe functional programming)
 //! - **`effect/`** - Layer 2: Effect Algebra (domain-specific effect management)
 //! - **`system/`** - Cross-cutting system utilities (content addressing, errors, serialization)
@@ -39,16 +39,16 @@ pub mod effect;
 
 // System utilities
 pub use system::{
+    EntityId, ResourceId, ExprId, RowTypeId, HandlerId, TransactionId, IntentId, NullifierId,
+    ContentAddressable, Timestamp, Str, Error, Result, ErrorKind, ResultExt,
+    CausalProof, Domain, get_current_time_ms, SszDuration,
+    StorageCommitment, StorageKeyDerivation, StorageKeyComponent, 
+    StorageAddressable, StorageCommitmentBatch,
     // Errors (unified system)
-    Error, Result, ErrorKind,
-    error::{TypeError, MachineError, ReductionError, LinearityError, ResultExt},
+    error::{TypeError, LinearityError},
     // Content addressing and core types
-    EntityId, ResourceId, ExprId, RowTypeId, HandlerId, TransactionId, IntentId, DomainId, NullifierId,
-    Timestamp, Str, ContentAddressable,
     encode_fixed_bytes, decode_fixed_bytes, DecodeWithRemainder,
     encode_with_length, decode_with_length, encode_enum_variant, decode_enum_variant,
-    // Causality and domain system
-    CausalProof, Domain,
 };
 
 // SMT re-exports from valence-coprocessor and our hasher
@@ -128,13 +128,16 @@ pub use lambda::{
 
 // Layer 0: Register Machine components
 pub use machine::{
-    Instruction, RegisterId, Pattern, MatchArm, ConstraintExpr, EffectCall, LiteralValue,
-    MachineState, MachineValue,
-    RegisterValue, Resource, Effect, Constraint,
-    ReductionEngine,
-    Nullifier, NullifierSet, NullifierError,
-    ResourceHeap, ResourceManager,
-    Metering, ComputeBudget, InstructionCosts,
+    instruction::{Instruction, RegisterId, Label},
+    value::{MachineValue, SessionChannel, ChannelState},
+    reduction::{MachineState, ExecutionTrace, TraceStep, MachineStateSnapshot},
+    register_file::{RegisterFile, RegisterFileError, RegisterFileSnapshot},
+    bounded_execution::{BoundedExecutor, BoundedExecutionError, ExecutionResult, ExecutionState},
+    resource::{
+        Resource, ResourceManager, ResourceError, Nullifier, NullifierSet, ConsumptionResult,
+        DependencyType, ResourceDependency,
+    },
+    metering::{GasMeter, GasError, InstructionCosts},
 };
 
 // Layer 2: Effect Algebra components
@@ -147,9 +150,6 @@ pub use effect::{
 pub mod primitive {
     pub mod ids {
         pub use crate::system::content_addressing::EntityId;
-        
-        /// Domain identifier
-        pub type DomainId = EntityId;
         
         /// Expression identifier  
         pub type ExprId = EntityId;
@@ -174,8 +174,8 @@ pub mod primitive {
         
         impl Timestamp {
             pub fn now() -> Self {
-                use std::time::{SystemTime, UNIX_EPOCH};
-                let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+                use std::time::UNIX_EPOCH;
+                let duration = crate::system::deterministic_system_time().duration_since(UNIX_EPOCH).unwrap();
                 Self {
                     secs_since_epoch: duration.as_secs(),
                 }
@@ -231,14 +231,15 @@ pub mod expression {
 
 // Resource types
 pub mod resource {
-    use crate::primitive::{ids::{EntityId, DomainId}, string::Str, time::Timestamp};
+    use crate::primitive::{ids::EntityId, string::Str, time::Timestamp};
+    use crate::lambda::base::Location;
     
     /// Resource in the system
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct Resource {
         pub id: EntityId,
         pub name: Str,
-        pub domain_id: DomainId,
+        pub location: Location,
         pub resource_type: Str,
         pub quantity: u64,
         pub timestamp: Timestamp,
@@ -305,7 +306,7 @@ pub mod graph {
             pub id: NodeId,
             pub name: Str,
             pub node_type: Str,
-            pub preferred_domain: Option<super::optimization::TypedDomain>,
+            pub preferred_location: Option<super::optimization::TypedLocation>,
         }
         
         impl ProcessDataflowNode {
@@ -314,12 +315,12 @@ pub mod graph {
                     id,
                     name,
                     node_type,
-                    preferred_domain: None,
+                    preferred_location: None,
                 }
             }
             
-            pub fn with_preferred_domain(mut self, domain: super::optimization::TypedDomain) -> Self {
-                self.preferred_domain = Some(domain);
+            pub fn with_preferred_location(mut self, location: super::optimization::TypedLocation) -> Self {
+                self.preferred_location = Some(location);
                 self
             }
         }
@@ -373,22 +374,36 @@ pub mod graph {
     }
     
     pub mod optimization {
-        use crate::primitive::{ids::DomainId, string::Str};
+        use crate::lambda::base::Location;
+        use crate::system::content_addressing::Str;
         
-        /// Typed domain for optimization
+        /// Typed location for optimization
         #[derive(Debug, Clone)]
-        pub struct TypedDomain {
-            pub domain_id: DomainId,
-            pub domain_type: Str,
+        pub struct TypedLocation {
+            pub location: Location,
+            pub location_type: Str,
         }
         
-        impl TypedDomain {
-            pub fn new(domain_id: DomainId, domain_type: Str) -> Self {
+        impl TypedLocation {
+            pub fn new(location: Location, location_type: Str) -> Self {
                 Self {
-                    domain_id,
-                    domain_type,
+                    location,
+                    location_type,
                 }
             }
         }
     }
 }
+
+// Re-exports for convenience
+pub use machine::*;
+pub use lambda::{
+    Term, TermKind, Literal, Location,
+    type_checker, base, function, session_linear,
+};
+pub use lambda::base::SessionType;
+pub use effect::{
+    Intent, TransformConstraint, TransformDefinition,
+    synthesis, intent_evaluator, teg, transform_constraint, transform,
+    capability, row, location_row, protocol_derivation, core as effect_core,
+};

@@ -23,8 +23,9 @@ pub enum RuntimeError {
     #[error("Effect not handled: {effect_type}")]
     UnhandledEffect { effect_type: String },
     
+    /// Error types from underlying machine
     #[error("Machine error: {0}")]
-    MachineError(#[from] causality_core::machine::MachineError),
+    MachineError(#[from] causality_core::system::Error),
     
     #[error("Register error: {0}")]
     RegisterError(String),
@@ -94,9 +95,7 @@ mod tests {
     #[test]
     fn test_error_conversion() {
         // Test that we can create machine errors
-        let machine_err = causality_core::machine::MachineError::InvalidRegister(
-            causality_core::machine::RegisterId::new(0)
-        );
+        let machine_err = causality_core::system::Error::system("test machine error");
         let runtime_err = RuntimeError::from(machine_err);
         assert!(matches!(runtime_err, RuntimeError::MachineError(_)));
     }

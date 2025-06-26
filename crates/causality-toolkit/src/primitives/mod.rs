@@ -1,3 +1,4 @@
+
 //! Causality DeFi Primitives
 //!
 //! This module provides a comprehensive set of DeFi primitives that can be used
@@ -20,7 +21,7 @@ pub use dex::*;
 use causality_core::{Value, EntityId};
 use causality_core::system::content_addressing::ContentAddressable;
 use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use anyhow::Result;
 use thiserror::Error;
 
@@ -51,7 +52,7 @@ pub trait DeFiPrimitive: ContentAddressable + Serialize + for<'de> Deserialize<'
     fn primitive_type(&self) -> &'static str;
     
     /// Get metadata about this primitive instance
-    fn metadata(&self) -> HashMap<String, Value>;
+    fn metadata(&self) -> BTreeMap<String, Value>;
 }
 
 /// Common asset types used across primitives
@@ -86,7 +87,7 @@ pub struct Asset {
     pub amount: u128,
     
     /// Optional metadata
-    pub metadata: HashMap<String, Value>,
+    pub metadata: BTreeMap<String, Value>,
 }
 
 /// Common error types for DeFi operations
@@ -304,7 +305,7 @@ mod tests {
                 decimals: 6 
             },
             amount: 1_000_000, // 1 USDC
-            metadata: HashMap::new(),
+            metadata: BTreeMap::new(),
         };
         
         assert_eq!(asset.amount, 1_000_000);

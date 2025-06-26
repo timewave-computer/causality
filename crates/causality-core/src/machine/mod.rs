@@ -1,52 +1,32 @@
-//! Layer 0: Register Machine
+//! Machine module for the causality core
 //!
-//! This module implements the foundational register machine that executes
-//! causality operations. It provides the basic execution model for resource
-//! manipulation and state transitions.
+//! This module contains the minimal instruction set and execution engine
+//! based on symmetric monoidal closed category theory.
 
-pub mod nullifier;
-pub mod resource;
-pub mod state;
-pub mod value;
-pub mod effect;
 pub mod instruction;
+pub mod value;
 pub mod reduction;
+pub mod resource;
 pub mod metering;
+pub mod register_file;
+pub mod bounded_execution;
+pub mod channel_resource;
+pub mod pattern;
 
-// Re-export commonly used types
-pub use instruction::{
-    Instruction, RegisterId, Pattern, MatchArm, ConstraintExpr, EffectCall, LiteralValue,
+// Re-export key types
+pub use instruction::{Instruction, Label, RegisterId};
+pub use reduction::MachineState;
+pub use value::{MachineValue, SessionChannel, ChannelState};
+pub use resource::Resource;
+pub use register_file::{RegisterFile, RegisterFileError};
+pub use bounded_execution::{BoundedExecutor, BoundedExecutionError, ExecutionResult};
+pub use metering::{GasMeter, GasError, InstructionCosts};
+pub use pattern::{Pattern, LiteralValue};
+
+// Channel-resource integration
+pub use channel_resource::{
+    ChannelResourceManager, ChannelOperationResult, ChannelResourceError, ChannelResourceStats,
 };
-
-pub use state::MachineState;
-
-pub use value::{
-    MachineValue, RegisterValue,
-};
-
-pub use resource::{
-    Resource, ResourceHeap, ResourceManager,
-};
-
-// Re-export ResourceId from system module
-pub use crate::system::content_addressing::ResourceId;
-
-pub use effect::{
-    Effect, Constraint,
-};
-
-pub use reduction::{
-    ReductionEngine,
-};
-
-pub use metering::{
-    Metering, ComputeBudget, InstructionCosts,
-};
-
-pub use nullifier::*;
-
-// Re-export error types from system
-pub use crate::system::error::{MachineError, ReductionError};
 
 //-----------------------------------------------------------------------------
 // Tests
@@ -55,6 +35,8 @@ pub use crate::system::error::{MachineError, ReductionError};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::machine::resource::ResourceManager;
+    use crate::machine::metering::GasMeter;
     
     #[test]
     fn test_register_id_creation() {
@@ -68,47 +50,60 @@ mod tests {
     
     #[test]
     fn test_machine_state_creation() {
-        let state = MachineState::new();
+        let program = vec![
+            Instruction::Transform {
+                morph_reg: RegisterId::new(1),
+                input_reg: RegisterId::new(2),
+                output_reg: RegisterId::new(3),
+            }
+        ];
+        let state = MachineState::new(program);
         assert_eq!(state.registers.len(), 0);
-        assert_eq!(state.effects.len(), 0);
-        assert_eq!(state.constraints.len(), 0);
-        assert_eq!(state.pc, 0);
+        assert_eq!(state.instruction_pointer, 0);
     }
     
     #[test]
-    fn test_resource_allocation() {
-        let mut state = MachineState::new();
+    fn test_resource_manager() {
+        let mut manager = ResourceManager::new();
+        let resource_type = MachineValue::Type(crate::lambda::TypeInner::Base(crate::lambda::BaseType::Int));
         let value = MachineValue::Int(42);
-        let resource_type = crate::lambda::TypeInner::Base(crate::lambda::BaseType::Int);
         
-        let resource_id = state.alloc_resource(value.clone(), resource_type);
+        let resource_id = manager.allocate(resource_type, value.clone());
         
         // Check resource exists
-        assert!(state.resources.is_available(resource_id));
+        assert_eq!(manager.resource_count(), 1);
+        
+        // Peek at resource
+        let peeked = manager.peek(&resource_id).unwrap();
+        assert_eq!(peeked, &value);
         
         // Consume resource
-        let consumed_value = state.consume_resource(resource_id);
+        let consumed_value = manager.consume(resource_id.clone());
         assert!(consumed_value.is_ok());
-        assert_eq!(consumed_value.unwrap(), value);
+        assert_eq!(consumed_value.unwrap().value, value);
         
         // Check resource is consumed
-        assert!(!state.resources.is_available(resource_id));
+        assert_eq!(manager.resource_count(), 0);
         
         // Try to consume again - should fail
-        assert!(state.consume_resource(resource_id).is_err());
+        assert!(manager.consume(resource_id).is_err());
     }
     
     #[test]
-    fn test_linear_safety() {
-        let mut state = MachineState::new();
+    fn test_gas_metering() {
+        let mut meter = GasMeter::new(100);
         
-        // Store value in register
-        state.store_register(RegisterId::new(1), MachineValue::Int(42), None);
+        let instruction = Instruction::Transform {
+            morph_reg: RegisterId::new(1),
+            input_reg: RegisterId::new(2),
+            output_reg: RegisterId::new(3),
+        };
         
-        // Consume register
-        assert!(state.consume_register(RegisterId::new(1)).is_ok());
+        assert!(meter.can_execute(&instruction));
+        assert_eq!(meter.instruction_cost(&instruction), 3);
         
-        // Try to consume again - should fail
-        assert!(state.consume_register(RegisterId::new(1)).is_err());
+        meter.consume_gas(&instruction).unwrap();
+        assert_eq!(meter.gas_used, 3);
+        assert_eq!(meter.remaining_gas(), 97);
     }
-} 
+}

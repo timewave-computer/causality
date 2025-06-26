@@ -1,3 +1,4 @@
+
 //! Test case generation for automatic effect testing
 
 use crate::{
@@ -9,7 +10,7 @@ use crate::{
 };
 use serde::{Serialize, Deserialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::BTreeSet,
     time::Duration,
 };
 
@@ -19,7 +20,7 @@ pub struct TestGenerator {
     config: TestConfig,
     
     /// Generated test cases by effect name
-    test_cache: HashMap<String, Vec<TestCase>>,
+    test_cache: BTreeMap<String, Vec<TestCase>>,
     
     /// Random seed for deterministic test generation
     seed: u64,
@@ -73,7 +74,7 @@ pub enum TestPrioritization {
 }
 
 /// Types of test cases that can be generated
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum TestCaseType {
     /// Boundary value testing
     BoundaryValue,
@@ -122,14 +123,14 @@ pub struct TestCase {
     pub description: String,
     
     /// Tags for categorization
-    pub tags: HashSet<String>,
+    pub tags: BTreeSet<String>,
 }
 
 /// Test input parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestInputs {
     /// Parameter values by name
-    pub parameters: HashMap<String, TestValue>,
+    pub parameters: BTreeMap<String, TestValue>,
     
     /// Mock strategy to use for this test
     pub mock_strategy: Option<String>,
@@ -176,13 +177,13 @@ pub enum TestValue {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestSetup {
     /// Required account balances
-    pub balances: HashMap<String, u64>,
+    pub balances: BTreeMap<String, u64>,
     
     /// Required token balances
-    pub token_balances: HashMap<String, HashMap<String, u64>>,
+    pub token_balances: BTreeMap<String, BTreeMap<String, u64>>,
     
     /// Required contract states
-    pub contract_states: HashMap<String, HashMap<String, String>>,
+    pub contract_states: BTreeMap<String, BTreeMap<String, String>>,
     
     /// Network conditions to simulate
     pub network_conditions: NetworkConditions,
@@ -243,10 +244,10 @@ pub struct TestSuite {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestCoverage {
     /// Parameters covered by tests
-    pub parameters_covered: HashSet<String>,
+    pub parameters_covered: BTreeSet<String>,
     
     /// Failure modes covered
-    pub failure_modes_covered: HashSet<FailureMode>,
+    pub failure_modes_covered: BTreeSet<FailureMode>,
     
     /// Edge cases covered
     pub edge_cases_covered: u32,
@@ -268,7 +269,7 @@ pub struct TestGenerationMetadata {
     pub config: TestConfig,
     
     /// Number of tests by type
-    pub test_counts: HashMap<TestCaseType, u32>,
+    pub test_counts: BTreeMap<TestCaseType, u32>,
 }
 
 impl TestGenerator {
@@ -276,7 +277,7 @@ impl TestGenerator {
     pub fn new() -> Self {
         TestGenerator {
             config: TestConfig::default(),
-            test_cache: HashMap::new(),
+            test_cache: BTreeMap::new(),
             seed: 42,
         }
     }
@@ -285,7 +286,7 @@ impl TestGenerator {
     pub fn with_config(config: TestConfig) -> Self {
         TestGenerator {
             config,
-            test_cache: HashMap::new(),
+            test_cache: BTreeMap::new(),
             seed: 42,
         }
     }
@@ -344,7 +345,7 @@ impl TestGenerator {
         coverage = self.calculate_coverage(&test_cases, schema);
         
         // Create test counts
-        let mut test_counts = HashMap::new();
+        let mut test_counts = BTreeMap::new();
         for test_case in &test_cases {
             *test_counts.entry(test_case.test_type.clone()).or_insert(0) += 1;
         }
@@ -354,7 +355,7 @@ impl TestGenerator {
             test_cases,
             coverage,
             metadata: TestGenerationMetadata {
-                generated_at: std::time::SystemTime::now()
+                generated_at: std::time::UNIX_EPOCH
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
@@ -385,7 +386,7 @@ impl TestGenerator {
                         priority: 2, // High priority
                         inputs: TestInputs {
                             parameters: {
-                                let mut params = HashMap::new();
+                                let mut params = BTreeMap::new();
                                 params.insert(param.name.clone(), value.clone());
                                 // Fill other required parameters with defaults
                                 self.fill_default_parameters(&mut params, schema);
@@ -402,7 +403,7 @@ impl TestGenerator {
                         timeout: self.config.test_timeout,
                         description: format!("Boundary value test for parameter '{}' with value {:?}", param.name, value),
                         tags: {
-                            let mut tags = HashSet::new();
+                            let mut tags = BTreeSet::new();
                             tags.insert("boundary".to_string());
                             tags.insert(param.name.clone());
                             tags
@@ -431,7 +432,7 @@ impl TestGenerator {
                     priority: 3, // Medium priority
                     inputs: TestInputs {
                         parameters: {
-                            let mut params = HashMap::new();
+                            let mut params = BTreeMap::new();
                             params.insert(param.name.clone(), value.clone());
                             self.fill_default_parameters(&mut params, schema);
                             params
@@ -443,7 +444,7 @@ impl TestGenerator {
                     timeout: self.config.test_timeout,
                     description: format!("Invalid input test for parameter '{}' with value {:?}", param.name, value),
                     tags: {
-                        let mut tags = HashSet::new();
+                        let mut tags = BTreeSet::new();
                         tags.insert("invalid".to_string());
                         tags.insert(param.name.clone());
                         tags
@@ -491,7 +492,7 @@ impl TestGenerator {
         let mut test_cases = Vec::new();
         
         for i in 0..self.config.random_valid_tests {
-            let mut parameters = HashMap::new();
+            let mut parameters = BTreeMap::new();
             
             // Generate random valid values for all parameters
             for param in &schema.parameters {
@@ -512,7 +513,7 @@ impl TestGenerator {
                 timeout: self.config.test_timeout,
                 description: format!("Random valid input test #{}", i + 1),
                 tags: {
-                    let mut tags = HashSet::new();
+                    let mut tags = BTreeSet::new();
                     tags.insert("random".to_string());
                     tags.insert("valid".to_string());
                     tags
@@ -543,7 +544,7 @@ impl TestGenerator {
             timeout: self.config.test_timeout * 2, // Longer timeout for stress tests
             description: "Stress test with maximum parameter values and high latency".to_string(),
             tags: {
-                let mut tags = HashSet::new();
+                let mut tags = BTreeSet::new();
                 tags.insert("stress".to_string());
                 tags.insert("max_values".to_string());
                 tags
@@ -590,8 +591,8 @@ impl TestGenerator {
     
     /// Calculate test coverage for the generated suite
     fn calculate_coverage(&self, test_cases: &[TestCase], schema: &EffectSchema) -> TestCoverage {
-        let mut parameters_covered = HashSet::new();
-        let mut failure_modes_covered = HashSet::new();
+        let mut parameters_covered = BTreeSet::new();
+        let mut failure_modes_covered = BTreeSet::new();
         let mut edge_cases_covered = 0;
         
         for test_case in test_cases {
@@ -685,7 +686,7 @@ impl TestGenerator {
         }
     }
     
-    fn fill_default_parameters(&self, params: &mut HashMap<String, TestValue>, schema: &EffectSchema) {
+    fn fill_default_parameters(&self, params: &mut BTreeMap<String, TestValue>, schema: &EffectSchema) {
         for param in &schema.parameters {
             if !params.contains_key(&param.name) && !param.optional {
                 if let Some(default_value) = self.get_default_value(&param.param_type) {
@@ -720,7 +721,7 @@ impl TestGenerator {
             timeout: self.config.test_timeout,
             description: format!("Edge case test for failure mode: {:?}", failure_mode),
             tags: {
-                let mut tags = HashSet::new();
+                let mut tags = BTreeSet::new();
                 tags.insert("edge_case".to_string());
                 tags.insert(failure_mode_to_string(failure_mode));
                 tags
@@ -757,8 +758,8 @@ impl TestGenerator {
         }
     }
     
-    fn generate_stress_parameters(&self, schema: &EffectSchema, _max_values: bool) -> TestResult<HashMap<String, TestValue>> {
-        let mut params = HashMap::new();
+    fn generate_stress_parameters(&self, schema: &EffectSchema, _max_values: bool) -> TestResult<BTreeMap<String, TestValue>> {
+        let mut params = BTreeMap::new();
         
         for param in &schema.parameters {
             if let Some(stress_value) = self.get_stress_value(&param.param_type) {
@@ -784,8 +785,8 @@ impl TestGenerator {
         }
     }
     
-    fn generate_parameters_for_failure_mode(&self, schema: &EffectSchema, failure_mode: &FailureMode) -> TestResult<HashMap<String, TestValue>> {
-        let mut params = HashMap::new();
+    fn generate_parameters_for_failure_mode(&self, schema: &EffectSchema, failure_mode: &FailureMode) -> TestResult<BTreeMap<String, TestValue>> {
+        let mut params = BTreeMap::new();
         
         // Generate parameters that would cause the specific failure mode
         match failure_mode {
@@ -847,9 +848,9 @@ impl Default for TestConfig {
 impl Default for TestSetup {
     fn default() -> Self {
         TestSetup {
-            balances: HashMap::new(),
-            token_balances: HashMap::new(),
-            contract_states: HashMap::new(),
+            balances: BTreeMap::new(),
+            token_balances: BTreeMap::new(),
+            contract_states: BTreeMap::new(),
             network_conditions: NetworkConditions::default(),
         }
     }
@@ -858,9 +859,9 @@ impl Default for TestSetup {
 impl TestSetup {
     fn high_load() -> Self {
         TestSetup {
-            balances: HashMap::new(),
-            token_balances: HashMap::new(),
-            contract_states: HashMap::new(),
+            balances: BTreeMap::new(),
+            token_balances: BTreeMap::new(),
+            contract_states: BTreeMap::new(),
             network_conditions: NetworkConditions {
                 latency_ms: 1000,
                 packet_loss: 0.1,
@@ -885,8 +886,8 @@ impl Default for NetworkConditions {
 impl TestCoverage {
     fn new() -> Self {
         TestCoverage {
-            parameters_covered: HashSet::new(),
-            failure_modes_covered: HashSet::new(),
+            parameters_covered: BTreeSet::new(),
+            failure_modes_covered: BTreeSet::new(),
             edge_cases_covered: 0,
             coverage_percentage: 0.0,
         }
@@ -1026,28 +1027,28 @@ mod tests {
                 test_type: TestCaseType::StressTest,
                 priority: 5,
                 inputs: TestInputs {
-                    parameters: HashMap::new(),
+                    parameters: BTreeMap::new(),
                     mock_strategy: None,
                     setup: TestSetup::default(),
                 },
                 expected_outcome: ExpectedOutcome::Success,
                 timeout: Duration::from_secs(1),
                 description: "Test 1".to_string(),
-                tags: HashSet::new(),
+                tags: BTreeSet::new(),
             },
             TestCase {
                 id: "test2".to_string(),
                 test_type: TestCaseType::BoundaryValue,
                 priority: 1,
                 inputs: TestInputs {
-                    parameters: HashMap::new(),
+                    parameters: BTreeMap::new(),
                     mock_strategy: None,
                     setup: TestSetup::default(),
                 },
                 expected_outcome: ExpectedOutcome::Success,
                 timeout: Duration::from_secs(1),
                 description: "Test 2".to_string(),
-                tags: HashSet::new(),
+                tags: BTreeSet::new(),
             },
         ];
         
@@ -1068,7 +1069,7 @@ mod tests {
                 priority: 1,
                 inputs: TestInputs {
                     parameters: {
-                        let mut params = HashMap::new();
+                        let mut params = BTreeMap::new();
                         params.insert("amount".to_string(), TestValue::UInt(100));
                         params
                     },
@@ -1078,7 +1079,7 @@ mod tests {
                 expected_outcome: ExpectedOutcome::Failure(FailureMode::InsufficientBalance),
                 timeout: Duration::from_secs(1),
                 description: "Test 1".to_string(),
-                tags: HashSet::new(),
+                tags: BTreeSet::new(),
             },
         ];
         

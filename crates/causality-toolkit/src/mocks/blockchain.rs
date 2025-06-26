@@ -1,3 +1,4 @@
+
 //! Blockchain simulation mocking for realistic DeFi effect testing
 
 use crate::{
@@ -96,13 +97,13 @@ pub struct MockChainState {
     pub available_block_gas: u64,
     
     /// Account balances by address
-    pub balances: HashMap<String, u64>,
+    pub balances: BTreeMap<String, u64>,
     
     /// Token balances by (address, token_contract)
-    pub token_balances: HashMap<(String, String), u64>,
+    pub token_balances: BTreeMap<(String, String), u64>,
     
     /// Nonce tracking by address
-    pub nonces: HashMap<String, u64>,
+    pub nonces: BTreeMap<String, u64>,
     
     /// Pending transactions in mempool
     pub mempool: Vec<PendingTransaction>,
@@ -114,7 +115,7 @@ pub struct MockChainState {
     pub congestion_state: CongestionState,
     
     /// Active smart contracts
-    pub contracts: HashMap<String, ContractState>,
+    pub contracts: BTreeMap<String, ContractState>,
 }
 
 /// Pending transaction in mempool
@@ -212,7 +213,7 @@ pub struct ContractState {
     pub contract_type: ContractType,
     
     /// Contract-specific state
-    pub state: HashMap<String, ContractStateValue>,
+    pub state: BTreeMap<String, ContractStateValue>,
     
     /// Whether contract is paused
     pub paused: bool,
@@ -540,9 +541,9 @@ impl MockChainState {
             block_timestamp: 0,
             gas_price: params.chain_config.base_gas_price,
             available_block_gas: params.chain_config.gas_limit,
-            balances: HashMap::new(),
-            token_balances: HashMap::new(),
-            nonces: HashMap::new(),
+            balances: BTreeMap::new(),
+            token_balances: BTreeMap::new(),
+            nonces: BTreeMap::new(),
             mempool: Vec::new(),
             transaction_history: Vec::new(),
             congestion_state: CongestionState {
@@ -551,7 +552,7 @@ impl MockChainState {
                 avg_gas_price: params.chain_config.base_gas_price,
                 congestion_multiplier: 1.0,
             },
-            contracts: HashMap::new(),
+            contracts: BTreeMap::new(),
         }
     }
     

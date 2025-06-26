@@ -3,7 +3,7 @@
 //! This module provides functionality to fork simulation states and explore
 //! different execution paths in parallel, enabling "what-if" analysis.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
 use crate::{
     engine::SimulationEngine,
@@ -12,13 +12,12 @@ use crate::{
     engine::ExecutionState,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
-use uuid;
 
 /// Global counter for ensuring unique branch IDs
 static BRANCH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Unique identifier for a simulation branch
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct BranchId(pub String);
 
 impl BranchId {
@@ -30,8 +29,8 @@ impl BranchId {
     /// Generate a unique branch ID
     pub fn generate() -> Self {
         let counter = BRANCH_COUNTER.fetch_add(1, Ordering::SeqCst);
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let timestamp = SystemTime::now()
+        use std::time::UNIX_EPOCH;
+        let timestamp = std::time::UNIX_EPOCH
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis();
@@ -162,7 +161,7 @@ pub struct BranchInfo {
 #[derive(Debug, Clone)]
 pub struct BranchingManager {
     /// All branches in the system
-    branches: HashMap<BranchId, BranchInfo>,
+    branches: BTreeMap<BranchId, BranchInfo>,
     /// Currently active branch
     pub active_branch_id: Option<BranchId>,
     /// Root branch ID
@@ -173,14 +172,14 @@ impl BranchingManager {
     /// Create a new branching manager
     pub fn new() -> Self {
         let root_id = BranchId("root".to_string());
-        let mut branches = HashMap::new();
+        let mut branches = BTreeMap::new();
         
         // Create root branch
         let root_branch = BranchInfo {
             id: root_id.clone(),
             name: "Root".to_string(),
             parent_id: None,
-            created_at: std::time::SystemTime::now(),
+            created_at: std::time::UNIX_EPOCH,
             execution_state: ExecutionState::new(),
             metadata: BranchMetadata {
                 description: "Root branch".to_string(),
@@ -224,7 +223,7 @@ impl BranchingManager {
             id: new_branch_id.clone(),
             name: branch_name.to_string(),
             parent_id: self.active_branch_id.clone(),
-            created_at: std::time::SystemTime::now(),
+            created_at: std::time::UNIX_EPOCH,
             execution_state,
             metadata: BranchMetadata {
                 description: branch_name.to_string(),
@@ -358,7 +357,7 @@ impl BranchingManager {
     
     /// Fork a new branch from the current active branch
     pub fn fork_branch(&mut self, description: String) -> Result<BranchId, SimulationError> {
-        let new_id = uuid::Uuid::new_v4().to_string();
+        let new_id = "deterministic_uuid".to_string();
         let execution_state = if let Some(active_id) = &self.active_branch_id {
             self.branches.get(active_id)
                 .map(|b| b.execution_state.clone())

@@ -3,7 +3,7 @@
 //! This module provides a registry system for effect handlers that can be
 //! dynamically registered and executed based on effect tags.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use crate::lambda::{base::Value};
 use crate::system::error::{Error, Result};
@@ -59,7 +59,7 @@ pub trait EffectHandler: Send + Sync {
 
 /// Registry for managing effect handlers
 pub struct EffectHandlerRegistry {
-    handlers: RwLock<HashMap<String, Arc<dyn EffectHandler>>>,
+    handlers: RwLock<BTreeMap<String, Arc<dyn EffectHandler>>>,
     default_handler: Option<Arc<dyn EffectHandler>>,
 }
 
@@ -76,7 +76,7 @@ impl EffectHandlerRegistry {
     /// Create a new effect handler registry
     pub fn new() -> Self {
         Self {
-            handlers: RwLock::new(HashMap::new()),
+            handlers: RwLock::new(BTreeMap::new()),
             default_handler: None,
         }
     }

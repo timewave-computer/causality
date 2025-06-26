@@ -1,6 +1,81 @@
 # Causality Runtime
 
-Execution environment for the Causality framework that provides specialized executors for sequential, zero-knowledge, and parallel execution modes while maintaining consistency across the three-layer architecture.
+Execution environment providing specialized executors for sequential, zero-knowledge proof generation, and parallel Task Effect Graph execution while maintaining linear resource constraints.
+
+## Core Executors
+
+### Basic Executor
+Sequential execution of register machine instructions with linear resource tracking:
+
+```rust
+use causality_runtime::{Executor, RuntimeContext};
+use causality_core::machine::{Instruction, RegisterId, MachineValue};
+
+// Create basic executor
+let mut executor = Executor::new();
+
+// Execute instruction sequence
+let instructions = vec![
+    Instruction::Witness { out_reg: RegisterId(0) },
+    Instruction::Move { src: RegisterId(0), dst: RegisterId(1) },
+    Instruction::Return { reg: RegisterId(1) },
+];
+
+let result = executor.execute(&instructions)?;
+println!("Execution result: {:?}", result);
+```
+
+**Basic Executor Features:**
+- **Sequential Execution**: Execute instructions in order with proper dependencies
+- **State Management**: Maintain machine state across instruction sequences
+- **Resource Enforcement**: Enforce linear resource consumption constraints
+- **Error Recovery**: Provide detailed error information for debugging
+
+### ZK Executor  
+Zero-knowledge proof generation with multiple backend support:
+
+```rust
+use causality_runtime::zk_executor::{ZkExecutor, ZkExecutionConfig};
+
+let zk_executor = ZkExecutor::with_config(config);
+let (result, proof) = zk_executor.execute_with_proof(&instructions)?;
+```
+
+**ZK Backends:**
+- **Mock**: Configurable testing backend
+- **SP1**: Local proving with SP1 infrastructure  
+- **Valence**: Production coprocessor integration
+
+### TEG Executor
+Parallel execution using work-stealing scheduler:
+
+```rust
+use causality_runtime::teg_executor::{TegExecutor, TegExecutorConfig};
+use causality_core::effect::TaskEffectGraph;
+
+let teg_executor = TegExecutor::with_config(config, context);
+let result = teg_executor.execute(task_effect_graph)?;
+```
+
+**Features:**
+- Work-stealing load balancing
+- Adaptive scheduling with ML optimization
+- Performance metrics and analysis
+
+## Key Features
+
+- **Linear Resource Enforcement**: Runtime validation of linear constraints
+- **Multi-Backend ZK**: Unified interface for different proving systems
+- **Parallel Execution**: Efficient parallelization of independent effects
+- **Error Recovery**: Comprehensive error handling and recovery
+- **State Management**: Session-based execution with cleanup
+
+## Integration
+
+- **Layer 0 Instructions**: Direct execution of 5 fundamental instructions
+- **ZK Circuits**: Automatic circuit generation and proof verification
+- **Resource Tracking**: Content-addressed resource lifecycle management
+- **Session Management**: Stateful execution contexts with timeouts
 
 ## Purpose
 
@@ -34,110 +109,6 @@ Parallel execution for Task Effect Graphs:
 - **Work Stealing**: Dynamic load balancing across worker threads
 - **Adaptive Scheduling**: Machine learning-based task scheduling optimization
 - **Performance Monitoring**: Detailed metrics for parallel execution analysis
-
-## Core Executors
-
-### Basic Executor
-
-Sequential execution of register machine instructions:
-
-```rust
-use causality_runtime::{Executor, RuntimeContext};
-use causality_core::machine::{Instruction, RegisterId, MachineValue};
-
-// Create basic executor
-let mut executor = Executor::new();
-
-// Execute instruction sequence
-let instructions = vec![
-    Instruction::Witness { out_reg: RegisterId(0) },
-    Instruction::Move { src: RegisterId(0), dst: RegisterId(1) },
-    Instruction::Return { reg: RegisterId(1) },
-];
-
-let result = executor.execute(&instructions)?;
-println!("Execution result: {:?}", result);
-```
-
-**Basic Executor Features:**
-- **Sequential Execution**: Execute instructions in order with proper dependencies
-- **State Management**: Maintain machine state across instruction sequences
-- **Resource Enforcement**: Enforce linear resource consumption constraints
-- **Error Recovery**: Provide detailed error information for debugging
-
-### ZK Executor
-
-Zero-knowledge proof generation during execution:
-
-```rust
-use causality_runtime::zk_executor::{ZkExecutor, ZkExecutionConfig, ZkBackendConfig};
-
-// Configure ZK execution
-let config = ZkExecutionConfig {
-    enable_circuit_caching: true,
-    max_circuit_size: 1000,
-    always_generate_proofs: false,
-    backend_config: ZkBackendConfig::Mock {
-        success_rate: 1.0,
-        proof_time_ms: 100,
-    },
-};
-
-// Create ZK executor
-let mut zk_executor = ZkExecutor::with_config(config);
-
-// Execute with proof generation
-let (result, proof_option) = zk_executor.execute_with_proof(&instructions)?;
-
-if let Some(proof) = proof_option {
-    println!("Proof generated successfully");
-    // Verify proof
-    let verified = zk_executor.verify_proof(&proof, &public_inputs)?;
-    assert!(verified);
-}
-```
-
-**ZK Executor Features:**
-- **Automatic Proof Generation**: Generate proofs for specified instruction sequences
-- **Circuit Compilation**: Compile instructions to arithmetic circuits
-- **Multi-Backend Support**: Support for Mock, SP1, and Valence proving backends
-- **Proof Verification**: Built-in proof verification capabilities
-
-### TEG Executor
-
-Parallel execution using work-stealing task scheduler:
-
-```rust
-use causality_runtime::teg_executor::{TegExecutor, TegExecutorConfig};
-use causality_core::effect::TaskEffectGraph;
-
-// Configure parallel execution
-let config = TegExecutorConfig {
-    worker_count: 4,
-    steal_timeout_ms: 50,
-    load_balance_threshold: 2,
-    node_timeout_ms: 10000,
-    adaptive_scheduling: true,
-};
-
-// Create TEG executor
-let mut teg_executor = TegExecutor::with_config(config, runtime_context);
-
-// Execute effect graph in parallel
-let teg = TaskEffectGraph::from_effects(effects);
-let result = teg_executor.execute(teg)?;
-
-println!("Parallel execution completed:");
-println!("  Nodes executed: {}", result.nodes_executed);
-println!("  Total time: {:?}", result.execution_time);
-println!("  Parallelism efficiency: {:.2}%", result.parallelism_efficiency * 100.0);
-```
-
-**TEG Executor Features:**
-- **Work Stealing**: Dynamic load balancing across multiple threads
-- **Adaptive Scheduling**: Learning-based optimization of task scheduling
-- **Performance Analytics**: Detailed metrics for parallel execution optimization
-- **Timeout Management**: Configurable timeouts for individual nodes
 
 ## Backend Configuration
 

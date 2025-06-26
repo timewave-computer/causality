@@ -4,8 +4,7 @@ use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
 use std::fs;
-
-use causality_compiler::EnhancedCompilerPipeline;
+use causality_compiler::{compile, CompiledArtifact};
 
 #[derive(Parser, Debug, Clone)]
 pub struct CompileCommand {
@@ -49,21 +48,14 @@ impl CompileCommand {
             .map_err(|e| anyhow::anyhow!("Failed to read input file {}: {}", self.input.display(), e))?;
 
         if self.verbose {
-            println!("📝 Source code loaded ({} bytes)", source_code.len());
-        }
-
-        // Initialize the compiler pipeline
-        let mut compiler = EnhancedCompilerPipeline::new();
-        
-        if self.verbose {
-            println!("🏭 Compiler pipeline initialized");
+            println!("Source code loaded ({} bytes)", source_code.len());
         }
 
         // Compile based on the requested format
         let compiled_result = match self.format.as_str() {
             "intermediate" => {
                 if self.verbose {
-                    println!("🔄 Compiling to intermediate representation...");
+                    println!("Compiling to intermediate representation...");
                 }
                 
                 // Compile to Causality Lisp first
@@ -73,45 +65,44 @@ impl CompileCommand {
                     println!("   ✓ DSL → Causality Lisp conversion complete");
                 }
                 
-                // Then compile to IR
-                let program = compiler.compile_full(&lisp_code)?;
+                // Then compile to IR using unified pipeline
+                let compiled_artifact = compile(&lisp_code)?;
                 
                 if self.verbose {
                     println!("   ✓ Lisp → IR compilation complete");
-                    println!("   📊 Instructions generated: {}", program.instructions.len());
-                    println!("   📊 Registers used: {}", program.metadata.registers_used);
+                    println!("   Instructions generated: {}", compiled_artifact.instructions.len());
                 }
                 
                 // Serialize the IR
-                self.serialize_ir(&program)
+                self.serialize_ir(&compiled_artifact)
             }
             "bytecode" => {
                 if self.verbose {
-                    println!("🔄 Compiling to bytecode...");
+                    println!("Compiling to bytecode...");
                 }
                 
                 let lisp_code = self.dsl_to_lisp(&source_code)?;
-                let program = compiler.compile_full(&lisp_code)?;
+                let compiled_artifact = compile(&lisp_code)?;
                 
                 if self.verbose {
                     println!("   ✓ Bytecode compilation complete");
                 }
                 
-                self.serialize_bytecode(&program)
+                self.serialize_bytecode(&compiled_artifact)
             }
             "native" => {
                 if self.verbose {
-                    println!("🔄 Compiling to native code...");
+                    println!("Compiling to native code...");
                 }
                 
                 let lisp_code = self.dsl_to_lisp(&source_code)?;
-                let program = compiler.compile_full(&lisp_code)?;
+                let compiled_artifact = compile(&lisp_code)?;
                 
                 if self.verbose {
                     println!("   ✓ Native compilation complete");
                 }
                 
-                self.serialize_native(&program)
+                self.serialize_native(&compiled_artifact)
             }
             _ => {
                 return Err(anyhow::anyhow!("Unsupported output format: {}", self.format));
@@ -124,7 +115,7 @@ impl CompileCommand {
 
         if self.verbose {
             println!("💾 Output written to {}", self.output.display());
-            println!("✅ Compilation completed successfully!");
+            println!("Compilation completed successfully!");
         }
 
         // Print compilation summary
@@ -180,47 +171,43 @@ impl CompileCommand {
     }
 
     #[allow(dead_code)]
-    fn serialize_ir(&self, program: &causality_compiler::CompiledProgram) -> Result<String> {
+    fn serialize_ir(&self, artifact: &CompiledArtifact) -> Result<String> {
         let ir_json = serde_json::json!({
             "format": "causality-ir-v1",
-            "source": program.source,
-            "instructions": program.instructions.iter().map(|i| format!("{:?}", i)).collect::<Vec<_>>(),
+            "instructions": artifact.instructions.iter().map(|i| format!("{:?}", i)).collect::<Vec<_>>(),
             "metadata": {
-                "registers_used": program.metadata.registers_used,
-                "instruction_count": program.metadata.instruction_count,
-                "passes": program.metadata.passes,
-                "resource_allocations": program.metadata.resource_allocations,
-                "resource_consumptions": program.metadata.resource_consumptions,
+                "instruction_count": artifact.instructions.len(),
+                "compilation_time": "N/A", // Would need timing info
             },
-            "ast": format!("{:?}", program.ast),
         });
         
         Ok(serde_json::to_string_pretty(&ir_json)?)
     }
 
     #[allow(dead_code)]
-    fn serialize_bytecode(&self, _program: &causality_compiler::CompiledProgram) -> Result<String> {
-        // Mock bytecode serialization
-        Ok("CAUSALITY_BYTECODE_V1\n# Bytecode representation (mock)\n".to_string())
+    fn serialize_bytecode(&self, _artifact: &CompiledArtifact) -> Result<String> {
+        // Placeholder for bytecode serialization
+        Ok("Bytecode serialization not yet implemented".to_string())
     }
 
     #[allow(dead_code)]
-    fn serialize_native(&self, _program: &causality_compiler::CompiledProgram) -> Result<String> {
-        // Mock native code serialization
-        Ok("CAUSALITY_NATIVE_V1\n# Native code representation (mock)\n".to_string())
+    fn serialize_native(&self, _artifact: &CompiledArtifact) -> Result<String> {
+        // Placeholder for native code generation
+        Ok("Native code generation not yet implemented".to_string())
     }
 
     #[allow(dead_code)]
     async fn print_compilation_summary(&self) -> Result<()> {
-        if self.verbose {
-            println!("\n📋 Compilation Summary:");
-            println!("   Source format: Custom DSL");
-            println!("   Target format: {}", self.format);
-            println!("   Optimization: {}", if self.optimize { "enabled" } else { "disabled" });
-            if let Some(target) = &self.target {
-                println!("   Target architecture: {}", target);
-            }
+        println!("\nCompilation Summary:");
+        println!("   Input: {}", self.input.display());
+        println!("   Output: {}", self.output.display());
+        println!("   Format: {}", self.format);
+        println!("   Optimization: {}", if self.optimize { "enabled" } else { "disabled" });
+        
+        if let Some(target) = &self.target {
+            println!("   Target: {}", target);
         }
+        
         Ok(())
     }
-} 
+}

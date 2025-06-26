@@ -21,6 +21,7 @@ use causality_core::{
     system::content_addressing::{ContentAddressable, EntityId},
 };
 use serde::{Serialize, Deserialize};
+use sha2::{Sha256, Digest};
 use std::{
     time::Duration,
     collections::HashMap,
@@ -76,8 +77,8 @@ impl ContentAddressable for LockEthereumAsset {
     fn content_id(&self) -> EntityId {
         let content = format!("{}:{}:{}:{}:{}", 
             self.user_address, self.amount, self.destination_chain, self.destination_address, self.nonce);
-        let hash = blake3::hash(content.as_bytes());
-        EntityId::from_bytes(*hash.as_bytes())
+        let hash = Sha256::digest(content.as_bytes());
+        EntityId::from_bytes(hash.into())
     }
 }
 
@@ -117,8 +118,8 @@ impl ContentAddressable for MintPolygonAsset {
     fn content_id(&self) -> EntityId {
         let content = format!("{}:{}:{}:{}", 
             self.lock_id, self.recipient_address, self.amount, self.wrapped_token_contract);
-        let hash = blake3::hash(content.as_bytes());
-        EntityId::from_bytes(*hash.as_bytes())
+        let hash = Sha256::digest(content.as_bytes());
+        EntityId::from_bytes(hash.into())
     }
 }
 
@@ -162,8 +163,8 @@ impl ContentAddressable for SwapOnPolygonDex {
         let content = format!("{}:{}:{}:{}:{}:{}", 
             self.input_token, self.output_token, self.input_amount, 
             self.min_output_amount, self.user_address, self.deadline);
-        let hash = blake3::hash(content.as_bytes());
-        EntityId::from_bytes(*hash.as_bytes())
+        let hash = Sha256::digest(content.as_bytes());
+        EntityId::from_bytes(hash.into())
     }
 }
 
@@ -199,8 +200,8 @@ impl ContentAddressable for GeneratePrivacyProof {
     fn content_id(&self) -> EntityId {
         let content = format!("{}:{}:{}:{}", 
             self.commitment, self.nullifier, self.recipient_address, self.merkle_path.join(","));
-        let hash = blake3::hash(content.as_bytes());
-        EntityId::from_bytes(*hash.as_bytes())
+        let hash = Sha256::digest(content.as_bytes());
+        EntityId::from_bytes(hash.into())
     }
 }
 

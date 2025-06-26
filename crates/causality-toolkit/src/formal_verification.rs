@@ -1,3 +1,4 @@
+
 //! Formal verification utilities for the Causality toolkit.
 
 use causality_core::{Value, EntityId};
@@ -6,14 +7,14 @@ use anyhow::Result;
 /// Proof checker for formal verification
 #[derive(Debug, Clone)]
 pub struct ProofChecker {
-    verified_proofs: std::collections::HashMap<EntityId, bool>,
+    verified_proofs: std::collections::BTreeMap<EntityId, bool>,
 }
 
 impl ProofChecker {
     /// Create a new proof checker
     pub fn new() -> Self {
         Self {
-            verified_proofs: std::collections::HashMap::new(),
+            verified_proofs: std::collections::BTreeMap::new(),
         }
     }
     
@@ -30,7 +31,7 @@ impl ProofChecker {
     }
     
     /// Get verification status for all proofs
-    pub fn get_verification_status(&self) -> &std::collections::HashMap<EntityId, bool> {
+    pub fn get_verification_status(&self) -> &std::collections::BTreeMap<EntityId, bool> {
         &self.verified_proofs
     }
     

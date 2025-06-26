@@ -8,7 +8,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::Path;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use log::trace;
 use serde_json::Value;
 
@@ -127,7 +127,7 @@ pub struct ValenceBackend {
     client: CoprocessorClient,
     
     /// Circuit cache to avoid recompilation
-    circuit_cache: HashMap<String, String>, // circuit_id -> program_id mapping
+    circuit_cache: BTreeMap<String, String>, // circuit_id -> program_id mapping
     
     /// Verification key manager
     verification_keys: VerificationKeyManager,
@@ -146,13 +146,13 @@ pub struct CachedVerificationKey {
     pub access_count: u64,
     
     /// Metadata about the key
-    pub metadata: HashMap<String, String>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 /// Verification key cache manager
 pub struct VerificationKeyManager {
     /// In-memory cache of verification keys
-    key_cache: HashMap<String, CachedVerificationKey>,
+    key_cache: BTreeMap<String, CachedVerificationKey>,
     
     /// Maximum number of keys to cache
     max_cache_size: usize,
@@ -174,7 +174,7 @@ impl VerificationKeyManager {
     /// Create a new verification key manager
     pub fn new() -> Self {
         Self {
-            key_cache: HashMap::new(),
+            key_cache: BTreeMap::new(),
             max_cache_size: 1000,
             cache_hits: 0,
             cache_misses: 0,
@@ -230,7 +230,7 @@ impl ValenceBackend {
     pub fn new() -> Self {
         Self {
             client: CoprocessorClient::new(),
-            circuit_cache: HashMap::new(),
+            circuit_cache: BTreeMap::new(),
             verification_keys: VerificationKeyManager::new(),
         }
     }
@@ -274,7 +274,7 @@ impl ValenceBackend {
                 .unwrap()
                 .as_secs(),
             access_count: 1,
-            metadata: HashMap::new(),
+            metadata: BTreeMap::new(),
         };
         
         self.verification_keys.store_in_cache(
@@ -407,7 +407,7 @@ impl ValenceBackend {
     pub fn with_config(config: ValenceConfig) -> Self {
         Self {
             client: CoprocessorClient::with_socket(config.socket),
-            circuit_cache: HashMap::new(),
+            circuit_cache: BTreeMap::new(),
             verification_keys: VerificationKeyManager::new(),
         }
     }

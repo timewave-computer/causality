@@ -8,7 +8,7 @@ use crate::lambda::{
 };
 use crate::{Linearity, LinearityError};
 use super::capability::Capability;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use ssz::{Encode, Decode};
 
@@ -28,12 +28,12 @@ pub struct Object<T, L = Linear> {
     linearity: PhantomData<L>,
     
     /// Set of capabilities associated with this object
-    pub capabilities: HashSet<Capability>,
+    pub capabilities: BTreeSet<Capability>,
 }
 
 impl<T, L: Linearity> Object<T, L> {
     /// Create a new object with the given data and capabilities
-    pub fn new(data: T, capabilities: HashSet<Capability>) -> Self {
+    pub fn new(data: T, capabilities: BTreeSet<Capability>) -> Self {
         Self {
             data,
             linearity: PhantomData,
@@ -43,7 +43,7 @@ impl<T, L: Linearity> Object<T, L> {
     
     /// Create an object with no capabilities
     pub fn from_data(data: T) -> Self {
-        Self::new(data, HashSet::new())
+        Self::new(data, BTreeSet::new())
     }
     
     /// Add a capability to this object
@@ -69,7 +69,7 @@ impl<T, L: Linearity> Object<T, L> {
     }
     
     /// Get all capabilities of this object
-    pub fn get_capabilities(&self) -> &HashSet<Capability> {
+    pub fn get_capabilities(&self) -> &BTreeSet<Capability> {
         &self.capabilities
     }
     
@@ -225,7 +225,7 @@ pub enum CapabilityError {
     /// Required capability is missing
     MissingCapability {
         required: Capability,
-        available: Box<HashSet<Capability>>,
+        available: Box<BTreeSet<Capability>>,
     },
     
     /// Operation not permitted
@@ -283,7 +283,7 @@ impl<T: Decode, L> Decode for Object<T, L> {
         Ok(Object {
             data,
             linearity: PhantomData,
-            capabilities: HashSet::new(),
+            capabilities: BTreeSet::new(),
         })
     }
 }

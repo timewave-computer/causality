@@ -3,7 +3,7 @@
 //! This module provides the OCaml runtime interface for the Causality system,
 //! including initialization, expression management, and cleanup.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::{Mutex, Arc};
 
 use ocaml::{FromValue, ToValue, Value};
@@ -17,7 +17,7 @@ static RUNTIME_STATE: Mutex<Option<Arc<RuntimeState>>> = Mutex::new(None);
 /// Runtime state container
 pub struct RuntimeState {
     /// Storage for expressions with unique IDs
-    pub expressions: HashMap<u64, Expr>,
+    pub expressions: BTreeMap<u64, Expr>,
     /// Next available expression ID
     next_expr_id: u64,
     /// Runtime configuration
@@ -45,7 +45,7 @@ impl Default for RuntimeConfig {
 impl RuntimeState {
     pub fn new() -> Self {
         Self {
-            expressions: HashMap::new(),
+            expressions: BTreeMap::new(),
             next_expr_id: 1,
             config: RuntimeConfig::default(),
         }
@@ -101,7 +101,7 @@ pub fn causality_cleanup() -> bool {
 }
 
 /// Execute operation with runtime state
-pub fn with_runtime_state<T, F>(f: F) -> Result<T, String>
+pub fn with_runtime_state<T, F>(_f: F) -> Result<T, String>
 where
     F: FnOnce(&mut RuntimeState) -> T,
 {
@@ -109,7 +109,7 @@ where
         .map_err(|_| "Failed to acquire runtime lock".to_string())?;
     
     match state_guard.as_ref() {
-        Some(state_arc) => {
+        Some(_state_arc) => {
             // For this simplified version, we'll return an error since we can't easily get mutable access
             Err("Runtime state access not implemented in simplified version".to_string())
         }

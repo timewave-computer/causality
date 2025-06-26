@@ -3,7 +3,7 @@
 //! This module implements dynamic orchestration for TEGs with work stealing,
 //! load balancing, and adaptive scheduling for efficient parallel execution.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex, Condvar};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -160,8 +160,8 @@ impl WorkerState {
 #[derive(Debug)]
 struct SharedExecutionState {
     teg: Arc<TemporalEffectGraph>,
-    node_results: Arc<Mutex<HashMap<NodeId, Value>>>,
-    node_status: Arc<Mutex<HashMap<NodeId, NodeStatus>>>,
+    node_results: Arc<Mutex<BTreeMap<NodeId, Value>>>,
+    node_status: Arc<Mutex<BTreeMap<NodeId, NodeStatus>>>,
     execution_errors: Arc<Mutex<Vec<(NodeId, String)>>>,
     ready_queue: Arc<(Mutex<VecDeque<WorkItem>>, Condvar)>,
     completion_signal: Arc<(Mutex<bool>, Condvar)>,
@@ -197,13 +197,13 @@ impl TegExecutor {
         
         // Initialize shared state - fix circular reference
         let teg_arc = Arc::new(teg);
-        let node_status_map: HashMap<NodeId, NodeStatus> = teg_arc.nodes.keys()
+        let node_status_map: BTreeMap<NodeId, NodeStatus> = teg_arc.nodes.keys()
             .map(|&id| (id, NodeStatus::Pending))
             .collect();
         
         let shared_state = Arc::new(SharedExecutionState {
             teg: Arc::clone(&teg_arc),
-            node_results: Arc::new(Mutex::new(HashMap::new())),
+            node_results: Arc::new(Mutex::new(BTreeMap::new())),
             node_status: Arc::new(Mutex::new(node_status_map)),
             execution_errors: Arc::new(Mutex::new(Vec::new())),
             ready_queue: Arc::new((Mutex::new(VecDeque::new()), Condvar::new())),
@@ -307,9 +307,15 @@ impl TegExecutor {
         let total_time = start_time.elapsed();
         let parallel_nodes = worker_stats.iter().map(|s| s.completed_nodes).sum();
         let actual_parallelization = if total_time.as_millis() > 0 {
-            (parallel_nodes as f64) / (total_time.as_millis() as f64 / 1000.0)
+            // Use simple integer ratio: parallel_nodes * 1000 / time_seconds for 3 decimal precision
+            let time_seconds = total_time.as_millis() as i64 / 1000;
+            if time_seconds > 0 {
+                (parallel_nodes as i64 * 1000) / time_seconds
+            } else {
+                1000 // 1.0 scaled by 1000
+            }
         } else {
-            1.0
+            1000 // 1.0 scaled by 1000
         };
         
         let stats = ExecutionStats {
@@ -562,7 +568,7 @@ impl TegExecutor {
     }
 }
 
-/// Execution statistics for a worker
+/// Statistics for worker performance
 #[derive(Debug, Clone)]
 pub struct WorkerStats {
     pub worker_id: usize,
@@ -570,15 +576,21 @@ pub struct WorkerStats {
     pub stolen_work: u64,
     pub provided_work: u64,
     pub execution_time: Duration,
-    pub efficiency: f64,
+    pub efficiency: i64, // Nodes per second * 1000 for precision
 }
 
 impl From<WorkerState> for WorkerStats {
     fn from(state: WorkerState) -> Self {
         let efficiency = if state.execution_time.as_millis() > 0 {
-            state.completed_nodes as f64 / state.execution_time.as_secs_f64()
+            // Use simple integer ratio: completed_nodes / execution_time_seconds
+            let time_seconds = state.execution_time.as_millis() as i64 / 1000;
+            if time_seconds > 0 {
+                (state.completed_nodes as i64 * 1000) / time_seconds
+            } else {
+                1000 // 1.0 scaled by 1000
+            }
         } else {
-            0.0
+            1000 // 1.0 scaled by 1000
         };
         
         Self {

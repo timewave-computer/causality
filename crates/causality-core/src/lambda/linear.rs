@@ -83,14 +83,14 @@ impl<T, L: Linearity> LinearResource<T, L> {
     pub fn consume(mut self) -> Result<T, LinearityError> {
         self.used.set(true);
         self.value.take()
-            .ok_or(LinearityError::MultipleUse)
+            .ok_or(LinearityError::MultipleUse { resource: "unknown".to_string() })
     }
     
     /// Try to consume the resource without moving self
     pub fn try_consume(&mut self) -> Result<T, LinearityError> {
         self.used.set(true);
         self.value.take()
-            .ok_or(LinearityError::MultipleUse)
+            .ok_or(LinearityError::MultipleUse { resource: "unknown".to_string() })
     }
     
     /// Check if the resource has been consumed
@@ -137,7 +137,7 @@ impl<T: Clone> LinearResource<T, Unrestricted> {
         self.used.set(true);
         self.value.as_ref()
             .cloned()
-            .ok_or(LinearityError::UseAfterDrop)
+            .ok_or(LinearityError::UseAfterConsumption { resource: "unknown".to_string() })
     }
 }
 
@@ -147,7 +147,7 @@ impl<T: Clone> LinearResource<T, Relevant> {
         self.used.set(true);
         self.value.as_ref()
             .cloned()
-            .ok_or(LinearityError::UseAfterDrop)
+            .ok_or(LinearityError::UseAfterConsumption { resource: "unknown".to_string() })
     }
 }
 
@@ -243,7 +243,7 @@ impl<T> MustUse for LinearResource<T, Linear> {
     
     fn ensure_will_be_used(&self) -> Result<(), LinearityError> {
         if !self.has_been_used() && self.value.is_some() {
-            Err(LinearityError::NotUsed)
+            Err(LinearityError::NotUsed { resource: "unknown".to_string() })
         } else {
             Ok(())
         }
@@ -257,7 +257,7 @@ impl<T> MustUse for LinearResource<T, Relevant> {
     
     fn ensure_will_be_used(&self) -> Result<(), LinearityError> {
         if !self.has_been_used() && self.value.is_some() {
-            Err(LinearityError::NotUsed)
+            Err(LinearityError::NotUsed { resource: "unknown".to_string() })
         } else {
             Ok(())
         }

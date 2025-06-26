@@ -50,8 +50,9 @@ pub enum SimulationError {
     #[error("Engine operation error: {0}")]
     EngineError(String),
     
-    #[error("Core causality error: {0}")]
-    MachineError(#[from] causality_core::system::error::MachineError),
+    /// Machine-level error during simulation
+    #[error("Machine error: {0}")]
+    MachineError(#[from] causality_core::system::Error),
     
     /// Branch not found
     #[error("Branch not found: {0}")]
@@ -77,6 +78,14 @@ pub enum SimulationError {
     
     #[error("Invalid input: {0}")]
     InvalidInput(String),
+    
+    /// Session protocol violation error
+    #[error("Session protocol violation by participant '{participant}': performed '{operation}' but expected '{expected}'")]
+    SessionProtocolViolation {
+        participant: String,
+        operation: String,
+        expected: String,
+    },
 }
 
 /// Result type for simulation operations
@@ -109,6 +118,9 @@ pub enum SnapshotError {
     
     #[error("Invalid snapshot state: {0}")]
     InvalidState(String),
+    
+    #[error("Deserialization failed for snapshot {id}: {error}")]
+    DeserializationError { id: String, error: String },
     
     /// Branch not found
     #[error("Branch not found: {0}")]

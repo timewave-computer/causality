@@ -1,9 +1,10 @@
+
 //! Utility functions for Causality development
 
 /// Helper function for generating unique identifiers
 pub fn generate_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let timestamp = SystemTime::now()
+    use std::time::UNIX_EPOCH;
+    let timestamp = std::time::UNIX_EPOCH
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
@@ -23,7 +24,7 @@ pub fn hex_to_bytes(hex: &str) -> Result<Vec<u8>, hex::FromHexError> {
 /// Test harness for running and managing tests
 #[derive(Debug, Clone)]
 pub struct TestHarness {
-    test_results: std::collections::HashMap<String, bool>,
+    test_results: std::collections::BTreeMap<String, bool>,
     test_count: usize,
 }
 
@@ -31,7 +32,7 @@ impl TestHarness {
     /// Create a new test harness
     pub fn new() -> Self {
         Self {
-            test_results: std::collections::HashMap::new(),
+            test_results: std::collections::BTreeMap::new(),
             test_count: 0,
         }
     }
@@ -53,7 +54,7 @@ impl TestHarness {
     }
     
     /// Get all test results
-    pub fn get_all_results(&self) -> &std::collections::HashMap<String, bool> {
+    pub fn get_all_results(&self) -> &std::collections::BTreeMap<String, bool> {
         &self.test_results
     }
     

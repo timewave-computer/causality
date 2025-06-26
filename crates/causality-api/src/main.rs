@@ -1,23 +1,18 @@
-// Causality API server for cross-chain deployment coordination
+//! Causality API Server
+//!
+//! HTTP API server for the Causality system
+
 use anyhow::Result;
-use causality_api::{ApiConfig, ExecutionSession, server::start_server};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use causality_api::{config::ApiConfig, server::Server};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging
-    env_logger::init();
-    
-    // Create configuration
+    // Load configuration
     let config = ApiConfig::default();
     
-    // Create session storage
-    let sessions = Arc::new(RwLock::new(HashMap::<String, ExecutionSession>::new()));
-    
-    // Start the API server
-    start_server(config, sessions).await?;
+    // Create and start server
+    let server = Server::new(config);
+    server.start().await?;
     
     Ok(())
-} 
+}

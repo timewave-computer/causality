@@ -3,7 +3,7 @@
 //! This module defines how Layer 2 effect expressions compile down to Layer 1 terms.
 
 use super::{EffectExpr, EffectExprKind};
-use crate::lambda::Term;
+use crate::lambda::{Term, Literal, Symbol};
 
 //-----------------------------------------------------------------------------
 // Effect Compilation
@@ -47,6 +47,54 @@ pub fn compile_effect(effect: &EffectExpr) -> Result<Term, EffectCompileError> {
         
         EffectExprKind::Race { .. } => {
             Err(EffectCompileError::NotImplemented("race".to_string()))
+        }
+        
+        // Session operations - compile to Layer 1 session operations
+        EffectExprKind::SessionSend { channel, value, continuation } => {
+            let channel_term = compile_effect(channel)?;
+            let continuation_term = compile_effect(continuation)?;
+            
+            // For now, compile to a special send application
+            let send_op = Term::apply(
+                Term::var("session_send"),
+                Term::tensor(channel_term, value.clone())
+            );
+            
+            Ok(Term::let_bind("_send_result".to_string(), send_op, continuation_term))
+        }
+        
+        EffectExprKind::SessionReceive { channel, continuation } => {
+            let channel_term = compile_effect(channel)?;
+            let continuation_term = compile_effect(continuation)?;
+            
+            // Compile to a receive operation
+            let recv_op = Term::apply(Term::var("session_recv"), channel_term);
+            
+            Ok(Term::let_bind("received_value".to_string(), recv_op, continuation_term))
+        }
+        
+        EffectExprKind::SessionSelect { channel, choice, continuation } => {
+            let channel_term = compile_effect(channel)?;
+            let continuation_term = compile_effect(continuation)?;
+            
+            // Compile to a select operation  
+            let choice_term = Term::literal(Literal::Symbol(Symbol::new(choice)));
+            let select_op = Term::apply(
+                Term::var("session_select"),
+                Term::tensor(channel_term, choice_term)
+            );
+            
+            Ok(Term::let_bind("_select_result".to_string(), select_op, continuation_term))
+        }
+        
+        EffectExprKind::SessionCase { .. } => {
+            // Session case requires more complex compilation (pattern matching)
+            Err(EffectCompileError::NotImplemented("session_case".to_string()))
+        }
+        
+        EffectExprKind::WithSession { .. } => {
+            // Session context establishment requires runtime support
+            Err(EffectCompileError::NotImplemented("with_session".to_string()))
         }
     }
 }

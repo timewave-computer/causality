@@ -1,3 +1,4 @@
+
 //! Core algebraic effect traits and types for automatic mock and test generation
 
 use causality_core::system::content_addressing::ContentAddressable;
@@ -20,7 +21,7 @@ pub enum EffectCategory {
 }
 
 /// Common failure modes for effects
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum FailureMode {
     // Asset/Token failures
     InsufficientBalance,
@@ -353,14 +354,14 @@ mod tests {
 /// Library for managing and organizing effects
 #[derive(Debug)]
 pub struct EffectLibrary {
-    effects: std::collections::HashMap<String, Box<dyn std::any::Any + Send + Sync>>,
+    effects: std::collections::BTreeMap<String, Box<dyn std::any::Any + Send + Sync>>,
 }
 
 impl EffectLibrary {
     /// Create a new effect library
     pub fn new() -> Self {
         Self {
-            effects: std::collections::HashMap::new(),
+            effects: std::collections::BTreeMap::new(),
         }
     }
     

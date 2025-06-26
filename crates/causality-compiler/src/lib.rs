@@ -2,7 +2,7 @@
 //!
 //! Minimal compiler implementation following the three-layer architecture.
 //! Compiles Lisp source code through S-expressions and lambda calculus
-//! to verifiable register machine instructions.
+//! to verifiable register machine instructions using the new 5-instruction API.
 
 #![allow(clippy::result_large_err)]
 
@@ -10,11 +10,27 @@ pub mod error;
 pub mod pipeline;
 pub mod checker;
 pub mod artifact;
-pub mod enhanced_pipeline;
 pub mod types;
+pub mod valence_analysis;
+pub mod state_analysis;
+pub mod almanac_schema;
+pub mod query_primitives;
+pub mod almanac_runtime;
+pub mod storage_layout;
+pub mod storage_backend;
+pub mod event_storage;
+pub mod valence_state_persistence;
+pub mod error_handling;
+pub mod observability;
+pub mod traverse_almanac_integration;
+pub mod valence_coprocessor_integration;
+pub mod proof_primitives;
+pub mod traverse_integration;
 
 #[cfg(test)]
 pub mod benchmarks;
+#[cfg(test)]
+pub mod storage_integration_tests;
 
 // Re-export key types for convenience
 pub use pipeline::{
@@ -27,14 +43,11 @@ pub use artifact::{
     ContentAddressedArtifact, ContentHash, ArtifactCache,
     build_artifact, verify_artifact
 };
-pub use enhanced_pipeline::{
-    EnhancedCompilerPipeline, CompiledProgram, CompilationMetadata,
-    CodeGenerator, InstructionOptimizer, OptimizationPass
-};
+// pub use enhanced_pipeline::{
+//     EnhancedCompilerPipeline, CompiledProgram, CompilationMetadata,
+//     CodeGenerator, InstructionOptimizer, OptimizationPass
+// };
 pub use types::CompileResult as CompileResultEnum;
-
-// Export TEG compilation functions
-//pub use {compile_teg_definition, CompiledTeg};
 
 /// Minimal test function for E2E validation
 /// Compiles a simple expression and returns the instructions
@@ -97,8 +110,8 @@ mod integration_tests {
 }
 
 // TEG compilation support for bridge tests
-use std::path::PathBuf;
-use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
 use causality_core::system::content_addressing::EntityId;
 
 /// Compiled TEG artifact for bridge workflows
@@ -107,13 +120,13 @@ pub struct CompiledTeg {
     pub id: EntityId,
     pub name: String,
     pub base_dir: PathBuf,
-    pub expressions: HashMap<String, String>,
-    pub handlers: HashMap<String, String>,
-    pub subgraphs: HashMap<String, String>,
+    pub expressions: BTreeMap<String, String>,
+    pub handlers: BTreeMap<String, String>,
+    pub subgraphs: BTreeMap<String, String>,
 }
 
 /// Compile a TEG definition from file
-pub fn compile_teg_definition(path: &PathBuf, name: Option<String>) -> Result<CompiledTeg, CompileError> {
+pub fn compile_teg_definition(path: &Path, name: Option<String>) -> Result<CompiledTeg, CompileError> {
     // For now, return a mock implementation since TEG compilation isn't fully implemented
     let teg_name = name.unwrap_or_else(|| {
         path.file_stem()
@@ -126,8 +139,8 @@ pub fn compile_teg_definition(path: &PathBuf, name: Option<String>) -> Result<Co
         id: EntityId::new([1u8; 32]),
         name: teg_name,
         base_dir: path.parent().unwrap_or(&PathBuf::from(".")).to_path_buf(),
-        expressions: HashMap::new(),
-        handlers: HashMap::new(),
-        subgraphs: HashMap::new(),
+        expressions: BTreeMap::new(),
+        handlers: BTreeMap::new(),
+        subgraphs: BTreeMap::new(),
     })
 } 

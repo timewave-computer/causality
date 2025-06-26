@@ -9,9 +9,9 @@
 
 use crate::ast::{Expr, ExprKind, LispValue};
 use crate::error::{TypeError, TypeResult};
-use causality_core::lambda::base::{TypeInner, BaseType};
 use causality_core::effect::{Capability, CapabilitySet, RecordCapability, RowType};
-use std::collections::HashMap;
+use causality_core::lambda::base::{TypeInner, BaseType, SessionType};
+use std::collections::BTreeMap;
 
 /// Type checker for Lisp expressions
 pub struct TypeChecker {
@@ -21,12 +21,12 @@ pub struct TypeChecker {
 /// Type checking context with capability tracking
 #[derive(Debug, Clone)]
 pub struct TypeContext {
-    pub type_bindings: HashMap<String, TypeInner>,
+    pub type_bindings: BTreeMap<String, TypeInner>,
     pub current_scope: usize,
     /// Available capabilities for the current context
     pub capabilities: CapabilitySet,
     /// Track row type constraints
-    pub row_constraints: HashMap<String, RowType>,
+    pub row_constraints: BTreeMap<String, RowType>,
 }
 
 /// Type representation with linearity and effects
@@ -36,7 +36,7 @@ pub enum Type {
     Unit,
     Bool,
     Int,
-    Float,
+
     String,
     Symbol,
     
@@ -186,7 +186,7 @@ impl TypeChecker {
                     LispValue::Unit => Ok(TypeInner::Base(BaseType::Unit)),
                     LispValue::Bool(_) => Ok(TypeInner::Base(BaseType::Bool)),
                     LispValue::Int(_) => Ok(TypeInner::Base(BaseType::Int)),
-                    LispValue::Float(_) => Ok(TypeInner::Base(BaseType::Int)), // Map to Int for now
+        
                     LispValue::String(_) => Ok(TypeInner::Base(BaseType::Symbol)), // Map to Symbol for now
                     LispValue::Symbol(_) => Ok(TypeInner::Base(BaseType::Symbol)),
                     _ => Err(TypeError::Mismatch { 
@@ -371,7 +371,7 @@ impl TypeChecker {
                     
                     // Return field type
                     if let Some(field_type) = record_ty.row.fields.get(field) {
-                        Ok(field_type.clone())
+                        Ok(field_type.ty.clone())
                     } else {
                         Err(TypeError::Mismatch {
                             expected: format!("Field '{}' in record", field),
@@ -400,9 +400,9 @@ impl TypeChecker {
                     
                     // Check field type compatibility
                     if let Some(field_type) = record_ty.row.fields.get(field) {
-                        if *field_type != value_type {
+                        if field_type.ty != value_type {
                             return Err(TypeError::Mismatch {
-                                expected: format!("{:?}", field_type),
+                                expected: format!("{:?}", field_type.ty),
                                 found: format!("{:?}", value_type),
                             });
                         }
@@ -417,6 +417,120 @@ impl TypeChecker {
                     })
                 }
             }
+
+            // Session types operations
+            ExprKind::SessionDeclaration { name: _, roles: _ } => {
+                // For session declarations, we just return unit type
+                // In a full implementation, this would register the session type in the environment
+                Ok(TypeInner::Base(BaseType::Unit))
+            }
+
+            ExprKind::WithSession { session: _, role: _, body } => {
+                // For with-session, we type check the body
+                // In a full implementation, this would set up session channel types
+                self.check_expr(body)
+            }
+
+            ExprKind::SessionSend { channel, value } => {
+                // Type check both the channel and value
+                let _channel_type = self.check_expr(channel)?;
+                let _value_type = self.check_expr(value)?;
+                
+                // For now, return unit type (successful send)
+                // In a full implementation, this would check protocol compatibility
+                Ok(TypeInner::Base(BaseType::Unit))
+            }
+
+            ExprKind::SessionReceive { channel } => {
+                // Type check the channel
+                let channel_type = self.check_expr(channel)?;
+                
+                // Extract the receive type from the session channel
+                match channel_type {
+                    TypeInner::Session(session_type) => {
+                        // Extract the expected receive type from the session protocol
+                        match session_type.as_ref() {
+                            SessionType::Send(_, _next) => {
+                                // If channel expects to send, we can't receive
+                                Err(TypeError::Mismatch {
+                                    expected: "Receive capability".to_string(),
+                                    found: "Send-only channel".to_string(),
+                                })
+                            }
+                            SessionType::Receive(message_type, _next) => {
+                                // Return the message type we expect to receive
+                                Ok(message_type.as_ref().clone())
+                            }
+                            SessionType::End => {
+                                // Cannot receive from ended session
+                                Err(TypeError::Mismatch {
+                                    expected: "Active session".to_string(),
+                                    found: "Ended session".to_string(),
+                                })
+                            }
+                            _ => {
+                                // For other session types, return a generic symbol type
+                                Ok(TypeInner::Base(BaseType::Symbol))
+                            }
+                        }
+                    }
+                    _ => {
+                        // For non-session types, assume it's a simple value channel
+                        Ok(TypeInner::Base(BaseType::Symbol))
+                    }
+                }
+            }
+
+            ExprKind::SessionSelect { channel, choice: _ } => {
+                // Type check the channel
+                let _channel_type = self.check_expr(channel)?;
+                
+                // Session selection returns unit type (successful select operation)
+                Ok(TypeInner::Base(BaseType::Unit))
+            }
+
+            ExprKind::SessionCase { channel, branches } => {
+                // Type check the channel
+                let _channel_type = self.check_expr(channel)?;
+                
+                // Type check all branches and ensure they have compatible types
+                if branches.is_empty() {
+                    return Err(TypeError::Mismatch {
+                        expected: "At least one branch".to_string(),
+                        found: "No branches provided".to_string(),
+                    });
+                }
+                
+                // Type check the first branch to get the expected result type
+                let first_branch_type = self.check_expr(&branches[0].body)?;
+                
+                // Verify all other branches have the same type
+                for branch in branches.iter().skip(1) {
+                    let branch_type = self.check_expr(&branch.body)?;
+                    if branch_type != first_branch_type {
+                        return Err(TypeError::Mismatch {
+                            expected: format!("{:?}", first_branch_type),
+                            found: format!("{:?}", branch_type),
+                        });
+                    }
+                }
+                
+                Ok(first_branch_type)
+            }
+        }
+    }
+    
+    /// Convert a session type to TypeInner for type checking
+    #[allow(dead_code)]
+    fn session_type_to_type_inner(&self, session_type: &SessionType) -> TypeInner {
+        match session_type {
+            SessionType::Send(_, _) => TypeInner::Base(BaseType::Unit),
+            SessionType::Receive(_, _) => TypeInner::Base(BaseType::Symbol),
+            SessionType::InternalChoice(_) => TypeInner::Base(BaseType::Symbol),
+            SessionType::ExternalChoice(_) => TypeInner::Base(BaseType::Symbol),
+            SessionType::End => TypeInner::Base(BaseType::Unit),
+            SessionType::Recursive(_, _) => TypeInner::Base(BaseType::Symbol),
+            SessionType::Variable(_) => TypeInner::Base(BaseType::Symbol),
         }
     }
 }
@@ -424,7 +538,7 @@ impl TypeChecker {
 impl TypeContext {
     /// Create a new type context with built-in types
     pub fn new() -> Self {
-        let mut type_bindings = HashMap::new();
+        let mut type_bindings = BTreeMap::new();
         
         // Add built-in function types
         type_bindings.insert("+".to_string(), TypeInner::LinearFunction(
@@ -467,7 +581,7 @@ impl TypeContext {
             type_bindings,
             current_scope: 0,
             capabilities: CapabilitySet::new(),
-            row_constraints: HashMap::new(),
+            row_constraints: BTreeMap::new(),
         }
     }
     
@@ -580,14 +694,14 @@ mod tests {
     
     #[test]
     fn test_capability_enforcement() {
-        use causality_core::effect::{Capability, RowType, RecordType};
-        use causality_core::lambda::base::{TypeInner, BaseType};
+        use causality_core::effect::{Capability, RowType, RecordType, FieldType};
+        use causality_core::lambda::base::{TypeInner, BaseType, SessionType};
         use std::collections::BTreeMap;
         
         // Create a record type with a field
         let mut fields = BTreeMap::new();
-        fields.insert("name".to_string(), TypeInner::Base(BaseType::Symbol));
-        fields.insert("age".to_string(), TypeInner::Base(BaseType::Int));
+        fields.insert("name".to_string(), FieldType::simple(TypeInner::Base(BaseType::Symbol)));
+        fields.insert("age".to_string(), FieldType::simple(TypeInner::Base(BaseType::Int)));
         let row = RowType::with_fields(fields);
         let record_type = TypeInner::Record(RecordType { row });
         

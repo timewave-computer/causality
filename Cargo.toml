@@ -9,7 +9,7 @@ members = [
   "crates/causality-toolkit",
   "crates/causality-simulation",
   "crates/causality-lisp",
-  # "crates/causality-ffi",  # Temporarily disabled due to compatibility issues
+  "crates/causality-ffi",
   "e2e",
   "e2e/cli",
 ]

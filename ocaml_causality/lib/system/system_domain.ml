@@ -10,9 +10,6 @@ type domain = { id : bytes; name : string; capabilities : capability list }
 (** A domain represents a context for resource management and capability
     enforcement *)
 
-type t = domain
-(** Main type for module interface *)
-
 (** Create a new domain *)
 let create (name : string) (capabilities : capability list) : domain =
   let id = Bytes.create 32 in
@@ -20,7 +17,7 @@ let create (name : string) (capabilities : capability list) : domain =
 
 (** Create the default domain with basic capabilities *)
 let default_domain () : domain =
-  let capabilities =
+  let capabilities : capability list =
     [
       { name = "read"; level = Read }
     ; { name = "write"; level = Write }
@@ -31,8 +28,9 @@ let default_domain () : domain =
 
 (** Check if this domain has a specific capability *)
 let has_capability (domain : domain) (capability_name : string) : bool =
-  List.exists (fun cap -> cap.name = capability_name) domain.capabilities
+  let caps : capability list = domain.capabilities in
+  List.exists (fun (cap : capability) -> cap.name = capability_name) caps
 
 (** Get a capability by name *)
 let get_capability (domain : domain) (name : string) : capability option =
-  List.find_opt (fun cap -> cap.name = name) domain.capabilities
+  List.find_opt (fun (cap : capability) -> cap.name = name) domain.capabilities

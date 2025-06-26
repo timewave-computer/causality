@@ -1,8 +1,10 @@
 (library
  (name ocaml_causality)
  (libraries
-  ocaml_causality_core
-  ocaml_causality_lang
-  ocaml_causality_effects
-  ocaml_causality_serialization
-  ocaml_causality_interop))
+  causality_core
+  causality_system
+  causality_lambda
+  causality_machine
+  causality_effects
+  causality_serialization
+  causality_compiler))

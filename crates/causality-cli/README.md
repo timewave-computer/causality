@@ -1,23 +1,67 @@
 # Causality CLI
 
-The Causality CLI is your comprehensive command-line interface for building, testing, and deploying privacy-preserving, cross-chain applications. It provides an intuitive, discovery-oriented experience that guides you through the framework's powerful capabilities.
+Command-line interface for building, testing, and deploying privacy-preserving, cross-chain applications on the Causality framework.
 
 ## Quick Start
 
 ```bash
-# Start interactive development
+# Interactive development
 causality repl
 
-# Get guided help
-causality help tutorial
-
-# Create your first project  
+# Create project from template
 causality project new my-defi-app --template defi
 
-# Compile and test
-causality dev compile -i src/main.lisp -o build/main.ir
-causality test unit
+# Development workflow
+causality dev compile -i src/main.lisp -o build/
+causality dev run -f build/main.ir --trace
+causality test unit --coverage
 ```
+
+## Core Commands
+
+### **Development Workflow**
+- `causality repl` - Interactive REPL environment
+- `causality project new` - Create projects from templates (defi, privacy, zk, basic)
+- `causality dev compile` - Compile source to IR/circuits
+- `causality dev run` - Execute compiled programs with tracing
+- `causality test` - Unit, integration, and e2e testing
+
+### **Zero-Knowledge Proofs**
+- `causality zk compile` - Compile to ZK circuits
+- `causality zk prove` - Generate proofs with witness data
+- `causality zk verify` - Verify proofs with public inputs
+
+### **Analysis & Debugging**
+- `causality analyze code` - Static analysis and optimization suggestions
+- `causality analyze resources` - Resource usage and leak detection  
+- `causality analyze security` - Security vulnerability analysis
+- `causality inspect system` - System health and performance diagnostics
+
+### **Visualization**
+- `causality viz effects` - Effect execution flow diagrams
+- `causality viz resources` - Resource dependency graphs
+- `causality viz architecture` - System architecture overview
+
+### **Cross-Chain Deployment**
+- `causality deploy simulate` - Deployment simulation with cost analysis
+- `causality deploy submit` - Submit transactions to target chains
+- `causality submit-transaction` - Submit ZK proofs and transactions to multiple blockchains
+
+## Learning Path
+
+1. **Start with REPL**: `causality repl --load-tutorial basic`
+2. **Create Project**: `causality project new learning --template basic`
+3. **Compile & Run**: `causality dev compile && causality dev run`
+4. **Test**: `causality test unit && causality test effects`
+5. **Analyze**: `causality analyze code src/`
+6. **ZK Development**: `causality zk compile && causality zk prove`
+
+## Project Templates
+
+- **defi**: DeFi applications with liquidity operations
+- **privacy**: Privacy-focused apps with ZK proofs
+- **zk**: Zero-knowledge circuit development
+- **basic**: Learning and experimentation
 
 ## Command Overview
 
@@ -47,7 +91,7 @@ The CLI is organized into logical groups that mirror your development workflow:
 ### **Cross-Chain Deployment**
 - `causality deploy simulate` - Simulate deployment with cost analysis
 - `causality deploy submit` - Submit transactions to chains
-- `causality deploy report` - Generate deployment reports
+- `causality submit-transaction` - Submit ZK proofs to multiple blockchains with gas optimization
 
 ### **Analysis & Diagnostics**
 - `causality analyze code` - Static code analysis
@@ -411,6 +455,52 @@ causality viz effects src/lib.lisp --format mermaid -o docs/effects.md
 
 # 5. Quality analysis
 causality analyze code src/ --depth comprehensive -o quality-report.json
+```
+
+## Transaction Submission
+
+### Submit ZK Proofs to Blockchains
+The `submit-transaction` command provides comprehensive blockchain interaction:
+
+```bash
+# Submit to single chain
+causality submit-transaction --proof proof.zk --chain ethereum --gas-limit 500000
+
+# Multi-chain submission with optimization
+causality submit-transaction --proof proof.zk --chain ethereum,polygon,arbitrum --optimize-gas
+
+# Dry run for cost estimation
+causality submit-transaction --proof proof.zk --chain ethereum --dry-run --verbose
+
+# Custom gas pricing
+causality submit-transaction --proof proof.zk --chain ethereum --gas-price 20 --priority-fee 2
+```
+
+**Supported Chains:**
+- Ethereum (mainnet, goerli, sepolia)
+- Polygon (mainnet, mumbai)
+- Arbitrum (mainnet, goerli)
+- Optimism (mainnet, goerli)
+
+**Features:**
+- **Gas Optimization**: Automatic gas price discovery and optimization
+- **Multi-chain Support**: Submit to multiple chains simultaneously
+- **Dry Run Mode**: Cost estimation without actual submission
+- **Progress Tracking**: Real-time transaction status monitoring
+- **Error Recovery**: Automatic retry with exponential backoff
+- **Proof Validation**: ZK proof format verification before submission
+
+**Configuration:**
+```bash
+# Set default chain
+causality config set blockchain.default_chain ethereum
+
+# Configure RPC endpoints
+causality config set blockchain.ethereum.rpc_url https://mainnet.infura.io/v3/YOUR_KEY
+
+# Set gas preferences
+causality config set blockchain.gas.strategy aggressive
+causality config set blockchain.gas.max_fee_per_gas 100
 ```
 
 ## Troubleshooting

@@ -1,3 +1,4 @@
+
 //! Mock handler generation for automatic effect mocking
 
 use crate::{
@@ -29,7 +30,7 @@ pub trait MockHandler<E: AlgebraicEffect>: Send + Sync {
 /// Mock generator for creating effect handlers
 pub struct MockGenerator {
     /// Registry of generated handlers by effect name
-    handlers: HashMap<String, Box<dyn std::any::Any + Send + Sync>>,
+    handlers: BTreeMap<String, Box<dyn std::any::Any + Send + Sync>>,
     
     /// Default strategy to use when none specified
     default_strategy: MockStrategy,
@@ -89,7 +90,7 @@ impl MockGenerator {
     /// Create a new mock generator with default settings
     pub fn new() -> Self {
         MockGenerator {
-            handlers: HashMap::new(),
+            handlers: BTreeMap::new(),
             default_strategy: MockStrategy::always_succeed(),
             rng_seed: 42, // Fixed seed for reproducible testing
         }

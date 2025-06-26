@@ -3,7 +3,7 @@
 //! This module provides integration between ZK proofs and effect execution,
 //! allowing effects to be verified with zero-knowledge proofs.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use crate::{
     effect::{
@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Hash of an effect for ZK proof generation
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EffectHash {
     /// The SSZ-based hash of the effect
     pub hash: [u8; 32],
@@ -188,7 +188,7 @@ pub struct ZkVerifiedEffectHandler {
     inner_handler: Arc<dyn EffectHandler>,
     
     /// Cache of verified effect hashes
-    verified_cache: HashMap<EffectHash, bool>,
+    verified_cache: BTreeMap<EffectHash, bool>,
     
     /// Whether to require proofs (for testing)
     require_proofs: bool,
@@ -199,7 +199,7 @@ impl ZkVerifiedEffectHandler {
     pub fn new(inner_handler: Arc<dyn EffectHandler>) -> Self {
         Self {
             inner_handler,
-            verified_cache: HashMap::new(),
+            verified_cache: BTreeMap::new(),
             require_proofs: false, // Default to not requiring proofs for minimal implementation
         }
     }

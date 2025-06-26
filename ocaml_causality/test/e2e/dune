@@ -1,0 +1,11 @@
+(executable
+ (public_name test_account_factory_creation)
+ (name test_account_factory_creation)
+ (libraries unix)
+ (modules test_account_factory_creation test_valence_ffi_mock test_async_runtime_mock test_gas_estimation_mock))
+
+(executable
+ (public_name test_multi_chain_queries)
+ (name test_multi_chain_queries)
+ (libraries unix)
+ (modules test_multi_chain_queries test_query_primitives_mock)) 

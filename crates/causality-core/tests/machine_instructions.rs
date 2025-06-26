@@ -1,176 +1,171 @@
 //! Integration tests for register machine instructions
 
-use causality_core::machine::{
-    ReductionEngine, Instruction, RegisterId, ConstraintExpr, MachineValue,
-    reduction::WitnessProvider,
-    instruction::Effect,
-};
-use causality_core::lambda::Symbol;
+use causality_core::machine::{Instruction, RegisterId};
 
 #[test]
-fn test_match_instruction() {
-    let mut engine = ReductionEngine::new(vec![
-        // Create a sum value (left variant)
-        Instruction::Witness { out_reg: RegisterId::new(1) },
-        // Match on the sum
-        Instruction::Match {
-            sum_reg: RegisterId::new(1),
-            left_reg: RegisterId::new(2),
-            right_reg: RegisterId::new(3),
-            left_label: "left".to_string(),
-            right_label: "right".to_string(),
-        },
-        // Define labels for the branches
-        Instruction::LabelMarker("left".to_string()),
-        // Intentionally no instruction here for the left branch for this test,
-        // execution will fall through or halt if it's the end of the program.
-        // We could add a Nop or another instruction if needed.
-        Instruction::LabelMarker("right".to_string())
-        // Similarly, no specific instruction for the right branch target.
-    ], 10);
+fn test_transform_instruction() {
+    // Test the Transform instruction (morphism application)
+    // For now, just test that the instruction can be created
+    let transform_instr = Instruction::Transform {
+        morph_reg: RegisterId::new(1),
+        input_reg: RegisterId::new(2),
+        output_reg: RegisterId::new(3),
+    };
     
-    struct MatchWitness;
-    impl WitnessProvider for MatchWitness {
-        fn get_witness(&mut self, _reg: RegisterId) -> MachineValue {
-            MachineValue::Sum {
-                tag: Symbol::new("left"),
-                value: Box::new(MachineValue::Int(42)),
-            }
-        }
-    }
-    
-    engine.set_witness_provider(Box::new(MatchWitness));
-    
-    let result = engine.run();
-    assert!(result.is_ok());
-    
-    let state = result.unwrap();
-    // Left register should have the value
-    let left_reg = state.load_register(RegisterId::new(2)).unwrap();
-    assert_eq!(left_reg.value, MachineValue::Int(42));
+    // Verify instruction properties
+    assert_eq!(transform_instr.reads(), vec![RegisterId::new(1), RegisterId::new(2)]);
+    assert_eq!(transform_instr.writes(), vec![RegisterId::new(3)]);
+    assert!(transform_instr.is_linear());
+    assert_eq!(transform_instr.operation_type(), "morphism_application");
+    assert!(transform_instr.verify_category_laws());
 }
 
 #[test]
-fn test_check_constraint() {
-    let mut engine = ReductionEngine::new(vec![
-        // Create two equal values
-        Instruction::Witness { out_reg: RegisterId::new(1) },
-        Instruction::Witness { out_reg: RegisterId::new(2) },
-        // Check equality constraint
-        Instruction::Check {
-            constraint: ConstraintExpr::Equal(RegisterId::new(1), RegisterId::new(2)),
-        },
-    ], 10);
+fn test_alloc_instruction() {
+    // Test the Alloc instruction (resource allocation)
+    let alloc_instr = Instruction::Alloc {
+        type_reg: RegisterId::new(1),
+        init_reg: RegisterId::new(2),
+        output_reg: RegisterId::new(3),
+    };
     
-    struct EqualWitness;
-    impl WitnessProvider for EqualWitness {
-        fn get_witness(&mut self, _reg: RegisterId) -> MachineValue {
-            MachineValue::Int(42)
-        }
-    }
-    
-    engine.set_witness_provider(Box::new(EqualWitness));
-    
-    let result = engine.run();
-    assert!(result.is_ok());
+    // Verify instruction properties
+    assert_eq!(alloc_instr.reads(), vec![RegisterId::new(1), RegisterId::new(2)]);
+    assert_eq!(alloc_instr.writes(), vec![RegisterId::new(3)]);
+    assert!(alloc_instr.is_linear());
+    assert_eq!(alloc_instr.operation_type(), "object_creation");
+    assert!(alloc_instr.verify_category_laws());
 }
 
 #[test]
-fn test_check_constraint_failure() {
-    let mut engine = ReductionEngine::new(vec![
-        // Create two different values
-        Instruction::Witness { out_reg: RegisterId::new(1) },
-        Instruction::Witness { out_reg: RegisterId::new(2) },
-        // Check equality constraint (should fail)
-        Instruction::Check {
-            constraint: ConstraintExpr::Equal(RegisterId::new(1), RegisterId::new(2)),
-        },
-    ], 10);
+fn test_consume_instruction() {
+    // Test the Consume instruction (resource consumption)
+    let consume_instr = Instruction::Consume {
+        resource_reg: RegisterId::new(1),
+        output_reg: RegisterId::new(2),
+    };
     
-    struct UnequalWitness;
-    impl WitnessProvider for UnequalWitness {
-        fn get_witness(&mut self, reg: RegisterId) -> MachineValue {
-            match reg.id() {
-                1 => MachineValue::Int(42),
-                2 => MachineValue::Int(99),
-                _ => MachineValue::Unit,
-            }
-        }
-    }
-    
-    engine.set_witness_provider(Box::new(UnequalWitness));
-    
-    let result = engine.run();
-    assert!(result.is_err());
+    // Verify instruction properties
+    assert_eq!(consume_instr.reads(), vec![RegisterId::new(1)]);
+    assert_eq!(consume_instr.writes(), vec![RegisterId::new(2)]);
+    assert!(consume_instr.is_linear());
+    assert_eq!(consume_instr.operation_type(), "object_destruction");
+    assert!(consume_instr.verify_category_laws());
 }
 
 #[test]
-fn test_perform_effect() {
-    let mut engine = ReductionEngine::new(vec![
-        // Create effect parameters
-        Instruction::Witness { out_reg: RegisterId::new(1) },
-        // Perform effect
-        Instruction::Perform {
-            effect: Effect {
-                tag: "transfer".to_string(),
-                pre: ConstraintExpr::True,
-                post: ConstraintExpr::True,
-                hints: vec![],
-            },
-            out_reg: RegisterId::new(2),
+fn test_compose_instruction() {
+    // Test the Compose instruction (morphism composition)
+    let compose_instr = Instruction::Compose {
+        first_reg: RegisterId::new(1),
+        second_reg: RegisterId::new(2),
+        output_reg: RegisterId::new(3),
+    };
+    
+    // Verify instruction properties
+    assert_eq!(compose_instr.reads(), vec![RegisterId::new(1), RegisterId::new(2)]);
+    assert_eq!(compose_instr.writes(), vec![RegisterId::new(3)]);
+    assert!(compose_instr.is_linear());
+    assert_eq!(compose_instr.operation_type(), "morphism_composition");
+    assert!(compose_instr.verify_category_laws());
+}
+
+#[test]
+fn test_tensor_instruction() {
+    // Test the Tensor instruction (parallel composition)
+    let tensor_instr = Instruction::Tensor {
+        left_reg: RegisterId::new(1),
+        right_reg: RegisterId::new(2),
+        output_reg: RegisterId::new(3),
+    };
+    
+    // Verify instruction properties
+    assert_eq!(tensor_instr.reads(), vec![RegisterId::new(1), RegisterId::new(2)]);
+    assert_eq!(tensor_instr.writes(), vec![RegisterId::new(3)]);
+    assert!(tensor_instr.is_linear());
+    assert_eq!(tensor_instr.operation_type(), "parallel_composition");
+    assert!(tensor_instr.verify_category_laws());
+}
+
+#[test]
+fn test_register_id() {
+    // Test RegisterId functionality
+    let reg1 = RegisterId::new(42);
+    let reg2 = RegisterId::new(42);
+    let reg3 = RegisterId::new(99);
+    
+    assert_eq!(reg1.id(), 42);
+    assert_eq!(reg1, reg2);
+    assert_ne!(reg1, reg3);
+    assert!(reg1 < reg3);
+}
+
+#[test]
+fn test_instruction_linearity() {
+    // Test that all instructions preserve linearity
+    let instructions = vec![
+        Instruction::Transform {
+            morph_reg: RegisterId::new(1),
+            input_reg: RegisterId::new(2),
+            output_reg: RegisterId::new(3),
         },
-    ], 10);
+        Instruction::Alloc {
+            type_reg: RegisterId::new(1),
+            init_reg: RegisterId::new(2),
+            output_reg: RegisterId::new(3),
+        },
+        Instruction::Consume {
+            resource_reg: RegisterId::new(1),
+            output_reg: RegisterId::new(2),
+        },
+        Instruction::Compose {
+            first_reg: RegisterId::new(1),
+            second_reg: RegisterId::new(2),
+            output_reg: RegisterId::new(3),
+        },
+        Instruction::Tensor {
+            left_reg: RegisterId::new(1),
+            right_reg: RegisterId::new(2),
+            output_reg: RegisterId::new(3),
+        },
+    ];
     
-    struct EffectWitness;
-    impl WitnessProvider for EffectWitness {
-        fn get_witness(&mut self, _reg: RegisterId) -> MachineValue {
-            MachineValue::Int(100)
-        }
-    }
-    
-    engine.set_witness_provider(Box::new(EffectWitness));
-    
-    let result = engine.run();
-    assert!(result.is_ok());
-    
-    let state = result.unwrap();
-    // Check that effect was recorded
-    assert_eq!(state.effects.len(), 1);
-    
-    // Check result register
-    let result_reg = state.load_register(RegisterId::new(2)).unwrap();
-    match &result_reg.value {
-        MachineValue::EffectResult(tag) => assert_eq!(tag.as_str(), "transfer"),
-        _ => panic!("Expected effect result"),
+    for instr in instructions {
+        assert!(instr.is_linear(), "Instruction should respect linearity: {:?}", instr);
+        assert!(instr.verify_category_laws(), "Instruction should satisfy category laws: {:?}", instr);
     }
 }
 
 #[test]
-fn test_linear_consumption_violation() {
-    let mut engine = ReductionEngine::new(vec![
-        // Create a value
-        Instruction::Witness { out_reg: RegisterId::new(1) },
-        // Move it to another register
-        Instruction::Move {
-            src: RegisterId::new(1),
-            dst: RegisterId::new(2),
-        },
-        // Try to use the consumed register again (should fail)
-        Instruction::Move {
-            src: RegisterId::new(1),
-            dst: RegisterId::new(3),
-        },
-    ], 10);
+fn test_category_theory_properties() {
+    // Test that the instruction set satisfies category theory properties
     
-    struct LinearWitness;
-    impl WitnessProvider for LinearWitness {
-        fn get_witness(&mut self, _reg: RegisterId) -> MachineValue {
-            MachineValue::Int(42)
-        }
-    }
+    // Test that all instructions can be created and verified
+    let transform = Instruction::Transform {
+        morph_reg: RegisterId::new(1),
+        input_reg: RegisterId::new(2),
+        output_reg: RegisterId::new(3),
+    };
     
-    engine.set_witness_provider(Box::new(LinearWitness));
+    let alloc = Instruction::Alloc {
+        type_reg: RegisterId::new(4),
+        init_reg: RegisterId::new(5),
+        output_reg: RegisterId::new(6),
+    };
     
-    let result = engine.run();
-    assert!(result.is_err());
+    let compose = Instruction::Compose {
+        first_reg: RegisterId::new(7),
+        second_reg: RegisterId::new(8),
+        output_reg: RegisterId::new(9),
+    };
+    
+    // All should satisfy category laws
+    assert!(transform.verify_category_laws());
+    assert!(alloc.verify_category_laws());
+    assert!(compose.verify_category_laws());
+    
+    // All should preserve linearity
+    assert!(transform.is_linear());
+    assert!(alloc.is_linear());
+    assert!(compose.is_linear());
 } 

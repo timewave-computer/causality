@@ -1,305 +1,349 @@
-//! HTTP client for Causality API
+//! Blockchain client for multi-chain transaction submission
 //!
-//! Provides a convenient Rust client for interacting with the Causality API server.
+//! This module provides a unified client interface for interacting with multiple
+//! blockchain networks, supporting transaction submission, validation, and monitoring.
 
 use anyhow::Result;
-use std::collections::HashMap;
+use reqwest::Client as HttpClient;
+use serde_json::{json, Value};
+use std::time::{Duration, SystemTime};
+use tokio::time::sleep;
 
 use crate::types::*;
 
-/// HTTP client for Causality API
+//-----------------------------------------------------------------------------
+// Local Types for Client Results
+//-----------------------------------------------------------------------------
+
+/// Result of a transaction submission or validation
 #[derive(Debug, Clone)]
-pub struct CausalityClient {
-    /// Base URL of the API server
-    base_url: String,
-    
-    /// HTTP client
-    client: reqwest::Client,
-    
-    /// Default session ID (if any)
-    default_session: Option<String>,
+pub enum TransactionResult {
+    Success {
+        tx_hash: String,
+        gas_used: u64,
+        block_number: u64,
+    },
+    Failure {
+        error: String,
+        gas_estimate: Option<u64>,
+    },
 }
 
-impl CausalityClient {
-    /// Create a new client
-    pub fn new(base_url: impl Into<String>) -> Self {
-        Self {
-            base_url: base_url.into(),
-            client: reqwest::Client::new(),
-            default_session: None,
+//-----------------------------------------------------------------------------
+// Chain Client Implementation
+//-----------------------------------------------------------------------------
+
+/// Client for interacting with blockchain networks
+pub struct ChainClient {
+    /// Chain configuration
+    config: ChainConfig,
+    
+    /// HTTP client for RPC calls
+    http_client: HttpClient,
+    
+    /// Current nonce for transactions
+    nonce: Option<u64>,
+}
+
+impl ChainClient {
+    /// Create a new chain client
+    pub async fn new(config: ChainConfig) -> Result<Self> {
+        let http_client = HttpClient::builder()
+            .timeout(Duration::from_secs(30))
+            .build()?;
+            
+        Ok(Self {
+            config,
+            http_client,
+            nonce: None,
+        })
+    }
+    
+    /// Submit a transaction to the blockchain
+    pub async fn submit_transaction(&self, request: &TransactionRequest) -> Result<TransactionResult> {
+        if request.dry_run {
+            return self.validate_transaction(request).await;
+        }
+        
+        // Get current gas price
+        let gas_price = match request.gas_price {
+            Some(price) => price,
+            None => self.get_gas_price().await?,
+        };
+        
+        // Estimate gas limit
+        let gas_limit = match request.gas_limit {
+            Some(limit) => limit,
+            None => self.estimate_gas(&request.proof_data).await?,
+        };
+        
+        // Build transaction
+        let tx_data = self.build_transaction_data(&request.proof_data, gas_price, gas_limit).await?;
+        
+        // Submit transaction
+        let tx_hash = self.send_raw_transaction(&tx_data).await?;
+        
+        // Wait for confirmation
+        let receipt = self.wait_for_confirmation(&tx_hash).await?;
+        
+        Ok(TransactionResult::Success {
+            tx_hash,
+            gas_used: receipt.gas_used,
+            block_number: receipt.block_number,
+        })
+    }
+    
+    /// Validate a transaction without submitting it
+    pub async fn validate_transaction(&self, request: &TransactionRequest) -> Result<TransactionResult> {
+        // Estimate gas for validation
+        let gas_estimate = self.estimate_gas(&request.proof_data).await?;
+        
+        // Validate proof data format
+        if let Err(e) = self.validate_proof_format(&request.proof_data) {
+            return Ok(TransactionResult::Failure {
+                error: format!("Invalid proof format: {}", e),
+                gas_estimate: Some(gas_estimate),
+            });
+        }
+        
+        // Simulate transaction execution
+        match self.simulate_transaction(&request.proof_data).await {
+            Ok(_) => Ok(TransactionResult::Success {
+                tx_hash: "dry-run".to_string(),
+                gas_used: gas_estimate,
+                block_number: 0,
+            }),
+            Err(e) => Ok(TransactionResult::Failure {
+                error: format!("Simulation failed: {}", e),
+                gas_estimate: Some(gas_estimate),
+            }),
         }
     }
     
-    /// Create a client with a default session
-    pub fn with_session(base_url: impl Into<String>, session_id: impl Into<String>) -> Self {
-        Self {
-            base_url: base_url.into(),
-            client: reqwest::Client::new(),
-            default_session: Some(session_id.into()),
+    /// Get current gas price from the network
+    async fn get_gas_price(&self) -> Result<u64> {
+        let response = self.rpc_call("eth_gasPrice", json!([])).await?;
+        
+        let gas_price_hex = response.as_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid gas price response"))?;
+            
+        let gas_price = u64::from_str_radix(&gas_price_hex[2..], 16)?;
+        
+        // Apply multiplier for faster confirmation
+        let adjusted_price = (gas_price as f64 * self.config.gas_price_multiplier) as u64;
+        
+        Ok(adjusted_price)
+    }
+    
+    /// Estimate gas required for the transaction
+    async fn estimate_gas(&self, proof_data: &ProofData) -> Result<u64> {
+        // Build transaction for estimation
+        let tx_data = json!({
+            "to": self.get_contract_address(),
+            "data": self.encode_proof_data(proof_data)?,
+        });
+        
+        let response = self.rpc_call("eth_estimateGas", json!([tx_data])).await?;
+        
+        let gas_hex = response.as_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid gas estimate response"))?;
+            
+        let gas_estimate = u64::from_str_radix(&gas_hex[2..], 16)?;
+        
+        // Add 20% buffer for safety
+        Ok((gas_estimate as f64 * 1.2) as u64)
+    }
+    
+    /// Build transaction data for submission
+    async fn build_transaction_data(&self, proof_data: &ProofData, gas_price: u64, gas_limit: u64) -> Result<String> {
+        let nonce = self.get_next_nonce().await?;
+        
+        let tx = json!({
+            "nonce": format!("0x{:x}", nonce),
+            "gasPrice": format!("0x{:x}", gas_price),
+            "gasLimit": format!("0x{:x}", gas_limit),
+            "to": self.get_contract_address(),
+            "value": "0x0",
+            "data": self.encode_proof_data(proof_data)?,
+        });
+        
+        // In a real implementation, this would be signed with a private key
+        // For now, we'll return a mock signed transaction
+        Ok(format!("0x{}", hex::encode(serde_json::to_vec(&tx)?)))
+    }
+    
+    /// Send raw transaction to the network
+    async fn send_raw_transaction(&self, tx_data: &str) -> Result<String> {
+        let response = self.rpc_call("eth_sendRawTransaction", json!([tx_data])).await?;
+        
+        response.as_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid transaction hash response"))
+            .map(|s| s.to_string())
+    }
+    
+    /// Wait for transaction confirmation
+    async fn wait_for_confirmation(&self, tx_hash: &str) -> Result<TransactionReceipt> {
+        let start_time = SystemTime::now();
+        let timeout = Duration::from_secs(300); // 5 minutes
+        
+        loop {
+            if start_time.elapsed()? > timeout {
+                return Err(anyhow::anyhow!("Transaction confirmation timeout"));
+            }
+            
+            match self.get_transaction_receipt(tx_hash).await {
+                Ok(Some(receipt)) => {
+                    if receipt.block_number > 0 {
+                        return Ok(receipt);
+                    }
+                }
+                Ok(None) => {
+                    // Transaction not yet mined
+                }
+                Err(e) => {
+                    eprintln!("Error checking transaction receipt: {}", e);
+                }
+            }
+            
+            sleep(Duration::from_secs(2)).await;
         }
     }
     
-    /// Set the default session ID
-    pub fn set_default_session(&mut self, session_id: impl Into<String>) {
-        self.default_session = Some(session_id.into());
-    }
-    
-    /// Clear the default session ID
-    pub fn clear_default_session(&mut self) {
-        self.default_session = None;
-    }
-    
-    /// Health check
-    pub async fn health(&self) -> Result<HealthInfo> {
-        let url = format!("{}/health", self.base_url);
-        let response: ApiResponse<HealthInfo> = self.client
-            .get(&url)
-            .send()
-            .await?
-            .json()
-            .await?;
+    /// Get transaction receipt
+    async fn get_transaction_receipt(&self, tx_hash: &str) -> Result<Option<TransactionReceipt>> {
+        let response = self.rpc_call("eth_getTransactionReceipt", json!([tx_hash])).await?;
         
-        Ok(response.data)
-    }
-    
-    /// Compile source code
-    pub async fn compile(&self, source: impl Into<String>) -> Result<CompileResult> {
-        self.compile_with_options(source, None).await
-    }
-    
-    /// Compile source code with options
-    pub async fn compile_with_options(
-        &self,
-        source: impl Into<String>,
-        options: Option<CompileOptions>,
-    ) -> Result<CompileResult> {
-        let url = format!("{}/compile", self.base_url);
-        let request = CompileRequest {
-            source: source.into(),
-            session_id: self.default_session.clone(),
-            options,
+        if response.is_null() {
+            return Ok(None);
+        }
+        
+        let receipt = TransactionReceipt {
+            transaction_hash: tx_hash.to_string(),
+            block_number: self.parse_hex_u64(response["blockNumber"].as_str().unwrap_or("0x0"))?,
+            gas_used: self.parse_hex_u64(response["gasUsed"].as_str().unwrap_or("0x0"))?,
+            status: response["status"].as_str().unwrap_or("0x1") == "0x1",
         };
         
-        let response: ApiResponse<CompileResult> = self.client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await?
-            .json()
-            .await?;
-        
-        Ok(response.data)
+        Ok(Some(receipt))
     }
     
-    /// Execute source code
-    pub async fn execute(&self, source: impl Into<String>) -> Result<ExecuteResult> {
-        self.execute_with_options(source, None).await
+    /// Get next nonce for transactions
+    async fn get_next_nonce(&self) -> Result<u64> {
+        // In a real implementation, this would get the nonce from the account
+        // For now, we'll use a simple counter
+        match self.nonce {
+            Some(n) => Ok(n + 1),
+            None => Ok(0),
+        }
     }
     
-    /// Execute source code with options
-    pub async fn execute_with_options(
-        &self,
-        source: impl Into<String>,
-        options: Option<ExecuteOptions>,
-    ) -> Result<ExecuteResult> {
-        let url = format!("{}/execute", self.base_url);
-        let request = ExecuteRequest {
-            source: source.into(),
-            session_id: self.default_session.clone(),
-            options,
-        };
+    /// Validate proof data format
+    fn validate_proof_format(&self, proof_data: &ProofData) -> Result<()> {
+        if proof_data.proof.is_empty() {
+            return Err(anyhow::anyhow!("Empty proof data"));
+        }
         
-        let response: ApiResponse<ExecuteResult> = self.client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await?
-            .json()
-            .await?;
+        if proof_data.verification_key.is_empty() {
+            return Err(anyhow::anyhow!("Missing verification key"));
+        }
         
-        Ok(response.data)
-    }
-    
-    /// Create a new session
-    pub async fn create_session(&self) -> Result<SessionInfo> {
-        self.create_session_with_options(None, None).await
-    }
-    
-    /// Create a new session with name and tags
-    pub async fn create_session_with_options(
-        &self,
-        name: Option<String>,
-        tags: Option<HashMap<String, String>>,
-    ) -> Result<SessionInfo> {
-        let url = format!("{}/sessions", self.base_url);
-        let request = CreateSessionRequest { name, tags };
-        
-        let response: ApiResponse<SessionInfo> = self.client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await?
-            .json()
-            .await?;
-        
-        Ok(response.data)
-    }
-    
-    /// List all sessions
-    pub async fn list_sessions(&self) -> Result<Vec<SessionInfo>> {
-        let url = format!("{}/sessions", self.base_url);
-        let response: ApiResponse<Vec<SessionInfo>> = self.client
-            .get(&url)
-            .send()
-            .await?
-            .json()
-            .await?;
-        
-        Ok(response.data)
-    }
-    
-    /// Get session information
-    pub async fn get_session(&self, session_id: impl Into<String>) -> Result<SessionInfo> {
-        let url = format!("{}/sessions/{}", self.base_url, session_id.into());
-        let response: ApiResponse<SessionInfo> = self.client
-            .get(&url)
-            .send()
-            .await?
-            .json()
-            .await?;
-        
-        Ok(response.data)
-    }
-    
-    /// Delete a session
-    pub async fn delete_session(&self, session_id: impl Into<String>) -> Result<()> {
-        let url = format!("{}/sessions/{}", self.base_url, session_id.into());
-        let _response: ApiResponse<()> = self.client
-            .delete(&url)
-            .send()
-            .await?
-            .json()
-            .await?;
+        if proof_data.circuit_id.is_empty() {
+            return Err(anyhow::anyhow!("Missing circuit ID"));
+        }
         
         Ok(())
     }
-}
-
-/// Builder for compile options
-#[derive(Debug, Default)]
-pub struct CompileOptionsBuilder {
-    optimize: Option<bool>,
-    show_stages: Option<bool>,
-    target: Option<String>,
-}
-
-impl CompileOptionsBuilder {
-    /// Create a new builder
-    pub fn new() -> Self {
-        Self::default()
-    }
     
-    /// Enable optimizations
-    pub fn optimize(mut self, optimize: bool) -> Self {
-        self.optimize = Some(optimize);
-        self
-    }
-    
-    /// Show compilation stages
-    pub fn show_stages(mut self, show_stages: bool) -> Self {
-        self.show_stages = Some(show_stages);
-        self
-    }
-    
-    /// Set target platform
-    pub fn target(mut self, target: impl Into<String>) -> Self {
-        self.target = Some(target.into());
-        self
-    }
-    
-    /// Build the options
-    pub fn build(self) -> CompileOptions {
-        CompileOptions {
-            optimize: self.optimize,
-            show_stages: self.show_stages,
-            target: self.target,
+    /// Simulate transaction execution
+    async fn simulate_transaction(&self, proof_data: &ProofData) -> Result<()> {
+        let tx_data = json!({
+            "to": self.get_contract_address(),
+            "data": self.encode_proof_data(proof_data)?,
+        });
+        
+        let response = self.rpc_call("eth_call", json!([tx_data, "latest"])).await?;
+        
+        if response.as_str().unwrap_or("").starts_with("0x") {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Simulation failed"))
         }
     }
-}
-
-/// Builder for execute options
-#[derive(Debug, Default)]
-pub struct ExecuteOptionsBuilder {
-    max_steps: Option<u64>,
-    trace: Option<bool>,
-    timeout_seconds: Option<u64>,
-}
-
-impl ExecuteOptionsBuilder {
-    /// Create a new builder
-    pub fn new() -> Self {
-        Self::default()
+    
+    /// Encode proof data for contract call
+    fn encode_proof_data(&self, proof_data: &ProofData) -> Result<String> {
+        // This would encode the proof data according to the contract ABI
+        // For now, we'll create a simple encoding
+        let encoded = json!({
+            "proof": proof_data.proof,
+            "publicInputs": proof_data.public_inputs,
+            "verificationKey": proof_data.verification_key,
+        });
+        
+        Ok(format!("0x{}", hex::encode(serde_json::to_vec(&encoded)?)))
     }
     
-    /// Set maximum execution steps
-    pub fn max_steps(mut self, max_steps: u64) -> Self {
-        self.max_steps = Some(max_steps);
-        self
-    }
-    
-    /// Enable execution trace
-    pub fn trace(mut self, trace: bool) -> Self {
-        self.trace = Some(trace);
-        self
-    }
-    
-    /// Set timeout in seconds
-    pub fn timeout_seconds(mut self, timeout_seconds: u64) -> Self {
-        self.timeout_seconds = Some(timeout_seconds);
-        self
-    }
-    
-    /// Build the options
-    pub fn build(self) -> ExecuteOptions {
-        ExecuteOptions {
-            max_steps: self.max_steps,
-            trace: self.trace,
-            timeout_seconds: self.timeout_seconds,
+    /// Get the smart contract address for proof verification
+    fn get_contract_address(&self) -> String {
+        // This would be configured per chain
+        match self.config.chain_id {
+            1 => "0x1234567890123456789012345678901234567890".to_string(), // Ethereum
+            137 => "0x2345678901234567890123456789012345678901".to_string(), // Polygon
+            42161 => "0x3456789012345678901234567890123456789012".to_string(), // Arbitrum
+            10 => "0x4567890123456789012345678901234567890123".to_string(), // Optimism
+            _ => "0x0000000000000000000000000000000000000000".to_string(),
         }
     }
+    
+    /// Make RPC call to the blockchain
+    async fn rpc_call(&self, method: &str, params: Value) -> Result<Value> {
+        let request_body = json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+            "id": 1
+        });
+        
+        let response = self.http_client
+            .post(&self.config.rpc_url)
+            .json(&request_body)
+            .send()
+            .await?;
+            
+        let response_json: Value = response.json().await?;
+        
+        if let Some(error) = response_json["error"].as_object() {
+            return Err(anyhow::anyhow!("RPC error: {}", error["message"].as_str().unwrap_or("Unknown error")));
+        }
+        
+        Ok(response_json["result"].clone())
+    }
+    
+    /// Parse hexadecimal string to u64
+    fn parse_hex_u64(&self, hex_str: &str) -> Result<u64> {
+        let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+        Ok(u64::from_str_radix(hex_str, 16)?)
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+//-----------------------------------------------------------------------------
+// Helper Types
+//-----------------------------------------------------------------------------
+
+/// Transaction receipt information
+#[derive(Debug, Clone)]
+struct TransactionReceipt {
+    /// Transaction hash
+    #[allow(dead_code)]
+    transaction_hash: String,
     
-    #[tokio::test]
-    async fn test_client_creation() {
-        let client = CausalityClient::new("http://localhost:3000");
-        assert_eq!(client.base_url, "http://localhost:3000");
-        assert!(client.default_session.is_none());
-    }
+    /// Block number where transaction was included
+    block_number: u64,
     
-    #[test]
-    fn test_options_builders() {
-        let compile_opts = CompileOptionsBuilder::new()
-            .optimize(true)
-            .show_stages(true)
-            .target("wasm")
-            .build();
-        
-        assert_eq!(compile_opts.optimize, Some(true));
-        assert_eq!(compile_opts.show_stages, Some(true));
-        assert_eq!(compile_opts.target, Some("wasm".to_string()));
-        
-        let execute_opts = ExecuteOptionsBuilder::new()
-            .max_steps(1000)
-            .trace(true)
-            .timeout_seconds(30)
-            .build();
-        
-        assert_eq!(execute_opts.max_steps, Some(1000));
-        assert_eq!(execute_opts.trace, Some(true));
-        assert_eq!(execute_opts.timeout_seconds, Some(30));
-    }
-} 
+    /// Gas used by the transaction
+    gas_used: u64,
+    
+    /// Whether the transaction was successful
+    #[allow(dead_code)]
+    status: bool,
+}

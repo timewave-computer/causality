@@ -1,893 +1,528 @@
-//! Intent-based programming system for declarative effect specification
+//! Intent system for Layer 2 declarative programming
 //!
-//! This module implements the core intent types that allow users to specify
-//! what they want to achieve declaratively, rather than how to achieve it.
+//! This module defines intents as declarative specifications of desired computations
+//! that can be executed across different locations with automatic migration and optimization.
 
-use std::time::{SystemTime, UNIX_EPOCH};
-use crate::{
-    system::content_addressing::{EntityId, Timestamp, DomainId},
-    lambda::base::Value,
-    machine::instruction::{ConstraintExpr, MachineHint},
-};
-use super::{
-    capability::Capability,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use crate::lambda::{TypeInner, Location};
+use crate::SessionType;
+use crate::system::{ResourceId, DeterministicSystem};
+use crate::effect::transform_constraint::{TransformConstraint, TransformConstraintError, TransformDefinition};
 
-/// Unique identifier for intents
-pub type IntentId = EntityId;
+/// Unique identifier for an intent
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct IntentId(pub u64);
 
-/// A declarative intent specifying desired outcomes without implementation details
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl IntentId {
+    /// Create a new intent ID
+    pub fn new(id: u64) -> Self {
+        IntentId(id)
+    }
+    
+    /// Generate a new intent ID deterministically
+    pub fn generate(det_sys: &mut DeterministicSystem) -> Self {
+        IntentId(det_sys.next_counter())
+    }
+}
+
+/// Intent represents a declarative specification of a desired computation
+#[derive(Debug, Clone)]
 pub struct Intent {
-    /// Unique content-addressed identifier
+    /// Unique identifier for this intent
     pub id: IntentId,
     
-    /// Domain where this intent operates
-    pub domain: DomainId,
+    /// Primary location where this intent should be executed
+    pub domain: Location,
     
-    /// Required input resources
-    pub inputs: Vec<ResourceBinding>,
+    /// Unified transform constraints that specify the desired computation
+    pub constraints: Vec<TransformConstraint>,
     
-    /// The constraint that must be satisfied (purely declarative)
-    /// This expresses what should be true after execution
-    pub constraint: Constraint,
+    /// Resource bindings for the intent
+    pub resource_bindings: BTreeMap<String, ResourceRef>,
     
-    /// Hint expression for runtime optimization (optional)
-    /// This guides the solver without affecting correctness
-    pub hint: Hint,
+    /// Location requirements and migration specifications
+    pub location_requirements: LocationRequirements,
     
-    /// When this intent was created
-    pub timestamp: Timestamp,
+    /// Expected result type
+    pub expected_result: Option<TypeInner>,
+    
+    /// Priority for execution scheduling
+    pub priority: IntentPriority,
+    
+    /// Timeout for intent execution
+    pub timeout: Option<u64>,
+    
+    /// Dependencies on other intents
+    pub dependencies: BTreeSet<IntentId>,
 }
 
-/// Binding specification for resources in intents
+/// Location requirements for intent execution
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LocationRequirements {
+    /// Preferred execution location
+    pub preferred_location: Option<Location>,
+    
+    /// Allowed execution locations
+    pub allowed_locations: BTreeSet<Location>,
+    
+    /// Data migration specifications
+    pub migration_specs: Vec<MigrationSpec>,
+    
+    /// Required protocols for communication
+    pub required_protocols: BTreeMap<String, SessionType>,
+    
+    /// Performance constraints
+    pub performance_constraints: PerformanceConstraints,
+}
+
+/// Data migration specification
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigrationSpec {
+    /// Source location
+    pub from: Location,
+    
+    /// Target location
+    pub to: Location,
+    
+    /// Data to migrate
+    pub data_refs: Vec<ResourceRef>,
+    
+    /// Migration strategy
+    pub strategy: MigrationStrategy,
+    
+    /// Required protocol for migration
+    pub protocol: Option<SessionType>,
+}
+
+/// Strategy for data migration
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MigrationStrategy {
+    /// Copy data to new location, keep original
+    Copy,
+    
+    /// Move data to new location, remove original
+    Move,
+    
+    /// Replicate data across multiple locations
+    Replicate {
+        target_locations: BTreeSet<Location>,
+        consistency_model: ConsistencyModel,
+    },
+    
+    /// Partition data across locations
+    Partition {
+        partition_strategy: PartitionStrategy,
+        target_locations: BTreeSet<Location>,
+    },
+}
+
+/// Consistency model for replicated data
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum ConsistencyModel {
+    /// Strong consistency - all replicas updated before operation completes
+    Strong,
+    
+    /// Eventual consistency - updates propagated asynchronously
+    #[default]
+    Eventual,
+    
+    /// Causal consistency - causally related operations are ordered
+    Causal,
+    
+    /// Session consistency - consistency within a session
+    Session,
+}
+
+/// Strategy for data partitioning
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PartitionStrategy {
+    /// Hash-based partitioning
+    Hash { hash_function: String },
+    
+    /// Range-based partitioning
+    Range { partition_key: String },
+    
+    /// Round-robin partitioning
+    RoundRobin,
+    
+    /// Custom partitioning function
+    Custom { function_name: String },
+}
+
+/// Performance constraints for intent execution
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PerformanceConstraints {
+    /// Maximum execution time in milliseconds
+    pub max_execution_time: Option<u64>,
+    
+    /// Maximum memory usage in bytes
+    pub max_memory_usage: Option<u64>,
+    
+    /// Maximum gas consumption for blockchain operations
+    pub max_gas_usage: Option<u64>,
+}
+
+/// Priority levels for intent execution
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum IntentPriority {
+    Low,
+    Normal,
+    High,
+    Critical,
+    Immediate,
+}
+
+/// Reference to a resource
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceRef {
+    /// Resource identifier
+    pub id: ResourceId,
+    
+    /// Expected type of the resource
+    pub resource_type: TypeInner,
+    
+    /// Location where the resource is currently stored
+    pub current_location: Location,
+    
+    /// Access pattern for this resource
+    pub access_pattern: AccessPattern,
+}
+
+/// Access pattern for resources
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccessPattern {
+    /// Read-only access
+    ReadOnly,
+    
+    /// Write-only access
+    WriteOnly,
+    
+    /// Read-write access
+    ReadWrite,
+    
+    /// Linear access (consume exactly once)
+    Linear,
+    
+    /// Streaming access
+    Streaming {
+        chunk_size: Option<u64>,
+        prefetch_size: Option<u64>,
+    },
+    
+    /// Random access
+    Random {
+        access_frequency: u64,
+        cache_size: Option<u64>,
+    },
+}
+
+/// Resource binding associates a name with a resource reference
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceBinding {
-    /// Binding name (used in constraints)
+    /// Binding name
     pub name: String,
     
-    /// Expected resource type/label
-    pub resource_type: String,
+    /// Resource reference
+    pub resource: ResourceRef,
     
-    /// Required quantity (None means any amount)
-    pub quantity: Option<u64>,
+    /// Whether this binding is required or optional
+    pub required: bool,
     
-    /// Additional constraints on this resource
-    pub constraints: Vec<Constraint>,
-    
-    /// Required capabilities for operations on this resource
-    pub capabilities: Vec<Capability>,
-    
-    /// Optional metadata
-    pub metadata: Value,
+    /// Default value if optional and not provided
+    pub default_value: Option<String>,
 }
 
-/// Declarative constraints that must be satisfied
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Constraint {
-    /// Always true (trivial constraint)
-    True,
+/// Result of intent execution
+#[derive(Debug, Clone)]
+pub enum IntentResult {
+    /// Intent completed successfully
+    Success {
+        result: Box<Option<ResourceRef>>,
+        execution_stats: ExecutionStats,
+    },
     
-    /// Always false (impossible constraint)  
-    False,
+    /// Intent failed with error
+    Error {
+        error: IntentError,
+        partial_results: Vec<ResourceRef>,
+    },
     
-    /// Logical conjunction (all must be true)
-    And(Vec<Constraint>),
+    /// Intent was cancelled
+    Cancelled {
+        reason: String,
+    },
     
-    /// Logical disjunction (at least one must be true)
-    Or(Vec<Constraint>),
-    
-    /// Logical negation
-    Not(Box<Constraint>),
-    
-    /// Equality constraint between two values
-    Equals(ValueExpr, ValueExpr),
-    
-    /// Less than constraint
-    LessThan(ValueExpr, ValueExpr),
-    
-    /// Greater than constraint
-    GreaterThan(ValueExpr, ValueExpr),
-    
-    /// Require a capability to be held
-    HasCapability(ResourceRef, String),
-    
-    /// Conservation constraint (inputs must equal outputs)
-    Conservation(Vec<String>, Vec<String>),
-    
-    /// Temporal ordering constraint
-    Before(String, String),
-    
-    /// Require that a resource exists (typically outputs)
-    Exists(ResourceBinding),
-    
-    /// Require that multiple resources exist
-    ExistsAll(Vec<ResourceBinding>),
-    
-    /// Custom constraint expression from machine layer
-    Custom(ConstraintExpr),
+    /// Intent timed out
+    Timeout {
+        partial_results: Vec<ResourceRef>,
+    },
 }
 
-/// Value expressions for constraint evaluation
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ValueExpr {
-    /// Literal value
-    Literal(Value),
+/// Execution statistics
+#[derive(Debug, Clone)]
+pub struct ExecutionStats {
+    /// Total execution time in milliseconds
+    pub execution_time: u64,
     
-    /// Reference to a resource binding
-    ResourceRef(String),
+    /// Memory usage in bytes
+    pub memory_usage: u64,
     
-    /// Reference to resource metadata field
-    MetadataRef(String, String), // binding_name, field_name
+    /// Network bandwidth used in bytes
+    pub network_usage: u64,
     
-    /// Reference to resource quantity
-    QuantityRef(String),
+    /// Computational cost
+    pub compute_cost: u64,
     
-    /// Arithmetic operations
-    Add(Box<ValueExpr>, Box<ValueExpr>),
-    Sub(Box<ValueExpr>, Box<ValueExpr>),
-    Mul(Box<ValueExpr>, Box<ValueExpr>),
-    Div(Box<ValueExpr>, Box<ValueExpr>),
+    /// Communication cost
+    pub communication_cost: u64,
     
-    /// Function application
-    Apply(String, Vec<ValueExpr>), // function_name, args
+    /// Storage cost
+    pub storage_cost: u64,
+    
+    /// Number of locations involved
+    pub locations_used: BTreeSet<Location>,
+    
+    /// Protocols used for communication
+    pub protocols_used: Vec<SessionType>,
 }
 
-/// Reference to a resource in constraints
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ResourceRef {
-    /// Reference by binding name
-    ByName(String),
-    
-    /// Reference by resource ID
-    ById(EntityId),
-    
-    /// Reference to input resource by index
-    Input(usize),
-    
-    /// Reference to output resource by index
-    Output(usize),
-}
-
-/// Runtime optimization hints that guide the solver without affecting correctness
-/// These mirror the constraint structure but provide optimization guidance
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Hint {
-    /// No optimization hint (trivial hint)
-    True,
-    
-    /// Impossible hint (should not occur)
-    False,
-    
-    /// All hints should be considered (conjunction)
-    And(Vec<Hint>),
-    
-    /// Any of these hints may be considered (disjunction)
-    Or(Vec<Hint>),
-    
-    /// Negation of a hint
-    Not(Box<Hint>),
-    
-    /// Batch effects with matching selector
-    BatchWith(String), // selector for batching strategy
-    
-    /// Minimize a specific metric (price, latency, etc.)
-    Minimize(String), // metric name
-    
-    /// Maximize a specific metric
-    Maximize(String), // metric name
-    
-    /// Prefer execution in a specific domain
-    PreferDomain(DomainId),
-    
-    /// Deadline constraint for completion
-    Deadline(Timestamp),
-    
-    /// Prefer parallel execution where possible
-    PreferParallel,
-    
-    /// Prefer sequential execution
-    PreferSequential,
-    
-    /// Resource usage limit hint
-    ResourceLimit(String, u64), // resource_type, max_amount
-    
-    /// Cost budget hint
-    CostBudget(u64), // max_cost
-    
-    /// Custom optimization hint from machine layer
-    Custom(MachineHint), // structured machine-level hint
-}
-
-/// Intent validation and processing errors
+/// Errors that can occur during intent processing
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IntentError {
-    /// Invalid constraint
-    InvalidConstraint(String),
+    /// Invalid intent specification
+    InvalidIntent(String),
     
-    /// Missing required resource
-    MissingResource(String),
+    /// Resource not found
+    ResourceNotFound(ResourceId),
     
-    /// Constraint evaluation failed
-    ConstraintFailed(String),
+    /// Insufficient capabilities for operation
+    InsufficientCapabilities {
+        required: Vec<String>,
+        available: Vec<String>,
+    },
     
-    /// Invalid resource binding
-    InvalidBinding(String),
+    /// Location not accessible
+    LocationNotAccessible {
+        location: Location,
+        reason: String,
+    },
     
-    /// Unsupported operation
-    UnsupportedOperation(String),
+    /// Protocol not supported
+    ProtocolNotSupported {
+        protocol: String,
+        location: Location,
+    },
     
-    /// Synthesis failed
-    SynthesisFailed(String),
+    /// Constraint solving failed
+    ConstraintSolvingFailed(TransformConstraintError),
+    
+    /// Migration failed
+    MigrationFailed {
+        from: Location,
+        to: Location,
+        reason: String,
+    },
+    
+    /// Performance constraint violated
+    PerformanceConstraintViolated {
+        constraint: String,
+        actual: u64,
+        limit: u64,
+    },
+    
+    /// Dependency cycle detected
+    DependencyCycle(Vec<IntentId>),
+    
+    /// External system error
+    ExternalError(String),
 }
 
 impl Intent {
-    /// Create a new intent
-    pub fn new(
-        domain: DomainId,
-        inputs: Vec<ResourceBinding>,
-        constraint: Constraint,
-    ) -> Self {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+    /// Create a new intent for the given domain
+    pub fn new(domain: Location) -> Self {
+        Self {
+            id: IntentId::new(0), // Will be set by the system
+            domain,
+            constraints: Vec::new(),
+            resource_bindings: BTreeMap::new(),
+            location_requirements: LocationRequirements::default(),
+            expected_result: None,
+            priority: IntentPriority::Normal,
+            timeout: None,
+            dependencies: BTreeSet::new(),
+        }
+    }
+    
+    /// Add a transform constraint to this intent
+    pub fn with_constraint(mut self, constraint: TransformConstraint) -> Self {
+        self.constraints.push(constraint);
+        self
+    }
+    
+    /// Add a resource binding to this intent
+    pub fn with_resource(mut self, name: String, resource: ResourceRef) -> Self {
+        self.resource_bindings.insert(name, resource);
+        self
+    }
+    
+    /// Set location requirements for this intent
+    pub fn with_location_requirements(mut self, requirements: LocationRequirements) -> Self {
+        self.location_requirements = requirements;
+        self
+    }
+    
+    /// Set expected result type
+    pub fn with_expected_result(mut self, result_type: TypeInner) -> Self {
+        self.expected_result = Some(result_type);
+        self
+    }
+    
+    /// Set execution priority
+    pub fn with_priority(mut self, priority: IntentPriority) -> Self {
+        self.priority = priority;
+        self
+    }
+    
+    /// Set execution timeout
+    pub fn with_timeout(mut self, timeout_ms: u64) -> Self {
+        self.timeout = Some(timeout_ms);
+        self
+    }
+    
+    /// Add a dependency on another intent
+    pub fn with_dependency(mut self, dependency: IntentId) -> Self {
+        self.dependencies.insert(dependency);
+        self
+    }
+    
+    /// Check if this intent can be executed at the given location
+    pub fn can_execute_at(&self, location: &Location) -> bool {
+        // Check if location is explicitly allowed
+        if !self.location_requirements.allowed_locations.is_empty() {
+            return self.location_requirements.allowed_locations.contains(location);
+        }
         
-        // Generate content-addressed ID using simple string hash
-        let content_str = format!("intent_{}_{}", domain, timestamp);
-        let content_bytes: Vec<u8> = content_str.as_bytes().to_vec();
-        let id = EntityId::from_content(&content_bytes);
-        
+        // If no restrictions, can execute anywhere
+        true
+    }
+}
+
+impl ResourceRef {
+    /// Create a new resource reference
+    pub fn new(id: ResourceId, resource_type: TypeInner, location: Location) -> Self {
         Self {
             id,
-            domain,
-            inputs,
-            constraint,
-            hint: Hint::True,
-            timestamp: Timestamp { millis: timestamp },
+            resource_type,
+            current_location: location,
+            access_pattern: AccessPattern::ReadOnly,
         }
     }
     
-    /// Validate this intent for basic consistency
-    pub fn validate(&self) -> Result<(), IntentError> {
-        // Check that all resource bindings have unique names
-        let mut names = std::collections::HashSet::new();
-        for binding in &self.inputs {
-            if !names.insert(&binding.name) {
-                return Err(IntentError::InvalidBinding(
-                    format!("Duplicate input binding name: {}", binding.name)
-                ));
-            }
-        }
-        
-        // Collect all output binding names from the constraint tree
-        let output_names = self.collect_output_names(&self.constraint);
-        
-        // Validate constraints reference valid bindings
-        self.validate_constraint_with_outputs(&self.constraint, &output_names)?;
-        
-        Ok(())
-    }
-    
-    /// Collect all output binding names declared in constraint expressions
-    fn collect_output_names(&self, constraint: &Constraint) -> std::collections::HashSet<String> {
-        let mut output_names = std::collections::HashSet::new();
-        self.collect_output_names_recursive(constraint, &mut output_names);
-        output_names
-    }
-    
-    /// Recursively collect output names from constraint tree
-    #[allow(clippy::only_used_in_recursion)]
-    fn collect_output_names_recursive(&self, constraint: &Constraint, output_names: &mut std::collections::HashSet<String>) {
-        match constraint {
-            Constraint::And(constraints) | Constraint::Or(constraints) => {
-                for constraint in constraints {
-                    self.collect_output_names_recursive(constraint, output_names);
-                }
-            }
-            Constraint::Not(constraint) => {
-                self.collect_output_names_recursive(constraint, output_names);
-            }
-            Constraint::Exists(binding) => {
-                output_names.insert(binding.name.clone());
-            }
-            Constraint::ExistsAll(bindings) => {
-                for binding in bindings {
-                    output_names.insert(binding.name.clone());
-                }
-            }
-            _ => {} // Other constraints don't declare output names
-        }
-    }
-    
-    /// Validate a constraint references valid resource bindings (including outputs)
-    fn validate_constraint_with_outputs(&self, constraint: &Constraint, output_names: &std::collections::HashSet<String>) -> Result<(), IntentError> {
-        match constraint {
-            Constraint::True | Constraint::False => Ok(()),
-            Constraint::And(constraints) | Constraint::Or(constraints) => {
-                for constraint in constraints {
-                    self.validate_constraint_with_outputs(constraint, output_names)?;
-                }
-                Ok(())
-            }
-            Constraint::Not(constraint) => {
-                self.validate_constraint_with_outputs(constraint, output_names)
-            }
-            Constraint::Equals(expr1, expr2) |
-            Constraint::LessThan(expr1, expr2) |
-            Constraint::GreaterThan(expr1, expr2) => {
-                self.validate_value_expr_with_outputs(expr1, output_names)?;
-                self.validate_value_expr_with_outputs(expr2, output_names)?;
-                Ok(())
-            }
-            Constraint::HasCapability(resource_ref, _) => {
-                self.validate_resource_ref_with_outputs(resource_ref, output_names)
-            }
-            Constraint::Conservation(inputs, outputs) => {
-                for input_name in inputs {
-                    if !self.has_binding(input_name) && !output_names.contains(input_name) {
-                        return Err(IntentError::InvalidBinding(
-                            format!("Conservation input references unknown binding: {}", input_name)
-                        ));
-                    }
-                }
-                for output_name in outputs {
-                    if !self.has_binding(output_name) && !output_names.contains(output_name) {
-                        return Err(IntentError::InvalidBinding(
-                            format!("Conservation output references unknown binding: {}", output_name)
-                        ));
-                    }
-                }
-                Ok(())
-            }
-            Constraint::Custom(_) => Ok(()),
-            Constraint::Before(r1, r2) => {
-                if !self.has_binding(r1) && !output_names.contains(r1) {
-                    return Err(IntentError::InvalidBinding(
-                        format!("Before constraint references unknown binding: {}", r1)
-                    ));
-                }
-                if !self.has_binding(r2) && !output_names.contains(r2) {
-                    return Err(IntentError::InvalidBinding(
-                        format!("Before constraint references unknown binding: {}", r2)
-                    ));
-                }
-                Ok(())
-            }
-            Constraint::Exists(_binding) => {
-                // For Exists, we don't require the binding to already exist
-                // This is for specifying desired outputs
-                Ok(())
-            }
-            Constraint::ExistsAll(_bindings) => {
-                // Same for ExistsAll - these are output specifications
-                Ok(())
-            }
-        }
-    }
-    
-    /// Validate a value expression (including outputs)
-    fn validate_value_expr_with_outputs(&self, expr: &ValueExpr, output_names: &std::collections::HashSet<String>) -> Result<(), IntentError> {
-        match expr {
-            ValueExpr::Literal(_) => Ok(()),
-            ValueExpr::ResourceRef(name) => {
-                if self.has_binding(name) || output_names.contains(name) {
-                    Ok(())
-                } else {
-                    Err(IntentError::InvalidConstraint(
-                        format!("Unknown resource binding: {}", name)
-                    ))
-                }
-            }
-            ValueExpr::MetadataRef(name, _) => {
-                if self.has_binding(name) || output_names.contains(name) {
-                    Ok(())
-                } else {
-                    Err(IntentError::InvalidConstraint(
-                        format!("Unknown resource binding: {}", name)
-                    ))
-                }
-            }
-            ValueExpr::QuantityRef(name) => {
-                if self.has_binding(name) || output_names.contains(name) {
-                    Ok(())
-                } else {
-                    Err(IntentError::InvalidConstraint(
-                        format!("Unknown resource binding: {}", name)
-                    ))
-                }
-            }
-            ValueExpr::Add(left, right) |
-            ValueExpr::Sub(left, right) |
-            ValueExpr::Mul(left, right) |
-            ValueExpr::Div(left, right) => {
-                self.validate_value_expr_with_outputs(left, output_names)?;
-                self.validate_value_expr_with_outputs(right, output_names)?;
-                Ok(())
-            }
-            ValueExpr::Apply(_, args) => {
-                for arg in args {
-                    self.validate_value_expr_with_outputs(arg, output_names)?;
-                }
-                Ok(())
-            }
-        }
-    }
-    
-    /// Validate a resource reference (including outputs)
-    fn validate_resource_ref_with_outputs(&self, resource_ref: &ResourceRef, output_names: &std::collections::HashSet<String>) -> Result<(), IntentError> {
-        match resource_ref {
-            ResourceRef::ByName(name) => {
-                if self.has_binding(name) || output_names.contains(name) {
-                    Ok(())
-                } else {
-                    Err(IntentError::InvalidConstraint(
-                        format!("Unknown resource binding: {}", name)
-                    ))
-                }
-            }
-            ResourceRef::ById(_) => Ok(()), // Always valid for external references
-            ResourceRef::Input(index) => {
-                if *index < self.inputs.len() {
-                    Ok(())
-                } else {
-                    Err(IntentError::InvalidConstraint(
-                        format!("Input index {} out of bounds", index)
-                    ))
-                }
-            }
-            ResourceRef::Output(index) => {
-                if *index < self.inputs.len() {
-                    Ok(())
-                } else {
-                    Err(IntentError::InvalidConstraint(
-                        format!("Output index {} out of bounds", index)
-                    ))
-                }
-            }
-        }
-    }
-    
-    /// Check if a binding name exists
-    fn has_binding(&self, name: &str) -> bool {
-        self.inputs.iter().any(|b| b.name == name)
-    }
-    
-    /// Get all resource binding names
-    pub fn get_binding_names(&self) -> Vec<String> {
-        self.inputs.iter().map(|b| b.name.clone()).collect()
-    }
-    
-    /// Get a resource binding by name
-    pub fn get_binding(&self, name: &str) -> Option<&ResourceBinding> {
-        self.inputs.iter().find(|b| b.name == name)
+    /// Set the access pattern for this resource
+    pub fn with_access_pattern(mut self, pattern: AccessPattern) -> Self {
+        self.access_pattern = pattern;
+        self
     }
 }
 
 impl ResourceBinding {
     /// Create a new resource binding
-    pub fn new(
-        name: impl Into<String>,
-        resource_type: impl Into<String>,
-    ) -> Self {
+    pub fn new(name: &str, _resource_type: &str) -> Self {
         Self {
-            name: name.into(),
-            resource_type: resource_type.into(),
-            quantity: None,
-            constraints: Vec::new(),
-            capabilities: Vec::new(),
-            metadata: Value::Bool(false),
+            name: name.to_string(),
+            resource: ResourceRef::new(
+                ResourceId::new([0u8; 32]), // Placeholder ID
+                TypeInner::Base(crate::lambda::base::BaseType::Symbol), // Placeholder type
+                Location::domain("local"),
+            ),
+            required: true,
+            default_value: None,
         }
     }
     
-    /// Set the required quantity
-    pub fn with_quantity(mut self, quantity: u64) -> Self {
-        self.quantity = Some(quantity);
-        self
-    }
-    
-    /// Add a constraint
-    pub fn with_constraint(mut self, constraint: Constraint) -> Self {
-        self.constraints.push(constraint);
-        self
-    }
-    
-    /// Add a required capability
-    pub fn with_capability(mut self, capability: Capability) -> Self {
-        self.capabilities.push(capability);
-        self
-    }
-    
-    /// Set metadata
-    pub fn with_metadata(mut self, metadata: Value) -> Self {
-        self.metadata = metadata;
+    /// Set quantity for the resource binding
+    pub fn with_quantity(self, _quantity: u64) -> Self {
+        // Placeholder implementation - quantity would be part of resource metadata
         self
     }
 }
 
-// Helper functions for constraint construction
-impl Constraint {
-    /// Create a logical AND constraint
-    pub fn and(constraints: Vec<Constraint>) -> Self {
-        Constraint::And(constraints)
-    }
-    
-    /// Create a logical OR constraint
-    pub fn or(constraints: Vec<Constraint>) -> Self {
-        Constraint::Or(constraints)
-    }
-    
-    /// Create a logical NOT constraint
-    #[allow(clippy::should_implement_trait)]
-    pub fn not(constraint: Constraint) -> Self {
-        Constraint::Not(Box::new(constraint))
-    }
-    
-    /// Create an equality constraint
-    pub fn equals(left: ValueExpr, right: ValueExpr) -> Self {
-        Constraint::Equals(left, right)
-    }
-    
-    /// Create a conservation constraint
-    pub fn conservation(inputs: Vec<String>, outputs: Vec<String>) -> Self {
-        Constraint::Conservation(inputs, outputs)
-    }
-    
-    /// Create a capability constraint
-    pub fn has_capability(resource: impl Into<String>, capability: impl Into<String>) -> Self {
-        Constraint::HasCapability(ResourceRef::ByName(resource.into()), capability.into())
-    }
-    
-    /// Create an output existence constraint
-    pub fn produces(name: impl Into<String>, resource_type: impl Into<String>) -> Self {
-        Constraint::Exists(ResourceBinding::new(name.into(), resource_type.into()))
-    }
-    
-    /// Create an output existence constraint with quantity
-    pub fn produces_quantity(
-        name: impl Into<String>, 
-        resource_type: impl Into<String>, 
-        quantity: u64
-    ) -> Self {
-        Constraint::Exists(
-            ResourceBinding::new(name.into(), resource_type.into()).with_quantity(quantity)
-        )
-    }
-    
-    /// Create a constraint requiring multiple outputs
-    pub fn produces_all(outputs: Vec<ResourceBinding>) -> Self {
-        Constraint::ExistsAll(outputs)
-    }
-    
-    /// Create a transfer constraint (common pattern)
-    pub fn transfer(
-        from: impl Into<String>,
-        to: impl Into<String>, 
-        amount: u64,
-        token_type: impl Into<String>
-    ) -> Self {
-        let token_type = token_type.into();
-        let to_string = to.into();
-        Constraint::and(vec![
-            // Conservation: input amount equals output amount
-            Constraint::conservation(
-                vec![from.into()],
-                vec![to_string.clone()],
-            ),
-            // Output exists with correct type and amount
-            Constraint::produces_quantity(to_string, token_type, amount),
-        ])
+impl TransformConstraint {
+    /// Create a simple transform constraint for testing
+    pub fn new(name: String) -> Self {
+        TransformConstraint::LocalTransform {
+            source_type: TypeInner::Base(crate::lambda::base::BaseType::Int),
+            target_type: TypeInner::Base(crate::lambda::base::BaseType::Symbol),
+            transform: TransformDefinition::FunctionApplication {
+                function: name,
+                argument: "input".to_string(),
+            },
+        }
     }
 }
 
-// Helper functions for value expressions
-impl ValueExpr {
-    /// Create a literal value expression
-    pub fn literal(value: Value) -> Self {
-        ValueExpr::Literal(value)
-    }
-    
-    /// Create a resource reference
-    pub fn resource(name: impl Into<String>) -> Self {
-        ValueExpr::ResourceRef(name.into())
-    }
-    
-    /// Create a quantity reference
-    pub fn quantity(name: impl Into<String>) -> Self {
-        ValueExpr::QuantityRef(name.into())
-    }
-    
-    /// Create an addition expression
-    #[allow(clippy::should_implement_trait)]
-    pub fn add(left: ValueExpr, right: ValueExpr) -> Self {
-        ValueExpr::Add(Box::new(left), Box::new(right))
-    }
-}
-
-// Error implementations
 impl std::fmt::Display for IntentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            IntentError::InvalidConstraint(msg) => write!(f, "Invalid constraint: {}", msg),
-            IntentError::MissingResource(name) => write!(f, "Missing resource: {}", name),
-            IntentError::ConstraintFailed(msg) => write!(f, "Constraint failed: {}", msg),
-            IntentError::InvalidBinding(msg) => write!(f, "Invalid binding: {}", msg),
-            IntentError::UnsupportedOperation(op) => write!(f, "Unsupported operation: {}", op),
-            IntentError::SynthesisFailed(msg) => write!(f, "Synthesis failed: {}", msg),
+            IntentError::InvalidIntent(msg) => write!(f, "Invalid intent: {}", msg),
+            IntentError::ResourceNotFound(id) => write!(f, "Resource not found: {:?}", id),
+            IntentError::InsufficientCapabilities { required, available } => {
+                write!(f, "Insufficient capabilities. Required: {:?}, Available: {:?}", required, available)
+            }
+            IntentError::LocationNotAccessible { location, reason } => {
+                write!(f, "Location {:?} not accessible: {}", location, reason)
+            }
+            IntentError::ProtocolNotSupported { protocol, location } => {
+                write!(f, "Protocol {} not supported at location {:?}", protocol, location)
+            }
+            IntentError::ConstraintSolvingFailed(err) => write!(f, "Constraint solving failed: {:?}", err),
+            IntentError::MigrationFailed { from, to, reason } => {
+                write!(f, "Migration failed from {:?} to {:?}: {}", from, to, reason)
+            }
+            IntentError::PerformanceConstraintViolated { constraint, actual, limit } => {
+                write!(f, "Performance constraint '{}' violated: {} > {}", constraint, actual, limit)
+            }
+            IntentError::DependencyCycle(cycle) => write!(f, "Dependency cycle detected: {:?}", cycle),
+            IntentError::ExternalError(msg) => write!(f, "External error: {}", msg),
         }
     }
 }
 
 impl std::error::Error for IntentError {}
 
-impl Hint {
-    /// Create a logical AND hint
-    pub fn and(hints: Vec<Hint>) -> Self {
-        Hint::And(hints)
-    }
-    
-    /// Create a logical OR hint
-    pub fn or(hints: Vec<Hint>) -> Self {
-        Hint::Or(hints)
-    }
-    
-    /// Create a logical NOT hint
-    #[allow(clippy::should_implement_trait)]
-    pub fn not(hint: Hint) -> Self {
-        Hint::Not(Box::new(hint))
-    }
-    
-    /// Create a batching hint
-    pub fn batch_with(selector: impl Into<String>) -> Self {
-        Hint::BatchWith(selector.into())
-    }
-    
-    /// Create a minimize hint
-    pub fn minimize(metric: impl Into<String>) -> Self {
-        Hint::Minimize(metric.into())
-    }
-    
-    /// Create a maximize hint
-    pub fn maximize(metric: impl Into<String>) -> Self {
-        Hint::Maximize(metric.into())
-    }
-    
-    /// Create a domain preference hint
-    pub fn prefer_domain(domain: DomainId) -> Self {
-        Hint::PreferDomain(domain)
-    }
-    
-    /// Create a deadline hint
-    pub fn deadline(timestamp: Timestamp) -> Self {
-        Hint::Deadline(timestamp)
-    }
-    
-    /// Create a cost budget hint
-    pub fn cost_budget(max_cost: u64) -> Self {
-        Hint::CostBudget(max_cost)
-    }
-    
-    /// Create a resource limit hint
-    pub fn resource_limit(resource_type: impl Into<String>, max_amount: u64) -> Self {
-        Hint::ResourceLimit(resource_type.into(), max_amount)
-    }
-    
-    /// Create a custom machine-level hint
-    pub fn custom(machine_hint: MachineHint) -> Self {
-        Hint::Custom(machine_hint)
+impl From<TransformConstraintError> for IntentError {
+    fn from(err: TransformConstraintError) -> Self {
+        IntentError::ConstraintSolvingFailed(err)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lambda::base::Value;
-    use crate::effect::capability::Capability;
-    use crate::machine::instruction::{Metric, Selector};
-
+    
     #[test]
     fn test_intent_creation() {
-        let domain_name = String::from("test_domain");
-        let domain = EntityId::from_content(&domain_name.as_bytes().to_vec());
-        
-        let intent = Intent::new(
-            domain,
-            vec![
-                ResourceBinding::new("source_account", "Account").with_quantity(100),
-                ResourceBinding::new("tokens", "Token").with_quantity(50),
-            ],
-            Constraint::True,
-        );
-        
-        assert_eq!(intent.domain.to_string(), domain.to_string());
-        assert_eq!(intent.inputs.len(), 2);
-        assert_eq!(intent.inputs[0].name, "source_account");
-        assert_eq!(intent.inputs[1].quantity, Some(50));
-    }
-
-    #[test]
-    fn test_intent_validation() {
-        let domain_name = String::from("test_domain");
-        let domain = EntityId::from_content(&domain_name.as_bytes().to_vec());
-        
-        // Valid intent
-        let valid_intent = Intent::new(
-            domain,
-            vec![ResourceBinding::new("input", "Token")],
-            Constraint::True,
-        );
-        
-        assert!(valid_intent.validate().is_ok());
-        
-        // Invalid intent - references unknown binding in conservation constraint
-        let invalid_intent = Intent::new(
-            domain,
-            vec![ResourceBinding::new("input", "Token")],
-            Constraint::conservation(
-                vec!["unknown_binding".to_string()],
-                vec!["output".to_string()],
-            ),
-        );
-        
-        assert!(invalid_intent.validate().is_err());
-    }
-
-    #[test]
-    fn test_resource_binding_builder() {
-        let binding = ResourceBinding::new("account", "Account")
-            .with_quantity(1000)
-            .with_capability(Capability::read("read"))
-            .with_metadata(Value::Bool(true));
-        
-        assert_eq!(binding.name, "account");
-        assert_eq!(binding.resource_type, "Account");
-        assert_eq!(binding.quantity, Some(1000));
-        assert_eq!(binding.capabilities.len(), 1);
-        assert!(matches!(binding.metadata, Value::Bool(true)));
-    }
-
-    #[test]
-    fn test_intent_with_transfer_constraint() {
-        let domain_name = String::from("test_domain");
-        let domain = EntityId::from_content(&domain_name.as_bytes().to_vec());
-        
-        let intent = Intent::new(
-            domain,
-            vec![
-                ResourceBinding::new("source_account", "Account"),
-                ResourceBinding::new("tokens", "Token").with_quantity(50),
-            ],
-            Constraint::transfer("tokens", "destination_tokens", 50, "Token"),
-        );
-        
-        assert_eq!(intent.domain.to_string(), domain.to_string());
-        assert_eq!(intent.inputs.len(), 2);
-        assert_eq!(intent.inputs[0].name, "source_account");
-        assert_eq!(intent.inputs[1].quantity, Some(50));
-        
-        // Constraint should be compound (And)
-        assert!(matches!(intent.constraint, Constraint::And(_)));
+        let intent = Intent::new(Location::domain("test"));
+        assert_eq!(intent.domain, Location::Domain("test".to_string()));
+        assert_eq!(intent.priority, IntentPriority::Normal);
     }
     
-    #[test] 
-    fn test_intent_with_compound_constraints() {
-        let domain_name = String::from("defi_domain");
-        let domain = EntityId::from_content(&domain_name.as_bytes().to_vec());
-        
-        let intent = Intent::new(
-            domain,
-            vec![
-                ResourceBinding::new("token_a", "TokenA").with_quantity(100),
-            ],
-            Constraint::and(vec![
-                // Must produce token B
-                Constraint::produces_quantity("token_b", "TokenB", 90),
-                // Must maintain value conservation (simplified)
-                Constraint::equals(
-                    ValueExpr::quantity("token_a"),
-                    ValueExpr::literal(Value::Int(100)),
-                ),
-                // Output quantity constraint
-                Constraint::equals(
-                    ValueExpr::QuantityRef("token_b".to_string()),
-                    ValueExpr::literal(Value::Int(90)),
-                ),
-            ])
-        );
-        
-        assert!(matches!(intent.constraint, Constraint::And(_)));
-        if let Constraint::And(constraints) = &intent.constraint {
-            assert_eq!(constraints.len(), 3);
-            assert!(matches!(constraints[0], Constraint::Exists(_)));
-        }
-    }
-
     #[test]
-    fn test_constraint_validation() {
-        let domain_name = String::from("test_domain");
-        let domain = EntityId::from_content(&domain_name.as_bytes().to_vec());
-        
-        let valid_intent = Intent::new(
-            domain,
-            vec![ResourceBinding::new("input", "Token")],
-            Constraint::produces("output", "Token"),
-        );
-        
-        assert!(valid_intent.validate().is_ok());
+    fn test_resource_binding_creation() {
+        let binding = ResourceBinding::new("test_resource", "TestType");
+        assert_eq!(binding.name, "test_resource");
+        assert!(binding.required);
     }
-
+    
     #[test]
-    fn test_constraint_validation_error() {
-        let domain_name = String::from("test_domain");
-        let domain = EntityId::from_content(&domain_name.as_bytes().to_vec());
+    fn test_intent_location_checking() {
+        let mut requirements = LocationRequirements::default();
+        requirements.allowed_locations.insert(Location::domain("allowed"));
         
-        let invalid_intent = Intent::new(
-            domain,
-            vec![ResourceBinding::new("input", "Token")],
-            Constraint::conservation(
-                vec!["unknown_binding".to_string()],
-                vec!["output".to_string()],
-            ),
-        );
+        let intent = Intent::new(Location::domain("test"))
+            .with_location_requirements(requirements);
         
-        assert!(invalid_intent.validate().is_err());
-    }
-
-    #[test]
-    fn test_intent_with_hints() {
-        let domain_name = String::from("test_domain");
-        let domain = EntityId::from_content(&domain_name.as_bytes().to_vec());
-        
-        let mut intent = Intent::new(
-            domain,
-            vec![ResourceBinding::new("input", "Token")],
-            Constraint::produces("output", "Token"),
-        );
-        
-        // Test hint composition
-        intent.hint = Hint::and(vec![
-            Hint::minimize("latency"),
-            Hint::prefer_domain(domain),
-            Hint::cost_budget(1000),
-            Hint::batch_with("same_type"),
-        ]);
-        
-        assert!(matches!(intent.hint, Hint::And(_)));
-        if let Hint::And(hints) = &intent.hint {
-            assert_eq!(hints.len(), 4);
-            assert!(matches!(hints[0], Hint::Minimize(_)));
-            assert!(matches!(hints[1], Hint::PreferDomain(_)));
-            assert!(matches!(hints[2], Hint::CostBudget(_)));
-            assert!(matches!(hints[3], Hint::BatchWith(_)));
-        }
-    }
-
-    #[test]
-    fn test_intent_with_custom_machine_hints() {
-        let domain_name = String::from("test_domain");
-        let domain = EntityId::from_content(&domain_name.as_bytes().to_vec());
-        
-        let mut intent = Intent::new(
-            domain,
-            vec![ResourceBinding::new("input", "Token")],
-            Constraint::produces("output", "Token"),
-        );
-        
-        // Test machine-level custom hints
-        intent.hint = Hint::custom(MachineHint::HintAll(vec![
-            MachineHint::BatchWith(Selector::SameType),
-            MachineHint::Minimize(Metric::Latency),
-            MachineHint::PreferDomain(domain.to_string()),
-            MachineHint::Deadline(1000),
-        ]));
-        
-        assert!(matches!(intent.hint, Hint::Custom(_)));
-        if let Hint::Custom(machine_hint) = &intent.hint {
-            assert!(matches!(machine_hint, MachineHint::HintAll(_)));
-            if let MachineHint::HintAll(hints) = machine_hint {
-                assert_eq!(hints.len(), 4);
-                assert!(matches!(hints[2], MachineHint::PreferDomain(_)));
-            }
-        }
+        assert!(intent.can_execute_at(&Location::domain("allowed")));
+        assert!(!intent.can_execute_at(&Location::domain("forbidden")));
     }
 } 

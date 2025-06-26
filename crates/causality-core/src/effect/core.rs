@@ -6,6 +6,17 @@
 use crate::lambda::{Term, TypeInner};
 
 //-----------------------------------------------------------------------------
+// Session Types
+//-----------------------------------------------------------------------------
+
+/// Session branch for case operations
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionBranch {
+    pub label: String,
+    pub body: EffectExpr,
+}
+
+//-----------------------------------------------------------------------------
 // Effect Expressions
 //-----------------------------------------------------------------------------
 
@@ -54,6 +65,41 @@ pub enum EffectExprKind {
     Race {
         left: Box<EffectExpr>,
         right: Box<EffectExpr>,
+    },
+    
+    // Session type operations
+    
+    /// Session send: send value through channel, then continue
+    SessionSend {
+        channel: Box<EffectExpr>,
+        value: Term,
+        continuation: Box<EffectExpr>,
+    },
+    
+    /// Session receive: receive value from channel, then continue
+    SessionReceive {
+        channel: Box<EffectExpr>,
+        continuation: Box<EffectExpr>,
+    },
+    
+    /// Session select: make internal choice on channel
+    SessionSelect {
+        channel: Box<EffectExpr>,
+        choice: String,
+        continuation: Box<EffectExpr>,
+    },
+    
+    /// Session case: handle external choice from channel
+    SessionCase {
+        channel: Box<EffectExpr>,
+        branches: Vec<SessionBranch>,
+    },
+    
+    /// Session context: establish session with specific role
+    WithSession {
+        session_decl: String,
+        role: String,
+        body: Box<EffectExpr>,
     },
 }
 

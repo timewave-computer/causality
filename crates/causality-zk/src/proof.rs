@@ -1,7 +1,7 @@
 //! ZK proof generation and management
 
 use crate::{ZkCircuit, ZkProof, ZkWitness, backends::ZkBackend, error::{ProofError, ProofResult}};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Proof generator for creating ZK proofs
 pub struct ProofGenerator {
@@ -9,7 +9,7 @@ pub struct ProofGenerator {
     backend: Box<dyn ZkBackend>,
     
     /// Circuit cache for reusing compiled circuits
-    circuit_cache: HashMap<String, ZkCircuit>,
+    circuit_cache: BTreeMap<String, ZkCircuit>,
 }
 
 impl ProofGenerator {
@@ -17,7 +17,7 @@ impl ProofGenerator {
     pub fn new(backend: Box<dyn ZkBackend>) -> Self {
         Self {
             backend,
-            circuit_cache: HashMap::new(),
+            circuit_cache: BTreeMap::new(),
         }
     }
     
