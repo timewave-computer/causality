@@ -89,8 +89,8 @@ Each module tests:
 ## Expected Results
 
 All 20 tests should pass, verifying:
-- ✅ Type system mathematical soundness
-- ✅ Linear resource discipline enforcement
-- ✅ Cross-layer representation consistency
-- ✅ Serialization format stability
-- ✅ Constraint system correctness 
+-  Type system mathematical soundness
+-  Linear resource discipline enforcement
+-  Cross-layer representation consistency
+-  Serialization format stability
+-  Constraint system correctness 

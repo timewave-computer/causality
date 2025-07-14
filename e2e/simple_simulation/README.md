@@ -47,10 +47,10 @@ This test is useful for:
 ## Expected Results
 
 The test should pass, demonstrating:
-- ✅ Basic simulation engine functionality
-- ✅ Simple effect execution
-- ✅ State change tracking
-- ✅ Resource management basics
+-  Basic simulation engine functionality
+-  Simple effect execution
+-  State change tracking
+-  Resource management basics
 
 ## Note
 

@@ -129,7 +129,7 @@ async fn test_gas_optimization_strategy() -> Result<()> {
         
         optimization_results.insert(program_name.to_string(), optimization_result.clone());
         
-        println!("    ✓ Gas optimization: {:.1}% improvement", optimization_result.improvement_percentage);
+        println!("     Gas optimization: {:.1}% improvement", optimization_result.improvement_percentage);
         println!("      Original gas: {}, Optimized gas: {}", 
                 optimization_result.original_cost.gas_cost, 
                 optimization_result.optimized_cost.gas_cost);
@@ -145,7 +145,7 @@ async fn test_gas_optimization_strategy() -> Result<()> {
         .sum::<f64>() / optimization_results.len() as f64;
     
     assert!(avg_gas_improvement > 20.0); // Should achieve at least 20% gas reduction
-    println!("✓ Gas optimization strategy effective: {:.1}% average improvement", avg_gas_improvement);
+    println!(" Gas optimization strategy effective: {:.1}% average improvement", avg_gas_improvement);
     
     Ok(())
 }
@@ -185,13 +185,13 @@ async fn test_time_optimization_strategy() -> Result<()> {
             -((optimization_result.optimized_cost.time_cost - optimization_result.original_cost.time_cost) as f64 / optimization_result.original_cost.time_cost as f64) * 100.0
         };
         
-        println!("    ✓ Time optimization: {:.1}% improvement", time_improvement);
+        println!("     Time optimization: {:.1}% improvement", time_improvement);
         println!("      Original time: {} ms, Optimized time: {} ms", 
                 optimization_result.original_cost.time_cost, 
                 optimization_result.optimized_cost.time_cost);
     }
     
-    println!("✓ Time optimization strategy completed successfully");
+    println!(" Time optimization strategy completed successfully");
     
     Ok(())
 }
@@ -240,7 +240,7 @@ async fn test_balanced_optimization_strategy() -> Result<()> {
             -((optimization_result.optimized_cost.memory_cost - optimization_result.original_cost.memory_cost) as f64 / optimization_result.original_cost.memory_cost as f64) * 100.0
         };
         
-        println!("    ✓ Gas: {:.1}%, Time: {:.1}%, Memory: {:.1}% improvement", 
+        println!("     Gas: {:.1}%, Time: {:.1}%, Memory: {:.1}% improvement", 
                 gas_improvement, time_improvement, memory_improvement);
         
         // Verify balanced improvement (no metric should be severely degraded)
@@ -249,7 +249,7 @@ async fn test_balanced_optimization_strategy() -> Result<()> {
         assert!(memory_improvement > -20.0);
     }
     
-    println!("✓ Balanced optimization maintains good performance across all metrics");
+    println!(" Balanced optimization maintains good performance across all metrics");
     
     Ok(())
 }
@@ -283,7 +283,7 @@ async fn test_optimization_strategy_comparison() -> Result<()> {
     
     // Verify we have results for all strategies
     assert_eq!(strategy_results.len(), 4);
-    println!("✓ All optimization strategies produce results");
+    println!(" All optimization strategies produce results");
     
     Ok(())
 }
@@ -315,5 +315,5 @@ fn test_cost_metrics_calculation() {
     assert_eq!(time_improvement, 20.0);
     assert_eq!(memory_improvement, 20.0);
     
-    println!("✓ Cost metrics calculation works correctly");
+    println!(" Cost metrics calculation works correctly");
 } 

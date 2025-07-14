@@ -9,10 +9,10 @@ let test_effect_creation () =
   (* Test creating a linear resource - direct style! *)
   let test_creation () =
     let resource = create_linear_resource 42 in
-    print_endline "✓ Linear resource created successfully";
+    print_endline " Linear resource created successfully";
     (* Test consuming the resource *)
     let value = consume_linear_resource resource in
-    Printf.printf "✓ Linear resource consumed, value: %d\n" value
+    Printf.printf " Linear resource consumed, value: %d\n" value
   in
 
   (match run_with_effects test_creation with
@@ -22,7 +22,7 @@ let test_effect_creation () =
   (* Test resource allocation *)
   let test_allocation () =
     let resource_id = allocate_resource () in
-    Printf.printf "✓ Resource allocated, ID length: %d bytes\n"
+    Printf.printf " Resource allocated, ID length: %d bytes\n"
       (Bytes.length resource_id)
   in
 
@@ -35,7 +35,7 @@ let test_effect_creation () =
   (* Test constraint checking *)
   let test_constraint () =
     let result = check_constraint true in
-    Printf.printf "✓ Constraint check result: %b\n" result
+    Printf.printf " Constraint check result: %b\n" result
   in
 
   (match run_with_effects test_constraint with
@@ -47,7 +47,7 @@ let test_effect_creation () =
   (* Test ZK witness generation *)
   let test_witness () =
     let witness = generate_zk_witness "test_term" in
-    Printf.printf "✓ ZK witness generated: %s\n" witness
+    Printf.printf " ZK witness generated: %s\n" witness
   in
 
   match run_with_effects test_witness with
@@ -71,7 +71,7 @@ let test_effect_composition () =
 
   match run_with_effects computation with
   | Ok (value, validation, witness) ->
-      Printf.printf "✓ Composed computation result:\n";
+      Printf.printf " Composed computation result:\n";
       Printf.printf "  - Value: %s\n" value;
       Printf.printf "  - Validation: %b\n" validation;
       Printf.printf "  - Witness: %s\n" witness
@@ -88,7 +88,7 @@ let test_linear_functions () =
   let computation () = apply_linear_function increment 41 in
 
   match run_with_effects computation with
-  | Ok value -> Printf.printf "✓ Linear function result: %d\n" value
+  | Ok value -> Printf.printf " Linear function result: %d\n" value
   | Error exn ->
       Printf.printf "✗ Linear function failed: %s\n" (Printexc.to_string exn)
 
@@ -106,7 +106,7 @@ let test_effect_sequencing () =
 
   match run_with_effects computation with
   | Ok resources ->
-      Printf.printf "✓ Created %d resources successfully\n"
+      Printf.printf " Created %d resources successfully\n"
         (List.length resources);
       List.iteri
         (fun i resource ->
@@ -128,7 +128,7 @@ let test_linearity_enforcement () =
     let resource = create_linear_resource "test_linearity" in
     (* First consumption should succeed *)
     let value1 = consume_linear_resource resource in
-    Printf.printf "✓ First consumption: %s\n" value1;
+    Printf.printf " First consumption: %s\n" value1;
     (* Second consumption should fail *)
     let _value2 = consume_linear_resource resource in
     Printf.printf "✗ Second consumption should have failed!\n"
@@ -137,10 +137,10 @@ let test_linearity_enforcement () =
   match run_with_effects test_double_consumption with
   | Ok () -> Printf.printf "✗ Double consumption was not prevented!\n"
   | Error (Failure msg) ->
-      Printf.printf "✓ Second consumption correctly failed: %s\n" msg
+      Printf.printf " Second consumption correctly failed: %s\n" msg
   | Error _ ->
       Printf.printf
-        "✓ Second consumption correctly failed (linearity enforced)\n"
+        " Second consumption correctly failed (linearity enforced)\n"
 
 (** Test the provided example functions *)
 let test_examples () =
@@ -150,7 +150,7 @@ let test_examples () =
   let pipeline_computation () = linear_pipeline_example () in
   (match run_with_effects pipeline_computation with
   | Ok (value, type_ok, witness) ->
-      Printf.printf "✓ Linear pipeline example:\n";
+      Printf.printf " Linear pipeline example:\n";
       Printf.printf "  - Value: %d\n" value;
       Printf.printf "  - Type check: %b\n" type_ok;
       Printf.printf "  - Witness: %s\n" witness
@@ -161,7 +161,7 @@ let test_examples () =
   (* Test effect composition example *)
   let composition_computation () = effect_composition_example () in
   match run_with_effects composition_computation with
-  | Ok (Some value) -> Printf.printf "✓ Effect composition example: %s\n" value
+  | Ok (Some value) -> Printf.printf " Effect composition example: %s\n" value
   | Ok None -> Printf.printf "✗ Effect composition example returned None\n"
   | Error exn ->
       Printf.printf "✗ Effect composition example failed: %s\n"
@@ -174,7 +174,7 @@ let test_complex_computation () =
   let complex_computation () = complex_computation_example 10 in
   match run_with_effects complex_computation with
   | Ok (result, witness) ->
-      Printf.printf "✓ Complex computation result: %d, witness: %s\n" result
+      Printf.printf " Complex computation result: %d, witness: %s\n" result
         witness
   | Error exn ->
       Printf.printf "✗ Complex computation failed: %s\n"
@@ -186,7 +186,7 @@ let test_nested_computation () =
 
   let nested_computation () = nested_computation_example () in
   match run_with_effects nested_computation with
-  | Ok result -> Printf.printf "✓ Nested computation result: %s\n" result
+  | Ok result -> Printf.printf " Nested computation result: %s\n" result
   | Error exn ->
       Printf.printf "✗ Nested computation failed: %s\n" (Printexc.to_string exn)
 
@@ -210,7 +210,7 @@ let test_control_flow_benefits () =
   in
 
   match run_with_effects conditional_computation with
-  | Ok result -> Printf.printf "✓ Conditional computation: %s\n" result
+  | Ok result -> Printf.printf " Conditional computation: %s\n" result
   | Error exn ->
       Printf.printf "✗ Conditional computation failed: %s\n"
         (Printexc.to_string exn)
@@ -219,7 +219,7 @@ let test_control_flow_benefits () =
 let run_tests () =
   print_endline "OCaml Native Algebraic Effects Test Suite";
   print_endline "=======================================";
-  print_endline "🎉 No more monadic composition - direct style programming!";
+  print_endline " No more monadic composition - direct style programming!";
 
   test_effect_creation ();
   test_effect_composition ();
@@ -234,7 +234,7 @@ let run_tests () =
   print_endline "\n=== Test Suite Complete ===";
   print_endline
     "✨ True algebraic effects working - no monad composition overhead!";
-  print_endline "🚀 Direct style programming with effect tracking!"
+  print_endline " Direct style programming with effect tracking!"
 
 (* Run tests when module is loaded *)
 let () = run_tests ()

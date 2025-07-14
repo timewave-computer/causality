@@ -421,7 +421,7 @@ impl CrossDomainZkManager {
             timestamp: chrono::Utc::now().to_rfc3339(),
         };
         
-        println!("  ✓ Cross-domain proof coordination complete");
+        println!("   Cross-domain proof coordination complete");
         
         Ok(composite_proof)
     }
@@ -471,7 +471,7 @@ impl CrossDomainZkManager {
         let partitions = self.partition_instructions(instructions);
         let domain_count = partitions.len();
         
-        println!("  ✓ Partitioned into {} domains", domain_count);
+        println!("   Partitioned into {} domains", domain_count);
         
         // Simulate domain coordination
         for (domain_id, domain_instructions) in &partitions {
@@ -499,7 +499,7 @@ impl CrossDomainZkManager {
         
         let proof_id = format!("domain_proof_{:x}", proof_hash);
         
-        println!("  ✓ Domain proof generated: {}", proof_id);
+        println!("   Domain proof generated: {}", proof_id);
         
         Ok(proof_id)
     }
@@ -661,6 +661,6 @@ mod tests {
         assert!(manager.backends.contains_key(&Location::Domain("computation".to_string())));
         assert!(manager.backends.contains_key(&Location::Domain("parallel".to_string())));
         
-        println!("✓ Cross-domain proof generation setup completed successfully");
+        println!(" Cross-domain proof generation setup completed successfully");
     }
 } 

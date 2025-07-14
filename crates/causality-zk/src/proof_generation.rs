@@ -273,7 +273,7 @@ impl ZkProofGenerator {
             }
         }
         
-        println!("   ✓ All {} circuit constraints satisfied", circuit.gate_count);
+        println!("    All {} circuit constraints satisfied", circuit.gate_count);
         Ok(())
     }
 

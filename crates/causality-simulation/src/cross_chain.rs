@@ -748,7 +748,7 @@ impl CrossChainTestExecutor {
                 total_steps += chain_result.metrics.tests_executed as usize;
             }
             
-            println!("    ✓ Chain '{}' completed: {} steps", chain_name, total_steps);
+            println!("     Chain '{}' completed: {} steps", chain_name, total_steps);
         }
         
         Ok(CrossChainResult {

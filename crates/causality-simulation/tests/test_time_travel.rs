@@ -23,7 +23,7 @@ async fn test_checkpoint_architecture() -> Result<()> {
     
     // Create checkpoint at critical point
     let checkpoint1 = engine.create_checkpoint("before_critical_operation").await?;
-    println!("✓ Checkpoint 1 created: {}", checkpoint1);
+    println!(" Checkpoint 1 created: {}", checkpoint1);
     
     // Execute critical operation
     let critical_program = "(consume (alloc 500))";
@@ -32,7 +32,7 @@ async fn test_checkpoint_architecture() -> Result<()> {
     
     // Create second checkpoint
     let checkpoint2 = engine.create_checkpoint("after_critical_operation").await?;
-    println!("✓ Checkpoint 2 created: {}", checkpoint2);
+    println!(" Checkpoint 2 created: {}", checkpoint2);
     
     // Execute additional operations
     let additional_program = "(tensor (alloc 200) (alloc 300))";
@@ -41,7 +41,7 @@ async fn test_checkpoint_architecture() -> Result<()> {
     
     // Test checkpoint restoration
     engine.rewind_to_checkpoint(&checkpoint1).await?;
-    println!("✓ Rewound to checkpoint 1");
+    println!(" Rewound to checkpoint 1");
     
     // Execute alternative path
     let alternative_program = "(alloc 250)";
@@ -50,7 +50,7 @@ async fn test_checkpoint_architecture() -> Result<()> {
     
     // Verify different execution path
     assert_ne!(result1.step_count, alt_result.step_count);
-    println!("✓ Checkpoint architecture enables different execution paths");
+    println!(" Checkpoint architecture enables different execution paths");
     
     Ok(())
 }
@@ -78,15 +78,15 @@ async fn test_timeline_management() -> Result<()> {
         let checkpoint = engine.create_checkpoint(&format!("timeline_{}", phase_name)).await?;
         timeline_checkpoints.push((phase_name.to_string(), checkpoint, result.step_count));
         
-        println!("  ✓ Timeline point '{}': {} steps, checkpoint created", phase_name, result.step_count);
+        println!("   Timeline point '{}': {} steps, checkpoint created", phase_name, result.step_count);
     }
     
-    println!("✓ Timeline created with {} checkpoints", timeline_checkpoints.len());
+    println!(" Timeline created with {} checkpoints", timeline_checkpoints.len());
     
     // Test timeline navigation - jump to middle
     let (middle_phase, middle_checkpoint, _expected_steps) = &timeline_checkpoints[1];
     engine.rewind_to_checkpoint(middle_checkpoint).await?;
-    println!("✓ Navigated to timeline point: {}", middle_phase);
+    println!(" Navigated to timeline point: {}", middle_phase);
     
     // Verify we can continue from middle point
     let continuation_result = engine.execute_program("(alloc 25)").await?;
@@ -95,10 +95,10 @@ async fn test_timeline_management() -> Result<()> {
     // Test jumping to different timeline points
     for (phase_name, checkpoint, _) in &timeline_checkpoints {
         engine.rewind_to_checkpoint(checkpoint).await?;
-        println!("  ✓ Successfully navigated to: {}", phase_name);
+        println!("   Successfully navigated to: {}", phase_name);
     }
     
-    println!("✓ Timeline navigation working correctly");
+    println!(" Timeline navigation working correctly");
     
     Ok(())
 }
@@ -142,7 +142,7 @@ async fn test_iterative_debugging_workflow() -> Result<()> {
             metrics.effects_executed,
         ));
         
-        println!("    ✓ Attempt {}: {} steps, {} gas, {} effects", 
+        println!("     Attempt {}: {} steps, {} gas, {} effects", 
                 attempt_name, result.step_count, metrics.total_gas_consumed, metrics.effects_executed);
     }
     
@@ -151,7 +151,7 @@ async fn test_iterative_debugging_workflow() -> Result<()> {
         .min_by_key(|(_, (steps, gas, _))| steps + (*gas as usize))
         .map(|(name, _)| name);
     
-    println!("✓ Iterative debugging completed");
+    println!(" Iterative debugging completed");
     println!("  Optimal solution found: {:?}", optimal_attempt.unwrap());
     
     Ok(())
@@ -201,7 +201,7 @@ async fn test_what_if_analysis() -> Result<()> {
             effects_delta,
         ));
         
-        println!("    ✓ Scenario {}: {} steps, {} gas impact, {} effects impact", 
+        println!("     Scenario {}: {} steps, {} gas impact, {} effects impact", 
                 scenario_name, result.step_count, gas_delta, effects_delta);
     }
     
@@ -216,7 +216,7 @@ async fn test_what_if_analysis() -> Result<()> {
         .min_by_key(|(_, (steps, gas, _))| steps + (*gas as usize))
         .map(|(name, _)| name);
     
-    println!("✓ What-if analysis completed");
+    println!(" What-if analysis completed");
     println!("  Most efficient scenario: {:?}", most_efficient.unwrap());
     
     Ok(())
@@ -239,18 +239,18 @@ async fn test_temporal_consistency() -> Result<()> {
     let program2 = "(tensor (alloc 200) (alloc 300))";
     engine.execute_program(program2).await?;
     
-    println!("✓ Time progression verified through execution sequence");
+    println!(" Time progression verified through execution sequence");
     
     // Test temporal rewind
     engine.rewind_to_checkpoint(&temporal_checkpoint).await?;
     
-    println!("✓ Temporal checkpoint restoration completed");
+    println!(" Temporal checkpoint restoration completed");
     
     // Test temporal consistency across operations
     let consistency_program = "(consume (alloc 150))";
     engine.execute_program(consistency_program).await?;
     
-    println!("✓ Temporal consistency maintained after rewind");
+    println!(" Temporal consistency maintained after rewind");
     
     Ok(())
 }
@@ -282,19 +282,19 @@ async fn test_checkpoint_metadata_and_labeling() -> Result<()> {
         
         labeled_checkpoints.insert(label.to_string(), (checkpoint, description.to_string(), result.step_count));
         
-        println!("  ✓ Created checkpoint '{}': {} - {} steps", 
+        println!("   Created checkpoint '{}': {} - {} steps", 
                 label, description, result.step_count);
     }
     
-    println!("✓ Created {} labeled checkpoints", labeled_checkpoints.len());
+    println!(" Created {} labeled checkpoints", labeled_checkpoints.len());
     
     // Test checkpoint access by label
     for (label, (checkpoint, description, _expected_steps)) in &labeled_checkpoints {
         engine.rewind_to_checkpoint(checkpoint).await?;
-        println!("  ✓ Successfully accessed checkpoint '{}': {}", label, description);
+        println!("   Successfully accessed checkpoint '{}': {}", label, description);
     }
     
-    println!("✓ Checkpoint metadata and labeling system working");
+    println!(" Checkpoint metadata and labeling system working");
     
     Ok(())
 }
@@ -312,7 +312,7 @@ async fn test_regression_testing_workflow() -> Result<()> {
     // Create baseline checkpoint
     let baseline_checkpoint = engine.create_checkpoint("baseline_behavior").await?;
     
-    println!("✓ Baseline established: {} steps", baseline_result.step_count);
+    println!(" Baseline established: {} steps", baseline_result.step_count);
     
     // Simulate code changes and test for regressions
     let change_scenarios = vec![
@@ -342,7 +342,7 @@ async fn test_regression_testing_workflow() -> Result<()> {
         ));
         
         let status = if is_regression { "REGRESSION" } else { "OK" };
-        println!("    ✓ Change {}: {} steps [{}]", change_name, modified_result.step_count, status);
+        println!("     Change {}: {} steps [{}]", change_name, modified_result.step_count, status);
     }
     
     // Summary of regression testing
@@ -350,7 +350,7 @@ async fn test_regression_testing_workflow() -> Result<()> {
         .filter(|(_, (_, is_regression, _))| *is_regression)
         .collect();
     
-    println!("✓ Regression testing completed");
+    println!(" Regression testing completed");
     println!("  Baseline: {} steps", baseline_result.step_count);
     println!("  Regressions detected: {}/{}", regressions.len(), change_scenarios.len());
     
@@ -385,7 +385,7 @@ async fn test_complex_time_travel_scenarios() -> Result<()> {
         let checkpoint = engine.create_checkpoint(&format!("complex_{}", phase_name)).await?;
         
         phase_checkpoints.push((phase_name.to_string(), checkpoint, result.step_count));
-        println!("  ✓ Phase {} completed: {} steps", phase_name, result.step_count);
+        println!("   Phase {} completed: {} steps", phase_name, result.step_count);
     }
     
     // Test complex time-travel pattern: 5 -> 2 -> 4 -> 1 -> 5
@@ -398,10 +398,10 @@ async fn test_complex_time_travel_scenarios() -> Result<()> {
         // Execute verification program to ensure state is correct
         let verification_result = engine.execute_program("(alloc 10)").await?;
         
-        println!("  ✓ Traveled to {}: verification {} steps", phase_name, verification_result.step_count);
+        println!("   Traveled to {}: verification {} steps", phase_name, verification_result.step_count);
     }
     
-    println!("✓ Complex time-travel scenario completed");
+    println!(" Complex time-travel scenario completed");
     
     // Test time-travel with state modifications
     let modification_checkpoint = &phase_checkpoints[2].1; // Phase 3
@@ -409,11 +409,11 @@ async fn test_complex_time_travel_scenarios() -> Result<()> {
     
     // Modify state from this point
     let modification_result = engine.execute_program("(tensor (alloc 500) (alloc 600))").await?;
-    println!("  ✓ State modification from checkpoint: {} steps", modification_result.step_count);
+    println!("   State modification from checkpoint: {} steps", modification_result.step_count);
     
     // Create new timeline branch
     let _new_timeline_checkpoint = engine.create_checkpoint("modified_timeline").await?;
-    println!("  ✓ New timeline branch created");
+    println!("   New timeline branch created");
     
     Ok(())
 } 

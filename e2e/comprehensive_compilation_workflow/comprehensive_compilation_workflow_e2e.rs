@@ -111,7 +111,7 @@ async fn test_new_compilation_workflow() -> Result<()> {
     }
     println!("   State freed successfully");
 
-    println!("\n✅ New Compilation Workflow E2E Test Passed!");
+    println!("\n New Compilation Workflow E2E Test Passed!");
     Ok(())
 }
 
@@ -148,7 +148,7 @@ async fn test_error_handling() -> Result<()> {
         );
     }
 
-    println!("✅ Error handling test passed - invalid syntax properly rejected");
+    println!(" Error handling test passed - invalid syntax properly rejected");
 
     // Test with missing input file
     let output = Command::new("./target/debug/causality")
@@ -162,7 +162,7 @@ async fn test_error_handling() -> Result<()> {
         );
     }
 
-    println!("✅ Error handling test passed - missing file properly handled");
+    println!(" Error handling test passed - missing file properly handled");
     Ok(())
 }
 
@@ -214,12 +214,12 @@ async fn test_multiple_programs() -> Result<()> {
         }
 
         println!(
-            "  ✅ {} compiled successfully ({} bytes)",
+            "   {} compiled successfully ({} bytes)",
             name,
             bytecode.len()
         );
     }
 
-    println!("✅ Multiple program compilation test passed!");
+    println!(" Multiple program compilation test passed!");
     Ok(())
 }

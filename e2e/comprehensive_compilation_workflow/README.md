@@ -89,13 +89,13 @@ This test requires all major Causality components:
 ## Expected Results
 
 All 3 tests should pass, verifying:
-- ✅ Complete source-to-machine compilation works
-- ✅ Generated code executes correctly
-- ✅ Type safety is preserved through all layers
-- ✅ Linear resources are properly managed
-- ✅ Effects compile to correct machine operations
-- ✅ Intents resolve to valid effect sequences
-- ✅ Optimization preserves program semantics
+-  Complete source-to-machine compilation works
+-  Generated code executes correctly
+-  Type safety is preserved through all layers
+-  Linear resources are properly managed
+-  Effects compile to correct machine operations
+-  Intents resolve to valid effect sequences
+-  Optimization preserves program semantics
 
 ## Compilation Artifacts
 

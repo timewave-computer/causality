@@ -10,14 +10,14 @@ This directory contains OCaml-based end-to-end tests that demonstrate cross-lang
 - **Lisp ↔ IR**: Causality Lisp compilation to intermediate representation
 - **IR ↔ Machine**: IR compilation to register machine instructions
 
-### 🏦 DeFi Workflow Scenarios
+###  DeFi Workflow Scenarios
 - **Cross-Chain Bridging**: Token transfers between Ethereum, Polygon, Arbitrum
 - **Vault Deposits**: Automated yield farming with strategy selection
 - **Privacy Features**: Zero-knowledge proofs for transaction privacy
 - **Compliance**: Regulatory compliance proof generation
 - **Error Recovery**: Comprehensive error handling and transaction reversal
 
-### 🔐 Zero-Knowledge Integration
+###  Zero-Knowledge Integration
 - **ZK Circuit Generation**: Creating circuits for DeFi operations
 - **Proof Generation**: Generating proofs for bridge and vault operations
 - **Privacy Levels**: Configurable privacy settings (Low/Medium/High)
@@ -73,7 +73,7 @@ CAUSALITY_LOG=debug dune exec ./bridge_vault_e2e.exe
 
 The OCaml harness executes a complete 5-step workflow:
 
-### 1. 🔧 Compile OCaml Scenario to Lisp IR
+### 1.  Compile OCaml Scenario to Lisp IR
 - Compiles OCaml scenario using Dune
 - Converts Causality Lisp to intermediate representation
 - Verifies IR file creation and validity
@@ -85,19 +85,19 @@ The OCaml harness executes a complete 5-step workflow:
 - Performance metrics collection
 - **Expected**: Detailed cost breakdown and timing
 
-### 3. 🌉 Execute Cross-Chain Bridge Operations
+### 3.  Execute Cross-Chain Bridge Operations
 - Simulates token bridging between chains
 - Privacy-preserving transaction execution
 - ZK proof generation for bridge operations
 - **Expected**: Successful bridge with privacy proofs
 
-### 4. 🏦 Execute Vault Deposit with Strategy Selection
+### 4.  Execute Vault Deposit with Strategy Selection
 - Automated vault strategy selection (Aave/Compound/Yearn)
 - Yield optimization based on APY and risk parameters
 - Compliance checking and proof generation
 - **Expected**: Optimal vault selection and successful deposit
 
-### 5. 📋 Generate Comprehensive Compliance Report
+### 5.  Generate Comprehensive Compliance Report
 - Regulatory compliance verification
 - ZK proof aggregation and validation
 - Gas analysis and cost optimization report
@@ -148,13 +148,13 @@ type compliance_proof = {
 ### Successful Execution Output (Current Implementation)
 ```
 === Step 1: Compile OCaml Scenario to Lisp IR ===
-✅ OCaml scenario compilation successful
+ OCaml scenario compilation successful
 🔄 Compiling Lisp scenario to Causality IR...
-✅ Lisp → IR compilation successful
-✅ IR file created: /tmp/bridge_vault.ir
+ Lisp → IR compilation successful
+ IR file created: /tmp/bridge_vault.ir
 
 === Step 2: Run Cost Simulation via CLI ===
-❌ Simulation failed (simulate command not yet implemented)
+ Simulation failed (simulate command not yet implemented)
 
 Note: Currently only Step 1 (compilation) is fully functional.
 Steps 2-5 require CLI commands that are not yet implemented.
@@ -163,38 +163,38 @@ Steps 2-5 require CLI commands that are not yet implemented.
 ### Future Complete Workflow (When CLI is Extended)
 ```
 === Step 1: Compile OCaml Scenario to Lisp IR ===
-✅ OCaml scenario compilation successful
+ OCaml scenario compilation successful
 🔄 Compiling Lisp scenario to Causality IR...
-✅ Lisp → IR compilation successful
-✅ IR file created: /tmp/bridge_vault.ir
+ Lisp → IR compilation successful
+ IR file created: /tmp/bridge_vault.ir
 
 === Step 2: Run Cost Simulation via CLI ===
 🔬 Running cost simulation...
-✅ Simulation completed successfully
+ Simulation completed successfully
    Total gas cost: 245000 gwei
    Execution time: 1250 ms
    Success probability: 0.98
 
 === Step 3: Execute Cross-Chain Bridge Operations ===
-🌉 Bridging 1000000000 USDC from Ethereum to Polygon
+ Bridging 1000000000 USDC from Ethereum to Polygon
    Privacy level: High
    ZK proof required: true
-✅ Bridge operation completed with ZK privacy
+ Bridge operation completed with ZK privacy
 
 === Step 4: Execute Vault Deposit with Strategy Selection ===
-🔍 Finding optimal vault on Polygon for USDC
-✓ Selected: Aave (APY: 8.5%)
-🏦 Depositing 995000000 USDC into vault
-✅ Vault deposit successful
+ Finding optimal vault on Polygon for USDC
+ Selected: Aave (APY: 8.5%)
+ Depositing 995000000 USDC into vault
+ Vault deposit successful
 
 === Step 5: Generate Comprehensive Compliance Report ===
-📋 Generating compliance proof for scenario: bridge_vault_e2e
-✅ Compliance proof generated
+ Generating compliance proof for scenario: bridge_vault_e2e
+ Compliance proof generated
    ZK proofs: 3
    Privacy score: 0.95
    Gas analysis: included
 
-🎉 All steps completed successfully!
+ All steps completed successfully!
 ```
 
 ## Error Handling
@@ -235,7 +235,7 @@ The harness includes comprehensive error recovery:
 
 ## Current Status
 
-### Working Components ✅
+### Working Components 
 - **Step 1**: OCaml scenario compilation and Lisp → IR conversion
 - **Individual OCaml scenarios**: Full execution with mock DeFi operations
 - **Cross-language integration**: OCaml ↔ Rust CLI tool interaction
@@ -248,7 +248,7 @@ The harness includes comprehensive error recovery:
 
 ### Test Results
 ```bash
-# ✅ This works - Individual scenario
+#  This works - Individual scenario
 dune exec ./bridge_vault_scenario.exe
 
 # 🚧 This partially works - E2E harness (Step 1 only)

@@ -85,7 +85,7 @@ fn test_basic_property_framework() -> Result<()> {
     );
     
     let result = framework_test.run()?;
-    println!("✓ Framework Basic: {}/{} tests passed", result.passed, result.total_tests);
+    println!(" Framework Basic: {}/{} tests passed", result.passed, result.total_tests);
     
     assert!(result.passed == result.total_tests);
     
@@ -118,7 +118,7 @@ fn test_resource_conservation_properties() -> Result<()> {
     );
     
     let result = conservation_test.run()?;
-    println!("✓ Resource Conservation: {}/{} tests passed", result.passed, result.total_tests);
+    println!(" Resource Conservation: {}/{} tests passed", result.passed, result.total_tests);
     
     assert!(result.passed >= result.total_tests * 90 / 100); // At least 90% should pass
     

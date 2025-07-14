@@ -790,7 +790,7 @@ mod tests {
         let access_expr = Expr::record_access(Expr::variable("person"), "name");
         let result = checker_no_caps.check_expr(&access_expr);
         assert!(result.is_err());
-        println!("✓ Record access denied without capability");
+        println!(" Record access denied without capability");
 
         // Test case 2: Access with correct capability should succeed
         let read_cap = Capability::read_field("person_read", "name");
@@ -802,7 +802,7 @@ mod tests {
         let access_expr = Expr::record_access(Expr::variable("person"), "name");
         let result = checker_with_cap.check_expr(&access_expr);
         assert!(result.is_ok());
-        println!("✓ Record access allowed with correct capability");
+        println!(" Record access allowed with correct capability");
 
         // Test case 3: Update without write capability should fail
         let mut checker_read_only =
@@ -821,7 +821,7 @@ mod tests {
         );
         let result = checker_read_only.check_expr(&update_expr);
         assert!(result.is_err());
-        println!("✓ Record update denied with only read capability");
+        println!(" Record update denied with only read capability");
 
         // Test case 4: Update with write capability should succeed
         let write_cap = Capability::write_field("person_write", "name");
@@ -837,7 +837,7 @@ mod tests {
         );
         let result = checker_with_write.check_expr(&update_expr);
         assert!(result.is_ok());
-        println!("✓ Record update allowed with write capability");
+        println!(" Record update allowed with write capability");
     }
 
     #[test]
@@ -865,7 +865,7 @@ mod tests {
         // Should complete quickly (sub-millisecond for this simple operation)
         assert!(duration.as_millis() < 500);
         println!(
-            "✓ Capability checking completed in {:?} (zero runtime overhead)",
+            " Capability checking completed in {:?} (zero runtime overhead)",
             duration
         );
     }

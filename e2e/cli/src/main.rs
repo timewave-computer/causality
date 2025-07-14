@@ -140,7 +140,7 @@ async fn main() -> Result<()> {
         .with_env_filter("info")
         .init();
 
-    info!("🚀 Starting Causality CLI End-to-End Test Suite");
+    info!(" Starting Causality CLI End-to-End Test Suite");
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
@@ -241,7 +241,7 @@ EXAMPLES:
 /// Run the comprehensive test suite covering all CLI commands
 async fn run_comprehensive_test_suite(runner: &mut TestRunner) -> Result<TestSuiteResults> {
     let start_time = Utc::now();
-    info!("📋 Executing comprehensive CLI test suite");
+    info!(" Executing comprehensive CLI test suite");
 
     let mut results = TestSuiteResults {
         metadata: TestRunMetadata {
@@ -280,7 +280,7 @@ async fn run_comprehensive_test_suite(runner: &mut TestRunner) -> Result<TestSui
     ];
 
     for (category_name, category_desc) in test_categories {
-        info!("🔍 Testing category: {}", category_desc);
+        info!(" Testing category: {}", category_desc);
         
         let category_start = Instant::now();
         let category_results = run_category_tests(runner, category_name).await?;
@@ -332,7 +332,7 @@ async fn run_comprehensive_test_suite(runner: &mut TestRunner) -> Result<TestSui
         Duration::from_secs(0)
     };
 
-    info!("✅ Test suite completed: {}/{} tests passed ({:.1}%)", 
+    info!(" Test suite completed: {}/{} tests passed ({:.1}%)", 
           results.summary.passed, 
           results.summary.total_tests, 
           results.summary.success_rate);
@@ -398,7 +398,7 @@ async fn gather_environment_info() -> Result<EnvironmentInfo> {
 
 /// Generate comprehensive test reports
 async fn generate_reports(results: &TestSuiteResults, _config: &TestConfig) -> Result<()> {
-    info!("📊 Generating test reports");
+    info!(" Generating test reports");
 
     // Console report
     print_console_report(results);
@@ -424,11 +424,11 @@ async fn generate_reports(results: &TestSuiteResults, _config: &TestConfig) -> R
 /// Print a formatted console report
 fn print_console_report(results: &TestSuiteResults) {
     println!("\n{}", "=".repeat(80));
-    println!("🧪 CAUSALITY CLI E2E TEST RESULTS");
+    println!(" CAUSALITY CLI E2E TEST RESULTS");
     println!("{}", "=".repeat(80));
 
     // Summary
-    println!("\n📊 SUMMARY:");
+    println!("\n SUMMARY:");
     println!("  Total Tests:  {}", results.summary.total_tests);
     println!("  Passed:       {} ({:.1}%)", 
              results.summary.passed, 
@@ -441,7 +441,7 @@ fn print_console_report(results: &TestSuiteResults) {
     println!("  Avg/Test:     {:.2?}", results.summary.avg_test_time);
 
     // Category breakdown
-    println!("\n📋 BY CATEGORY:");
+    println!("\n BY CATEGORY:");
     for (name, category) in &results.category_results {
         let total = category.passed + category.failed + category.skipped;
         let rate = if total > 0 { 
@@ -458,7 +458,7 @@ fn print_console_report(results: &TestSuiteResults) {
         .collect();
     
     if !failed_tests.is_empty() {
-        println!("\n❌ FAILED TESTS:");
+        println!("\n FAILED TESTS:");
         for test in failed_tests {
             println!("  • {} - {}", test.name, test.error.as_deref().unwrap_or("Unknown error"));
         }
@@ -477,7 +477,7 @@ async fn generate_markdown_report(results: &TestSuiteResults) -> Result<()> {
         results.metadata.start_time.format("%Y-%m-%d %H:%M:%S UTC")));
     
     // Summary
-    content.push_str("## 📊 Summary\n\n");
+    content.push_str("##  Summary\n\n");
     content.push_str("| Metric | Value |\n");
     content.push_str("|--------|-------|\n");
     content.push_str(&format!("| Total Tests | {} |\n", results.summary.total_tests));
@@ -489,7 +489,7 @@ async fn generate_markdown_report(results: &TestSuiteResults) -> Result<()> {
     content.push_str(&format!("| Average Test Time | {:.2?} |\n\n", results.summary.avg_test_time));
     
     // Category Results
-    content.push_str("## 📋 Results by Category\n\n");
+    content.push_str("##  Results by Category\n\n");
     for (name, category) in &results.category_results {
         let total = category.passed + category.failed + category.skipped;
         let rate = if total > 0 { 
@@ -510,7 +510,7 @@ async fn generate_markdown_report(results: &TestSuiteResults) -> Result<()> {
         .collect();
     
     if !failed_tests.is_empty() {
-        content.push_str("## ❌ Failed Tests\n\n");
+        content.push_str("##  Failed Tests\n\n");
         for test in failed_tests {
             content.push_str(&format!("- **{}** - {}\n", 
                 test.name, 
@@ -520,7 +520,7 @@ async fn generate_markdown_report(results: &TestSuiteResults) -> Result<()> {
     }
     
     // Environment Information
-    content.push_str("## 🔧 Test Environment\n\n");
+    content.push_str("##  Test Environment\n\n");
     let env = &results.metadata.environment;
     content.push_str(&format!("- **OS:** {}\n", env.os));
     content.push_str(&format!("- **Architecture:** {}\n", env.arch));
@@ -535,7 +535,7 @@ async fn generate_markdown_report(results: &TestSuiteResults) -> Result<()> {
     }
     
     // All Test Results
-    content.push_str("\n## 📝 Detailed Test Results\n\n");
+    content.push_str("\n##  Detailed Test Results\n\n");
     for category_name in results.category_results.keys() {
         let category_tests: Vec<_> = results.test_results.iter()
             .filter(|t| t.category == *category_name)
@@ -548,11 +548,11 @@ async fn generate_markdown_report(results: &TestSuiteResults) -> Result<()> {
             
             for test in category_tests {
                 let status = if test.passed {
-                    "✅ PASSED"
+                    " PASSED"
                 } else if test.skipped {
                     "⏭️ SKIPPED" 
                 } else {
-                    "❌ FAILED"
+                    " FAILED"
                 };
                 
                 content.push_str(&format!("| {} | {} | {:.2?} | `{}` |\n",

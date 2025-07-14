@@ -16,26 +16,26 @@ async fn test_basic_simulation_workflow() -> Result<()> {
     
     // Create simulation engine
     let mut engine = SimulationEngine::new();
-    println!("✓ Created simulation engine");
+    println!(" Created simulation engine");
     
     // Test program execution
     let program = "(consume (alloc (tensor 100 200)))";
     let result = engine.execute_program(program).await?;
-    println!("✓ Executed program: {} steps", result.step_count);
+    println!(" Executed program: {} steps", result.step_count);
     
     // Test branching
     let branch_id = engine.create_branch("test_branch").await?;
-    println!("✓ Created branch: {}", branch_id);
+    println!(" Created branch: {}", branch_id);
     
     engine.switch_to_branch(&branch_id).await?;
-    println!("✓ Switched to branch");
+    println!(" Switched to branch");
     
     // Test checkpoints
     let checkpoint_id = engine.create_checkpoint("test_checkpoint").await?;
-    println!("✓ Created checkpoint: {}", checkpoint_id);
+    println!(" Created checkpoint: {}", checkpoint_id);
     
     engine.rewind_to_checkpoint(&checkpoint_id).await?;
-    println!("✓ Rewound to checkpoint");
+    println!(" Rewound to checkpoint");
     
     println!("\n=== All basic simulation features working! ===");
     Ok(())
@@ -46,11 +46,11 @@ async fn test_branching_manager() -> Result<()> {
     println!("=== Branching Manager Test ===\n");
     
     let mut manager = BranchingManager::new();
-    println!("✓ Created branching manager");
+    println!(" Created branching manager");
     
     // Initialize root
     let root_id = manager.initialize_root("Root Branch".to_string())?;
-    println!("✓ Initialized root branch: {:?}", root_id);
+    println!(" Initialized root branch: {:?}", root_id);
     
     // Create branches
     let branch1 = manager.create_branch("branch1", "Test Branch 1", 
@@ -58,21 +58,21 @@ async fn test_branching_manager() -> Result<()> {
     let branch2 = manager.create_branch("branch2", "Test Branch 2", 
         causality_simulation::ExecutionState::new())?;
     
-    println!("✓ Created branches: {:?}, {:?}", branch1, branch2);
+    println!(" Created branches: {:?}, {:?}", branch1, branch2);
     
     // Test branch switching
     manager.switch_to_branch(&branch1)?;
     assert_eq!(manager.current_branch(), Some(&branch1));
-    println!("✓ Switched to branch1");
+    println!(" Switched to branch1");
     
     manager.switch_to_branch(&branch2)?;
     assert_eq!(manager.current_branch(), Some(&branch2));
-    println!("✓ Switched to branch2");
+    println!(" Switched to branch2");
     
     // Test branch listing
     let branches = manager.list_branches();
     assert_eq!(branches.len(), 3); // root + 2 branches
-    println!("✓ Listed {} branches", branches.len());
+    println!(" Listed {} branches", branches.len());
     
     println!("\n=== Branching manager working correctly! ===");
     Ok(())
@@ -91,7 +91,7 @@ async fn test_simulation_with_config() -> Result<()> {
     };
     
     let mut engine = SimulationEngine::new_with_config(config);
-    println!("✓ Created simulation engine with custom config");
+    println!(" Created simulation engine with custom config");
     
     // Test step-by-step execution
     let program = vec![
@@ -104,19 +104,19 @@ async fn test_simulation_with_config() -> Result<()> {
     ];
     
     engine.load_program(program)?;
-    println!("✓ Loaded program");
+    println!(" Loaded program");
     
     // Execute step by step
     let step1 = engine.step().await?;
-    println!("✓ Executed step 1, continue: {}", step1);
+    println!(" Executed step 1, continue: {}", step1);
     
     let step2 = engine.step().await?;
-    println!("✓ Executed step 2, continue: {}", step2);
+    println!(" Executed step 2, continue: {}", step2);
     
     // Check state progression
     let progression = engine.state_progression();
     assert_eq!(progression.steps.len(), 2);
-    println!("✓ State progression tracked: {} steps", progression.steps.len());
+    println!(" State progression tracked: {} steps", progression.steps.len());
     
     println!("\n=== Configuration and step-by-step execution working! ===");
     Ok(())

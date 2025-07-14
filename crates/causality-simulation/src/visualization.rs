@@ -496,7 +496,7 @@ impl SessionProtocolVisualizer {
             let node_id = format!("N{}", i);
             let next_node_id = format!("N{}", i + 1);
             let operation_desc = format!("{:?}", event.operation);
-            let status_icon = if event.success { "✓" } else { "✗" };
+            let status_icon = if event.success { "" } else { "✗" };
             
             diagram.push_str(&format!(
                 "    {} --> {}[\"{}\\n{}\\n{} {}\"]\n",
@@ -524,7 +524,7 @@ impl SessionProtocolVisualizer {
         diagram.push_str(&format!("# Session Protocol State: {}\n\n", session_id));
         diagram.push_str(&format!("- **Current Session Type**: {:?}\n", state.current_session_type));
         diagram.push_str(&format!("- **Protocol Step**: {}\n", state.protocol_step));
-        diagram.push_str(&format!("- **Compliance Status**: {}\n", if state.is_compliant { "✓ Compliant" } else { "✗ Non-compliant" }));
+        diagram.push_str(&format!("- **Compliance Status**: {}\n", if state.is_compliant { " Compliant" } else { "✗ Non-compliant" }));
         diagram.push_str(&format!("- **Participants**: {}\n", state.participants.len()));
         diagram.push_str("\n## Performance Metrics\n");
         diagram.push_str(&format!("- **Operations Count**: {}\n", state.performance_metrics.operations_count));
@@ -576,7 +576,7 @@ impl SessionProtocolVisualizer {
         dashboard.push_str(&format!("## Active Sessions: {}\n\n", self.protocol_states.len()));
         
         for (session_id, state) in &self.protocol_states {
-            let compliance_icon = if state.is_compliant { "✅" } else { "❌" };
+            let compliance_icon = if state.is_compliant { "" } else { "" };
             dashboard.push_str(&format!(
                 "### {} {} {}\n",
                 compliance_icon,

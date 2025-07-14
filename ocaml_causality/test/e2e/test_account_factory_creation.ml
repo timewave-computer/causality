@@ -28,7 +28,7 @@ let test_create_account_factory () =
   (* Create account factory *)
   match safe_create_account_factory config with
   | Ok account -> 
-      Printf.printf "✓ Account factory created successfully\n";
+      Printf.printf " Account factory created successfully\n";
       Printf.printf "Account handle type: %s\n" (Obj.tag (Obj.repr account) |> string_of_int);
       Ok account
   | Error msg -> 
@@ -46,7 +46,7 @@ let test_async_account_factory_creation () =
   (* Create account factory asynchronously *)
   match Async_runtime.AccountFactory.create_account_async runtime test_owner test_permissions with
   | Ok (account, handle) ->
-      Printf.printf "✓ Async account factory created successfully\n";
+      Printf.printf " Async account factory created successfully\n";
       Printf.printf "Account: %s, Transaction ID: %s\n" account handle.tx_id;
       Printf.printf "Status: %s\n" (match handle.status with
         | Confirmed -> "Confirmed"
@@ -110,7 +110,7 @@ let test_interface_generation () =
   
   match generate_account_interface config with
   | Ok interface_code ->
-      Printf.printf "✓ Interface generated successfully\n";
+      Printf.printf " Interface generated successfully\n";
       Printf.printf "Interface preview (first 200 chars):\n%s...\n" 
         (String.sub interface_code 0 (min 200 (String.length interface_code)));
       Ok interface_code
@@ -130,7 +130,7 @@ let test_deployment_script_generation () =
   
   match generate_deployment_script configs with
   | Ok script ->
-      Printf.printf "✓ Deployment script generated successfully\n";
+      Printf.printf " Deployment script generated successfully\n";
       Printf.printf "Script preview (first 300 chars):\n%s...\n"
         (String.sub script 0 (min 300 (String.length script)));
       Ok script
@@ -193,7 +193,7 @@ let run_all_tests () =
     try
       match test_fn () with
       | Ok _ -> 
-          Printf.printf "✓ %s: PASSED\n" name;
+          Printf.printf " %s: PASSED\n" name;
           (name, true)
       | Error msg ->
           Printf.printf "✗ %s: FAILED - %s\n" name msg;
@@ -211,9 +211,9 @@ let run_all_tests () =
   Printf.printf "Test Results: %d/%d tests passed\n" passed total;
   
   if passed = total then
-    Printf.printf "🎉 All tests passed!\n"
+    Printf.printf " All tests passed!\n"
   else
-    Printf.printf "❌ Some tests failed\n";
+    Printf.printf " Some tests failed\n";
   
   results
 

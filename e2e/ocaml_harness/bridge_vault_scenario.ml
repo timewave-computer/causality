@@ -45,7 +45,7 @@ type error_recovery =
 (* Core scenario functions *)
 
 let verify_balance chain token expected_amount =
-  printf "🔍 Verifying balance on %s for %s: %Ld\n"
+  printf " Verifying balance on %s for %s: %Ld\n"
     (match chain with
     | Ethereum -> "Ethereum"
     | Polygon -> "Polygon"
@@ -64,7 +64,7 @@ let verify_balance chain token expected_amount =
          actual_balance)
 
 let bridge_tokens (params : bridge_params) =
-  printf "🌉 Bridging %Ld %s from %s to %s\n" params.amount
+  printf " Bridging %Ld %s from %s to %s\n" params.amount
     (match params.token with
     | USDC -> "USDC"
     | WETH -> "WETH"
@@ -91,13 +91,13 @@ let bridge_tokens (params : bridge_params) =
   (* 0.5% fee *)
   let final_amount = Int64.sub params.amount bridge_fee in
 
-  printf "   ✓ Bridge fee: %Ld\n" bridge_fee;
-  printf "   ✓ Final amount: %Ld\n" final_amount;
+  printf "    Bridge fee: %Ld\n" bridge_fee;
+  printf "    Final amount: %Ld\n" final_amount;
 
   { amount = final_amount; token = params.token; chain = params.dest_chain }
 
 let find_optimal_vault chain token strategies min_apy max_risk =
-  printf "🔍 Finding optimal vault on %s for %s\n"
+  printf " Finding optimal vault on %s for %s\n"
     (match chain with
     | Ethereum -> "Ethereum"
     | Polygon -> "Polygon"
@@ -124,7 +124,7 @@ let find_optimal_vault chain token strategies min_apy max_risk =
   in
 
   if estimated_apy >= min_apy then (
-    printf "   ✓ Selected: %s (APY: %.1f%%)\n"
+    printf "    Selected: %s (APY: %.1f%%)\n"
       (match selected_strategy with
       | Aave -> "Aave"
       | Compound -> "Compound"
@@ -135,7 +135,7 @@ let find_optimal_vault chain token strategies min_apy max_risk =
     failwith (sprintf "No vault meets minimum APY requirement: %.1f%%" min_apy)
 
 let vault_deposit (params : vault_params) =
-  printf "🏦 Depositing %Ld %s into vault on %s\n" params.amount
+  printf " Depositing %Ld %s into vault on %s\n" params.amount
     (match params.token with
     | USDC -> "USDC"
     | WETH -> "WETH"
@@ -151,13 +151,13 @@ let vault_deposit (params : vault_params) =
   (* Mock vault deposit *)
   let deposit_successful = true in
   if deposit_successful then (
-    printf "   ✓ Vault deposit successful\n";
+    printf "    Vault deposit successful\n";
     params.amount)
   else failwith "Vault deposit failed"
 
 let generate_compliance_proof scenario_name include_zk_proofs
     include_gas_analysis privacy_level =
-  printf "📋 Generating compliance proof for scenario: %s\n" scenario_name;
+  printf " Generating compliance proof for scenario: %s\n" scenario_name;
   printf "   Include ZK proofs: %b\n" include_zk_proofs;
   printf "   Include gas analysis: %b\n" include_gas_analysis;
   printf "   Privacy level: %s\n"
@@ -182,35 +182,35 @@ let generate_compliance_proof scenario_name include_zk_proofs
     }
   in
 
-  printf "   ✓ Compliance proof generated\n";
+  printf "    Compliance proof generated\n";
   proof_data
 
 (* Error handling functions *)
 let revert_bridge_transaction () =
   printf "🔄 Reverting bridge transaction\n";
-  printf "   ✓ Bridge reverted, funds returned to source chain\n"
+  printf "    Bridge reverted, funds returned to source chain\n"
 
 let refund_to_source_chain () =
-  printf "💰 Refunding to source chain\n";
-  printf "   ✓ Refund completed\n"
+  printf " Refunding to source chain\n";
+  printf "    Refund completed\n"
 
 let withdraw_from_vault () =
-  printf "🏦 Withdrawing from vault\n";
-  printf "   ✓ Vault withdrawal completed\n"
+  printf " Withdrawing from vault\n";
+  printf "    Vault withdrawal completed\n"
 
 let return_to_bridge_chain () =
-  printf "🌉 Returning funds to bridge chain\n";
-  printf "   ✓ Funds returned to bridge chain\n"
+  printf " Returning funds to bridge chain\n";
+  printf "    Funds returned to bridge chain\n"
 
 (* Main scenario execution *)
 let execute_bridge_vault_scenario () =
-  printf "🚀 Starting Cross-Chain Bridge and Vault Deposit Scenario\n";
+  printf " Starting Cross-Chain Bridge and Vault Deposit Scenario\n";
   printf "================================================\n";
 
   try
     (* Step 1: Verify initial balance *)
     let initial_balance = verify_balance Ethereum USDC 1000000000L in
-    printf "✅ Step 1: Balance verification complete\n";
+    printf " Step 1: Balance verification complete\n";
 
     (* Step 2: Bridge tokens with ZK privacy *)
     let bridge_params =
@@ -226,13 +226,13 @@ let execute_bridge_vault_scenario () =
     in
 
     let bridged_balance = bridge_tokens bridge_params in
-    printf "✅ Step 2: Cross-chain bridge complete\n";
+    printf " Step 2: Cross-chain bridge complete\n";
 
     (* Step 3: Find optimal vault *)
     let selected_vault, estimated_apy =
       find_optimal_vault Polygon USDC [ Aave; Compound; Yearn ] 5.0 `Medium
     in
-    printf "✅ Step 3: Optimal vault selection complete\n";
+    printf " Step 3: Optimal vault selection complete\n";
 
     (* Step 4: Deposit into vault *)
     let vault_params =
@@ -249,40 +249,40 @@ let execute_bridge_vault_scenario () =
     in
 
     let deposited_amount = vault_deposit vault_params in
-    printf "✅ Step 4: Vault deposit complete\n";
+    printf " Step 4: Vault deposit complete\n";
 
     (* Step 5: Generate compliance proof *)
     let compliance_proof_result =
       generate_compliance_proof "bridge-vault-deposit" true true `High
     in
-    printf "✅ Step 5: Compliance proof generation complete\n";
+    printf " Step 5: Compliance proof generation complete\n";
 
     (* Step 6: Report final metrics *)
-    printf "\n📊 Final Scenario Metrics:\n";
-    printf "   💰 Initial amount: %Ld USDC\n" initial_balance.amount;
-    printf "   🌉 Bridged amount: %Ld USDC\n" bridged_balance.amount;
-    printf "   🏦 Deposited amount: %Ld USDC\n" deposited_amount;
-    printf "   📈 Estimated APY: %.1f%%\n" estimated_apy;
-    printf "   🔐 Privacy score: %.2f\n" compliance_proof_result.privacy_score;
+    printf "\n Final Scenario Metrics:\n";
+    printf "    Initial amount: %Ld USDC\n" initial_balance.amount;
+    printf "    Bridged amount: %Ld USDC\n" bridged_balance.amount;
+    printf "    Deposited amount: %Ld USDC\n" deposited_amount;
+    printf "    Estimated APY: %.1f%%\n" estimated_apy;
+    printf "    Privacy score: %.2f\n" compliance_proof_result.privacy_score;
     printf "   ⛽ Gas optimization: enabled\n";
-    printf "   📋 ZK proofs generated: %d\n"
+    printf "    ZK proofs generated: %d\n"
       compliance_proof_result.zk_proofs_count;
 
-    printf "\n🎉 Bridge-Vault scenario completed successfully!\n"
+    printf "\n Bridge-Vault scenario completed successfully!\n"
   with
   | Failure msg ->
-      printf "\n❌ Scenario failed: %s\n" msg;
+      printf "\n Scenario failed: %s\n" msg;
       printf "🔄 Executing error recovery...\n";
       revert_bridge_transaction ();
       refund_to_source_chain ();
-      printf "✅ Error recovery completed\n";
+      printf " Error recovery completed\n";
       raise (Failure msg)
   | exn ->
-      printf "\n❌ Unexpected error: %s\n" (Printexc.to_string exn);
+      printf "\n Unexpected error: %s\n" (Printexc.to_string exn);
       printf "🔄 Executing emergency recovery...\n";
       withdraw_from_vault ();
       return_to_bridge_chain ();
-      printf "✅ Emergency recovery completed\n";
+      printf " Emergency recovery completed\n";
       raise exn
 
 (* Entry point for compilation to Lisp IR *)

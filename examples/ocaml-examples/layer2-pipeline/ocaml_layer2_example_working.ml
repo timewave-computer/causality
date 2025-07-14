@@ -10,7 +10,7 @@ let content_addressing_example () =
   
   Printf.printf "Content 1: %s\n" content1;
   Printf.printf "Content 2: %s\n" content2;
-  Printf.printf "✓ Content addressing concepts demonstrated\n\n"
+  Printf.printf " Content addressing concepts demonstrated\n\n"
 
 (* Example 2: Entity and Domain ID Concepts *)
 let entity_domain_example () =
@@ -22,7 +22,7 @@ let entity_domain_example () =
   
   Printf.printf "Entity: %s (type: %s)\n" entity_name entity_type;
   Printf.printf "Domain: %s\n" domain_name;
-  Printf.printf "✓ Entity and domain concepts demonstrated\n\n"
+  Printf.printf " Entity and domain concepts demonstrated\n\n"
 
 (* Example 3: Layer 2 Intent Concept *)
 let intent_example () =
@@ -36,7 +36,7 @@ let intent_example () =
   Printf.printf "Intent: %s\n" intent_name;
   Printf.printf "From: %s -> To: %s\n" from_user to_user;
   Printf.printf "Amount: %d tokens\n" amount;
-  Printf.printf "✓ Intent structure demonstrated\n\n"
+  Printf.printf " Intent structure demonstrated\n\n"
 
 (* Example 4: Effect Composition Concept *)
 let effect_composition_example () =
@@ -54,7 +54,7 @@ let effect_composition_example () =
   List.iteri (fun i effect -> 
     Printf.printf "  %d. %s\n" (i+1) effect
   ) effects;
-  Printf.printf "✓ Effect composition demonstrated\n\n"
+  Printf.printf " Effect composition demonstrated\n\n"
 
 (* Example 5: Pipeline Validation Concept *)
 let pipeline_validation_example () =
@@ -69,13 +69,13 @@ let pipeline_validation_example () =
   
   Printf.printf "Validation Results:\n";
   List.iter (fun (step, result) ->
-    let status = if result then "✓ PASS" else "✗ FAIL" in
+    let status = if result then " PASS" else "✗ FAIL" in
     Printf.printf "  %s: %s\n" step status
   ) validation_steps;
   
   let all_valid = List.for_all snd validation_steps in
   Printf.printf "Overall validation: %s\n\n" 
-    (if all_valid then "✓ VALID" else "✗ INVALID")
+    (if all_valid then " VALID" else "✗ INVALID")
 
 (* Example 6: Layer 0 Compilation Concept *)
 let layer0_compilation_example () =
@@ -98,7 +98,7 @@ let layer0_compilation_example () =
   List.iteri (fun i instr ->
     Printf.printf "  %02d: %s\n" i instr
   ) instructions;
-  Printf.printf "✓ Layer 0 compilation demonstrated\n\n"
+  Printf.printf " Layer 0 compilation demonstrated\n\n"
 
 (* Main example runner *)
 let () =
@@ -117,10 +117,10 @@ let () =
     layer0_compilation_example ();
     
     Printf.printf "=== Summary ===\n";
-    Printf.printf "✅ All conceptual examples completed successfully!\n";
-    Printf.printf "✅ Layer 2 DSL concepts demonstrated\n";
-    Printf.printf "✅ Pipeline architecture shown\n";
-    Printf.printf "✅ Compilation to Layer 0 illustrated\n\n";
+    Printf.printf " All conceptual examples completed successfully!\n";
+    Printf.printf " Layer 2 DSL concepts demonstrated\n";
+    Printf.printf " Pipeline architecture shown\n";
+    Printf.printf " Compilation to Layer 0 illustrated\n\n";
     
     Printf.printf "Key Insights:\n";
     Printf.printf "- Layer 2: High-level intents and effects (user-facing)\n";

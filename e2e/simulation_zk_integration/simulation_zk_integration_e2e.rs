@@ -133,12 +133,12 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
     cross_domain_composer.register_domain("polygon".to_string(), mock_backend.clone());
     cross_domain_composer.register_domain("arbitrum".to_string(), mock_backend.clone());
     
-    println!("   ✓ Simulation engine initialized");
-    println!("   ✓ Branching manager configured (max 8 branches, depth 4)");
-    println!("   ✓ Time-travel manager configured (100 checkpoints)");
-    println!("   ✓ Effect optimizer ready");
-    println!("   ✓ ZK proof generator with mock backend");
-    println!("   ✓ Cross-domain composer with 3 domains");
+    println!("    Simulation engine initialized");
+    println!("    Branching manager configured (max 8 branches, depth 4)");
+    println!("    Time-travel manager configured (100 checkpoints)");
+    println!("    Effect optimizer ready");
+    println!("    ZK proof generator with mock backend");
+    println!("    Cross-domain composer with 3 domains");
     
     // 2. Create complex simulation program with ZK requirements
     println!("\n2. Setting up complex simulation with ZK requirements...");
@@ -194,8 +194,8 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
     // Create ZK circuit for the program (mock)
     let circuit = MockZkCircuit::new(zk_verified_program.clone(), vec![1, 2]); // Public inputs: registers 1, 2
     
-    println!("   ✓ Complex ZK-verified program loaded ({} instructions)", zk_verified_program.len());
-    println!("   ✓ ZK circuit created with {} public inputs", circuit.public_inputs.len());
+    println!("    Complex ZK-verified program loaded ({} instructions)", zk_verified_program.len());
+    println!("    ZK circuit created with {} public inputs", circuit.public_inputs.len());
     
     // 3. Initialize branching with root branch
     println!("\n3. Setting up branching scenarios for ZK verification...");
@@ -209,8 +209,8 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
         "Initial state before branching".to_string()
     )?;
     
-    println!("   ✓ Root branch established: {:?}", root_branch_id);
-    println!("   ✓ Initial checkpoint: {}", initial_checkpoint.as_str());
+    println!("    Root branch established: {:?}", root_branch_id);
+    println!("    Initial checkpoint: {}", initial_checkpoint.as_str());
     
     // 4. Create multiple simulation branches for different ZK scenarios
     println!("\n4. Creating simulation branches for different ZK scenarios...");
@@ -260,11 +260,11 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
             
             // Generate ZK proof for this step
             let proof = proof_generator.generate_proof(&circuit, &witness)?;
-            println!("       ✓ ZK proof generated: {} bytes", proof.proof_data.len());
+            println!("        ZK proof generated: {} bytes", proof.proof_data.len());
             
             // Execute simulation step
             let continue_execution = simulation_engine.step().await?;
-            println!("       ✓ Simulation step executed: {}", continue_execution);
+            println!("        Simulation step executed: {}", continue_execution);
             
             if !continue_execution {
                 break;
@@ -279,7 +279,7 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
             "After high security ZK execution".to_string()
         )?;
         
-        println!("   ✓ High security scenario completed");
+        println!("    High security scenario completed");
         println!("     Pre-execution checkpoint: {}", pre_execution_checkpoint.as_str());
         println!("     Post-execution checkpoint: {}", post_execution_checkpoint.as_str());
     }
@@ -316,7 +316,7 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
             &global_witness
         )?;
         
-        println!("     ✓ Composite proof generated");
+        println!("      Composite proof generated");
         println!("       Global inputs: {} bytes", composite_proof.global_inputs.len());
         println!("       Domain proofs: {}", composite_proof.domain_proofs.len());
         println!("       Consistency proof: {} bytes", composite_proof.consistency_proof.len());
@@ -324,7 +324,7 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
         // Verify the composite proof
         let verification_result = cross_domain_composer.verify_composite_proof(&composite_proof)?;
         assert!(verification_result, "Composite proof should verify");
-        println!("     ✓ Composite proof verification successful");
+        println!("      Composite proof verification successful");
         
         branch.metadata.status = BranchStatus::Completed;
     }
@@ -485,7 +485,7 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
         let state_proof = proof_generator.generate_proof(&circuit, &state_witness)?;
         checkpoint_proofs.insert(checkpoint_id.clone(), state_proof);
         
-        println!("     ✓ Checkpoint {} created with ZK proof", i + 1);
+        println!("      Checkpoint {} created with ZK proof", i + 1);
     }
     
     // Test rewinding to different checkpoints and verifying ZK state
@@ -509,7 +509,7 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
     // Verify ZK proof is still valid after rewind
     if let Some(_checkpoint_proof) = checkpoint_proofs.get(&middle_checkpoint_id) {
         // In a real implementation, we would verify the proof matches the current state
-        println!("     ✓ ZK proof verification after rewind: valid");
+        println!("      ZK proof verification after rewind: valid");
     }
     
     // Fast-forward and verify state consistency
@@ -521,7 +521,7 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
         &mut simulation_engine
     ).await?;
     
-    println!("     ✓ Fast-forwarded {} steps with ZK consistency", steps_executed);
+    println!("      Fast-forwarded {} steps with ZK consistency", steps_executed);
     
     // 9. Test ZK-verified effect execution
     println!("\n9. Testing ZK-verified effect execution...");
@@ -564,7 +564,7 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
     match zk_result {
         CoreValue::Int(result) => {
             assert_eq!(result, 169); // 5^2 + 12^2 = 25 + 144 = 169
-            println!("   ✓ ZK-verified computation: 5² + 12² = {}", result);
+            println!("    ZK-verified computation: 5² + 12² = {}", result);
         }
         _ => panic!("Unexpected result type"),
     }
@@ -606,15 +606,15 @@ async fn test_simulation_zk_integration_comprehensive() -> Result<()> {
     println!("     Average proof size: {} bytes", zk_stats.average_proof_size);
     
     println!("\n=== E2E Test Summary ===");
-    println!("✅ Simulation engine with ZK integration");
-    println!("✅ Multi-branch ZK scenario execution");
-    println!("✅ Cross-domain ZK proof composition");
-    println!("✅ Effect optimization with ZK constraints");
-    println!("✅ Time-travel with ZK state consistency");
-    println!("✅ ZK-verified effect execution");
-    println!("✅ Comprehensive performance analysis");
+    println!(" Simulation engine with ZK integration");
+    println!(" Multi-branch ZK scenario execution");
+    println!(" Cross-domain ZK proof composition");
+    println!(" Effect optimization with ZK constraints");
+    println!(" Time-travel with ZK state consistency");
+    println!(" ZK-verified effect execution");
+    println!(" Comprehensive performance analysis");
     
-    println!("\n🎉 Simulation Engine with ZK Integration E2E Test PASSED!");
+    println!("\n Simulation Engine with ZK Integration E2E Test PASSED!");
     
     Ok(())
 }
@@ -795,7 +795,7 @@ async fn test_zk_coprocessor_integration() -> Result<()> {
     );
     
     // In a real implementation, this would deploy to the actual coprocessor
-    println!("   ✓ Circuit deployment simulated");
+    println!("    Circuit deployment simulated");
     
     // Test proof generation request
     println!("\n2. Testing proof generation request...");
@@ -828,7 +828,7 @@ async fn test_zk_coprocessor_integration() -> Result<()> {
         }
     };
     
-    println!("   ✓ Proof generation completed");
+    println!("    Proof generation completed");
     println!("     Proof size: {} bytes", proof_response.proof.len());
     println!("     Generation time: {} ms", proof_response.generation_time_ms);
     println!("     Circuit: {}", proof_response.circuit_info.name);
@@ -845,7 +845,7 @@ async fn test_zk_coprocessor_integration() -> Result<()> {
     let is_valid = coprocessor_service.verify_proof(verify_request).await?;
     assert!(is_valid, "Proof should be valid");
     
-    println!("   ✓ Proof verification successful");
+    println!("    Proof verification successful");
     
     Ok(())
 }
@@ -895,7 +895,7 @@ async fn test_cross_chain_zk_simulation() -> Result<()> {
     let mut proof_generator = MockProofGenerator::new(mock_backend);
     let privacy_proof = proof_generator.generate_proof(&privacy_circuit, &privacy_witness)?;
     
-    println!("   ✓ Privacy ZK proof generated: {} bytes", privacy_proof.proof_data.len());
+    println!("    Privacy ZK proof generated: {} bytes", privacy_proof.proof_data.len());
     
     // Simulate execution across chains
     cross_chain_simulator.execute_cross_chain_transaction(
@@ -905,7 +905,7 @@ async fn test_cross_chain_zk_simulation() -> Result<()> {
         Some(privacy_proof),
     ).await?;
     
-    println!("   ✓ Cross-chain transaction simulated with ZK privacy");
+    println!("    Cross-chain transaction simulated with ZK privacy");
     
     Ok(())
 }

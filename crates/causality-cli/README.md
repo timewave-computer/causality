@@ -247,7 +247,7 @@ causality deploy submit -c circuit.zk -p proof.zk --chains ethereum,polygon --dr
 causality deploy report --scenario bridge-deployment --include-proofs --include-gas --include-privacy -o report.json
 ```
 
-## 🎨 Visualization & Understanding
+##  Visualization & Understanding
 
 Gain insights through visual representation:
 
@@ -262,7 +262,7 @@ causality viz resources src/main.lisp --flow --states
 causality viz architecture --detail comprehensive
 ```
 
-## 🔧 Configuration & Customization
+##  Configuration & Customization
 
 Tailor the CLI to your workflow:
 
@@ -279,7 +279,7 @@ causality config set build.target wasm
 causality config set test.parallel true
 ```
 
-## 🚀 Advanced Features
+##  Advanced Features
 
 ### Command Aliases
 Save time with shorter commands:
@@ -309,7 +309,7 @@ Available on all commands:
 - `--format` - Control output format
 - `--help` - Command-specific help
 
-## 🛠️ Development Server
+##  Development Server
 
 The development server provides a web interface for learning and development:
 

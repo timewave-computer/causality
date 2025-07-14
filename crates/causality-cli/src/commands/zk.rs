@@ -81,7 +81,7 @@ impl ProveCommand {
         verbose: bool,
     ) -> Result<()> {
         if verbose {
-            println!("🔐 Starting ZK proof generation...");
+            println!(" Starting ZK proof generation...");
             println!("   Input: {}", input.display());
             if let Some(circuit_name) = circuit {
                 println!("   Circuit: {}", circuit_name);
@@ -117,7 +117,7 @@ impl ProveCommand {
         fs::write(&output_path, &proof_data)
             .map_err(|e| anyhow::anyhow!("Failed to write proof to {}: {}", output_path.display(), e))?;
 
-        println!("✅ ZK proof generated successfully");
+        println!(" ZK proof generated successfully");
         println!("   Circuit: {}", circuit_name);
         println!("   Proof size: {} bytes", proof_data.len());
         println!("   Output: {}", output_path.display());
@@ -138,7 +138,7 @@ impl ProveCommand {
         verbose: bool,
     ) -> Result<()> {
         if verbose {
-            println!("🔍 Starting ZK proof verification...");
+            println!(" Starting ZK proof verification...");
             println!("   Proof: {}", proof_path.display());
         }
 
@@ -155,13 +155,13 @@ impl ProveCommand {
         let is_valid = true; // Mock verification result
 
         if is_valid {
-            println!("✅ Proof verification successful");
+            println!(" Proof verification successful");
             println!("   Status: VALID");
             if verbose {
                 println!("   Verification time: {}ms", verification_time_ms);
             }
         } else {
-            println!("❌ Proof verification failed");
+            println!(" Proof verification failed");
             println!("   Status: INVALID");
         }
 
@@ -170,7 +170,7 @@ impl ProveCommand {
     
     async fn list_circuits(&self, verbose: bool) -> Result<()> {
         if verbose {
-            println!("📋 Available ZK circuits:");
+            println!(" Available ZK circuits:");
         }
 
         // Mock circuit list

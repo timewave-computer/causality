@@ -56,8 +56,8 @@ let print_test_header title =
 
 let print_step_result step_name result =
   match result with
-  | Success msg -> printf "✅ %s: %s\n" step_name msg
-  | Failure msg -> printf "❌ %s: %s\n" step_name msg
+  | Success msg -> printf " %s: %s\n" step_name msg
+  | Failure msg -> printf " %s: %s\n" step_name msg
 
 (* Unused parsing functions - commented out for mock implementation
 let parse_simulation_output lines =
@@ -147,7 +147,7 @@ let step_1_compile_dsl () =
     in
     match ocaml_exit_code with
     | WEXITED 0 -> (
-        printf "✅ OCaml scenario compilation successful\n";
+        printf " OCaml scenario compilation successful\n";
 
         (* Now compile the Lisp scenario using the real CLI *)
         printf "🔄 Compiling Lisp scenario to Causality IR...\n";
@@ -164,20 +164,20 @@ let step_1_compile_dsl () =
 
         match lisp_exit_code with
         | WEXITED 0 ->
-            printf "✅ Lisp → IR compilation successful\n";
+            printf " Lisp → IR compilation successful\n";
             printf "   %s\n" (String.concat "\n   " lisp_output);
 
             (* Verify the IR file was created *)
             if Sys.file_exists "/tmp/bridge_vault.ir" then (
-              printf "✅ IR file created: /tmp/bridge_vault.ir\n";
+              printf " IR file created: /tmp/bridge_vault.ir\n";
               Success "OCaml scenario compiled to Causality IR")
             else Failure "IR file was not created"
         | WEXITED _ | WSIGNALED _ | WSTOPPED _ ->
-            printf "❌ Lisp compilation failed\n";
+            printf " Lisp compilation failed\n";
             printf "   %s\n" (String.concat "\n   " lisp_output);
             Failure "Lisp compilation failed")
     | WEXITED _ | WSIGNALED _ | WSTOPPED _ ->
-        printf "❌ OCaml compilation failed\n";
+        printf " OCaml compilation failed\n";
         printf "   %s\n" (String.concat "\n   " ocaml_output);
         Failure "OCaml scenario compilation failed"
   with
@@ -202,7 +202,7 @@ let step_2_run_simulation () =
 
     match simulation_exit_code with
     | WEXITED 0 ->
-        printf "✅ Simulation completed successfully\n";
+        printf " Simulation completed successfully\n";
         printf "   %s\n" (String.concat "\n   " simulation_output);
 
         (* Parse key metrics from output *)
@@ -216,7 +216,7 @@ let step_2_run_simulation () =
           }
         in
 
-        printf "📊 Parsed Metrics:\n";
+        printf " Parsed Metrics:\n";
         printf "   Total gas cost: %d wei\n" metrics.total_gas_cost;
         printf "   Execution time: %d ms\n" metrics.execution_time_ms;
         printf "   Success probability: %.3f\n" metrics.success_probability;
@@ -236,7 +236,7 @@ let step_2_run_simulation () =
           Failure
             (Printf.sprintf "Gas cost out of range: %d" metrics.total_gas_cost)
     | WEXITED _ | WSIGNALED _ | WSTOPPED _ ->
-        printf "❌ Simulation failed\n";
+        printf " Simulation failed\n";
         printf "   %s\n" (String.concat "\n   " simulation_output);
         Failure "Simulation command failed"
   with
@@ -246,7 +246,7 @@ let step_2_run_simulation () =
 let step_3_compile_zk_circuit () =
   print_test_header "Step 3: Compile ZK Circuit";
 
-  printf "🔐 Compiling ZK circuit...\n";
+  printf " Compiling ZK circuit...\n";
 
   let zk_compile_cmd =
     "cd /Users/hxrts/projects/timewave/reverse-causality && \
@@ -260,16 +260,16 @@ let step_3_compile_zk_circuit () =
 
     match zk_exit_code with
     | WEXITED 0 ->
-        printf "✅ ZK circuit compilation successful\n";
+        printf " ZK circuit compilation successful\n";
         printf "   %s\n" (String.concat "\n   " zk_output);
 
         (* Verify the circuit file was created *)
         if Sys.file_exists "/tmp/bridge_vault_circuit.proof" then (
-          printf "✅ ZK proof file created: /tmp/bridge_vault_circuit.proof\n";
+          printf " ZK proof file created: /tmp/bridge_vault_circuit.proof\n";
           Success "ZK proof generated with bridge circuit")
         else Failure "ZK proof file was not created"
     | WEXITED _ | WSIGNALED _ | WSTOPPED _ ->
-        printf "❌ ZK compilation failed\n";
+        printf " ZK compilation failed\n";
         printf "   %s\n" (String.concat "\n   " zk_output);
         Failure "ZK circuit compilation failed"
   with
@@ -279,7 +279,7 @@ let step_3_compile_zk_circuit () =
 let step_4_verify_zk_proof () =
   print_test_header "Step 4: Verify ZK Proof and Transaction Flow";
 
-  printf "🔍 Creating witness data and verifying ZK proof...\n";
+  printf " Creating witness data and verifying ZK proof...\n";
 
   (* Create witness data *)
   let witness_cmd =
@@ -289,7 +289,7 @@ let step_4_verify_zk_proof () =
   let _, witness_exit_code = run_command_with_timeout witness_cmd 5 in
 
   if witness_exit_code = WEXITED 0 then (
-    printf "✅ Witness data created\n";
+    printf " Witness data created\n";
 
     let zk_verify_cmd =
       "cd /Users/hxrts/projects/timewave/reverse-causality && \
@@ -304,11 +304,11 @@ let step_4_verify_zk_proof () =
 
       match verify_exit_code with
       | WEXITED 0 ->
-          printf "✅ ZK proof verification successful\n";
+          printf " ZK proof verification successful\n";
           printf "   %s\n" (String.concat "\n   " verify_output);
           Success "ZK proof verified and transaction flow validated"
       | WEXITED _ | WSIGNALED _ | WSTOPPED _ ->
-          printf "❌ ZK verification failed\n";
+          printf " ZK verification failed\n";
           printf "   %s\n" (String.concat "\n   " verify_output);
           Failure "ZK proof verification failed"
     with
@@ -336,11 +336,11 @@ let step_5_submit_transactions () =
 
     match submit_exit_code with
     | WEXITED 0 ->
-        printf "✅ Multi-chain transaction submission test successful\n";
+        printf " Multi-chain transaction submission test successful\n";
         printf "   %s\n" (String.concat "\n   " submit_output);
         Success "Multi-chain transactions prepared and validated"
     | WEXITED _ | WSIGNALED _ | WSTOPPED _ ->
-        printf "❌ Transaction submission test failed\n";
+        printf " Transaction submission test failed\n";
         printf "   %s\n" (String.concat "\n   " submit_output);
         Failure "Multi-chain transaction submission failed"
   with
@@ -350,7 +350,7 @@ let step_5_submit_transactions () =
 let step_6_generate_report () =
   print_test_header "Step 6: Generate Compliance and Audit Report";
 
-  printf "📋 Generating compliance report...\n";
+  printf " Generating compliance report...\n";
 
   let report_cmd =
     "cd /Users/hxrts/projects/timewave/reverse-causality && \
@@ -366,12 +366,12 @@ let step_6_generate_report () =
 
     match report_exit_code with
     | WEXITED 0 ->
-        printf "✅ Compliance report generated successfully\n";
+        printf " Compliance report generated successfully\n";
         printf "   %s\n" (String.concat "\n   " report_output);
 
         (* Verify the report file was created *)
         if Sys.file_exists "/tmp/bridge_vault_report.json" then (
-          printf "✅ Report file created: /tmp/bridge_vault_report.json\n";
+          printf " Report file created: /tmp/bridge_vault_report.json\n";
 
           (* Show a snippet of the report *)
           let report_snippet_cmd = "head -10 /tmp/bridge_vault_report.json" in
@@ -384,7 +384,7 @@ let step_6_generate_report () =
           Success "Compliance report generated with ZK proofs and gas analysis")
         else Failure "Report file was not created"
     | WEXITED _ | WSIGNALED _ | WSTOPPED _ ->
-        printf "❌ Report generation failed\n";
+        printf " Report generation failed\n";
         printf "   %s\n" (String.concat "\n   " report_output);
         Failure "Compliance report generation failed"
   with
@@ -394,7 +394,7 @@ let step_6_generate_report () =
 
 (* Main test execution *)
 let run_comprehensive_test () =
-  printf "🚀 Starting Cross-Chain Bridge and Vault Deposit E2E Test\n";
+  printf " Starting Cross-Chain Bridge and Vault Deposit E2E Test\n";
   printf "📅 Test started at: %s\n" (string_of_float (Unix.time ()));
   printf "📍 Working directory: %s\n" (Sys.getcwd ());
 
@@ -421,7 +421,7 @@ let run_comprehensive_test () =
         match result with
         | Success _ -> run_steps (result :: results) rest
         | Failure _ ->
-            printf "\n❌ Test failed at step: %s\n" step_name;
+            printf "\n Test failed at step: %s\n" step_name;
             printf "🛑 Stopping test execution\n";
             result :: results)
   in
@@ -431,7 +431,7 @@ let run_comprehensive_test () =
 
   (* Print final summary *)
   printf "\n%s\n" (String.make 60 '=');
-  printf "\n📊 Final Test Summary\n";
+  printf "\n Final Test Summary\n";
   printf "%s\n" (String.make 60 '=');
 
   let success_count =
@@ -443,31 +443,31 @@ let run_comprehensive_test () =
 
   let total_count = List.length all_results in
 
-  printf "✅ Successful steps: %d/%d\n" success_count total_count;
-  printf "❌ Failed steps: %d/%d\n" (total_count - success_count) total_count;
+  printf " Successful steps: %d/%d\n" success_count total_count;
+  printf " Failed steps: %d/%d\n" (total_count - success_count) total_count;
 
   if success_count = total_count then (
     printf
       "\n\
-       🎉 ALL TESTS PASSED! Cross-chain bridge and vault deposit E2E test \
+        ALL TESTS PASSED! Cross-chain bridge and vault deposit E2E test \
        completed successfully.\n";
-    printf "🔐 ZK privacy preservation: ✅\n";
-    printf "💰 Cost optimization: ✅\n";
-    printf "🌉 Cross-chain functionality: ✅\n";
-    printf "🏦 Vault integration: ✅\n";
-    printf "📋 Compliance reporting: ✅\n";
+    printf " ZK privacy preservation: \n";
+    printf " Cost optimization: \n";
+    printf " Cross-chain functionality: \n";
+    printf " Vault integration: \n";
+    printf " Compliance reporting: \n";
     exit 0)
   else (
     printf "\n💥 TESTS FAILED! Some steps did not complete successfully.\n";
-    printf "📋 Check the error messages above for details.\n";
+    printf " Check the error messages above for details.\n";
     exit 1)
 
 (* Entry point *)
 let () =
   try run_comprehensive_test () with
   | Sys_error msg ->
-      printf "❌ System error: %s\n" msg;
+      printf " System error: %s\n" msg;
       exit 1
   | exn ->
-      printf "❌ Unexpected error: %s\n" (Printexc.to_string exn);
+      printf " Unexpected error: %s\n" (Printexc.to_string exn);
       exit 1

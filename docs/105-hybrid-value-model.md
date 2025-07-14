@@ -447,7 +447,7 @@ impl Resolvable for Value {
 
 ### 8.1 When to Use Direct Storage
 
-✅ **Use direct storage for**:
+ **Use direct storage for**:
 - Base types: `Unit`, `Bool`, `Int`, `Symbol`
 - Small composite values (< 64 bytes total)
 - Frequently accessed primitive values
@@ -456,7 +456,7 @@ impl Resolvable for Value {
 
 ### 8.2 When to Use Content-Addressed Storage
 
-✅ **Use content-addressed storage for**:
+ **Use content-addressed storage for**:
 - Lambda expressions and functions
 - Large data structures (> 64 bytes)
 - Reusable components (effects, handlers)
@@ -563,23 +563,23 @@ let expr3 = Apply(common_subexpr.clone(), Arg3);
 ### 11.1 Value Construction Guidelines
 
 ```rust
-// ✅ Good: Use smart constructors
+//  Good: Use smart constructors
 let result = Value::product(left, right);  // Automatically chooses storage strategy
 
-// ❌ Avoid: Manual storage decisions without size consideration
+//  Avoid: Manual storage decisions without size consideration
 let result = Value::ProductRef(manually_computed_id); // May be inefficient for small values
 ```
 
 ### 11.2 Performance Optimization
 
 ```rust
-// ✅ Good: Batch resolve operations
+//  Good: Batch resolve operations
 let resolved_values: Vec<ResolvedValue> = values
     .iter()
     .map(|v| v.resolve(store))
     .collect::<Result<Vec<_>, _>>()?;
 
-// ❌ Avoid: Repeated individual resolutions
+//  Avoid: Repeated individual resolutions
 for value in &values {
     let resolved = value.resolve(store)?; // Repeated store access
     // ... use resolved value

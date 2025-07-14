@@ -21,12 +21,12 @@ async fn test_engine_lifecycle() -> Result<()> {
     
     // Test initial state
     assert_eq!(engine.state(), &SimulationState::Created);
-    println!("✓ Engine created in correct initial state");
+    println!(" Engine created in correct initial state");
     
     // Test initialization
     engine.initialize().await?;
     assert_eq!(engine.state(), &SimulationState::Initialized);
-    println!("✓ Engine initialization successful");
+    println!(" Engine initialization successful");
     
     // Test program loading
     let program = vec![
@@ -34,17 +34,17 @@ async fn test_engine_lifecycle() -> Result<()> {
         Instruction::Transform { morph_reg: RegisterId::new(1), input_reg: RegisterId::new(1), output_reg: RegisterId::new(1) },
     ];
     engine.load_program(program)?;
-    println!("✓ Program loaded successfully");
+    println!(" Program loaded successfully");
     
     // Test execution
     engine.run().await?;
     assert_eq!(engine.state(), &SimulationState::Completed);
-    println!("✓ Program execution completed");
+    println!(" Program execution completed");
     
     // Test reset
     engine.reset()?;
     assert_eq!(engine.state(), &SimulationState::Created);
-    println!("✓ Engine reset successful");
+    println!(" Engine reset successful");
     
     Ok(())
 }
@@ -65,14 +65,14 @@ async fn test_state_management_design() -> Result<()> {
     let after_running = engine.state_progression();
     assert_eq!(after_running.state_transitions.len(), 1);
     assert_eq!(after_running.state_transitions[0].0, SimulationState::Running);
-    println!("✓ State transition tracking working");
+    println!(" State transition tracking working");
     
     // Test execution state management
     let execution_state = engine.execution_state();
     assert_eq!(execution_state.registers.len(), 0);
     assert_eq!(execution_state.memory.len(), 0);
     assert_eq!(execution_state.instruction_pointer, 0);
-    println!("✓ Execution state properly initialized");
+    println!(" Execution state properly initialized");
     
     // Test state invariants preservation
     let program = vec![
@@ -84,7 +84,7 @@ async fn test_state_management_design() -> Result<()> {
     
     let final_progression = engine.state_progression();
     assert!(!final_progression.steps.is_empty());
-    println!("✓ State invariants preserved during execution");
+    println!(" State invariants preserved during execution");
     
     Ok(())
 }
@@ -102,7 +102,7 @@ async fn test_effect_execution_sandbox() -> Result<()> {
     
     // Verify all effects executed successfully
     assert_eq!(effect_results.len(), 3);
-    println!("✓ Multiple effects executed in sandbox");
+    println!(" Multiple effects executed in sandbox");
     
     // Test sandbox isolation
     let metrics_before = engine.metrics().clone();
@@ -110,7 +110,7 @@ async fn test_effect_execution_sandbox() -> Result<()> {
     let metrics_after = engine.metrics().clone();
     
     assert!(metrics_after.effects_executed > metrics_before.effects_executed);
-    println!("✓ Effect execution properly tracked and isolated");
+    println!(" Effect execution properly tracked and isolated");
     
     // Test effect failure handling - create a low gas scenario
     let low_gas_config = SimulationConfig {
@@ -124,7 +124,7 @@ async fn test_effect_execution_sandbox() -> Result<()> {
     let mut gas_limited_engine = SimulationEngine::new_with_config(low_gas_config);
     let result = gas_limited_engine.execute_effect("(compute intensive_hash)".to_string()).await;
     // Note: Effect may not fail due to simplified implementation, but this tests the pathway
-    println!("✓ Low gas scenario tested");
+    println!(" Low gas scenario tested");
     
     Ok(())
 }
@@ -142,14 +142,14 @@ async fn test_temporal_modeling() -> Result<()> {
     
     // Verify temporal consistency
     assert!(result.step_count > 0);
-    println!("✓ Temporal modeling: {} execution steps recorded", result.step_count);
+    println!(" Temporal modeling: {} execution steps recorded", result.step_count);
     
     // Test reproducibility
     let mut engine2 = SimulationEngine::new();
     let result2 = engine2.execute_program(program).await?;
     
     assert_eq!(result.step_count, result2.step_count);
-    println!("✓ Deterministic execution: consistent step counts");
+    println!(" Deterministic execution: consistent step counts");
     
     Ok(())
 }
@@ -181,7 +181,7 @@ async fn test_deterministic_execution() -> Result<()> {
         assert_eq!(results[0].step_count, results[i].step_count);
         assert_eq!(results[0].instruction_count, results[i].instruction_count);
     }
-    println!("✓ Deterministic execution verified across {} runs", results.len());
+    println!(" Deterministic execution verified across {} runs", results.len());
     
     Ok(())
 }
@@ -205,7 +205,7 @@ async fn test_step_by_step_execution() -> Result<()> {
     // Execute first step
     let continue_step1 = engine.step().await?;
     assert!(!continue_step1 || engine.state() == &SimulationState::StepReady);
-    println!("✓ First step executed");
+    println!(" First step executed");
     
     // Execute remaining steps if needed
     while engine.state() == &SimulationState::StepReady {
@@ -216,7 +216,7 @@ async fn test_step_by_step_execution() -> Result<()> {
     }
     
     assert_eq!(engine.state(), &SimulationState::Completed);
-    println!("✓ Step-by-step execution completed");
+    println!(" Step-by-step execution completed");
     
     Ok(())
 }
@@ -266,7 +266,7 @@ async fn test_resource_conservation_properties() -> Result<()> {
     assert!(!alloc_step.resources_allocated.is_empty());
     assert!(!consume_step.resources_consumed.is_empty());
     
-    println!("✓ Resource conservation properties verified");
+    println!(" Resource conservation properties verified");
     println!("  - Alloc step allocated: {:?}", alloc_step.resources_allocated);
     println!("  - Consume step consumed: {:?}", consume_step.resources_consumed);
     
@@ -302,7 +302,7 @@ async fn test_configuration_variations() -> Result<()> {
         let result = engine.execute_program("(alloc 100)").await?;
         
         assert!(result.step_count > 0);
-        println!("    ✓ {} configuration: {} steps", config_name, result.step_count);
+        println!("     {} configuration: {} steps", config_name, result.step_count);
     }
     
     Ok(())
@@ -319,12 +319,12 @@ async fn test_error_handling_and_recovery() -> Result<()> {
     engine.load_program(invalid_program)?;
     engine.run().await?; // Should complete immediately
     assert_eq!(engine.state(), &SimulationState::Completed);
-    println!("✓ Empty program handled gracefully");
+    println!(" Empty program handled gracefully");
     
     // Test engine reset after error
     engine.reset()?;
     assert_eq!(engine.state(), &SimulationState::Created);
-    println!("✓ Engine reset after error successful");
+    println!(" Engine reset after error successful");
     
     // Test gas exhaustion handling
     let mut config = SimulationConfig::default();
@@ -335,7 +335,7 @@ async fn test_error_handling_and_recovery() -> Result<()> {
     
     let result = gas_limited_engine.execute_effect("(compute expensive_operation)".to_string()).await;
     // The result may or may not fail depending on implementation
-    println!("✓ Gas exhaustion scenario tested");
+    println!(" Gas exhaustion scenario tested");
     
     Ok(())
 }
@@ -356,7 +356,7 @@ async fn test_performance_metrics_collection() -> Result<()> {
     assert!(metrics.effects_executed >= 3);
     assert!(metrics.total_gas_consumed > 0);
     
-    println!("✓ Performance metrics collected:");
+    println!(" Performance metrics collected:");
     println!("  - Effects executed: {}", metrics.effects_executed);
     println!("  - Total gas consumed: {}", metrics.total_gas_consumed);
     println!("  - Execution time: {} ms", metrics.execution_time_ms);

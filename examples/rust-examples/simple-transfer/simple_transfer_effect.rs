@@ -134,8 +134,8 @@ fn basic_usage_example() -> Result<(), Box<dyn std::error::Error>> {
     
     // Validate the transfer
     match transfer.validate() {
-        Ok(()) => println!("✅ Transfer validation passed"),
-        Err(e) => println!("❌ Transfer validation failed: {:?}", e),
+        Ok(()) => println!(" Transfer validation passed"),
+        Err(e) => println!(" Transfer validation failed: {:?}", e),
     }
     
     Ok(())
@@ -158,25 +158,25 @@ async fn mock_testing_example() -> Result<(), Box<dyn std::error::Error>> {
     
     // Always succeed mock
     let always_succeed = mock_generator.generate_handler(&transfer, MockStrategy::AlwaysSucceed)?;
-    println!("✅ Always succeed mock generated");
+    println!(" Always succeed mock generated");
     
     // Probabilistic mock
     let probabilistic = mock_generator.generate_handler(
         &transfer, 
         MockStrategy::Probabilistic { success_rate: 0.8 }
     )?;
-    println!("✅ Probabilistic mock generated (80% success rate)");
+    println!(" Probabilistic mock generated (80% success rate)");
     
     // Latency mock
     let latency_mock = mock_generator.generate_handler(
         &transfer,
         MockStrategy::Latency { base_delay_ms: 100, variance_ms: 50 }
     )?;
-    println!("✅ Latency mock generated (100ms ± 50ms delay)");
+    println!(" Latency mock generated (100ms ± 50ms delay)");
     
     // Blockchain simulation mock
     let blockchain_mock = mock_generator.generate_handler(&transfer, MockStrategy::Blockchain)?;
-    println!("✅ Blockchain simulation mock generated");
+    println!(" Blockchain simulation mock generated");
     
     Ok(())
 }
@@ -196,19 +196,19 @@ fn test_generation_example() -> Result<(), Box<dyn std::error::Error>> {
     // Generate comprehensive test suite
     println!("Generating comprehensive test suite...");
     let test_suite = test_generator.generate_test_suite(&transfer, 50)?;
-    println!("✅ Generated {} tests in test suite", test_suite.len());
+    println!(" Generated {} tests in test suite", test_suite.len());
     
     // Generate specific test types
     println!("Generating specific test types...");
     
     let boundary_tests = test_generator.generate_boundary_tests(&transfer, 10)?;
-    println!("✅ Generated {} boundary tests", boundary_tests.len());
+    println!(" Generated {} boundary tests", boundary_tests.len());
     
     let invalid_tests = test_generator.generate_invalid_tests(&transfer, 10)?;
-    println!("✅ Generated {} invalid input tests", invalid_tests.len());
+    println!(" Generated {} invalid input tests", invalid_tests.len());
     
     let property_tests = test_generator.generate_property_tests(&transfer, 20)?;
-    println!("✅ Generated {} property tests", property_tests.len());
+    println!(" Generated {} property tests", property_tests.len());
     
     // Show examples of generated tests
     println!("\nExample boundary tests:");
@@ -255,9 +255,9 @@ fn property_testing_example() -> Result<(), Box<dyn std::error::Error>> {
         max_slippage: 0.0, // No slippage for direct transfers
     };
     
-    println!("✅ Defined conservation law property");
-    println!("✅ Defined non-negative balance property"); 
-    println!("✅ Defined slippage bounds property");
+    println!(" Defined conservation law property");
+    println!(" Defined non-negative balance property"); 
+    println!(" Defined slippage bounds property");
     
     println!("Properties can be verified against generated test cases");
     
@@ -301,8 +301,8 @@ fn composition_testing_example() -> Result<(), Box<dyn std::error::Error>> {
         Box::new(transfer3.clone()),
     ]);
     
-    println!("✅ Created sequential composition (3 transfers in order)");
-    println!("✅ Created parallel composition (3 transfers simultaneously)");
+    println!(" Created sequential composition (3 transfers in order)");
+    println!(" Created parallel composition (3 transfers simultaneously)");
     
     // Show composition properties
     println!("Sequential composition ensures transfers happen in order");
@@ -336,12 +336,12 @@ fn content_addressing_example() -> Result<(), Box<dyn std::error::Error>> {
     
     // Identical effects produce identical schema IDs
     assert_eq!(schema_id_v1, schema_id_v2);
-    println!("✅ Identical effects produce identical schema IDs");
+    println!(" Identical effects produce identical schema IDs");
     
     // Show deterministic generation
     let schema_id_again = transfer_v1.schema().id();
     assert_eq!(schema_id_v1, schema_id_again);
-    println!("✅ Schema ID generation is deterministic");
+    println!(" Schema ID generation is deterministic");
     
     Ok(())
 }
@@ -349,7 +349,7 @@ fn content_addressing_example() -> Result<(), Box<dyn std::error::Error>> {
 /// Main example runner
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🚀 Causality Toolkit - Simple Transfer Effect Example");
+    println!(" Causality Toolkit - Simple Transfer Effect Example");
     println!("=====================================================");
     
     // Run all examples
@@ -360,7 +360,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     composition_testing_example()?;
     content_addressing_example()?;
     
-    println!("\n🎉 All examples completed successfully!");
+    println!("\n All examples completed successfully!");
     println!("\nNext steps:");
     println!("1. Try running: `causality test-effects discover --detailed`");
     println!("2. Generate tests: `causality test-effects generate SimpleTransfer --count 20`");

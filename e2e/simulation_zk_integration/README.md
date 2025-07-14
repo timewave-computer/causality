@@ -84,12 +84,12 @@ This test requires:
 ## Expected Results
 
 All 3 tests should pass, verifying:
-- ✅ Simulation engine produces valid execution traces
-- ✅ ZK circuits correctly represent effect semantics
-- ✅ Proof generation works for all effect types
-- ✅ Verification accepts valid proofs and rejects invalid ones
-- ✅ Cross-domain proofs maintain security properties
-- ✅ Batch proving preserves individual effect guarantees
+-  Simulation engine produces valid execution traces
+-  ZK circuits correctly represent effect semantics
+-  Proof generation works for all effect types
+-  Verification accepts valid proofs and rejects invalid ones
+-  Cross-domain proofs maintain security properties
+-  Batch proving preserves individual effect guarantees
 
 ## Performance Notes
 

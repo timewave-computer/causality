@@ -456,7 +456,7 @@ mod integration_tests {
         assert!(api_endpoint.contains("/effects/"));
 
         // These would be tested with actual CLI/API in a full integration test
-        println!("✅ CLI and API command structure verified");
+        println!(" CLI and API command structure verified");
     }
 
     #[tokio::test]
@@ -493,7 +493,7 @@ mod integration_tests {
             mock_time.as_millis()
         );
 
-        println!("✅ Performance characteristics verified");
+        println!(" Performance characteristics verified");
     }
 
     // Helper structs for testing
