@@ -26,7 +26,7 @@ type query_handle = {
   query_id : string;
   config : query_config;
   mutable status : query_status;
-  submitted_at : float;
+  submitted_at : int64;
 }
 
 (* Multi-chain query coordination *)
@@ -105,31 +105,31 @@ let cosmos_config contract_id =
 
 (* Async query operations *)
 let submit_query_async (config : query_config) (field : string) (_key : string) : query_handle =
-  let query_id = Printf.sprintf "query_%f_%s" (Unix.gettimeofday ()) field in
+  let query_id = Printf.sprintf "query_%Ld_%s" (Int64.of_float (Unix.time () *. 1000.0)) field in
   {
     query_id;
     config;
     status = Pending;
-    submitted_at = Unix.gettimeofday ();
+    submitted_at = Int64.of_float (Unix.time () *. 1000.0);
   }
 
 let get_query_status (handle : query_handle) : query_status =
   (* Mock implementation - simulate completion after 1 second *)
-  if Unix.gettimeofday () -. handle.submitted_at > 1.0 then
+  if Int64.sub (Int64.of_float (Unix.time () *. 1000.0)) handle.submitted_at > 1000L then
     Completed
   else
     handle.status
 
 let wait_for_query (handle : query_handle) ?(timeout_ms=5000) () : query_result =
-  let start_time = Unix.gettimeofday () in
-  let timeout_seconds = float_of_int timeout_ms /. 1000.0 in
+  let start_time = Int64.of_float (Unix.time () *. 1000.0) in
+  let timeout_seconds = timeout_ms / 1000 in
   
   let rec wait () =
     match get_query_status handle with
     | Completed -> query_state handle.config "balances" "mock_key"
     | Failed msg -> Error msg
     | Pending | Cached ->
-        if Unix.gettimeofday () -. start_time > timeout_seconds then
+        if Int64.sub (Int64.of_float (Unix.time () *. 1000.0)) start_time > Int64.of_int timeout_seconds then
           Error "Query timeout"
         else begin
           Unix.sleepf 0.1;

@@ -12,7 +12,9 @@ causality-core = { version = "0.1.0", path = "../causality-core" }
 # Traverse storage proof integration (optional)
 traverse-core = { git = "https://github.com/timewave-computer/traverse", default-features = false, optional = true }
 traverse-ethereum = { git = "https://github.com/timewave-computer/traverse", optional = true }
-traverse-valence = { git = "https://github.com/timewave-computer/traverse", features = ["alloc"], optional = true }
+traverse-valence = { git = "https://github.com/timewave-computer/traverse", features = [
+    "alloc",
+], optional = true }
 
 # Valence coprocessor integration (optional) - updated to match Almanac version (v0.2.3)
 valence-coprocessor = { git = "https://github.com/timewave-computer/valence-coprocessor.git", tag = "v0.2.3", default-features = false, optional = true }
@@ -42,10 +44,14 @@ risc0-zkvm = { version = "0.19", optional = true }
 
 [features]
 default = ["mock"]
-mock = []  # Mock backend for testing
+mock = [] # Mock backend for testing
 sp1 = ["dep:sp1-sdk"]
 risc0 = ["dep:risc0-zkvm"]
-traverse = ["dep:traverse-core", "dep:traverse-ethereum", "dep:traverse-valence"]
+traverse = [
+    "dep:traverse-core",
+    "dep:traverse-ethereum",
+    "dep:traverse-valence",
+]
 coprocessor = ["dep:valence-coprocessor", "dep:valence-coprocessor-client"]
 
 [dev-dependencies]
@@ -53,4 +59,4 @@ tokio = { workspace = true, features = ["macros", "rt"] }
 
 [[example]]
 name = "zk_effect_demo"
-path = "../../examples/zk_effect_demo.rs" 
+path = "../../examples/rust-examples/zk-effects/zk_effect_demo.rs"

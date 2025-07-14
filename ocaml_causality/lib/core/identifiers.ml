@@ -229,7 +229,7 @@ let validate_entity_id (id : entity_id) : bool =
 
 (** Create ID from current timestamp *)
 let current_timestamp_id () : entity_id =
-  let current_time = Int64.of_float (Unix.time ()) in
+  let current_time = Time_utils.current_time_int64_ms () in
   generate_timestamped_id current_time "current"
 
 (** Hash multiple IDs together *)

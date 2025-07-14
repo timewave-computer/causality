@@ -9,3 +9,15 @@
  (name test_multi_chain_queries)
  (libraries unix)
  (modules test_multi_chain_queries test_query_primitives_mock)) 
+
+(executable
+ (public_name test_river_compilation_simulation)
+ (name test_river_compilation_simulation)
+ (modes (native exe))
+ (modules test_river_compilation_simulation))
+
+(executable
+ (public_name test_simple_simulation)
+ (name test_simple_simulation)
+ (libraries unix)
+ (modules test_simple_simulation))

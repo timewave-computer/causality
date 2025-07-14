@@ -3,7 +3,7 @@
 name = "causality-e2e-tests"
 version = "0.1.0"
 edition = "2021"
-publish = false # This is a test crate, not meant to be published
+publish = false              # This is a test crate, not meant to be published
 
 [dependencies]
 # Core causality crates
@@ -16,7 +16,7 @@ causality-api = { path = "../crates/causality-api" }
 causality-cli = { path = "../crates/causality-cli" }
 causality-toolkit = { path = "../crates/causality-toolkit" }
 causality-simulation = { path = "../crates/causality-simulation" }
-# causality-ffi = { path = "../crates/causality-ffi" }  # Temporarily disabled due to compatibility issues
+causality-ffi = { path = "../crates/causality-ffi", features = ["c-ffi"] }
 
 # Testing and async
 tokio = { workspace = true, features = ["full"] }
@@ -24,6 +24,7 @@ anyhow = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 uuid = { version = "1.0", features = ["v4"] }
+scopeguard = "1.1"
 
 # Additional dependencies
 log = { workspace = true }

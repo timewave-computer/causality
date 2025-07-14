@@ -1,5 +1,0 @@
-(executable
- (name simple_layer2_demo))
-
-(executable
- (name ocaml_layer2_example_fixed)) 

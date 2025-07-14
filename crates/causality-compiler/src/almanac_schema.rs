@@ -1,9 +1,9 @@
-// ------------ ALMANAC SCHEMA GENERATION ------------ 
+// ------------ ALMANAC SCHEMA GENERATION ------------
 // Purpose: Generate Almanac indexing schemas from state query analysis
 
-use std::collections::BTreeMap;
+use crate::state_analysis::{QueryType, StateAnalysisResult, StateQueryRequirement};
 use serde::{Deserialize, Serialize};
-use crate::state_analysis::{StateAnalysisResult, StateQueryRequirement, QueryType};
+use std::collections::BTreeMap;
 // Note: LayoutCommitment will be defined locally to avoid circular dependency
 
 /// Layout commitment for content-addressed contract versioning
@@ -157,7 +157,7 @@ pub struct AlmanacSchemaGenerator {
     /// Known contract layouts
     contract_layouts: BTreeMap<String, LayoutCommitment>,
     /// Schema optimization settings
-    ________optimization_settings: OptimizationSettings,
+    optimization_settings: OptimizationSettings,
 }
 
 /// Settings for schema optimization
@@ -178,41 +178,49 @@ impl AlmanacSchemaGenerator {
     pub fn new() -> Self {
         Self {
             contract_layouts: BTreeMap::new(),
-            ________optimization_settings: OptimizationSettings::default(),
+            optimization_settings: OptimizationSettings::default(),
         }
     }
-    
+
     /// Create a new schema generator with custom optimization settings
     pub fn with_optimization_settings(settings: OptimizationSettings) -> Self {
         Self {
             contract_layouts: BTreeMap::new(),
-            ________optimization_settings: settings,
+            optimization_settings: settings,
         }
     }
-    
+
     /// Register a contract layout commitment
-    pub fn register_layout(&mut self, contract_id: String, layout: LayoutCommitment) {
+    pub fn register_layout(
+        &mut self,
+        contract_id: String,
+        layout: LayoutCommitment,
+    ) {
         self.contract_layouts.insert(contract_id, layout);
     }
-    
+
     /// Generate Almanac schemas from state analysis results
-    pub fn generate_schemas(&self, analysis: &StateAnalysisResult) -> SchemaGenerationResult {
+    pub fn generate_schemas(
+        &self,
+        analysis: &StateAnalysisResult,
+    ) -> SchemaGenerationResult {
         let start_time = std::time::Instant::now();
         let mut schemas = BTreeMap::new();
         let mut dependencies = Vec::new();
-        
+
         // Generate schema for each contract
         for (contract_id, queries) in &analysis.queries_by_contract {
-            let schema = self.generate_contract_schema(contract_id, queries, analysis);
+            let schema =
+                self.generate_contract_schema(contract_id, queries, analysis);
             schemas.insert(contract_id.clone(), schema);
         }
-        
+
         // Identify cross-contract dependencies
         dependencies.extend(self.identify_dependencies(analysis));
-        
+
         let generation_duration = start_time.elapsed().as_millis() as u64;
         let dependencies_count = dependencies.len();
-        
+
         SchemaGenerationResult {
             schemas,
             dependencies,
@@ -223,7 +231,7 @@ impl AlmanacSchemaGenerator {
             },
         }
     }
-    
+
     /// Generate schema for a specific contract
     fn generate_contract_schema(
         &self,
@@ -231,20 +239,23 @@ impl AlmanacSchemaGenerator {
         queries: &[StateQueryRequirement],
         _analysis: &StateAnalysisResult,
     ) -> AlmanacSchema {
-        let layout_commitment = self.contract_layouts
+        let layout_commitment = self
+            .contract_layouts
             .get(contract_id)
             .cloned()
             .unwrap_or_else(|| LayoutCommitment::default_for_contract(contract_id));
-        
-        let domain = queries.first()
+
+        let domain = queries
+            .first()
             .map(|q| q.domain.clone())
             .unwrap_or_else(|| "ethereum".to_string());
-        
+
         let indexed_slots = self.generate_storage_slots(queries);
         let query_patterns = self.generate_query_patterns(queries);
-        
-        let estimated_storage = self.estimate_storage_requirements(&indexed_slots, &query_patterns);
-        
+
+        let estimated_storage =
+            self.estimate_storage_requirements(&indexed_slots, &query_patterns);
+
         AlmanacSchema {
             contract_id: contract_id.to_string(),
             domain,
@@ -262,52 +273,72 @@ impl AlmanacSchemaGenerator {
             },
         }
     }
-    
+
     /// Generate storage slot schemas from query requirements
-    fn generate_storage_slots(&self, queries: &[StateQueryRequirement]) -> Vec<StorageSlotSchema> {
+    fn generate_storage_slots(
+        &self,
+        queries: &[StateQueryRequirement],
+    ) -> Vec<StorageSlotSchema> {
         let mut slots = BTreeMap::new();
-        
+
         for query in queries {
             let slot_id = query.storage_slot.clone();
             let data_type = self.infer_data_type(&query.query_type);
             let is_hot = query.is_conditional || self.is_frequent_query(query);
             let indexing_strategy = self.determine_indexing_strategy(query, is_hot);
-            
-            slots.insert(slot_id.clone(), StorageSlotSchema {
-                slot_id,
-                data_type,
-                is_hot,
-                indexing_strategy,
-            });
+
+            slots.insert(
+                slot_id.clone(),
+                StorageSlotSchema {
+                    slot_id,
+                    data_type,
+                    is_hot,
+                    indexing_strategy,
+                },
+            );
         }
-        
+
         slots.into_values().collect()
     }
-    
+
     /// Generate query patterns for optimization
-    fn generate_query_patterns(&self, queries: &[StateQueryRequirement]) -> Vec<QueryPattern> {
+    fn generate_query_patterns(
+        &self,
+        queries: &[StateQueryRequirement],
+    ) -> Vec<QueryPattern> {
         let mut patterns = BTreeMap::new();
-        
+
         for query in queries {
-            let pattern_id = format!("{}_{}", query.query_type.type_name(), query.storage_slot);
-            let frequency = if query.is_conditional { 100 } else { 10 }; // Rough estimate
-            
-            patterns.insert(pattern_id.clone(), QueryPattern {
-                pattern_id,
-                query_type: query.query_type.clone(),
-                frequency,
-                is_conditional: query.is_conditional,
-            });
+            let pattern_id =
+                format!("{}_{}", query.query_type.type_name(), query.storage_slot);
+            let frequency = if query.is_conditional {
+                100
+            } else {
+                10
+            }; // Rough estimate
+
+            patterns.insert(
+                pattern_id.clone(),
+                QueryPattern {
+                    pattern_id,
+                    query_type: query.query_type.clone(),
+                    frequency,
+                    is_conditional: query.is_conditional,
+                },
+            );
         }
-        
+
         patterns.into_values().collect()
     }
-    
+
     /// Identify cross-contract dependencies
-    fn identify_dependencies(&self, analysis: &StateAnalysisResult) -> Vec<SchemaDependency> {
+    fn identify_dependencies(
+        &self,
+        analysis: &StateAnalysisResult,
+    ) -> Vec<SchemaDependency> {
         let mut dependencies = Vec::new();
         let contracts: Vec<_> = analysis.queries_by_contract.keys().collect();
-        
+
         // For now, create simple query dependencies between contracts
         for i in 0..contracts.len() {
             for j in (i + 1)..contracts.len() {
@@ -318,10 +349,10 @@ impl AlmanacSchemaGenerator {
                 });
             }
         }
-        
+
         dependencies
     }
-    
+
     /// Infer data type from query type
     fn infer_data_type(&self, query_type: &QueryType) -> SlotDataType {
         match query_type {
@@ -333,15 +364,19 @@ impl AlmanacSchemaGenerator {
             QueryType::Custom(_) => SlotDataType::Bytes(None),
         }
     }
-    
+
     /// Determine if a query is frequent based on context
     fn is_frequent_query(&self, query: &StateQueryRequirement) -> bool {
         // Simple heuristic: balance queries are typically frequent
         matches!(query.query_type, QueryType::TokenBalance)
     }
-    
+
     /// Determine optimal indexing strategy
-    fn determine_indexing_strategy(&self, query: &StateQueryRequirement, is_hot: bool) -> IndexingStrategy {
+    fn determine_indexing_strategy(
+        &self,
+        query: &StateQueryRequirement,
+        is_hot: bool,
+    ) -> IndexingStrategy {
         if is_hot {
             IndexingStrategy::Full
         } else if query.is_conditional {
@@ -350,26 +385,35 @@ impl AlmanacSchemaGenerator {
             IndexingStrategy::Sparse
         }
     }
-    
+
     /// Estimate storage requirements for a schema
-    fn estimate_storage_requirements(&self, slots: &[StorageSlotSchema], patterns: &[QueryPattern]) -> u64 {
-        let base_storage: u64 = slots.iter().map(|slot| {
-            match &slot.data_type {
-                SlotDataType::Uint(bits) | SlotDataType::Int(bits) => (*bits as u64) / 8,
-                SlotDataType::Address => 20,
-                SlotDataType::Bool => 1,
-                SlotDataType::Bytes(Some(len)) => *len as u64,
-                SlotDataType::Bytes(None) => 1024, // Estimate
-                SlotDataType::String => 256, // Estimate
-                SlotDataType::Mapping(_, _) => 1024, // Estimate per entry
-                SlotDataType::Array(_, Some(len)) => *len as u64 * 32,
-                SlotDataType::Array(_, None) => 1024, // Estimate
-            }
-        }).sum();
-        
+    fn estimate_storage_requirements(
+        &self,
+        slots: &[StorageSlotSchema],
+        patterns: &[QueryPattern],
+    ) -> u64 {
+        let base_storage: u64 = slots
+            .iter()
+            .map(|slot| {
+                match &slot.data_type {
+                    SlotDataType::Uint(bits) | SlotDataType::Int(bits) => {
+                        (*bits as u64) / 8
+                    }
+                    SlotDataType::Address => 20,
+                    SlotDataType::Bool => 1,
+                    SlotDataType::Bytes(Some(len)) => *len as u64,
+                    SlotDataType::Bytes(None) => 1024, // Estimate
+                    SlotDataType::String => 256,       // Estimate
+                    SlotDataType::Mapping(_, _) => 1024, // Estimate per entry
+                    SlotDataType::Array(_, Some(len)) => *len as u64 * 32,
+                    SlotDataType::Array(_, None) => 1024, // Estimate
+                }
+            })
+            .sum();
+
         // Add overhead for indexing structures
         let indexing_overhead = patterns.len() as u64 * 128;
-        
+
         base_storage + indexing_overhead
     }
 }
@@ -399,7 +443,7 @@ impl LayoutCommitment {
         use std::hash::{Hash, Hasher};
         contract_id.hash(&mut hasher);
         let hash = hasher.finish();
-        
+
         LayoutCommitment {
             commitment_hash: format!("layout_{:016x}", hash),
             version: "1.0.0".to_string(),
@@ -414,12 +458,12 @@ impl LayoutCommitment {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state_analysis::{StateQueryRequirement, QueryType};
-    
+    use crate::state_analysis::{QueryType, StateQueryRequirement};
+
     #[test]
     fn test_schema_generation() {
-        let mut generator = AlmanacSchemaGenerator::new();
-        
+        let generator = AlmanacSchemaGenerator::new();
+
         // Create mock analysis result
         let queries = vec![
             StateQueryRequirement {
@@ -437,11 +481,11 @@ mod tests {
                 is_conditional: false,
             },
         ];
-        
+
         let mut queries_by_contract = BTreeMap::new();
         queries_by_contract.insert("usdc".to_string(), queries.clone());
-        
-        _analysis = StateAnalysisResult {
+
+        let analysis = StateAnalysisResult {
             required_queries: queries,
             queries_by_contract,
             queries_by_domain: BTreeMap::new(),
@@ -451,55 +495,57 @@ mod tests {
                 analysis_duration_ms: 5,
             },
         };
-        
+
         let result = generator.generate_schemas(&analysis);
-        
+
         assert_eq!(result.schemas.len(), 1);
         assert!(result.schemas.contains_key("usdc"));
-        
+
         let usdc_schema = &result.schemas["usdc"];
         assert_eq!(usdc_schema.contract_id, "usdc");
         assert_eq!(usdc_schema.domain, "ethereum");
         assert_eq!(usdc_schema.indexed_slots.len(), 2);
         assert_eq!(usdc_schema.query_patterns.len(), 2);
     }
-    
+
     #[test]
     fn test_storage_slot_generation() {
         let generator = AlmanacSchemaGenerator::new();
-        
-        let queries = vec![
-            StateQueryRequirement {
-                contract: "test".to_string(),
-                storage_slot: "balance".to_string(),
-                domain: "ethereum".to_string(),
-                query_type: QueryType::TokenBalance,
-                is_conditional: true,
-            },
-        ];
-        
+
+        let queries = vec![StateQueryRequirement {
+            contract: "test".to_string(),
+            storage_slot: "balance".to_string(),
+            domain: "ethereum".to_string(),
+            query_type: QueryType::TokenBalance,
+            is_conditional: true,
+        }];
+
         let slots = generator.generate_storage_slots(&queries);
-        
+
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].slot_id, "balance");
         assert!(slots[0].is_hot);
         assert!(matches!(slots[0].data_type, SlotDataType::Uint(256)));
         assert!(matches!(slots[0].indexing_strategy, IndexingStrategy::Full));
     }
-    
+
     #[test]
-    fn test_______optimization_settings() {
+    fn test_optimization_settings() {
         let settings = OptimizationSettings {
             min_frequency_threshold: 50,
             max_storage_overhead: 0.1,
             enable_range_optimization: false,
             enable_conditional_optimization: true,
         };
-        
+
         let generator = AlmanacSchemaGenerator::with_optimization_settings(settings);
         assert_eq!(generator.optimization_settings.min_frequency_threshold, 50);
         assert_eq!(generator.optimization_settings.max_storage_overhead, 0.1);
         assert!(!generator.optimization_settings.enable_range_optimization);
-        assert!(generator.optimization_settings.enable_conditional_optimization);
+        assert!(
+            generator
+                .optimization_settings
+                .enable_conditional_optimization
+        );
     }
-} 
+}

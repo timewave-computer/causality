@@ -66,7 +66,9 @@ dashu = { version = "0.4", default-features = false, features = ["std"] }
 tokio = { workspace = true, optional = true }
 
 # Sparse Merkle Tree implementation - updated to match Almanac version (v0.2.3)
-valence-coprocessor = { version = "0.2.3", git = "https://github.com/timewave-computer/valence-coprocessor.git", tag = "v0.2.3", default-features = false, features = ["std"] }
+valence-coprocessor = { version = "0.2.3", git = "https://github.com/timewave-computer/valence-coprocessor.git", tag = "v0.2.3", default-features = false, features = [
+    "std",
+] }
 sha2 = "0.10.8"
 
 [dev-dependencies]
@@ -77,7 +79,7 @@ ethereum_ssz_derive = { workspace = true }
 
 [[example]]
 name = "layer2_effect_demo"
-path = "../../examples/layer2_effect_demo.rs"
+path = "../../examples/rust-examples/layer2-effects/layer2_effect_demo.rs"
 
 [[example]]
 name = "zk_effect_demo"

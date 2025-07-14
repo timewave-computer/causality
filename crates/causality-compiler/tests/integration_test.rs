@@ -14,53 +14,66 @@ fn test_complete_compilation_pipeline() {
     let unit_program = unit_result.unwrap();
     assert_eq!(unit_program.source, "nil");
     assert!(!unit_program.instructions.is_empty());
-    
+
     // Verify instructions are valid - check for new instruction types
-    assert!(unit_program.instructions.iter().any(|i| matches!(i, 
-        Instruction::Transform { .. } | 
-        Instruction::Alloc { .. } | 
-        Instruction::Consume { .. } |
-        Instruction::Compose { .. } |
-        Instruction::Tensor { .. }
+    assert!(unit_program.instructions.iter().any(|i| matches!(
+        i,
+        Instruction::Transform { .. }
+            | Instruction::Alloc { .. }
+            | Instruction::Consume { .. }
+            | Instruction::Compose { .. }
+            | Instruction::Tensor { .. }
     )));
 }
 
 #[test]
 fn test_alloc_instruction_generation() {
     // Test resource allocation compilation
-    let alloc_result = compile("(alloc 42)");
+    let alloc_result = compile("(alloc TokenA 42)");
     assert!(alloc_result.is_ok());
     let alloc_program = alloc_result.unwrap();
-    assert_eq!(alloc_program.source, "(alloc 42)");
+    assert_eq!(alloc_program.source, "(alloc TokenA 42)");
     assert!(!alloc_program.instructions.is_empty());
-    
+
     // Verify alloc instruction is generated
-    assert!(alloc_program.instructions.iter().any(|i| matches!(i, Instruction::Alloc { .. })));
+    assert!(alloc_program
+        .instructions
+        .iter()
+        .any(|i| matches!(i, Instruction::Alloc { .. })));
 }
 
 #[test]
 fn test_consume_instruction_generation() {
     // Test resource consumption compilation
-    let consume_result = compile("(consume (alloc 42))");
+    let consume_result = compile("(consume (alloc TokenA 42))");
     assert!(consume_result.is_ok());
     let consume_program = consume_result.unwrap();
     assert!(!consume_program.instructions.is_empty());
-    
+
     // Should have both alloc and consume instructions
-    assert!(consume_program.instructions.iter().any(|i| matches!(i, Instruction::Alloc { .. })));
-    assert!(consume_program.instructions.iter().any(|i| matches!(i, Instruction::Consume { .. })));
+    assert!(consume_program
+        .instructions
+        .iter()
+        .any(|i| matches!(i, Instruction::Alloc { .. })));
+    assert!(consume_program
+        .instructions
+        .iter()
+        .any(|i| matches!(i, Instruction::Consume { .. })));
 }
 
 #[test]
 fn test_tensor_instruction_generation() {
     // Test tensor compilation
-    let tensor_result = compile("(tensor 1 2)");
+    let tensor_result = compile("(tensor (alloc TokenA 42) (alloc TokenB 24))");
     assert!(tensor_result.is_ok());
     let tensor_program = tensor_result.unwrap();
     assert!(!tensor_program.instructions.is_empty());
-    
+
     // Should generate tensor instruction
-    assert!(tensor_program.instructions.iter().any(|i| matches!(i, Instruction::Tensor { .. })));
+    assert!(tensor_program
+        .instructions
+        .iter()
+        .any(|i| matches!(i, Instruction::Tensor { .. })));
 }
 
 #[test]
@@ -70,17 +83,22 @@ fn test_lambda_compilation() {
     assert!(lambda_result.is_ok());
     let lambda_program = lambda_result.unwrap();
     assert!(!lambda_program.instructions.is_empty());
-    
+
     // Lambda should compile to alloc (for function creation)
-    assert!(lambda_program.instructions.iter().any(|i| matches!(i, Instruction::Alloc { .. })));
+    assert!(lambda_program
+        .instructions
+        .iter()
+        .any(|i| matches!(i, Instruction::Alloc { .. })));
 }
 
 #[test]
 fn test_quick_expression_compilation() {
     // Test the quick compilation method
-    let instructions = compile_expression("(alloc 42)").unwrap();
+    let instructions = compile_expression("(alloc TokenA 42)").unwrap();
     assert!(!instructions.is_empty());
-    assert!(instructions.iter().any(|i| matches!(i, Instruction::Alloc { .. })));
+    assert!(instructions
+        .iter()
+        .any(|i| matches!(i, Instruction::Alloc { .. })));
 }
 
 #[test]
@@ -91,7 +109,10 @@ fn test_compose_instruction_generation() {
     assert!(compose_result.is_ok());
     let compose_program = compose_result.unwrap();
     assert!(!compose_program.instructions.is_empty());
-    
+
     // Should generate alloc instructions for the lambda functions
-    assert!(compose_program.instructions.iter().any(|i| matches!(i, Instruction::Alloc { .. })));
-} 
+    assert!(compose_program
+        .instructions
+        .iter()
+        .any(|i| matches!(i, Instruction::Alloc { .. })));
+}

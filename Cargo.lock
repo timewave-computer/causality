@@ -2098,6 +2098,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bincode",
  "causality-api",
  "causality-compiler",
  "causality-core",
@@ -2207,6 +2208,7 @@ dependencies = [
  "causality-cli",
  "causality-compiler",
  "causality-core",
+ "causality-ffi",
  "causality-lisp",
  "causality-runtime",
  "causality-simulation",
@@ -2216,6 +2218,7 @@ dependencies = [
  "futures",
  "log",
  "parking_lot",
+ "scopeguard",
  "serde",
  "serde_json",
  "tempfile",
@@ -2234,6 +2237,7 @@ dependencies = [
  "causality-compiler",
  "causality-core",
  "causality-lisp",
+ "causality-runtime",
  "cbindgen",
  "env_logger 0.11.8",
  "ethereum_ssz",
@@ -2245,7 +2249,6 @@ dependencies = [
  "libc",
  "log",
  "ocaml",
- "ocaml-derive",
  "once_cell",
  "rand 0.8.5",
  "serde",
@@ -11553,10 +11556,12 @@ name = "traverse-core"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "keccak",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "thiserror 1.0.69",
+ "tiny-keccak",
 ]
 
 [[package]]

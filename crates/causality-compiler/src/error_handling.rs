@@ -1,11 +1,11 @@
+use serde::{Deserialize, Serialize};
+use std::error::Error as StdError;
 /// Enhanced error handling for Causality compiler operations
-/// 
+///
 /// This module provides comprehensive error handling and recovery mechanisms
 /// for the Causality compiler, including storage errors, network failures,
 /// and validation issues.
 use std::fmt;
-use std::error::Error as StdError;
-use serde::{Deserialize, Serialize};
 
 /// Comprehensive error type for Causality compiler operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,7 +16,7 @@ pub enum CausalityError {
         details: Option<String>,
         recoverable: bool,
     },
-    
+
     /// Network-related errors
     Network {
         message: String,
@@ -24,7 +24,7 @@ pub enum CausalityError {
         status_code: Option<u16>,
         retry_count: u32,
     },
-    
+
     /// Compilation errors
     Compilation {
         message: String,
@@ -32,14 +32,14 @@ pub enum CausalityError {
         column: Option<usize>,
         source_context: Option<String>,
     },
-    
+
     /// Serialization/deserialization errors
     Serialization {
         message: String,
         format: String,
         data_type: Option<String>,
     },
-    
+
     /// Validation errors
     Validation {
         message: String,
@@ -47,14 +47,14 @@ pub enum CausalityError {
         expected: Option<String>,
         actual: Option<String>,
     },
-    
+
     /// Configuration errors
     Configuration {
         message: String,
         config_key: Option<String>,
         config_file: Option<String>,
     },
-    
+
     /// Resource exhaustion errors
     ResourceExhaustion {
         message: String,
@@ -62,14 +62,14 @@ pub enum CausalityError {
         current_usage: Option<u64>,
         limit: Option<u64>,
     },
-    
+
     /// Permission/authorization errors
     Permission {
         message: String,
         required_permission: Option<String>,
         current_role: Option<String>,
     },
-    
+
     /// Timeout errors
     Timeout {
         message: String,
@@ -77,7 +77,7 @@ pub enum CausalityError {
         duration_ms: u64,
         timeout_ms: u64,
     },
-    
+
     /// Generic errors with structured context
     Generic {
         message: String,
@@ -89,7 +89,11 @@ pub enum CausalityError {
 impl fmt::Display for CausalityError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CausalityError::Storage { message, details, recoverable } => {
+            CausalityError::Storage {
+                message,
+                details,
+                recoverable,
+            } => {
                 write!(f, "Storage error: {}", message)?;
                 if let Some(details) = details {
                     write!(f, " ({})", details)?;
@@ -99,7 +103,12 @@ impl fmt::Display for CausalityError {
                 }
                 Ok(())
             }
-            CausalityError::Network { message, endpoint, status_code, retry_count } => {
+            CausalityError::Network {
+                message,
+                endpoint,
+                status_code,
+                retry_count,
+            } => {
                 write!(f, "Network error: {}", message)?;
                 if let Some(endpoint) = endpoint {
                     write!(f, " (endpoint: {})", endpoint)?;
@@ -112,7 +121,12 @@ impl fmt::Display for CausalityError {
                 }
                 Ok(())
             }
-            CausalityError::Compilation { message, line, column, source_context } => {
+            CausalityError::Compilation {
+                message,
+                line,
+                column,
+                source_context,
+            } => {
                 write!(f, "Compilation error: {}", message)?;
                 if let (Some(line), Some(column)) = (line, column) {
                     write!(f, " at line {}, column {}", line, column)?;
@@ -122,14 +136,23 @@ impl fmt::Display for CausalityError {
                 }
                 Ok(())
             }
-            CausalityError::Serialization { message, format, data_type } => {
+            CausalityError::Serialization {
+                message,
+                format,
+                data_type,
+            } => {
                 write!(f, "Serialization error ({}): {}", format, message)?;
                 if let Some(data_type) = data_type {
                     write!(f, " for type {}", data_type)?;
                 }
                 Ok(())
             }
-            CausalityError::Validation { message, field, expected, actual } => {
+            CausalityError::Validation {
+                message,
+                field,
+                expected,
+                actual,
+            } => {
                 write!(f, "Validation error: {}", message)?;
                 if let Some(field) = field {
                     write!(f, " (field: {})", field)?;
@@ -139,7 +162,11 @@ impl fmt::Display for CausalityError {
                 }
                 Ok(())
             }
-            CausalityError::Configuration { message, config_key, config_file } => {
+            CausalityError::Configuration {
+                message,
+                config_key,
+                config_file,
+            } => {
                 write!(f, "Configuration error: {}", message)?;
                 if let Some(key) = config_key {
                     write!(f, " (key: {})", key)?;
@@ -149,14 +176,23 @@ impl fmt::Display for CausalityError {
                 }
                 Ok(())
             }
-            CausalityError::ResourceExhaustion { message, resource_type, current_usage, limit } => {
+            CausalityError::ResourceExhaustion {
+                message,
+                resource_type,
+                current_usage,
+                limit,
+            } => {
                 write!(f, "Resource exhaustion ({}): {}", resource_type, message)?;
                 if let (Some(usage), Some(limit)) = (current_usage, limit) {
                     write!(f, " ({}/{} used)", usage, limit)?;
                 }
                 Ok(())
             }
-            CausalityError::Permission { message, required_permission, current_role } => {
+            CausalityError::Permission {
+                message,
+                required_permission,
+                current_role,
+            } => {
                 write!(f, "Permission error: {}", message)?;
                 if let Some(permission) = required_permission {
                     write!(f, " (required: {})", permission)?;
@@ -166,11 +202,23 @@ impl fmt::Display for CausalityError {
                 }
                 Ok(())
             }
-            CausalityError::Timeout { message, operation, duration_ms, timeout_ms } => {
-                write!(f, "Timeout error in {}: {} ({}ms > {}ms)", 
-                       operation, message, duration_ms, timeout_ms)
+            CausalityError::Timeout {
+                message,
+                operation,
+                duration_ms,
+                timeout_ms,
+            } => {
+                write!(
+                    f,
+                    "Timeout error in {}: {} ({}ms > {}ms)",
+                    operation, message, duration_ms, timeout_ms
+                )
             }
-            CausalityError::Generic { message, error_code, context } => {
+            CausalityError::Generic {
+                message,
+                error_code,
+                context,
+            } => {
                 write!(f, "Error: {}", message)?;
                 if let Some(code) = error_code {
                     write!(f, " (code: {})", code)?;
@@ -208,19 +256,20 @@ impl ErrorContext {
             additional_data: std::collections::BTreeMap::new(),
         }
     }
-    
+
     pub fn with_trace_id(mut self, trace_id: String) -> Self {
         self.trace_id = Some(trace_id);
         self
     }
-    
+
     pub fn with_user_id(mut self, user_id: String) -> Self {
         self.user_id = Some(user_id);
         self
     }
-    
+
     pub fn with_data(mut self, key: &str, value: &str) -> Self {
-        self.additional_data.insert(key.to_string(), value.to_string());
+        self.additional_data
+            .insert(key.to_string(), value.to_string());
         self
     }
 }
@@ -241,21 +290,27 @@ impl ContextualError {
             chain: Vec::new(),
         }
     }
-    
+
     pub fn with_cause(mut self, cause: CausalityError) -> Self {
         self.chain.push(cause);
         self
     }
-    
+
     pub fn add_context_data(&mut self, key: &str, value: &str) {
-        self.context.additional_data.insert(key.to_string(), value.to_string());
+        self.context
+            .additional_data
+            .insert(key.to_string(), value.to_string());
     }
 }
 
 impl fmt::Display for ContextualError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}:{}] {}", self.context.component, self.context.operation, self.error)?;
-        
+        write!(
+            f,
+            "[{}:{}] {}",
+            self.context.component, self.context.operation, self.error
+        )?;
+
         if !self.chain.is_empty() {
             write!(f, " (caused by: ")?;
             for (i, cause) in self.chain.iter().enumerate() {
@@ -266,7 +321,7 @@ impl fmt::Display for ContextualError {
             }
             write!(f, ")")?;
         }
-        
+
         Ok(())
     }
 }
@@ -325,33 +380,37 @@ impl ErrorHandler {
             enable_metrics: true,
         }
     }
-    
+
     pub fn with_logging(mut self, enable: bool) -> Self {
         self.enable_logging = enable;
         self
     }
-    
+
     pub fn with_metrics(mut self, enable: bool) -> Self {
         self.enable_metrics = enable;
         self
     }
-    
+
     /// Handle an error with full context and observability
-    pub fn handle_error(&self, error: CausalityError, operation: &str) -> ContextualError {
+    pub fn handle_error(
+        &self,
+        error: CausalityError,
+        operation: &str,
+    ) -> ContextualError {
         let context = ErrorContext::new(operation, &self.component);
         let contextual_error = ContextualError::new(error, context);
-        
+
         if self.enable_logging {
             self.log_error(&contextual_error);
         }
-        
+
         if self.enable_metrics {
             self.record_error_metric(&contextual_error);
         }
-        
+
         contextual_error
     }
-    
+
     /// Handle an error with additional context data
     pub fn handle_error_with_context(
         &self,
@@ -361,20 +420,20 @@ impl ErrorHandler {
     ) -> ContextualError {
         let mut context = ErrorContext::new(operation, &self.component);
         context.additional_data = context_data;
-        
+
         let contextual_error = ContextualError::new(error, context);
-        
+
         if self.enable_logging {
             self.log_error(&contextual_error);
         }
-        
+
         if self.enable_metrics {
             self.record_error_metric(&contextual_error);
         }
-        
+
         contextual_error
     }
-    
+
     /// Log error with structured logging
     fn log_error(&self, error: &ContextualError) {
         log::error!(
@@ -384,7 +443,7 @@ impl ErrorHandler {
             error.error,
             error.context.additional_data
         );
-        
+
         // Log error chain if present
         for (i, cause) in error.chain.iter().enumerate() {
             log::error!(
@@ -395,7 +454,7 @@ impl ErrorHandler {
             );
         }
     }
-    
+
     /// Record error metrics (placeholder for actual metrics implementation)
     fn record_error_metric(&self, error: &ContextualError) {
         // In a real implementation, this would integrate with metrics systems like Prometheus
@@ -425,14 +484,37 @@ impl CausalityError {
             CausalityError::Generic { .. } => "generic",
         }
     }
-    
+
     pub fn is_retryable(&self) -> bool {
-        matches!(self, CausalityError::Network { .. } | CausalityError::Timeout { .. } | CausalityError::Storage { .. })
+        match self {
+            CausalityError::Storage { recoverable, .. } => *recoverable,
+            CausalityError::Network { .. } | CausalityError::Timeout { .. } => true,
+            _ => false,
+        }
     }
-    
+
     /// Check if error should trigger circuit breaker
     pub fn should_break_circuit(&self) -> bool {
-        matches!(self, CausalityError::Storage { .. } | CausalityError::Network { .. } | CausalityError::Configuration { .. } | CausalityError::ResourceExhaustion { .. } | CausalityError::Permission { .. })
+        matches!(
+            self,
+            CausalityError::Storage { .. }
+                | CausalityError::Network { .. }
+                | CausalityError::Configuration { .. }
+                | CausalityError::ResourceExhaustion { .. }
+                | CausalityError::Permission { .. }
+        )
+    }
+
+    /// Check if error should trigger an alert
+    pub fn should_alert(&self) -> bool {
+        matches!(
+            self,
+            CausalityError::Storage { .. }
+                | CausalityError::Network { .. }
+                | CausalityError::Configuration { .. }
+                | CausalityError::ResourceExhaustion { .. }
+                | CausalityError::Permission { .. }
+        )
     }
 }
 
@@ -468,17 +550,17 @@ where
 {
     let mut delay = config.initial_delay_ms;
     let mut last_error = None;
-    
+
     for attempt in 1..=config.max_attempts {
         match operation().await {
             Ok(result) => return Ok(result),
             Err(error) => {
                 last_error = Some(error.clone());
-                
+
                 if !error.is_retryable() || attempt == config.max_attempts {
                     break;
                 }
-                
+
                 log::warn!(
                     "Attempt {}/{} failed for {}: {}. Retrying in {}ms",
                     attempt,
@@ -487,7 +569,7 @@ where
                     error,
                     delay
                 );
-                
+
                 tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
                 delay = std::cmp::min(
                     (delay as f64 * config.backoff_multiplier) as u64,
@@ -496,13 +578,13 @@ where
             }
         }
     }
-    
+
     let final_error = last_error.unwrap_or_else(|| CausalityError::Generic {
         message: "Retry operation failed without error".to_string(),
         error_code: None,
         context: std::collections::HashMap::new(),
     });
-    
+
     Err(error_handler.handle_error(final_error, operation_name))
 }
 
@@ -534,14 +616,14 @@ impl HealthStatus {
             dependencies: Vec::new(),
         }
     }
-    
+
     pub fn add_dependency(&mut self, dependency: DependencyHealth) {
         if !dependency.is_healthy {
             self.is_healthy = false;
         }
         self.dependencies.push(dependency);
     }
-    
+
     pub fn add_detail(&mut self, key: &str, value: &str) {
         self.details.insert(key.to_string(), value.to_string());
     }
@@ -560,17 +642,26 @@ impl HealthChecker {
             timeout: chrono::Duration::try_seconds(5).unwrap(),
         }
     }
-    
+
     pub fn with_timeout(mut self, timeout: chrono::Duration) -> Self {
         self.timeout = timeout;
         self
     }
-    
+
     /// Check health of an HTTP endpoint
-    pub async fn check_http_endpoint(&self, name: &str, url: &str) -> DependencyHealth {
+    pub async fn check_http_endpoint(
+        &self,
+        name: &str,
+        url: &str,
+    ) -> DependencyHealth {
         let start_time = std::time::Instant::now();
-        
-        match tokio::time::timeout(std::time::Duration::from_millis(self.timeout.num_milliseconds() as u64), reqwest::get(url)).await {
+
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(self.timeout.num_milliseconds() as u64),
+            reqwest::get(url),
+        )
+        .await
+        {
             Ok(Ok(response)) => {
                 let response_time = start_time.elapsed().as_millis() as u64;
                 DependencyHealth {
@@ -598,23 +689,27 @@ impl HealthChecker {
             },
         }
     }
-    
+
     /// Perform comprehensive health check
     pub async fn comprehensive_health_check(&self) -> HealthStatus {
         let mut health_status = HealthStatus::new(&self.component);
-        
+
         // Check Almanac
-        let almanac_health = self.check_http_endpoint("almanac", "http://localhost:8080/health").await;
+        let almanac_health = self
+            .check_http_endpoint("almanac", "http://localhost:8080/health")
+            .await;
         health_status.add_dependency(almanac_health);
-        
+
         // Check Valence
-        let valence_health = self.check_http_endpoint("valence", "http://localhost:9090/health").await;
+        let valence_health = self
+            .check_http_endpoint("valence", "http://localhost:9090/health")
+            .await;
         health_status.add_dependency(valence_health);
-        
+
         // Add system details
         health_status.add_detail("version", env!("CARGO_PKG_VERSION"));
         health_status.add_detail("build_time", "unknown");
-        
+
         health_status
     }
 }
@@ -622,7 +717,7 @@ impl HealthChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_error_creation() {
         let error = CausalityError::Storage {
@@ -630,12 +725,12 @@ mod tests {
             details: None,
             recoverable: false,
         };
-        
+
         assert_eq!(error.error_type(), "storage");
         assert!(!error.is_retryable());
         assert!(error.should_alert());
     }
-    
+
     #[test]
     fn test_contextual_error() {
         let error = CausalityError::Network {
@@ -644,14 +739,14 @@ mod tests {
             status_code: Some(500),
             retry_count: 1,
         };
-        
+
         let context = ErrorContext::new("test_operation", "test_component");
         let contextual_error = ContextualError::new(error, context);
-        
+
         assert_eq!(contextual_error.context.operation, "test_operation");
         assert_eq!(contextual_error.context.component, "test_component");
     }
-    
+
     #[tokio::test]
     async fn test_retry_logic() {
         let config = RetryConfig {
@@ -660,13 +755,13 @@ mod tests {
             max_delay_ms: 100,
             backoff_multiplier: 2.0,
         };
-        
+
         let error_handler = ErrorHandler::new("test");
-        
+
         // Use Arc<Mutex<>> to share mutable state across closure calls
         let attempt_count = std::sync::Arc::new(std::sync::Mutex::new(0));
         let attempt_count_clone = attempt_count.clone();
-        
+
         let result = retry_with_backoff(
             move || {
                 let attempt_count = attempt_count_clone.clone();
@@ -675,7 +770,7 @@ mod tests {
                     *count += 1;
                     let current_attempt = *count;
                     drop(count); // Release the lock
-                    
+
                     if current_attempt < 2 {
                         Err(CausalityError::Network {
                             message: "Temporary failure".to_string(),
@@ -691,9 +786,10 @@ mod tests {
             config,
             &error_handler,
             "test_operation",
-        ).await;
-        
+        )
+        .await;
+
         assert!(result.is_ok());
         assert_eq!(*attempt_count.lock().unwrap(), 2);
     }
-} 
+}

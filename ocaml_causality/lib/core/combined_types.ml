@@ -61,7 +61,7 @@ type domain_compatibility = {
     source_domain : typed_domain
   ; target_domain : typed_domain
   ; transfer_cost : int64
-  ; compatibility_score : float
+  ; compatibility_score : Fixed_point.t
 }
 (** Domain compatibility specification for cross-domain operations *)
 

@@ -36,7 +36,7 @@
 //! ### Basic Simulation
 //! ```rust,no_run
 //! use causality_simulation::{SimulationEngine, SimulatedClock};
-//! 
+//!
 //! let mut engine = SimulationEngine::new();
 //! let clock = SimulatedClock::from_system_time();
 //! // ... perform simulation
@@ -46,11 +46,11 @@
 //! ```rust,no_run
 //! use causality_simulation::{SimulationEngine, SessionEnvironmentGenerator};
 //! use causality_core::lambda::base::SessionType;
-//! 
+//!
 //! // Create session-driven simulation environment
 //! let mut env_generator = SessionEnvironmentGenerator::new();
 //! let mut engine = SimulationEngine::new();
-//! 
+//!
 //! // Add session declarations and generate participants automatically
 //! // ... perform session-driven simulation
 //! ```
@@ -59,47 +59,47 @@
 //! ```rust,no_run
 //! use causality_simulation::{SimulationOptimizer, SessionAwareOptimizer};
 //! use causality_core::lambda::base::SessionType;
-//! 
+//!
 //! let mut optimizer = SimulationOptimizer::new();
 //! // Analyze session types for optimization opportunities
 //! // ... perform protocol optimization
 //! ```
 
-pub mod engine;
-pub mod clock;
-pub mod fault_injection;
-pub mod snapshot;
-pub mod visualization;
-pub mod error;
-pub mod effect_runner;
-pub mod cross_chain;
 pub mod branching;
-pub mod time_travel;
-pub mod optimizer;
+pub mod clock;
+pub mod cross_chain;
+pub mod effect_runner;
+pub mod engine;
+pub mod error;
 pub mod executor;
+pub mod fault_injection;
+pub mod optimizer;
 pub mod session_environments;
-
-// Legacy modules for backward compatibility
-pub mod network;
-pub mod testing;
+pub mod snapshot;
+pub mod time_travel;
+pub mod visualization;
 
 // Core exports
-pub use engine::*;
-pub use clock::*;
-pub use fault_injection::*;
-pub use snapshot::*;
-pub use visualization::*;
-pub use error::*;
-pub use effect_runner::{EffectTestRunner, MockGenerator, MockHandlerRegistry, TestValue, EffectTestResult, ExpectedOutcome};
-pub use cross_chain::{CrossChainTestExecutor, CrossChainTestScenario, TestSuite as CrossChainTestSuite};
 pub use branching::*;
-pub use time_travel::*;
+pub use clock::*;
+pub use cross_chain::{
+    CrossChainTestExecutor, CrossChainTestScenario, TestSuite as CrossChainTestSuite,
+};
+pub use effect_runner::{
+    EffectTestResult, EffectTestRunner, ExpectedOutcome, MockGenerator,
+    MockHandlerRegistry, TestValue,
+};
+pub use engine::*;
+pub use error::*;
+pub use fault_injection::*;
 pub use optimizer::*;
-pub use session_environments::{SessionEnvironmentGenerator, SessionParticipantConfig, SessionTopology, CommunicationPattern};
-
-// Legacy exports
-pub use network::*;
-pub use testing::*;
+pub use session_environments::{
+    CommunicationPattern, SessionEnvironmentGenerator, SessionParticipantConfig,
+    SessionTopology,
+};
+pub use snapshot::*;
+pub use time_travel::*;
+pub use visualization::*;
 
 // Missing type aliases and exports for e2e test compatibility
 pub type PerformanceProfiler = optimizer::SimulationOptimizer;
@@ -110,14 +110,12 @@ impl SimulationEngine {
     /// Create a simulation engine with session choreography support
     /// This factory method sets up the engine for session-type-driven simulation
     pub fn with_session_choreography() -> Self {
-        
         // Session mode is always enabled for engines with session participants
         Self::new()
     }
-    
+
     /// Create simulation engine with enhanced session capabilities
     pub fn with_enhanced_session_support() -> Self {
-        
         // Enhanced session features are built into the engine
         Self::with_session_choreography()
     }
@@ -128,12 +126,12 @@ impl SimulationOptimizer {
     pub fn with_session_optimization() -> Self {
         Self::with_strategy(OptimizationStrategy::SessionOptimized)
     }
-    
+
     /// Create optimizer with communication pattern optimization
     pub fn with_communication_optimization() -> Self {
         Self::with_strategy(OptimizationStrategy::CommunicationOptimized)
     }
-    
+
     /// Create optimizer for multi-party protocol optimization
     pub fn with_multiparty_optimization() -> Self {
         Self::with_strategy(OptimizationStrategy::MultiPartyOptimized)
@@ -168,7 +166,6 @@ impl SnapshotManager {
 impl CrossChainTestExecutor {
     /// Create cross-chain test executor with session registry support
     pub fn with_session_choreography() -> Self {
-        
         // Session registry is integrated internally
         Self::new(crate::clock::SimulatedClock::from_system_time())
     }
@@ -234,7 +231,9 @@ impl SessionSimulationEnvironment {
     /// Create a complete session-driven simulation environment
     pub fn new(config: SessionSimulationConfig) -> Self {
         Self {
-            engine: if config.enable_compliance_checking || config.enable_deadlock_detection {
+            engine: if config.enable_compliance_checking
+                || config.enable_deadlock_detection
+            {
                 SimulationEngine::with_enhanced_session_support()
             } else {
                 SimulationEngine::with_session_choreography()
@@ -255,19 +254,19 @@ impl SessionSimulationEnvironment {
                 FaultInjector::new()
             },
             snapshot_manager: SnapshotManager::with_session_checkpoints(100),
-            cross_chain_executor: CrossChainTestExecutor::with_session_choreography(),
+            cross_chain_executor: CrossChainTestExecutor::with_session_choreography(
+            ),
             effect_runner: EffectTestRunner::with_session_test_generation(),
             env_generator: SessionEnvironmentGenerator::new(),
             config,
         }
     }
-    
 
-#[allow(clippy::should_implement_trait)]
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
         Self::new(SessionSimulationConfig::default())
     }
-    
+
     /// Create environment optimized for performance testing
     pub fn for_performance_testing() -> Self {
         let config = SessionSimulationConfig {
@@ -281,7 +280,7 @@ impl SessionSimulationEnvironment {
         };
         Self::new(config)
     }
-    
+
     /// Create environment optimized for debugging and analysis
     pub fn for_debugging() -> Self {
         let config = SessionSimulationConfig {
@@ -290,12 +289,12 @@ impl SessionSimulationEnvironment {
             enable_session_fault_injection: true,
             enable_session_visualization: true,
             enable_session_optimization: false, // Don't optimize for debugging
-            max_execution_timeout_ms: 120000, // 2 minutes
+            max_execution_timeout_ms: 120000,   // 2 minutes
             max_simulation_steps: 50000,
         };
         Self::new(config)
     }
-    
+
     /// Create environment optimized for resilience testing
     pub fn for_resilience_testing() -> Self {
         let config = SessionSimulationConfig {
@@ -352,176 +351,151 @@ impl Default for SessionSimulationResults {
     }
 }
 
-// NEW: Public API for session migration
-
-/// Migration utilities for upgrading from mock-based to session-driven simulation
-pub mod migration {
-    use super::*;
-    
-    /// Convert existing mock-based simulation to session-driven
-    pub fn migrate_mock_to_session_simulation(
-        _legacy_engine: &SimulationEngine,
-    ) -> Result<SessionSimulationEnvironment, crate::error::SimulationError> {
-        // Create new session-driven environment
-        let env = SessionSimulationEnvironment::new(SessionSimulationConfig::default());
-        Ok(env)
-    }
-    
-    /// Validate session-driven simulation capabilities
-    pub fn validate_session_capabilities() -> Result<(), crate::error::SimulationError> {
-        // Basic capability validation
-        let _engine = SimulationEngine::with_session_choreography();
-        let _optimizer = SimulationOptimizer::with_session_optimization();
-        let _visualizer = VisualizationHooks::with_session_visualization();
-        
-        Ok(())
-    }
-    
-    /// Generate migration report for existing codebase
-    pub fn generate_migration_report() -> String {
-        let mut report = String::new();
-        report.push_str("# Session-Driven Simulation Migration Report\n\n");
-        report.push_str("## Available Session Features\n");
-        report.push_str("- ✅ Session-aware performance optimization\n");
-        report.push_str("- ✅ Enhanced visualization with protocol flow diagrams\n");
-        report.push_str("- ✅ Cross-chain session coordination\n");
-        report.push_str("- ✅ Session-aware fault injection\n");
-        report.push_str("- ✅ Automatic test generation from session types\n");
-        report.push_str("- ✅ Session recovery and resilience testing\n");
-        report.push_str("\n## Migration Steps\n");
-        report.push_str("1. Replace `SimulationEngine::new()` with `SimulationEngine::with_session_choreography()`\n");
-        report.push_str("2. Use `SessionSimulationEnvironment` for comprehensive session capabilities\n");
-        report.push_str("3. Replace manual test case generation with `EffectTestRunner::with_session_test_generation()`\n");
-        report.push_str("4. Enable session-aware optimization with `SimulationOptimizer::with_session_optimization()`\n");
-        report.push_str("5. Add session visualization with `VisualizationHooks::with_session_visualization()`\n");
-        report
-    }
-}
-
 // Re-export the new session types for convenience
-pub use optimizer::{
-    SessionAwareOptimizer, SessionAnalysisResult, CommunicationOptimizationResult, 
-    PerformancePrediction, ResourceUsagePrediction
-};
-pub use visualization::{
-    SessionProtocolVisualizer, SessionProtocolState, SessionFlowEvent, 
-    SessionPerformanceMetrics, SessionTraceInfo, SessionComplexityMetrics
+pub use cross_chain::{
+    ChainCapabilities, ChoreographyExecutionResult, CrossChainChoreography,
+    CrossChainSessionMessage, CrossChainSessionRegistry,
 };
 pub use fault_injection::{
-    SessionFaultConfig, SessionFaultResult, SessionOperationType, 
-    SessionViolationType, SessionProtocolAnalysis
+    SessionFaultConfig, SessionFaultResult, SessionOperationType,
+    SessionProtocolAnalysis, SessionViolationType,
+};
+pub use optimizer::{
+    CommunicationOptimizationResult, PerformancePrediction, ResourceUsagePrediction,
+    SessionAnalysisResult, SessionAwareOptimizer,
 };
 pub use snapshot::{
-    SessionSnapshot, CheckpointBoundary, RecoveryStrategy, 
-    FaultRecoveryContext, ResilienceMetrics
+    CheckpointBoundary, FaultRecoveryContext, RecoveryStrategy, ResilienceMetrics,
+    SessionSnapshot,
 };
-pub use cross_chain::{
-    CrossChainChoreography, CrossChainSessionRegistry, CrossChainSessionMessage,
-    ChoreographyExecutionResult, ChainCapabilities
+pub use visualization::{
+    SessionComplexityMetrics, SessionFlowEvent, SessionPerformanceMetrics,
+    SessionProtocolState, SessionProtocolVisualizer, SessionTraceInfo,
 };
 
 #[cfg(test)]
 mod integration_tests {
     use super::*;
     use std::time::Duration;
-    
+
     #[tokio::test]
     async fn test_end_to_end_effect_execution() {
         let mut engine = SimulationEngine::new();
-        
+
         // Set up test environment
-        engine.initialize().await.expect("Failed to initialize engine");
-        
+        engine
+            .initialize()
+            .await
+            .expect("Failed to initialize engine");
+
         // Create test scenario
         let scenario = TestScenario {
             _name: "basic_transfer_test".to_string(),
             _description: "End-to-end transfer effect test".to_string(),
             _timeout: Duration::from_secs(30),
         };
-        
+
         // Execute scenario
         let result = engine.execute_scenario(scenario).await;
         assert!(result.is_ok(), "End-to-end test failed");
-        
+
         let execution_result = result.unwrap();
         assert!(execution_result.success);
         assert!(execution_result.execution_time_ms > 0);
     }
-    
+
     #[tokio::test]
     async fn test_cross_chain_scenarios() {
         let mut engine = SimulationEngine::new();
-        engine.initialize().await.expect("Failed to initialize engine");
-        
+        engine
+            .initialize()
+            .await
+            .expect("Failed to initialize engine");
+
         // Create cross-chain scenario
         let cross_chain_scenario = CrossChainTestScenario {
             _chains: vec!["ethereum".to_string(), "arbitrum".to_string()],
             _operations: vec![],
             _dependencies: vec![],
         };
-        
+
         // Execute cross-chain test
-        let result = engine.execute_cross_chain_scenario(cross_chain_scenario).await;
+        let result = engine
+            .execute_cross_chain_scenario(cross_chain_scenario)
+            .await;
         assert!(result.is_ok(), "Cross-chain scenario failed");
     }
-    
+
     #[tokio::test]
     async fn test_simulation_engine_integration() {
         let runner = EffectTestRunner::new();
-        
+
         // Test that the simulation engine properly integrates
         // A new runner starts with no handlers, so it's not initialized yet
         assert!(!runner.is_initialized());
-        
+
         // Test mock registry integration
         let mock_count = runner.mock_registry_size();
         assert_eq!(mock_count, 0); // Should start empty
-        
+
         // Test result collection
         let results = runner.collect_results().await;
         assert_eq!(results.len(), 0);
     }
-    
+
     #[test]
     fn test_cli_api_commands_work() {
         // Verify CLI commands can be constructed properly
-        let cli_test_command = "causality test-effects discover --category defi".to_string();
+        let cli_test_command =
+            "causality test-effects discover --category defi".to_string();
         assert!(cli_test_command.contains("test-effects"));
-        
-        // Verify API endpoints can be constructed properly  
-        let api_endpoint = "/effects/discover?category=defi&detailed=true".to_string();
+
+        // Verify API endpoints can be constructed properly
+        let api_endpoint =
+            "/effects/discover?category=defi&detailed=true".to_string();
         assert!(api_endpoint.contains("/effects/"));
-        
+
         // These would be tested with actual CLI/API in a full integration test
         println!("✅ CLI and API command structure verified");
     }
-    
+
     #[tokio::test]
     async fn test_performance_characteristics() {
         use std::time::Instant;
-        
+
         let mut engine = SimulationEngine::new();
-        engine.initialize().await.expect("Failed to initialize engine");
-        
+        engine
+            .initialize()
+            .await
+            .expect("Failed to initialize engine");
+
         // Test schema generation performance
         let start = Instant::now();
         for _ in 0..100 {
             let _schema_id = format!("schema_{}", start.elapsed().as_nanos());
         }
         let schema_time = start.elapsed();
-        assert!(schema_time.as_millis() < 100, "Schema generation too slow: {}ms", schema_time.as_millis());
-        
+        assert!(
+            schema_time.as_millis() < 100,
+            "Schema generation too slow: {}ms",
+            schema_time.as_millis()
+        );
+
         // Test mock generation performance
         let start = Instant::now();
         for _ in 0..50 {
             let _mock_result = format!("mock_{}", start.elapsed().as_nanos());
         }
         let mock_time = start.elapsed();
-        assert!(mock_time.as_millis() < 50, "Mock generation too slow: {}ms", mock_time.as_millis());
-        
+        assert!(
+            mock_time.as_millis() < 50,
+            "Mock generation too slow: {}ms",
+            mock_time.as_millis()
+        );
+
         println!("✅ Performance characteristics verified");
     }
-    
+
     // Helper structs for testing
     #[derive(Debug)]
     struct TestScenario {
@@ -529,23 +503,26 @@ mod integration_tests {
         _description: String,
         _timeout: Duration,
     }
-    
+
     #[derive(Debug)]
     struct ExecutionResult {
         success: bool,
         execution_time_ms: u64,
     }
-    
+
     #[derive(Debug)]
     struct CrossChainTestScenario {
         _chains: Vec<String>,
         _operations: Vec<String>,
         _dependencies: Vec<String>,
     }
-    
+
     // Mock implementations for testing
     impl SimulationEngine {
-        async fn execute_scenario(&mut self, _scenario: TestScenario) -> Result<ExecutionResult, String> {
+        async fn execute_scenario(
+            &mut self,
+            _scenario: TestScenario,
+        ) -> Result<ExecutionResult, String> {
             // Simulate execution
             tokio::time::sleep(Duration::from_millis(10)).await;
             Ok(ExecutionResult {
@@ -553,8 +530,11 @@ mod integration_tests {
                 execution_time_ms: 10,
             })
         }
-        
-        async fn execute_cross_chain_scenario(&mut self, _scenario: CrossChainTestScenario) -> Result<ExecutionResult, String> {
+
+        async fn execute_cross_chain_scenario(
+            &mut self,
+            _scenario: CrossChainTestScenario,
+        ) -> Result<ExecutionResult, String> {
             // Simulate cross-chain execution
             tokio::time::sleep(Duration::from_millis(20)).await;
             Ok(ExecutionResult {

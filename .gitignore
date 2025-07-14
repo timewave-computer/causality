@@ -14,6 +14,9 @@ dune-project.lock
 # OCaml LSP and Dune cache directories
 .ocaml-lsp-cache/
 .dune-cache/
+.cache-timestamp
+.cache-watcher-pid
+.last-config-check
 
 # Nix build outputs
 result
@@ -93,3 +96,7 @@ ml_work/
 scripts/
 TODO.md
 _docs/
+metropolis/
+
+# Editor caches
+.vscode/settings.json.bak

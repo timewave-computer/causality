@@ -5,12 +5,12 @@
 // Core modules - working
 pub mod cross_language;
 pub mod debug;
-// pub mod dsl; // Temporarily disabled due to intent_builder API changes
-// pub mod effects; // Temporarily disabled due to type compatibility issues
+pub mod dsl; // Re-enabled after cleaning up intent_builder
+             // pub mod effects; // Temporarily disabled due to type compatibility issues
 pub mod formal_verification;
 // pub mod interface_synthesis; // Temporarily disabled due to doc comment issues
 // pub mod mocks; // Temporarily disabled due to type compatibility issues
-// pub mod primitives; // Temporarily disabled due to type compatibility issues
+pub mod primitives; // Re-enabled after cleaning up stub files
 pub mod resources;
 // pub mod testing; // Temporarily disabled due to type compatibility issues
 pub mod utils;
@@ -18,7 +18,7 @@ pub mod utils;
 pub mod fixed_point;
 
 // Re-exports - updated for new causality-core API
-pub use causality_core::{Value, EntityId};
+pub use causality_core::{EntityId, Value};
 
 /// Main toolkit interface for building Causality applications
 pub struct CausalityToolkit {
@@ -31,7 +31,7 @@ pub struct CausalityToolkit {
 pub struct ToolkitConfig {
     /// Default deployment settings
     pub deployment_config: DeploymentConfig,
-    
+
     /// Logging and debugging options
     pub debug_config: DebugConfig,
 }
@@ -41,13 +41,13 @@ pub struct ToolkitConfig {
 pub struct DeploymentConfig {
     /// Target chains for deployment
     pub target_chains: Vec<String>,
-    
+
     /// Gas optimization settings
     pub gas_optimization: bool,
-    
+
     /// ZK proof generation settings
     pub zk_proofs_enabled: bool,
-    
+
     /// Cross-chain bridging settings
     pub cross_chain_enabled: bool,
 }
@@ -57,13 +57,13 @@ pub struct DeploymentConfig {
 pub struct DebugConfig {
     /// Enable verbose logging
     pub verbose: bool,
-    
+
     /// Enable execution tracing
     pub trace_execution: bool,
-    
+
     /// Enable performance profiling
     pub profile_performance: bool,
-    
+
     /// Output directory for logs and artifacts
     pub output_dir: String,
 }
@@ -81,17 +81,17 @@ impl CausalityToolkit {
             config: ToolkitConfig::default(),
         }
     }
-    
+
     /// Create a new toolkit instance with custom configuration
     pub fn with_config(config: ToolkitConfig) -> Self {
         Self { config }
     }
-    
+
     /// Get the current configuration
     pub fn config(&self) -> &ToolkitConfig {
         &self.config
     }
-    
+
     /// Update the configuration
     pub fn set_config(&mut self, config: ToolkitConfig) {
         self.config = config;

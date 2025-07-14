@@ -36,7 +36,7 @@ let test_layer2_to_layer0_compilation () =
 (* Test intent compilation *)
 let test_intent_compilation () =
   let intent = create_simple_intent () in
-  let expr_id = Compiler.compile_intent intent in
+  let expr_id = Causality_compiler.Layer2_compiler.compile_intent intent in
   
   Printf.printf "Intent compilation: ";
   if Bytes.length expr_id > 0 then

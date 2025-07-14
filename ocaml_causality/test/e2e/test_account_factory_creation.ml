@@ -154,7 +154,7 @@ let test_runtime_statistics () =
   Printf.printf "  Successful transactions: %d\n" stats.successful_transactions;
   Printf.printf "  Failed transactions: %d\n" stats.failed_transactions;
   Printf.printf "  Active transactions: %d\n" stats.active_transactions;
-  Printf.printf "  Average completion time: %.2f seconds\n" stats.average_completion_time;
+  Printf.printf "  Average completion time: %d seconds\n" stats.average_completion_time;
   
   Ok stats
 

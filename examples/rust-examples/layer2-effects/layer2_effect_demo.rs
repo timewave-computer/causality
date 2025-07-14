@@ -8,31 +8,33 @@
 
 use causality_core::{
     effect::{
-        transform_constraint::{TransformConstraintSystem, TransformConstraint, TransformDefinition},
-        intent::{Intent, LocationRequirements},
         capability::{Capability, CapabilityLevel},
+        intent::{Intent, LocationRequirements},
+        transform_constraint::{
+            TransformConstraint, TransformConstraintSystem, TransformDefinition,
+        },
     },
-    lambda::base::{TypeInner, BaseType, Location},
+    lambda::base::{BaseType, Location, TypeInner},
     system::{deterministic::DeterministicSystem, error::Result},
 };
 use std::collections::{BTreeMap, BTreeSet};
 
 fn main() -> Result<()> {
     println!("=== Causality Layer 2 Unified Transform Demo ===\n");
-    
+
     // 1. Create unified constraint system
     println!("1. Setting up unified transform constraint system...");
     let mut constraint_system = TransformConstraintSystem::new();
     let mut det_sys = DeterministicSystem::new();
-    
+
     // 2. Demonstrate local computation transforms
     println!("\n2. Local computation transforms...");
-    
+
     // Local computation: add two numbers
     let local_computation = TransformConstraint::LocalTransform {
         source_type: TypeInner::Product(
             Box::new(TypeInner::Base(BaseType::Int)),
-            Box::new(TypeInner::Base(BaseType::Int))
+            Box::new(TypeInner::Base(BaseType::Int)),
         ),
         target_type: TypeInner::Base(BaseType::Int),
         transform: TransformDefinition::FunctionApplication {
@@ -40,10 +42,10 @@ fn main() -> Result<()> {
             argument: "numbers".to_string(),
         },
     };
-    
+
     constraint_system.add_constraint(local_computation);
     println!("   Added local computation: add(10, 32) -> 42");
-    
+
     // Local data processing
     let data_processing = TransformConstraint::LocalTransform {
         source_type: TypeInner::Base(BaseType::Symbol),
@@ -53,29 +55,31 @@ fn main() -> Result<()> {
             argument: "input_message".to_string(),
         },
     };
-    
+
     constraint_system.add_constraint(data_processing);
     println!("   Added local data processing: process_message(input) -> output");
-    
+
     // 3. Demonstrate remote communication transforms - SAME API!
     println!("\n3. Remote communication transforms (same API!)...");
-    
+
     // Remote computation: same operation, different location
     let remote_computation = TransformConstraint::RemoteTransform {
         source_location: Location::Local,
         target_location: Location::Domain("compute_service".to_string()),
         source_type: TypeInner::Product(
             Box::new(TypeInner::Base(BaseType::Int)),
-            Box::new(TypeInner::Base(BaseType::Int))
+            Box::new(TypeInner::Base(BaseType::Int)),
         ),
         target_type: TypeInner::Base(BaseType::Int),
         protocol: TypeInner::Base(BaseType::Unit), // Auto-derived
     };
-    
+
     constraint_system.add_constraint(remote_computation);
     println!("   Added remote computation: same add operation on remote service");
-    println!("   Protocol automatically derived: Send(Int, Int) -> Receive(Int) -> End");
-    
+    println!(
+        "   Protocol automatically derived: Send(Int, Int) -> Receive(Int) -> End"
+    );
+
     // Remote data storage
     let remote_storage = TransformConstraint::RemoteTransform {
         source_location: Location::Local,
@@ -84,28 +88,30 @@ fn main() -> Result<()> {
         target_type: TypeInner::Base(BaseType::Bool),
         protocol: TypeInner::Base(BaseType::Unit), // Auto-derived
     };
-    
+
     constraint_system.add_constraint(remote_storage);
     println!("   Added remote storage: store data on database service");
-    println!("   Protocol automatically derived: Send(Symbol) -> Receive(Bool) -> End");
-    
+    println!(
+        "   Protocol automatically derived: Send(Symbol) -> Receive(Bool) -> End"
+    );
+
     // 4. Demonstrate data migration transforms
     println!("\n4. Data migration transforms...");
-    
+
     let data_migration = TransformConstraint::DataMigration {
         from_location: Location::Local,
         to_location: Location::Domain("backup_service".to_string()),
         data_type: TypeInner::Base(BaseType::Symbol),
         migration_strategy: "incremental_backup".to_string(),
     };
-    
+
     constraint_system.add_constraint(data_migration);
     println!("   Added data migration: local -> backup service");
     println!("   Migration protocol automatically derived");
-    
+
     // 5. Demonstrate distributed synchronization
     println!("\n5. Distributed synchronization transforms...");
-    
+
     let distributed_sync = TransformConstraint::DistributedSync {
         locations: vec![
             Location::Domain("service_a".to_string()),
@@ -115,14 +121,14 @@ fn main() -> Result<()> {
         sync_type: TypeInner::Base(BaseType::Bool),
         consistency_model: "eventual_consistency".to_string(),
     };
-    
+
     constraint_system.add_constraint(distributed_sync);
     println!("   Added distributed sync across 3 services");
     println!("   Coordination protocol automatically generated");
-    
+
     // 6. Demonstrate capability-based access
     println!("\n6. Capability-based access transforms...");
-    
+
     let capability_access = TransformConstraint::CapabilityAccess {
         resource: "sensitive_data".to_string(),
         required_capability: Some(Capability::new(
@@ -131,46 +137,53 @@ fn main() -> Result<()> {
         )),
         access_pattern: "authenticated_read".to_string(),
     };
-    
+
     constraint_system.add_constraint(capability_access);
     println!("   Added capability-based access to sensitive data");
     println!("   Authentication protocol automatically included");
-    
+
     // 7. Solve all constraints together
     println!("\n7. Solving unified constraint system...");
-    
+
     // Convert the transform constraint error to our error type
-    let operations = constraint_system.solve_constraints(&mut det_sys)
-        .map_err(|e| causality_core::Error::Serialization(format!("Transform constraint error: {}", e)))?;
+    let operations =
+        constraint_system
+            .solve_constraints(&mut det_sys)
+            .map_err(|e| {
+                causality_core::Error::serialization(format!(
+                    "Transform constraint error: {}",
+                    e
+                ))
+            })?;
     println!("   Successfully resolved {} operations", operations.len());
     println!("   All constraints solved through unified system!");
-    
+
     // 8. Demonstrate computation-communication symmetry
     println!("\n8. Computation-Communication Symmetry Demonstration:");
-    
+
     println!("   Local computation constraint:");
     println!("     TransformConstraint::LocalTransform {{");
     println!("       source_type: (Int, Int),");
     println!("       target_type: Int,");
     println!("       transform: add_function");
     println!("     }}");
-    
+
     println!("\n   Remote communication constraint - SAME STRUCTURE:");
     println!("     TransformConstraint::RemoteTransform {{");
     println!("       source_type: (Int, Int),  // Same types!");
     println!("       target_type: Int,         // Same types!");
     println!("       protocol: auto_derived    // Only difference: protocol");
     println!("     }}");
-    
+
     println!("\n   Key insight: Computation and communication are unified!");
     println!("   - Same constraint language");
     println!("   - Same type system");
     println!("   - Same composition rules");
     println!("   - Only difference: location");
-    
+
     // 9. Show unified intent creation
     println!("\n9. Creating unified intent...");
-    
+
     let mut intent = Intent::new(Location::Local);
     intent.location_requirements = LocationRequirements {
         preferred_location: Some(Location::Local),
@@ -183,11 +196,12 @@ fn main() -> Result<()> {
         },
         migration_specs: vec![],
         required_protocols: BTreeMap::new(),
-        performance_constraints: causality_core::effect::intent::PerformanceConstraints {
-            max_execution_time: Some(1000),
-            max_memory_usage: None,
-            max_gas_usage: None,
-        },
+        performance_constraints:
+            causality_core::effect::intent::PerformanceConstraints {
+                max_execution_time: Some(1000),
+                max_memory_usage: None,
+                max_gas_usage: None,
+            },
     };
 
     println!("   Created intent with location requirements");
@@ -206,4 +220,4 @@ fn main() -> Result<()> {
     println!("✓ Location-transparent operations");
 
     Ok(())
-} 
+}

@@ -15,9 +15,12 @@ pub mod layer2;
 pub mod memory_management;
 pub mod runtime;
 pub mod unified_types;
+pub mod simulation;
 
 // Re-exports
 pub use core_types::{LispValue, ResourceId, ExprId};
 pub use error_handling::result_to_ocaml;
 pub use runtime::{causality_init, causality_version, causality_cleanup, with_runtime_state};
 pub use unified_types::{OcamlLocation, OcamlTypeInner, OcamlSessionType};
+pub use memory_management::*;
+pub use simulation::*;
