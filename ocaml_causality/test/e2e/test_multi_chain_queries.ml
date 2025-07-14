@@ -36,7 +36,7 @@ let test_multi_chain_balance_queries () =
     is_success ethereum_weth_balance in
   
   if all_successful then (
-    Printf.printf "✓ All multi-chain balance queries successful\n";
+    Printf.printf " All multi-chain balance queries successful\n";
     Ok ()
   ) else (
     Printf.printf "✗ Some balance queries failed\n";
@@ -83,7 +83,7 @@ let test_state_dependent_strategy () =
         "error"
   in
   
-  Printf.printf "✓ State-dependent strategy executed: %s\n" strategy_result;
+  Printf.printf " State-dependent strategy executed: %s\n" strategy_result;
   Ok ()
 
 (* Test multi-chain query coordination *)
@@ -127,7 +127,7 @@ let test_multi_chain_coordination () =
     Printf.printf "  %d. %s: %s\n" (i+1) field (result_to_string result)
   ) conditional_results;
   
-  Printf.printf "✓ Multi-chain coordination strategies tested\n";
+  Printf.printf " Multi-chain coordination strategies tested\n";
   Ok ()
 
 (* Test query caching and optimization *)
@@ -162,8 +162,8 @@ let test_query_caching () =
   in
   
   if results_match then (
-    Printf.printf "✓ Cache working correctly (results match)\n";
-    Printf.printf "✓ Performance improvement: %.1fx faster\n" 
+    Printf.printf " Cache working correctly (results match)\n";
+    Printf.printf " Performance improvement: %.1fx faster\n" 
       (if second_duration > 0.0 then first_duration /. second_duration else 1.0);
     Ok ()
   ) else (
@@ -202,7 +202,7 @@ let test_async_queries () =
     | Cached -> "Cached");
   
   if is_success result then (
-    Printf.printf "✓ Async query completed successfully\n";
+    Printf.printf " Async query completed successfully\n";
     Ok ()
   ) else (
     Printf.printf "✗ Async query failed\n";
@@ -240,7 +240,7 @@ let test_query_composition () =
     Printf.printf "  %d. %s: %s\n" (i+1) field (result_to_string result)
   ) mapped_results;
   
-  Printf.printf "✓ Query composition and filtering working\n";
+  Printf.printf " Query composition and filtering working\n";
   Ok ()
 
 (* Test error handling and validation *)
@@ -277,7 +277,7 @@ let test_error_handling () =
   
   let expected_errors = is_error invalid_result && is_error empty_address_result && is_error error_combined in
   if expected_errors then (
-    Printf.printf "✓ Error handling working correctly\n";
+    Printf.printf " Error handling working correctly\n";
     Ok ()
   ) else (
     Printf.printf "✗ Error handling issues detected\n";
@@ -304,7 +304,7 @@ let run_all_tests () =
     try
       match test_fn () with
       | Ok _ -> 
-          Printf.printf "✓ %s: PASSED\n" name;
+          Printf.printf " %s: PASSED\n" name;
           (name, true)
       | Error msg ->
           Printf.printf "✗ %s: FAILED - %s\n" name msg;
@@ -322,9 +322,9 @@ let run_all_tests () =
   Printf.printf "Test Results: %d/%d tests passed\n" passed total;
   
   if passed = total then
-    Printf.printf "🎉 All Phase 2 tests passed!\n"
+    Printf.printf " All Phase 2 tests passed!\n"
   else
-    Printf.printf "❌ Some Phase 2 tests failed\n";
+    Printf.printf " Some Phase 2 tests failed\n";
   
   results
 

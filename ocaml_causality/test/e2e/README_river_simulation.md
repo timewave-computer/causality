@@ -259,9 +259,9 @@ This test validates the key architectural requirement:
 
 > "nothing in the rust project should have any reference to grove or metropolis or river. generic s expressions should be passed over ffi and serialized into instructions that are compiled"
 
-✅ **Rust FFI**: Only generic `compile_and_simulate_lisp` function  
-✅ **Domain Logic**: All River/Grove logic in OCaml  
-✅ **S-expressions**: Lisp serves as the interface  
-✅ **Generic Instructions**: Rust compiles Lisp to generic instructions  
+ **Rust FFI**: Only generic `compile_and_simulate_lisp` function  
+ **Domain Logic**: All River/Grove logic in OCaml  
+ **S-expressions**: Lisp serves as the interface  
+ **Generic Instructions**: Rust compiles Lisp to generic instructions  
 
 The test demonstrates the complete separation of concerns and proper use of the causality-lisp → causality-simulation pipeline. 

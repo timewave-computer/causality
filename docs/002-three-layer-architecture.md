@@ -248,42 +248,42 @@ While the theoretical foundation rests on 11 core primitives, the actual impleme
 #### Core Linear Lambda Calculus (11 Primitives)
 | Category | Primitive | Purpose | Content-Addressed |
 |----------|-----------|---------|-------------------|
-| **Unit Type** | `unit` | Unit introduction | ✓ |
-| | `letunit` | Unit elimination | ✓ |
-| **Tensor Product (⊗)** | `tensor` | Creates pairs/tuples | ✓ |
-| | `lettensor` | Destructures pairs | ✓ |
-| **Sum Type (⊕)** | `inl` | Left injection | ✓ |
-| | `inr` | Right injection | ✓ |
-| | `case` | Pattern matching | ✓ |
-| **Linear Functions (⊸)** | `lambda` | Function definition | ✓ |
-| | `apply` | Function application | ✓ |
-| **Resource Management** | `alloc` | Resource allocation | ✓ |
-| | `consume` | Resource consumption | ✓ |
+| **Unit Type** | `unit` | Unit introduction |  |
+| | `letunit` | Unit elimination |  |
+| **Tensor Product (⊗)** | `tensor` | Creates pairs/tuples |  |
+| | `lettensor` | Destructures pairs |  |
+| **Sum Type (⊕)** | `inl` | Left injection |  |
+| | `inr` | Right injection |  |
+| | `case` | Pattern matching |  |
+| **Linear Functions (⊸)** | `lambda` | Function definition |  |
+| | `apply` | Function application |  |
+| **Resource Management** | `alloc` | Resource allocation |  |
+| | `consume` | Resource consumption |  |
 
 #### Row Types and Record Operations
 Layer 1 includes sophisticated support for row types and record manipulation:
 
 | Operation | Purpose | Content-Addressed |
 |-----------|---------|-------------------|
-| `ReadField` | Safe field access from records | ✓ |
-| `UpdateField` | Functional field updates | ✓ |
-| `Project` | Row type projection | ✓ |
-| `Restrict` | Row type restriction | ✓ |
-| `Extend` | Row type extension | ✓ |
-| `Diff` | Row type difference | ✓ |
+| `ReadField` | Safe field access from records |  |
+| `UpdateField` | Functional field updates |  |
+| `Project` | Row type projection |  |
+| `Restrict` | Row type restriction |  |
+| `Extend` | Row type extension |  |
+| `Diff` | Row type difference |  |
 
 #### Convenience Forms
 Additional constructs that compile to core primitives:
 
 | Form | Purpose | Content-Addressed |
 |------|---------|-------------------|
-| `Symbol` | Symbol literals | ✓ |
-| `Int` | Integer literals | ✓ |
-| `Bool` | Boolean literals | ✓ |
-| `Quote` | Quoted expressions | ✓ |
-| `List` | List construction | ✓ |
-| `Let` | Local bindings | ✓ |
-| `If` | Conditional expressions | ✓ |
+| `Symbol` | Symbol literals |  |
+| `Int` | Integer literals |  |
+| `Bool` | Boolean literals |  |
+| `Quote` | Quoted expressions |  |
+| `List` | List construction |  |
+| `Let` | Local bindings |  |
+| `If` | Conditional expressions |  |
 
 ### Content-Addressed Expression System
 

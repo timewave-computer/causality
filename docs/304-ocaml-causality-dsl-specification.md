@@ -606,14 +606,14 @@ let validate_session_types () =
   let server_protocol = receive (Int 0L) (send (String "") end_session) in
   
   if verify_duality client_protocol server_protocol then
-    Printf.printf "✓ Protocols are valid duals\n"
+    Printf.printf " Protocols are valid duals\n"
   else
     Printf.printf "✗ Protocol duality verification failed\n";
     
   (* Test duality involution property *)
   let dual_of_dual = compute_dual (compute_dual client_protocol) in
   if dual_of_dual = client_protocol then
-    Printf.printf "✓ Duality involution property holds\n"
+    Printf.printf " Duality involution property holds\n"
   else
     Printf.printf "✗ Duality involution property failed\n"
 ```

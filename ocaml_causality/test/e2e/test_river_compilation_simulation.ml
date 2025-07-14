@@ -54,11 +54,11 @@ let run_cli_compilation_test () =
       failwith "Bytecode file is empty";
     printf "   Bytecode validation passed.\n";
 
-    printf "\n✅ CLI Compilation Test Passed!\n";
+    printf "\n CLI Compilation Test Passed!\n";
     (true, "CLI Compilation Test")
   with
   | ex ->
-    printf "\n❌ Test Failed: %s\n" (Printexc.to_string ex);
+    printf "\n Test Failed: %s\n" (Printexc.to_string ex);
     (false, "Test failed")
 
 (* Cleanup function *)

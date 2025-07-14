@@ -36,7 +36,7 @@ pub struct CompileCommand {
 impl CompileCommand {
     pub async fn execute(&self) -> Result<()> {
         if self.verbose {
-            println!("🔧 Starting Lisp compilation process...");
+            println!(" Starting Lisp compilation process...");
             println!("   Input: {}", self.input.display());
             println!("   Output: {}", self.output.display());
         }
@@ -78,7 +78,7 @@ impl CompileCommand {
         let compiled_artifact = compile(&source_code)?;
 
         if self.verbose {
-            println!("   ✓ Lisp → IR compilation complete");
+            println!("    Lisp → IR compilation complete");
             println!(
                 "   Instructions generated: {}",
                 compiled_artifact.instructions.len()
@@ -90,7 +90,7 @@ impl CompileCommand {
 
         if self.verbose {
             println!(
-                "   ✓ Bytecode serialization complete ({} bytes)",
+                "    Bytecode serialization complete ({} bytes)",
                 bytecode.len()
             );
         }

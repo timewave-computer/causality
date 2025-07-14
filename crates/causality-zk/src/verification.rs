@@ -144,7 +144,7 @@ impl ZkVerifier {
         )?;
         
         if verification_success {
-            println!("  ✓ ZK proof verification successful");
+            println!("   ZK proof verification successful");
             Ok(true)
         } else {
             println!("  ✗ ZK proof verification failed");

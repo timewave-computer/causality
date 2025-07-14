@@ -136,7 +136,7 @@ impl CircuitCompiler {
         // Validate circuit
         self.validate_circuit(&circuit)?;
         
-        println!("  ✓ Circuit compiled: {} gates", circuit.gate_count);
+        println!("   Circuit compiled: {} gates", circuit.gate_count);
         
         Ok(circuit)
     }

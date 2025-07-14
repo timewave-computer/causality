@@ -171,7 +171,7 @@ impl TestRunner {
     pub async fn run_command_test(&mut self, test: CommandTest) -> Result<TestResult> {
         let start_time = Instant::now();
         
-        info!("🧪 Running test: {}", test.name);
+        info!(" Running test: {}", test.name);
 
         if test.skip {
             return Ok(TestResult {

@@ -40,7 +40,7 @@ pub struct SubmitCommand {
 impl SubmitCommand {
     pub async fn execute(&self) -> Result<()> {
         if self.verbose {
-            println!("🚀 Starting multi-chain transaction submission...");
+            println!(" Starting multi-chain transaction submission...");
             println!("   Proof file: {}", self.proof.display());
             println!("   Target chains: {}", self.target_chains);
             println!("   Dry run: {}", self.dry_run);
@@ -69,11 +69,11 @@ impl SubmitCommand {
         }
 
         // Print results
-        println!("✅ Multi-chain submission completed");
+        println!(" Multi-chain submission completed");
         for (chain, result) in results {
             match result {
                 TransactionResult::Success { tx_hash, gas_used, block_number } => {
-                    println!("   {} ✅ Success", chain);
+                    println!("   {}  Success", chain);
                     if !self.dry_run {
                         println!("      Transaction: {}", tx_hash);
                         println!("      Block: {}", block_number);
@@ -84,7 +84,7 @@ impl SubmitCommand {
                     }
                 }
                 TransactionResult::Failure { error, gas_estimate } => {
-                    println!("   {} ❌ Failed: {}", chain, error);
+                    println!("   {}  Failed: {}", chain, error);
                     if let Some(gas) = gas_estimate {
                         println!("      Gas estimate: {}", gas);
                     }

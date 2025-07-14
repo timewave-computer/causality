@@ -7,7 +7,7 @@ open Ssz
 module TestData = struct
   let bool_values = [ true; false ]
   let u32_values = [ 0; 42; 2147483647 ]
-  let string_values = [ ""; "hello"; "world"; "SSZ test 🧪" ]
+  let string_values = [ ""; "hello"; "world"; "SSZ test " ]
 
   (* Create test IDs (32-byte arrays) *)
   let create_id seed =
@@ -42,7 +42,7 @@ let test_roundtrip name serialize deserialize value =
     let deserialized = deserialize serialized in
     let success = value = deserialized in
     add_result { test_name = name; success; error = None };
-    if success then printf "  ✓ %s\n" name
+    if success then printf "   %s\n" name
     else printf "  ✗ %s: value mismatch\n" name
   with e ->
     let err_msg = Printexc.to_string e in
@@ -109,7 +109,7 @@ let test_ocaml_rust_ocaml () =
              ; error = None
              };
            printf "  %s Bool %b -> %b\n"
-             (if success then "✓" else "✗")
+             (if success then "" else "✗")
              value final_result
          with e ->
            add_result
@@ -135,7 +135,7 @@ let test_ocaml_rust_ocaml () =
              ; error = None
              };
            printf "  %s UInt32 %d -> %d\n"
-             (if success then "✓" else "✗")
+             (if success then "" else "✗")
              value final_result
          with e ->
            add_result
@@ -161,7 +161,7 @@ let test_ocaml_rust_ocaml () =
              ; error = None
              };
            printf "  %s String '%s' -> '%s'\n"
-             (if success then "✓" else "✗")
+             (if success then "" else "✗")
              value final_result
          with e ->
            add_result
@@ -191,7 +191,7 @@ let test_rust_ocaml_rust () =
              ; error = None
              };
            printf "  %s Bool %b -> %b\n"
-             (if success then "✓" else "✗")
+             (if success then "" else "✗")
              value final_result
          with e ->
            add_result
@@ -217,7 +217,7 @@ let test_rust_ocaml_rust () =
              ; error = None
              };
            printf "  %s UInt32 %d -> %d\n"
-             (if success then "✓" else "✗")
+             (if success then "" else "✗")
              value final_result
          with e ->
            add_result
@@ -243,7 +243,7 @@ let test_rust_ocaml_rust () =
              ; error = None
              };
            printf "  %s String '%s' -> '%s'\n"
-             (if success then "✓" else "✗")
+             (if success then "" else "✗")
              value final_result
          with e ->
            add_result
@@ -294,7 +294,7 @@ let run_tests () =
   printf "- OCaml -> Rust -> OCaml roundtrips\n";
   printf "- Rust -> OCaml -> Rust roundtrips\n";
   printf "- Compatible with causality-types SSZ implementations\n\n";
-  printf "✅ TESTING COMPLETE\n"
+  printf " TESTING COMPLETE\n"
 
 (* Entry point *)
 let () = run_tests ()

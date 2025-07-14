@@ -65,7 +65,7 @@ let user_row = RowType::open(
 );
 
 // Can project 'name' from any record containing at least these fields
-let name_projection = user_row.project("name"); // ✅ Always succeeds
+let name_projection = user_row.project("name"); //  Always succeeds
 ```
 
 **Closed Row Types** provide exact field specifications:
@@ -78,7 +78,7 @@ let point_row = RowType::with_fields(btreemap! {
 });
 
 // Operations must match exactly
-let z_projection = point_row.project("z"); // ❌ Compile error: field not found
+let z_projection = point_row.project("z"); //  Compile error: field not found
 ```
 
 ## 3. Row Operations and Compile-Time Resolution
@@ -118,8 +118,8 @@ let product = Record::new(btreemap! {
     "category" => "Hardware"
 });
 
-let name1 = get_name(user);    // ✅ Compiles: user has 'name' + other fields
-let name2 = get_name(product); // ✅ Compiles: product has 'name' + other fields
+let name1 = get_name(user);    //  Compiles: user has 'name' + other fields
+let name2 = get_name(product); //  Compiles: product has 'name' + other fields
 ```
 
 ## 4. Capability System Integration
@@ -758,7 +758,7 @@ let user_with_prefs: Record<{ name: String, email: String, preferences: Prefs | 
 ### 12.1 Schema Design
 
 ```rust
-// ✅ Good: Modular schema with clear capabilities
+//  Good: Modular schema with clear capabilities
 let user_public_schema = RecordSchema {
     fields: btreemap! {
         "name" => TypeInner::Base(BaseType::Symbol),
@@ -775,7 +775,7 @@ let user_private_schema = RecordSchema {
     capabilities: hashset!["admin_access"],
 };
 
-// ❌ Avoid: Monolithic schema with mixed access levels
+//  Avoid: Monolithic schema with mixed access levels
 let monolithic_schema = RecordSchema {
     fields: btreemap! {
         "name" => TypeInner::Base(BaseType::Symbol),          // Public
@@ -790,7 +790,7 @@ let monolithic_schema = RecordSchema {
 ### 12.2 Capability Granularity
 
 ```rust
-// ✅ Good: Fine-grained capabilities
+//  Good: Fine-grained capabilities
 let capabilities = vec![
     Capability::ReadField("name"),
     Capability::ReadField("email"),
@@ -798,7 +798,7 @@ let capabilities = vec![
     // Cannot write name or read internal fields
 ];
 
-// ❌ Avoid: Overly broad capabilities
+//  Avoid: Overly broad capabilities
 let broad_capability = Capability::FullRecordAccess; // Too permissive
 ```
 

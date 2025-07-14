@@ -26,7 +26,7 @@ fn test_empty_smt() {
     assert!(MemorySmt::verify(&proof1, &root2, &key1, value1));
     assert!(MemorySmt::verify(&proof2, &root2, &key2, value2));
     
-    println!("✅ Basic SMT operations working correctly!");
+    println!(" Basic SMT operations working correctly!");
 }
 
 #[test]
@@ -43,5 +43,5 @@ fn test_smt_with_sha256() {
     let proof = smt.get_opening(root, &key).unwrap().unwrap();
     assert!(MemorySmt::verify(&proof, &root, &key, data));
     
-    println!("✅ SHA256 hashing is working correctly in SMT!");
+    println!(" SHA256 hashing is working correctly in SMT!");
 } 

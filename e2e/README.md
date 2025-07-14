@@ -6,7 +6,7 @@ This directory contains end-to-end tests for the Causality framework, organized 
 
 Each e2e test suite is now organized in its own subfolder with a dedicated README explaining what is tested and how to run it:
 
-### 🧪 Test Suites
+###  Test Suites
 
 | Test Suite | Location | Description | Tests |
 |------------|----------|-------------|-------|
@@ -51,7 +51,7 @@ cargo test --test type_system_consistency_e2e -- --nocapture
 
 ## Test Suite Details
 
-### 🔍 Type System Consistency (20 tests)
+###  Type System Consistency (20 tests)
 **Purpose**: Verifies type system correctness across all three layers
 - **Base Types**: Unit, Bool, Int, Symbol with serialization
 - **Product Types**: Tuple operations and tensor composition  
@@ -69,21 +69,21 @@ cargo test --test type_system_consistency_e2e -- --nocapture
 - **Content Addressing**: Deterministic content identification
 - **Error Handling**: Consistent error propagation across modules
 
-### ⚡ Simulation ZK Integration (3 tests)
+###  Simulation ZK Integration (3 tests)
 **Purpose**: Verifies simulation engine with zero-knowledge proof generation
 - **Effect Execution**: Running Layer 2 effects in simulation
 - **Proof Generation**: Creating ZK proofs for simulated executions
 - **Cross-Chain Operations**: Multi-domain effect coordination
 - **Verification Pipeline**: Complete proof verification workflow
 
-### 🔧 Comprehensive Compilation (3 tests)
+###  Comprehensive Compilation (3 tests)
 **Purpose**: Tests complete compilation from Causality Lisp to machine code
 - **Layer 2 → Layer 1**: Effects and intents to lambda calculus
 - **Layer 1 → Layer 0**: Lambda calculus to register machine instructions
 - **Optimization**: Code optimization and constraint solving
 - **Intent Resolution**: Declarative intent compilation
 
-### 🎯 Simple Simulation (3 tests)
+###  Simple Simulation (3 tests)
 **Purpose**: Basic simulation engine functionality for learning and debugging
 - **Effect Creation**: Creating simple effects for testing
 - **Simulation Execution**: Running effects in simulation mode
@@ -110,11 +110,11 @@ Each test suite includes:
 ## Continuous Integration
 
 All e2e tests are designed to:
-- ✅ Run independently without external dependencies
-- ✅ Complete in reasonable time (< 30 seconds total)
-- ✅ Provide clear failure messages with context
-- ✅ Maintain stability across different environments
-- ✅ Cover critical integration points and workflows
+-  Run independently without external dependencies
+-  Complete in reasonable time (< 30 seconds total)
+-  Provide clear failure messages with context
+-  Maintain stability across different environments
+-  Cover critical integration points and workflows
 
 ## Troubleshooting
 

@@ -213,7 +213,7 @@ mod zk_compilation_tests {
 
     #[test]
     fn test_full_compilation_pipeline_into_zk_circuits() {
-        println!("✅ Testing full compilation pipeline into ZK circuits");
+        println!(" Testing full compilation pipeline into ZK circuits");
 
         // Test basic program compilation
         let simple_program = r#"
@@ -237,12 +237,12 @@ mod zk_compilation_tests {
         let verified = verify_proof(&proof, &circuit).expect("Should verify");
         assert!(verified, "Proof should be valid");
 
-        println!("✅ ZK compilation pipeline test passed");
+        println!(" ZK compilation pipeline test passed");
     }
 
     #[test]
     fn test_multi_domain_effect_handling() {
-        println!("✅ Testing multi-domain effect handling");
+        println!(" Testing multi-domain effect handling");
 
         // Test cross-domain effect composition
         let domains = vec!["ethereum", "polygon", "arbitrum"];
@@ -259,7 +259,7 @@ mod zk_compilation_tests {
             assert!(isolated.is_ok(), "Domain isolation should succeed");
         }
 
-        println!("✅ Multi-domain effect handling test passed");
+        println!(" Multi-domain effect handling test passed");
     }
 
     // Helper functions for testing

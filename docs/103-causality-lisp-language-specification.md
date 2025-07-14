@@ -288,7 +288,7 @@ The type checker tracks the usage of each variable through the computation:
 ```rust
 // Example: This would be rejected by the type checker
 let resource = alloc(my_data);
-let result1 = consume(resource);  // ✓ First use is valid
+let result1 = consume(resource);  //  First use is valid
 let result2 = consume(resource);  // ✗ Error: resource used after consumption
 ```
 
@@ -310,7 +310,7 @@ Row types enable extensible records with compile-time capability checking:
   
   ; This would be checked at compile time
   (if (record-has-capability user-account "write-capability")
-    (update-balance user-account 500)  ; ✓ Capability verified
+    (update-balance user-account 500)  ;  Capability verified
     (error "Insufficient permissions"))) ; ✗ No write capability
 ```
 

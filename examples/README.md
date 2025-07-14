@@ -75,10 +75,10 @@ The examples demonstrate the **3-layer Causality architecture**:
 
 ## Testing Status
 
-✅ **All examples compile and run successfully**
-✅ **Rust examples** - Type system working, capabilities enforced
-✅ **Lisp examples** - Parser and compiler working, generates register machine code  
-✅ **OCaml examples** - Algebraic effects working, 28/28 tests passing
+ **All examples compile and run successfully**
+ **Rust examples** - Type system working, capabilities enforced
+ **Lisp examples** - Parser and compiler working, generates register machine code  
+ **OCaml examples** - Algebraic effects working, 28/28 tests passing
 
 ## Getting Help
 

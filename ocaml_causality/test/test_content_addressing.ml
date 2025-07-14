@@ -20,12 +20,12 @@ let () =
 
   (* Test that identical content produces identical IDs *)
   if EntityId.equal id1 id2 then
-    Printf.printf "✓ Identical content produces identical IDs\n"
+    Printf.printf " Identical content produces identical IDs\n"
   else Printf.printf "✗ ERROR: Identical content should produce identical IDs\n";
 
   (* Test that different content produces different IDs *)
   if not (EntityId.equal id1 id3) then
-    Printf.printf "✓ Different content produces different IDs\n"
+    Printf.printf " Different content produces different IDs\n"
   else Printf.printf "✗ ERROR: Different content should produce different IDs\n";
 
   (* Test content addressing with structured data *)
@@ -43,13 +43,13 @@ let () =
   Printf.printf "Struct3: %s\n" (EntityId.to_hex struct_id3);
 
   if EntityId.equal struct_id1 struct_id2 then
-    Printf.printf "✓ Identical structured data produces identical IDs\n"
+    Printf.printf " Identical structured data produces identical IDs\n"
   else
     Printf.printf
       "✗ ERROR: Identical structured data should produce identical IDs\n";
 
   if not (EntityId.equal struct_id1 struct_id3) then
-    Printf.printf "✓ Different structured data produces different IDs\n"
+    Printf.printf " Different structured data produces different IDs\n"
   else
     Printf.printf
       "✗ ERROR: Different structured data should produce different IDs\n";

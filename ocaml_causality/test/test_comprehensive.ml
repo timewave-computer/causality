@@ -22,12 +22,12 @@ let () =
   Printf.printf "Content3 ID: %s\n" (id_to_hex id3);
   
   if equal_id id1 id2 then
-    Printf.printf "✓ Identical content produces identical IDs\n"
+    Printf.printf " Identical content produces identical IDs\n"
   else
     Printf.printf "✗ ERROR: Identical content should produce identical IDs\n";
     
   if not (equal_id id1 id3) then
-    Printf.printf "✓ Different content produces different IDs\n"
+    Printf.printf " Different content produces different IDs\n"
   else
     Printf.printf "✗ ERROR: Different content should produce different IDs\n";
 
@@ -43,12 +43,12 @@ let () =
   Printf.printf "Entity3 (user:bob): %s\n" (id_to_hex entity3);
   
   if equal_id entity1 entity2 then
-    Printf.printf "✓ Same entity data produces same entity ID\n"
+    Printf.printf " Same entity data produces same entity ID\n"
   else
     Printf.printf "✗ ERROR: Same entity data should produce same entity ID\n";
     
   if not (equal_id entity1 entity3) then
-    Printf.printf "✓ Different entity data produces different entity IDs\n"
+    Printf.printf " Different entity data produces different entity IDs\n"
   else
     Printf.printf "✗ ERROR: Different entity data should produce different entity IDs\n";
 
@@ -79,9 +79,9 @@ let () =
   (* Generate and verify proofs *)
   (match MemorySmt.get_opening smt root2 key1 with
   | Some opening1 ->
-      Printf.printf "✓ Successfully generated opening for key1\n";
+      Printf.printf " Successfully generated opening for key1\n";
       if MemorySmt.verify opening1 root2 key1 value1 then
-        Printf.printf "✓ Opening verification successful for key1\n"
+        Printf.printf " Opening verification successful for key1\n"
       else
         Printf.printf "✗ ERROR: Opening verification failed for key1\n"
   | None ->
@@ -89,9 +89,9 @@ let () =
       
   (match MemorySmt.get_opening smt root2 key2 with
   | Some opening2 ->
-      Printf.printf "✓ Successfully generated opening for key2\n";
+      Printf.printf " Successfully generated opening for key2\n";
       if MemorySmt.verify opening2 root2 key2 value2 then
-        Printf.printf "✓ Opening verification successful for key2\n"
+        Printf.printf " Opening verification successful for key2\n"
       else
         Printf.printf "✗ ERROR: Opening verification failed for key2\n"
   | None ->
@@ -109,12 +109,12 @@ let () =
   Printf.printf "Domain3 (polygon): %s\n" (id_to_hex domain3);
   
   if equal_id domain1 domain2 then
-    Printf.printf "✓ Same domain name produces same domain ID\n"
+    Printf.printf " Same domain name produces same domain ID\n"
   else
     Printf.printf "✗ ERROR: Same domain name should produce same domain ID\n";
     
   if not (equal_id domain1 domain3) then
-    Printf.printf "✓ Different domain names produce different domain IDs\n"
+    Printf.printf " Different domain names produce different domain IDs\n"
   else
     Printf.printf "✗ ERROR: Different domain names should produce different domain IDs\n";
 
@@ -130,12 +130,12 @@ let () =
   Printf.printf "Expression3 (+ 2 3): %s\n" (id_to_hex expr3);
   
   if equal_id expr1 expr2 then
-    Printf.printf "✓ Same expression produces same expression ID\n"
+    Printf.printf " Same expression produces same expression ID\n"
   else
     Printf.printf "✗ ERROR: Same expression should produce same expression ID\n";
     
   if not (equal_id expr1 expr3) then
-    Printf.printf "✓ Different expressions produce different expression IDs\n"
+    Printf.printf " Different expressions produce different expression IDs\n"
   else
     Printf.printf "✗ ERROR: Different expressions should produce different expression IDs\n";
 
@@ -154,7 +154,7 @@ let () =
   (match hex_to_id hex_repr with
   | Some recovered_id ->
       if equal_id test_id recovered_id then
-        Printf.printf "✓ Hex serialization roundtrip successful\n"
+        Printf.printf " Hex serialization roundtrip successful\n"
       else
         Printf.printf "✗ ERROR: Hex serialization roundtrip failed\n"
   | None ->
@@ -170,12 +170,12 @@ let () =
   Printf.printf "Fixed timestamp ID: %s\n" (id_to_hex timestamped_id);
   
   if validate_entity_id current_id then
-    Printf.printf "✓ Current timestamp ID is valid 32-byte entity ID\n"
+    Printf.printf " Current timestamp ID is valid 32-byte entity ID\n"
   else
     Printf.printf "✗ ERROR: Current timestamp ID is not valid\n";
     
   if validate_entity_id timestamped_id then
-    Printf.printf "✓ Fixed timestamp ID is valid 32-byte entity ID\n"
+    Printf.printf " Fixed timestamp ID is valid 32-byte entity ID\n"
   else
     Printf.printf "✗ ERROR: Fixed timestamp ID is not valid\n";
 
@@ -192,24 +192,24 @@ let () =
   Printf.printf "Different combined: %s\n" (id_to_hex different_combined);
   
   if equal_id combined_id combined_id2 then
-    Printf.printf "✓ Same ID list produces same combined ID\n"
+    Printf.printf " Same ID list produces same combined ID\n"
   else
     Printf.printf "✗ ERROR: Same ID list should produce same combined ID\n";
     
   if not (equal_id combined_id different_combined) then
-    Printf.printf "✓ Different ID lists produce different combined IDs\n"
+    Printf.printf " Different ID lists produce different combined IDs\n"
   else
     Printf.printf "✗ ERROR: Different ID lists should produce different combined IDs\n";
 
   Printf.printf "\n=== Test Summary ===\n";
-  Printf.printf "✓ Content addressing with deterministic hashing\n";
-  Printf.printf "✓ Entity ID generation and validation\n";
-  Printf.printf "✓ Sparse Merkle Tree operations and proofs\n";
-  Printf.printf "✓ Domain and handler ID generation\n";
-  Printf.printf "✓ Expression ID content addressing\n";
-  Printf.printf "✓ ID serialization and utilities\n";
-  Printf.printf "✓ Timestamp-based ID generation\n";
-  Printf.printf "✓ ID combination and composition\n";
+  Printf.printf " Content addressing with deterministic hashing\n";
+  Printf.printf " Entity ID generation and validation\n";
+  Printf.printf " Sparse Merkle Tree operations and proofs\n";
+  Printf.printf " Domain and handler ID generation\n";
+  Printf.printf " Expression ID content addressing\n";
+  Printf.printf " ID serialization and utilities\n";
+  Printf.printf " Timestamp-based ID generation\n";
+  Printf.printf " ID combination and composition\n";
   
   Printf.printf "\n=== Comprehensive Test Complete ===\n";
   Printf.printf "All implemented functionality working correctly!\n"

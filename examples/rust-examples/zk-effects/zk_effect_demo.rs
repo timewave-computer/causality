@@ -107,7 +107,7 @@ fn main() -> Result<()> {
     
     match proof_result {
         Ok(result) => {
-            println!("   ✓ ZK Proof generated successfully!");
+            println!("    ZK Proof generated successfully!");
             println!("   Computation result: {:?}", result);
             
             // 5. Test proof verification
@@ -119,7 +119,7 @@ fn main() -> Result<()> {
                 vec![1, 2, 3, 4], // Mock proof data
             );
             
-            println!("   ✓ Mock proof created");
+            println!("    Mock proof created");
             println!("   Effect Hash: {}", mock_proof.effect_hash.to_hex());
             println!("   Proof size: {} bytes", mock_proof.data.len());
         }
@@ -140,17 +140,17 @@ fn main() -> Result<()> {
     ]);
     
     match zk_result {
-        Ok(value) => println!("   ✓ ZK effect execution successful: {:?}", value),
+        Ok(value) => println!("    ZK effect execution successful: {:?}", value),
         Err(e) => println!("   ✗ ZK effect execution failed: {}", e),
     }
     
     println!("\n=== Demo completed successfully! ===");
     println!("\nZK Integration Features Demonstrated:");
-    println!("✓ Effect hash generation (SSZ-based)");
-    println!("✓ ZK-verified effect handlers");
-    println!("✓ Mock ZK proof generation and verification");
-    println!("✓ Integration with effect registry");
-    println!("✓ ZK effect execution pipeline");
+    println!(" Effect hash generation (SSZ-based)");
+    println!(" ZK-verified effect handlers");
+    println!(" Mock ZK proof generation and verification");
+    println!(" Integration with effect registry");
+    println!(" ZK effect execution pipeline");
     
     Ok(())
 } 

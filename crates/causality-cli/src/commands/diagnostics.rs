@@ -415,24 +415,24 @@ impl std::fmt::Display for DiagnosticReport {
         writeln!(f)?;
 
         if !self.type_errors.is_empty() {
-            writeln!(f, "🚨 Type Errors:")?;
+            writeln!(f, " Type Errors:")?;
             for error in &self.type_errors {
                 writeln!(f, "  • {}", error.message)?;
                 if let Some((line, col)) = error.location {
                     writeln!(f, "    at line {}, column {}", line, col)?;
                 }
                 if let Some(suggestion) = &error.suggestion {
-                    writeln!(f, "    💡 {}", suggestion)?;
+                    writeln!(f, "     {}", suggestion)?;
                 }
                 writeln!(f)?;
             }
         }
 
         if !self.linearity_warnings.is_empty() {
-            writeln!(f, "⚠️  Linearity Warnings:")?;
+            writeln!(f, "  Linearity Warnings:")?;
             for warning in &self.linearity_warnings {
                 writeln!(f, "  • {}", warning.message)?;
-                writeln!(f, "    💡 {}", warning.suggestion)?;
+                writeln!(f, "     {}", warning.suggestion)?;
                 writeln!(f)?;
             }
         }
@@ -443,7 +443,7 @@ impl std::fmt::Display for DiagnosticReport {
         writeln!(f, "  Live resources: {}", self.resource_usage.live_resources.len())?;
         writeln!(f)?;
 
-        writeln!(f, "⚡ Performance Summary:")?;
+        writeln!(f, " Performance Summary:")?;
         writeln!(f, "  Instructions: {}", self.compilation_summary.total_instructions)?;
         writeln!(f, "  Registers: {}", self.compilation_summary.register_count)?;
         writeln!(f, "  Estimated gas: {}", self.compilation_summary.estimated_gas_cost)?;

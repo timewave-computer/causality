@@ -209,15 +209,15 @@ fn main() -> Result<()> {
 
     println!("\n=== Demo completed successfully! ===");
     println!("\nUnified Transform System Features Demonstrated:");
-    println!("✓ Local computation transforms");
-    println!("✓ Remote communication transforms (same API!)");
-    println!("✓ Data migration transforms");
-    println!("✓ Distributed synchronization transforms");
-    println!("✓ Capability-based access transforms");
-    println!("✓ Unified constraint solving");
-    println!("✓ Automatic protocol derivation");
-    println!("✓ Computation-communication symmetry");
-    println!("✓ Location-transparent operations");
+    println!(" Local computation transforms");
+    println!(" Remote communication transforms (same API!)");
+    println!(" Data migration transforms");
+    println!(" Distributed synchronization transforms");
+    println!(" Capability-based access transforms");
+    println!(" Unified constraint solving");
+    println!(" Automatic protocol derivation");
+    println!(" Computation-communication symmetry");
+    println!(" Location-transparent operations");
 
     Ok(())
 }
