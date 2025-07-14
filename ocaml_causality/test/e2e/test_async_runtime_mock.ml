@@ -15,16 +15,16 @@ type transaction_handle = {
   tx_id : string;
   account : string;
   operation : string;
-  submitted_at : float;
+  submitted_at : int64;
   mutable status : transaction_status;
 }
 
 (* Runtime configuration *)
 type runtime_config = {
   max_concurrent_transactions : int;
-  transaction_timeout_seconds : float;
+  transaction_timeout_seconds : int;
   retry_attempts : int;
-  retry_delay_seconds : float;
+  retry_delay_seconds : int;
 }
 
 (* Runtime state *)
@@ -37,9 +37,9 @@ type runtime_state = {
 (* Create default runtime configuration *)
 let default_runtime_config = {
   max_concurrent_transactions = 10;
-  transaction_timeout_seconds = 30.0;
+  transaction_timeout_seconds = 30;
   retry_attempts = 3;
-  retry_delay_seconds = 1.0;
+  retry_delay_seconds = 1;
 }
 
 (* Create runtime state *)
@@ -51,7 +51,7 @@ let create_runtime ?(config = default_runtime_config) () = {
 
 (* Generate unique transaction ID *)
 let generate_tx_id runtime =
-  let id = Printf.sprintf "tx_%d_%f" runtime.next_tx_id (Unix.time ()) in
+  let id = Printf.sprintf "tx_%d_%Ld" runtime.next_tx_id (Int64.of_float (Unix.time () *. 1000.0)) in
   runtime.next_tx_id <- runtime.next_tx_id + 1;
   id
 
@@ -62,7 +62,7 @@ let submit_transaction_async runtime account operation data =
     tx_id;
     account;
     operation;
-    submitted_at = Unix.time ();
+    submitted_at = Int64.of_float (Unix.time () *. 1000.0);
     status = Pending;
   } in
   
@@ -90,7 +90,7 @@ type runtime_stats = {
   successful_transactions : int;
   failed_transactions : int;
   active_transactions : int;
-  average_completion_time : float;
+  average_completion_time : int;
 }
 
 let get_runtime_stats (runtime : runtime_state) =
@@ -106,7 +106,7 @@ let get_runtime_stats (runtime : runtime_state) =
     successful_transactions = successful;
     failed_transactions = failed;
     active_transactions = active;
-    average_completion_time = 2.5; (* Would calculate this in real implementation *)
+    average_completion_time = 250; (* Would calculate this in real implementation *)
   }
 
 (* Account factory specific operations *)
@@ -121,7 +121,7 @@ module AccountFactory = struct
           tx_id;
           account = owner;
           operation = "create_account_factory";
-          submitted_at = Unix.time ();
+          submitted_at = Int64.of_float (Unix.time () *. 1000.0);
           status = Confirmed;
         } in
         Hashtbl.add runtime.active_transactions tx_id handle;

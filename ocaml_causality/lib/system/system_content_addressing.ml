@@ -1,3 +1,4 @@
+
 (** Content Addressing System
 
     This module provides the core content addressing functionality for the
@@ -102,7 +103,7 @@ module Timestamp = struct
   (** Get current timestamp *)
   let now () : t =
     (* Simple implementation using current time *)
-    Unix.time () |> ( *. ) 1000.0 |> Int64.of_float
+    Int64.of_float (Unix.time () *. 1000.0)
 
   (** Zero timestamp *)
   let zero : t = 0L

@@ -1,3 +1,5 @@
 (library
  (name causality_compiler)
- (libraries causality_core causality_lambda causality_machine causality_system))
+ (public_name ocaml_causality.compiler)
+ (modules effect_compiler intent_compiler layer2_compiler pipeline)
+ (libraries ocaml_causality.core))

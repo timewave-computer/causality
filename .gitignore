@@ -11,6 +11,13 @@ _build/
 dune-project.lock
 *.merlin
 
+# OCaml LSP and Dune cache directories
+.ocaml-lsp-cache/
+.dune-cache/
+.cache-timestamp
+.cache-watcher-pid
+.last-config-check
+
 # Nix build outputs
 result
 result-*
@@ -89,3 +96,7 @@ ml_work/
 scripts/
 TODO.md
 _docs/
+metropolis/
+
+# Editor caches
+.vscode/settings.json.bak

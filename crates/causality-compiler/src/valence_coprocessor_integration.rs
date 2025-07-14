@@ -4,12 +4,14 @@
 //! and verifying ZK proofs. It handles proof lifecycle management, submission tracking,
 //! and result processing for cross-chain state verification.
 
-use std::collections::BTreeMap;
-use anyhow::Result;
-use serde::{Serialize, Deserialize};
-use tokio::time::{timeout, Duration};
 use crate::proof_primitives::CompiledProof;
-use crate::traverse_integration::{ProofGenerationResponse, ProofData, VerificationInfo};
+use crate::traverse_integration::{
+    ProofData, ProofGenerationResponse, VerificationInfo,
+};
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use tokio::time::{timeout, Duration};
 
 // Use existing ZK infrastructure instead of reimplementing
 // use causality_zk::{ZkProofGenerator, ZkProof, StorageProofGenerator};
@@ -83,7 +85,9 @@ pub enum ProofStatus {
     /// Proof verification in progress
     Verifying,
     /// Proof verified successfully
-    Verified { verification_result: VerificationResult },
+    Verified {
+        verification_result: VerificationResult,
+    },
 }
 
 /// Status update entry
@@ -167,31 +171,31 @@ pub struct VerificationDetails {
 pub enum CoprocessorError {
     #[error("HTTP request failed: {0}")]
     HttpError(#[from] reqwest::Error),
-    
+
     #[error("JSON serialization/deserialization error: {0}")]
     JsonError(#[from] serde_json::Error),
-    
+
     #[error("Proof submission failed: {0}")]
     SubmissionFailed(String),
-    
+
     #[error("Proof generation failed: {0}")]
     GenerationFailed(String),
-    
+
     #[error("Proof verification failed: {0}")]
     VerificationFailed(String),
-    
+
     #[error("Submission not found: {0}")]
     SubmissionNotFound(String),
-    
+
     #[error("Timeout waiting for proof completion")]
     Timeout,
-    
+
     #[error("Coprocessor service unavailable")]
     ServiceUnavailable,
-    
+
     #[error("Invalid proof data: {0}")]
     InvalidProofData(String),
-    
+
     #[error("Feature not enabled: {0}")]
     FeatureNotEnabled(String),
 }
@@ -207,15 +211,17 @@ impl ValenceCoprocessorClient {
             result_cache: BTreeMap::new(),
         }
     }
-    
+
     /// Create a new client with custom configuration
-    pub fn with_config(#[allow(dead_code)]
-    base_url: String, config: CoprocessorClientConfig) -> Self {
+    pub fn with_config(
+        #[allow(dead_code)] base_url: String,
+        config: CoprocessorClientConfig,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_millis(config.timeout_ms))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
-            
+
         Self {
             base_url,
             client,
@@ -224,31 +230,36 @@ impl ValenceCoprocessorClient {
             result_cache: BTreeMap::new(),
         }
     }
-    
+
     /// Submit a proof for generation
-    pub async fn submit_proof(&mut self, request: ProofSubmissionRequest) -> Result<ProofSubmissionResponse, CoprocessorError> {
+    pub async fn submit_proof(
+        &mut self,
+        request: ProofSubmissionRequest,
+    ) -> Result<ProofSubmissionResponse, CoprocessorError> {
         // Check cache first if enabled
         if self.config.enable_caching {
             if let Some(cached) = self.get_cached_result(&request.compiled_proof) {
                 let submission_id = uuid::Uuid::new_v4().to_string();
                 return Ok(ProofSubmissionResponse {
                     submission_id,
-                    status: ProofStatus::Completed { result: cached.result },
+                    status: ProofStatus::Completed {
+                        result: cached.result,
+                    },
                     estimated_processing_time: 0,
                     queue_position: None,
                 });
             }
         }
-        
+
         // Check concurrent proof limit
         if self.active_proofs.len() >= self.config.max_concurrent_proofs {
             return Err(CoprocessorError::SubmissionFailed(
-                "Maximum concurrent proofs exceeded".to_string()
+                "Maximum concurrent proofs exceeded".to_string(),
             ));
         }
-        
+
         let submission_id = uuid::Uuid::new_v4().to_string();
-        
+
         // Mock submission for development (real implementation would call coprocessor API)
         let submission_response = ProofSubmissionResponse {
             submission_id: submission_id.clone(),
@@ -256,7 +267,7 @@ impl ValenceCoprocessorClient {
             estimated_processing_time: 30, // 30 seconds
             queue_position: Some(self.active_proofs.len() as u32 + 1),
         };
-        
+
         // Track the submission
         let submission = ProofSubmission {
             submission_id: submission_id.clone(),
@@ -271,60 +282,75 @@ impl ValenceCoprocessorClient {
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
-                    .as_secs() + submission_response.estimated_processing_time
+                    .as_secs()
+                    + submission_response.estimated_processing_time,
             ),
         };
-        
+
         self.active_proofs.insert(submission_id, submission);
         Ok(submission_response)
     }
-    
+
     /// Get the status of a proof submission
     #[allow(unused_variables)]
     #[allow(unused_variables)]
-    pub async fn get_proof_status(&mut self, submission_id: &str) -> Result<ProofStatus, CoprocessorError> {
+    pub async fn get_proof_status(
+        &mut self,
+        submission_id: &str,
+    ) -> Result<ProofStatus, CoprocessorError> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         // First, check if submission exists and get the current status
         let (current_status, submitted_at) = {
             if let Some(submission) = self.active_proofs.get(submission_id) {
                 (submission.status.clone(), submission.submitted_at)
             } else {
-                return Err(CoprocessorError::SubmissionNotFound(submission_id.to_string()));
+                return Err(CoprocessorError::SubmissionNotFound(
+                    submission_id.to_string(),
+                ));
             }
         };
-        
+
         let elapsed = now - submitted_at;
-        
+
         // Determine new status based on elapsed time
         let new_status = match &current_status {
-            ProofStatus::Queued if elapsed > 5 => {
-                ProofStatus::InProgress { progress_percentage: 25 }
+            ProofStatus::Queued if elapsed > 5 => ProofStatus::InProgress {
+                progress_percentage: 25,
             },
-            ProofStatus::InProgress { progress_percentage } if elapsed > 15 => {
+            ProofStatus::InProgress {
+                progress_percentage,
+            } if elapsed > 15 => {
                 if *progress_percentage < 100 {
-                    ProofStatus::InProgress { progress_percentage: (*progress_percentage + 25).min(100) }
+                    ProofStatus::InProgress {
+                        progress_percentage: (*progress_percentage + 25).min(100),
+                    }
                 } else {
                     // Create mock proof result
-                    let compiled_proof = self.active_proofs.get(submission_id).unwrap().compiled_proof.clone();
-                    ProofStatus::Completed { 
-                        result: self.create_mock_proof_result(&compiled_proof)
+                    let compiled_proof = self
+                        .active_proofs
+                        .get(submission_id)
+                        .unwrap()
+                        .compiled_proof
+                        .clone();
+                    ProofStatus::Completed {
+                        result: self.create_mock_proof_result(&compiled_proof),
                     }
                 }
-            },
+            }
             status => status.clone(),
         };
-        
+
         // Check if status has changed and update tracking
         let status_changed = !matches!(current_status.clone(), new_status);
         if status_changed {
             if let Some(submission) = self.active_proofs.get_mut(submission_id) {
                 let old_status = format!("{:?}", current_status);
                 let new_status_str = format!("{:?}", new_status);
-                
+
                 submission.status_history.push(StatusUpdate {
                     timestamp: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
@@ -332,63 +358,82 @@ impl ValenceCoprocessorClient {
                         .as_secs(),
                     from_status: old_status,
                     to_status: new_status_str,
-                    message: Some(format!("Status updated from {:?} to {:?}", current_status, new_status)),
+                    message: Some(format!(
+                        "Status updated from {:?} to {:?}",
+                        current_status, new_status
+                    )),
                 });
-                
+
                 submission.status = new_status.clone();
                 submission.estimated_completion = Some(
                     std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap()
-                        .as_secs() + 30 // Estimate 30 seconds remaining
+                        .as_secs()
+                        + 30, // Estimate 30 seconds remaining
                 );
             }
         }
-        
+
         Ok(new_status)
     }
-    
+
     /// Wait for a proof to complete
-    pub async fn wait_for_completion(&mut self, submission_id: &str, timeout_seconds: u64) -> Result<ProofGenerationResponse, CoprocessorError> {
+    pub async fn wait_for_completion(
+        &mut self,
+        submission_id: &str,
+        timeout_seconds: u64,
+    ) -> Result<ProofGenerationResponse, CoprocessorError> {
         let timeout_duration = Duration::from_secs(timeout_seconds);
-        let polling_interval = Duration::from_millis(self.config.polling_interval_ms);
-        
+        let polling_interval =
+            Duration::from_millis(self.config.polling_interval_ms);
+
         timeout(timeout_duration, async {
             loop {
                 match self.get_proof_status(submission_id).await? {
                     ProofStatus::Completed { result } => {
                         // Cache the result if enabled
                         if self.config.enable_caching {
-                            let compiled_proof = self.active_proofs.get(submission_id)
+                            let compiled_proof = self
+                                .active_proofs
+                                .get(submission_id)
                                 .map(|s| s.compiled_proof.clone());
                             if let Some(proof) = compiled_proof {
                                 self.cache_result(&proof, &result);
                             }
                         }
-                        
+
                         // Remove from active proofs
                         self.active_proofs.remove(submission_id);
                         return Ok(result);
-                    },
+                    }
                     ProofStatus::Failed { error } => {
                         self.active_proofs.remove(submission_id);
                         return Err(CoprocessorError::GenerationFailed(error));
-                    },
+                    }
                     ProofStatus::Cancelled => {
                         self.active_proofs.remove(submission_id);
-                        return Err(CoprocessorError::GenerationFailed("Proof was cancelled".to_string()));
-                    },
+                        return Err(CoprocessorError::GenerationFailed(
+                            "Proof was cancelled".to_string(),
+                        ));
+                    }
                     _ => {
                         // Continue polling
                         tokio::time::sleep(polling_interval).await;
                     }
                 }
             }
-        }).await.map_err(|_| CoprocessorError::Timeout)?
+        })
+        .await
+        .map_err(|_| CoprocessorError::Timeout)?
     }
-    
+
     /// Verify a generated proof
-    pub async fn verify_proof(&self, proof_data: &ProofData, verification_info: &VerificationInfo) -> Result<VerificationResult, CoprocessorError> {
+    pub async fn verify_proof(
+        &self,
+        proof_data: &ProofData,
+        verification_info: &VerificationInfo,
+    ) -> Result<VerificationResult, CoprocessorError> {
         // Mock verification for development
         Ok(VerificationResult {
             is_valid: true,
@@ -401,11 +446,14 @@ impl ValenceCoprocessorClient {
             verification_duration_ms: 100,
         })
     }
-    
+
     /// Create mock proof result for development
-    fn create_mock_proof_result(&self, compiled_proof: &CompiledProof) -> ProofGenerationResponse {
-        use crate::traverse_integration::{ProofMetadata};
-        
+    fn create_mock_proof_result(
+        &self,
+        compiled_proof: &CompiledProof,
+    ) -> ProofGenerationResponse {
+        use crate::traverse_integration::ProofMetadata;
+
         ProofGenerationResponse {
             proof: ProofData {
                 proof_bytes: "0x1234567890abcdef".to_string(),
@@ -417,8 +465,14 @@ impl ValenceCoprocessorClient {
                 format: "groth16".to_string(),
             },
             verification_info: VerificationInfo {
-                circuit_id: format!("{}_circuit", compiled_proof.primitive.contract_id),
-                layout_commitment: compiled_proof.layout_commitment.commitment_hash.clone(),
+                circuit_id: format!(
+                    "{}_circuit",
+                    compiled_proof.primitive.contract_id
+                ),
+                layout_commitment: compiled_proof
+                    .layout_commitment
+                    .commitment_hash
+                    .clone(),
                 verification_params: BTreeMap::new(),
             },
             metadata: ProofMetadata {
@@ -429,52 +483,63 @@ impl ValenceCoprocessorClient {
             },
         }
     }
-    
+
     /// Get cached result if available
-    fn get_cached_result(&self, compiled_proof: &CompiledProof) -> Option<CachedProofResult> {
+    fn get_cached_result(
+        &self,
+        compiled_proof: &CompiledProof,
+    ) -> Option<CachedProofResult> {
         let cache_key = self.generate_cache_key(compiled_proof);
-        
+
         if let Some(cached) = self.result_cache.get(&cache_key) {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs();
-            
+
             if now - cached.cached_at < self.config.cache_ttl_seconds {
                 return Some(cached.clone());
             }
         }
-        
+
         None
     }
-    
+
     /// Cache a proof result
-    fn cache_result(&mut self, compiled_proof: &CompiledProof, result: &ProofGenerationResponse) {
+    fn cache_result(
+        &mut self,
+        compiled_proof: &CompiledProof,
+        result: &ProofGenerationResponse,
+    ) {
         let cache_key = self.generate_cache_key(compiled_proof);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         let cached_result = CachedProofResult {
             result: result.clone(),
             cached_at: now,
-            layout_commitment: compiled_proof.layout_commitment.commitment_hash.clone(),
+            layout_commitment: compiled_proof
+                .layout_commitment
+                .commitment_hash
+                .clone(),
             access_count: 1,
         };
-        
+
         self.result_cache.insert(cache_key, cached_result);
     }
-    
+
     /// Generate cache key for a compiled proof
     fn generate_cache_key(&self, compiled_proof: &CompiledProof) -> String {
-        format!("{}:{}:{}",
+        format!(
+            "{}:{}:{}",
             compiled_proof.primitive.contract_id,
             compiled_proof.primitive.storage_slot,
             compiled_proof.layout_commitment.commitment_hash
         )
     }
-    
+
     /// Health check for the coprocessor service
     pub async fn health_check(&self) -> Result<bool, CoprocessorError> {
         // Mock health check - always return true for development
@@ -498,9 +563,13 @@ impl Default for CoprocessorClientConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::proof_primitives::{ProveStatePrimitive, ProofType, WitnessStrategy};
+    use crate::almanac_schema::LayoutCommitment;
+    use crate::proof_primitives::{
+        ProofGenerationConfig, ProofType, ProveStatePrimitive, WitnessData,
+        WitnessStrategy,
+    };
     use crate::storage_layout::TraverseLayoutInfo;
-    
+
     fn create_test_compiled_proof() -> CompiledProof {
         CompiledProof {
             primitive: ProveStatePrimitive {
@@ -531,28 +600,31 @@ mod tests {
             },
         }
     }
-    
+
     #[test]
     fn test_client_creation() {
-        let client = ValenceCoprocessorClient::new("http://localhost:8080".to_string());
+        let client =
+            ValenceCoprocessorClient::new("http://localhost:8080".to_string());
         assert_eq!(client.base_url, "http://localhost:8080");
         assert!(client.active_proofs.is_empty());
     }
-    
+
     #[test]
     fn test_cache_key_generation() {
-        let client = ValenceCoprocessorClient::new("http://localhost:8080".to_string());
+        let client =
+            ValenceCoprocessorClient::new("http://localhost:8080".to_string());
         let proof = create_test_compiled_proof();
-        
+
         let key = client.generate_cache_key(&proof);
         assert_eq!(key, "test_contract:balances:test_hash");
     }
-    
+
     #[tokio::test]
     async fn test_health_check() {
-        let client = ValenceCoprocessorClient::new("http://localhost:8080".to_string());
+        let client =
+            ValenceCoprocessorClient::new("http://localhost:8080".to_string());
         let result = client.health_check().await;
         assert!(result.is_ok());
         assert!(result.unwrap()); // Mock always returns true
     }
-} 
+}

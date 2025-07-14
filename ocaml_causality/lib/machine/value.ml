@@ -1,3 +1,4 @@
+
 (* Value system for the Causality register machine with content addressing *)
 
 open Causality_system.System_content_addressing
@@ -26,7 +27,7 @@ type linearity =
 (* Value metadata *)
 type value_metadata = {
     consumed : bool
-  ; created_at : float
+  ; created_at : int
   ; access_count : int
 }
 
@@ -111,7 +112,7 @@ end
 
 (* Helper functions for metadata *)
 module Value_metadata = struct
-  let empty = { consumed = false; created_at = Unix.time (); access_count = 0 }
+  let empty = { consumed = false; created_at = int_of_float (Unix.time ()); access_count = 0 }
 
   let increment_access metadata =
     { metadata with access_count = metadata.access_count + 1 }

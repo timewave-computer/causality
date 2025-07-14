@@ -1,10 +1,5 @@
 (library
  (name ocaml_causality)
- (libraries
-  causality_core
-  causality_system
-  causality_lambda
-  causality_machine
-  causality_effects
-  causality_serialization
-  causality_compiler))
+ (public_name ocaml_causality)
+ (libraries ctypes)
+ (modules causality simulation))

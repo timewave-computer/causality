@@ -19,7 +19,7 @@ type linearity =
 
 type value_metadata = {
     consumed : bool
-  ; created_at : float
+  ; created_at : int
   ; access_count : int
 }
 

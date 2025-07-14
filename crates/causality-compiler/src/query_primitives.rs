@@ -1,10 +1,10 @@
-// ------------ QUERY PRIMITIVES ------------ 
+// ------------ QUERY PRIMITIVES ------------
 // Purpose: Implement query_state primitive with type-safe contract interface generation
 
-use std::collections::BTreeMap;
-use serde::{Deserialize, Serialize};
-use causality_lisp::ast::{Expr, ExprKind, LispValue};
 use crate::almanac_schema::{AlmanacSchema, LayoutCommitment};
+use causality_lisp::ast::{Expr, ExprKind, LispValue};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Query state primitive implementation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,25 +141,28 @@ impl QueryPrimitiveCompiler {
             default_runtime_config: QueryRuntimeConfig::default(),
         }
     }
-    
+
     /// Register a contract schema for query compilation
     pub fn register_schema(&mut self, contract_id: String, schema: AlmanacSchema) {
         self.schemas.insert(contract_id, schema);
     }
-    
+
     /// Set default runtime configuration
     pub fn set_default_runtime_config(&mut self, config: QueryRuntimeConfig) {
         self.default_runtime_config = config;
     }
-    
+
     /// Compile a query_state expression into a typed query primitive
-    pub fn compile_query_state(&self, expr: &Expr) -> Result<CompiledQuery, QueryCompileError> {
+    pub fn compile_query_state(
+        &self,
+        expr: &Expr,
+    ) -> Result<CompiledQuery, QueryCompileError> {
         let primitive = self.extract_query_primitive(expr)?;
         let schema = self.get_schema(&primitive.contract_id)?;
-        
+
         let ocaml_interface = self.generate_ocaml_interface(&primitive, schema)?;
         let runtime_config = self.generate_runtime_config(&primitive, schema)?;
-        
+
         Ok(CompiledQuery {
             primitive,
             ocaml_interface,
@@ -167,9 +170,12 @@ impl QueryPrimitiveCompiler {
             layout_commitment: schema.layout_commitment.clone(),
         })
     }
-    
+
     /// Extract query primitive from Lisp expression
-    fn extract_query_primitive(&self, expr: &Expr) -> Result<QueryStatePrimitive, QueryCompileError> {
+    fn extract_query_primitive(
+        &self,
+        expr: &Expr,
+    ) -> Result<QueryStatePrimitive, QueryCompileError> {
         match &expr.kind {
             ExprKind::Apply(func, args) => {
                 if let ExprKind::Var(symbol) = &func.kind {
@@ -182,16 +188,22 @@ impl QueryPrimitiveCompiler {
             _ => Err(QueryCompileError::NotQueryState),
         }
     }
-    
+
     /// Parse arguments to query_state function
-    fn parse_query_state_args(&self, args: &[Expr]) -> Result<QueryStatePrimitive, QueryCompileError> {
+    fn parse_query_state_args(
+        &self,
+        args: &[Expr],
+    ) -> Result<QueryStatePrimitive, QueryCompileError> {
         if args.len() < 2 {
-            return Err(QueryCompileError::InvalidArguments("query_state requires at least contract_id and storage_slot".to_string()));
+            return Err(QueryCompileError::InvalidArguments(
+                "query_state requires at least contract_id and storage_slot"
+                    .to_string(),
+            ));
         }
-        
+
         let contract_id = self.extract_string_literal(&args[0])?;
         let storage_slot = self.extract_string_literal(&args[1])?;
-        
+
         Ok(QueryStatePrimitive {
             contract_id,
             storage_slot,
@@ -200,51 +212,73 @@ impl QueryPrimitiveCompiler {
             optimization_hints: vec![],
         })
     }
-    
+
     /// Get schema for a contract
-    fn get_schema(&self, contract_id: &str) -> Result<&AlmanacSchema, QueryCompileError> {
-        self.schemas.get(contract_id)
-            .ok_or_else(|| QueryCompileError::UnknownContract(contract_id.to_string()))
+    fn get_schema(
+        &self,
+        contract_id: &str,
+    ) -> Result<&AlmanacSchema, QueryCompileError> {
+        self.schemas.get(contract_id).ok_or_else(|| {
+            QueryCompileError::UnknownContract(contract_id.to_string())
+        })
     }
-    
+
     /// Generate OCaml interface for the query
-    fn generate_ocaml_interface(&self, primitive: &QueryStatePrimitive, schema: &AlmanacSchema) -> Result<String, QueryCompileError> {
+    fn generate_ocaml_interface(
+        &self,
+        primitive: &QueryStatePrimitive,
+        schema: &AlmanacSchema,
+    ) -> Result<String, QueryCompileError> {
         let mut code = String::new();
-        
+
         // Generate function signature
-        let function_name = format!("query_{}_{}", primitive.contract_id, primitive.storage_slot);
+        let function_name =
+            format!("query_{}_{}", primitive.contract_id, primitive.storage_slot);
         code.push_str(&format!("let {} ", function_name));
-        
+
         // Add parameters
         for param in &primitive.parameters {
             code.push_str(&format!("~{} ", param.name));
         }
-        
+
         code.push_str("() = \n");
-        
+
         // Generate implementation
         code.push_str("  (* Query implementation *)\n");
-        code.push_str(&format!("  let contract_id = \"{}\" in\n", primitive.contract_id));
-        code.push_str(&format!("  let storage_slot = \"{}\" in\n", primitive.storage_slot));
-        code.push_str(&format!("  let layout_commitment = \"{}\" in\n", schema.layout_commitment.commitment_hash));
-        
+        code.push_str(&format!(
+            "  let contract_id = \"{}\" in\n",
+            primitive.contract_id
+        ));
+        code.push_str(&format!(
+            "  let storage_slot = \"{}\" in\n",
+            primitive.storage_slot
+        ));
+        code.push_str(&format!(
+            "  let layout_commitment = \"{}\" in\n",
+            schema.layout_commitment.commitment_hash
+        ));
+
         // Add query execution logic
         code.push_str("  let query_params = [\n");
         for param in &primitive.parameters {
             code.push_str(&format!("    (\"{}\", {});\n", param.name, param.name));
         }
         code.push_str("  ] in\n");
-        
+
         code.push_str("  (* Execute query via Almanac *)\n");
         code.push_str("  Almanac.execute_query ~contract_id ~storage_slot ~layout_commitment ~params:query_params\n");
-        
+
         Ok(code)
     }
-    
+
     /// Generate runtime configuration for the query
-    fn generate_runtime_config(&self, primitive: &QueryStatePrimitive, _schema: &AlmanacSchema) -> Result<QueryRuntimeConfig, QueryCompileError> {
+    fn generate_runtime_config(
+        &self,
+        primitive: &QueryStatePrimitive,
+        _schema: &AlmanacSchema,
+    ) -> Result<QueryRuntimeConfig, QueryCompileError> {
         let mut config = self.default_runtime_config.clone();
-        
+
         // Apply optimization hints
         for hint in &primitive.optimization_hints {
             match hint {
@@ -261,32 +295,41 @@ impl QueryPrimitiveCompiler {
                 _ => {} // Other hints handled elsewhere
             }
         }
-        
+
         Ok(config)
     }
-    
+
     /// Extract string literal from expression
-    fn extract_string_literal(&self, expr: &Expr) -> Result<String, QueryCompileError> {
+    fn extract_string_literal(
+        &self,
+        expr: &Expr,
+    ) -> Result<String, QueryCompileError> {
         match &expr.kind {
             ExprKind::Const(LispValue::String(s)) => Ok(s.to_string()),
-            _ => Err(QueryCompileError::InvalidArguments("Expected string literal".to_string())),
+            _ => Err(QueryCompileError::InvalidArguments(
+                "Expected string literal".to_string(),
+            )),
         }
     }
-    
+
     /// Compile multi-chain query coordination
-    pub fn compile_multi_chain_query(&self, queries: &[Expr]) -> Result<MultiChainQuery, QueryCompileError> {
+    pub fn compile_multi_chain_query(
+        &self,
+        queries: &[Expr],
+    ) -> Result<MultiChainQuery, QueryCompileError> {
         let mut chain_queries = BTreeMap::new();
-        
+
         for query_expr in queries {
             let primitive = self.extract_query_primitive(query_expr)?;
             let schema = self.get_schema(&primitive.contract_id)?;
-            
+
             let chain = schema.domain.clone();
-            chain_queries.entry(chain)
+            chain_queries
+                .entry(chain)
                 .or_insert_with(Vec::new)
                 .push(primitive);
         }
-        
+
         Ok(MultiChainQuery {
             chain_queries,
             coordination_strategy: CoordinationStrategy::Parallel,
@@ -294,11 +337,15 @@ impl QueryPrimitiveCompiler {
             retry_config: RetryConfig::default(),
         })
     }
-    
+
     /// Create query composition for filtering and aggregation
-    pub fn create_query_composition(&self, base_query: &QueryStatePrimitive, filters: Vec<QueryFilter>) -> Result<ComposedQuery, QueryCompileError> {
+    pub fn create_query_composition(
+        &self,
+        base_query: &QueryStatePrimitive,
+        filters: Vec<QueryFilter>,
+    ) -> Result<ComposedQuery, QueryCompileError> {
         let schema = self.get_schema(&base_query.contract_id)?;
-        
+
         Ok(ComposedQuery {
             base_query: base_query.clone(),
             filters,
@@ -307,25 +354,35 @@ impl QueryPrimitiveCompiler {
             layout_commitment: schema.layout_commitment.clone(),
         })
     }
-    
+
     /// Add query result caching with invalidation
-    pub fn create_cached_query(&self, primitive: &QueryStatePrimitive, cache_strategy: CacheStrategy) -> Result<CachedQuery, QueryCompileError> {
+    pub fn create_cached_query(
+        &self,
+        primitive: &QueryStatePrimitive,
+        cache_strategy: CacheStrategy,
+    ) -> Result<CachedQuery, QueryCompileError> {
         let schema = self.get_schema(&primitive.contract_id)?;
-        
+
         let ttl_seconds = cache_strategy.ttl_seconds();
         Ok(CachedQuery {
             primitive: primitive.clone(),
             cache_strategy,
             invalidation_rules: vec![
                 InvalidationRule::TimeBasedTTL(ttl_seconds),
-                InvalidationRule::LayoutCommitmentChange(schema.layout_commitment.commitment_hash.clone()),
+                InvalidationRule::LayoutCommitmentChange(
+                    schema.layout_commitment.commitment_hash.clone(),
+                ),
             ],
             cache_key_generator: CacheKeyGenerator::Standard,
         })
     }
-    
+
     /// Handle query failures and timeouts with comprehensive error handling
-    pub fn create_resilient_query(&self, primitive: &QueryStatePrimitive, error_handling: ErrorHandlingConfig) -> Result<ResilientQuery, QueryCompileError> {
+    pub fn create_resilient_query(
+        &self,
+        primitive: &QueryStatePrimitive,
+        error_handling: ErrorHandlingConfig,
+    ) -> Result<ResilientQuery, QueryCompileError> {
         Ok(ResilientQuery {
             primitive: primitive.clone(),
             error_handling,
@@ -340,16 +397,16 @@ impl QueryPrimitiveCompiler {
 pub enum QueryCompileError {
     #[error("Expression is not a query_state call")]
     NotQueryState,
-    
+
     #[error("Invalid arguments: {0}")]
     InvalidArguments(String),
-    
+
     #[error("Unknown contract: {0}")]
     UnknownContract(String),
-    
+
     #[error("Unknown type: {0}")]
     UnknownType(String),
-    
+
     #[error("Schema error: {0}")]
     SchemaError(String),
 }
@@ -511,7 +568,10 @@ pub enum CacheStrategy {
     /// Standard time-based caching
     TimeBasedTTL(u64),
     /// Conditional caching based on query frequency
-    Conditional { min_frequency: u32, ttl_seconds: u64 },
+    Conditional {
+        min_frequency: u32,
+        ttl_seconds: u64,
+    },
     /// Write-through caching with immediate updates
     WriteThrough(u64),
     /// No caching
@@ -633,9 +693,11 @@ impl Default for ErrorHandlingConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use causality_lisp::ast::{Expr, ExprKind, LispValue};
-    use crate::almanac_schema::{AlmanacSchema, StorageSlotSchema, SlotDataType, IndexingStrategy, SchemaMetadata};
-    
+    use crate::almanac_schema::{
+        AlmanacSchema, IndexingStrategy, SchemaMetadata, SlotDataType,
+        StorageSlotSchema,
+    };
+
     fn create_test_schema() -> AlmanacSchema {
         AlmanacSchema {
             contract_id: "usdc".to_string(),
@@ -645,14 +707,12 @@ mod tests {
                 version: "1.0.0".to_string(),
                 timestamp: 1234567890,
             },
-            indexed_slots: vec![
-                StorageSlotSchema {
-                    slot_id: "balances".to_string(),
-                    data_type: SlotDataType::Uint(256),
-                    is_hot: true,
-                    indexing_strategy: IndexingStrategy::Full,
-                }
-            ],
+            indexed_slots: vec![StorageSlotSchema {
+                slot_id: "balances".to_string(),
+                data_type: SlotDataType::Uint(256),
+                is_hot: true,
+                indexing_strategy: IndexingStrategy::Full,
+            }],
             query_patterns: vec![],
             metadata: SchemaMetadata {
                 version: "1.0.0".to_string(),
@@ -662,14 +722,14 @@ mod tests {
             },
         }
     }
-    
+
     #[test]
     fn test_query_primitive_compiler_creation() {
         let mut compiler = QueryPrimitiveCompiler::new();
         let schema = create_test_schema();
         compiler.register_schema("usdc".to_string(), schema);
-        
+
         // Basic test that the compiler can be created and schemas registered
         assert!(compiler.schemas.contains_key("usdc"));
     }
-} 
+}

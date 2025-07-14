@@ -5,10 +5,11 @@
 //! fine-grained access control for record field operations while maintaining
 //! ZK circuit compatibility through static analysis and capability resolution.
 
-use super::core::{EffectExpr, EffectHandler};
-use super::operations::{pure, bind, perform, handle};
-use super::capability::{RecordCapability, RecordSchema, FieldName, Capability};
-use crate::lambda::{Term, Symbol};
+use super::capability::{Capability, FieldName, RecordCapability, RecordSchema};
+#[allow(unused_imports)]
+use super::core::{EffectExpr, EffectExprKind, EffectHandler};
+use super::operations::{bind, handle, perform, pure};
+use crate::lambda::{Symbol, Term};
 use crate::system::content_addressing::EntityId;
 use std::collections::BTreeMap;
 
@@ -26,7 +27,7 @@ pub enum RecordEffect {
         field: FieldName,
         capability: RecordCapability,
     },
-    
+
     /// Update a field in a record resource
     /// update_field : ResourceId → FieldName → Value → Capability → Effect Unit
     UpdateField {
@@ -35,7 +36,7 @@ pub enum RecordEffect {
         value: Box<Term>,
         capability: RecordCapability,
     },
-    
+
     /// Project specific fields from a record
     /// project_record : ResourceId → [FieldName] → Capability → Effect Record
     ProjectRecord {
@@ -43,7 +44,7 @@ pub enum RecordEffect {
         fields: Vec<FieldName>,
         capability: RecordCapability,
     },
-    
+
     /// Extend a record with additional fields
     /// extend_record : ResourceId → RecordSchema → Values → Capability → Effect ResourceId
     ExtendRecord {
@@ -52,7 +53,7 @@ pub enum RecordEffect {
         values: BTreeMap<FieldName, Term>,
         capability: RecordCapability,
     },
-    
+
     /// Restrict a record by removing fields
     /// restrict_record : ResourceId → [FieldName] → Capability → Effect ResourceId
     RestrictRecord {
@@ -60,7 +61,7 @@ pub enum RecordEffect {
         remove_fields: Vec<FieldName>,
         capability: RecordCapability,
     },
-    
+
     /// Create a new record with given schema and initial values
     /// create_record : RecordSchema → Values → Capability → Effect ResourceId
     CreateRecord {
@@ -68,20 +69,18 @@ pub enum RecordEffect {
         values: BTreeMap<FieldName, Term>,
         capability: RecordCapability,
     },
-    
+
     /// Delete an entire record resource
     /// delete_record : ResourceId → Capability → Effect Unit
     DeleteRecord {
         resource_id: EntityId,
         capability: RecordCapability,
     },
-    
+
     /// Require a specific capability for record operations
     /// require_capability : CapabilityName → Effect CapabilityToken
-    RequireCapability {
-        capability_name: String,
-    },
-    
+    RequireCapability { capability_name: String },
+
     /// Grant a capability for a resource (requires ownership)
     /// grant_capability : ResourceId → CapabilityName → Effect CapabilityToken
     GrantCapability {
@@ -130,28 +129,37 @@ pub fn access_field(
     capability: RecordCapability,
 ) -> EffectExpr {
     let field = field.into();
-    
+
     // Validate capability allows field access
     match &capability {
-        RecordCapability::ReadField(cap_field) if cap_field == &field => {},
-        RecordCapability::WriteField(cap_field) if cap_field == &field => {}, // Write implies read
-        RecordCapability::ProjectFields(fields) if fields.contains(&field) => {},
-        RecordCapability::FullRecordAccess => {},
+        RecordCapability::ReadField(cap_field) if cap_field == &field => {}
+        RecordCapability::WriteField(cap_field) if cap_field == &field => {} // Write implies read
+        RecordCapability::ProjectFields(fields) if fields.contains(&field) => {}
+        RecordCapability::FullRecordAccess => {}
         _ => {
             // Return an error effect if capability doesn't match
-            return perform("capability_error", vec![
-                Term::literal(crate::lambda::Literal::Symbol(
-                    Symbol::new(&format!("Insufficient capability for field access: {}", field))
-                ))
-            ]);
+            return perform(
+                "capability_error",
+                vec![Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                    &format!("Insufficient capability for field access: {}", field),
+                )))],
+            );
         }
     }
-    
-    perform("record.access_field", vec![
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&resource_id.to_string()))),
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&field))),
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!("{:?}", capability)))),
-    ])
+
+    perform(
+        "record.access_field",
+        vec![
+            Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                &resource_id.to_string(),
+            ))),
+            Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&field))),
+            Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!(
+                "{:?}",
+                capability
+            )))),
+        ],
+    )
 }
 
 /// Update a field in a record with write capability
@@ -162,27 +170,36 @@ pub fn update_field(
     capability: RecordCapability,
 ) -> EffectExpr {
     let field = field.into();
-    
+
     // Validate capability allows field write
     match &capability {
-        RecordCapability::WriteField(cap_field) if cap_field == &field => {},
-        RecordCapability::FullRecordAccess => {},
+        RecordCapability::WriteField(cap_field) if cap_field == &field => {}
+        RecordCapability::FullRecordAccess => {}
         _ => {
             // Return an error effect if capability doesn't allow writes
-            return perform("capability_error", vec![
-                Term::literal(crate::lambda::Literal::Symbol(
-                    Symbol::new(&format!("Insufficient capability for field write: {}", field))
-                ))
-            ]);
+            return perform(
+                "capability_error",
+                vec![Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                    &format!("Insufficient capability for field write: {}", field),
+                )))],
+            );
         }
     }
-    
-    perform("record.update_field", vec![
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&resource_id.to_string()))),
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&field))),
-        *value,
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!("{:?}", capability)))),
-    ])
+
+    perform(
+        "record.update_field",
+        vec![
+            Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                &resource_id.to_string(),
+            ))),
+            Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&field))),
+            (*value).clone(),
+            Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!(
+                "{:?}",
+                capability
+            )))),
+        ],
+    )
 }
 
 /// Project specific fields from a record
@@ -192,35 +209,42 @@ pub fn project_record(
     capability: RecordCapability,
 ) -> EffectExpr {
     let field_names: Vec<FieldName> = fields.into_iter().map(|f| f.into()).collect();
-    
+
     // Validate capability allows projection of all requested fields
     let has_access = match &capability {
         RecordCapability::ProjectFields(cap_fields) => {
             field_names.iter().all(|f| cap_fields.contains(f))
-        },
+        }
         RecordCapability::FullRecordAccess => true,
         _ => false,
     };
-    
+
     if !has_access {
-        return perform("capability_error", vec![
-            Term::literal(crate::lambda::Literal::Symbol(
-                Symbol::new(&format!("Insufficient capability for record projection: {:?}", field_names))
-            ))
-        ]);
+        return perform(
+            "capability_error",
+            vec![Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                &format!(
+                    "Insufficient capability for record projection: {:?}",
+                    field_names
+                ),
+            )))],
+        );
     }
-    
+
     // Convert field names to terms for the effect call
-    let field_terms: Vec<Term> = field_names.into_iter()
+    let field_terms: Vec<Term> = field_names
+        .into_iter()
         .map(|f| Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&f))))
         .collect();
-    
-    let mut args = vec![
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&resource_id.to_string()))),
-    ];
+
+    let mut args = vec![Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+        &resource_id.to_string(),
+    )))];
     args.extend(field_terms);
-    args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!("{:?}", capability)))));
-    
+    args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+        &format!("{:?}", capability),
+    ))));
+
     perform("record.project", args)
 }
 
@@ -236,37 +260,48 @@ pub fn extend_record(
         RecordCapability::ExtendRecord(cap_schema) => {
             // Check if the extension is compatible with the capability schema
             if cap_schema != &extension {
-                return perform("capability_error", vec![
-                    Term::literal(crate::lambda::Literal::Symbol(
-                        Symbol::new("Extension schema doesn't match capability")
-                    ))
-                ]);
+                return perform(
+                    "capability_error",
+                    vec![Term::literal(crate::lambda::Literal::Symbol(
+                        Symbol::new("Extension schema doesn't match capability"),
+                    ))],
+                );
             }
-        },
-        RecordCapability::FullRecordAccess => {},
+        }
+        RecordCapability::FullRecordAccess => {}
         _ => {
-            return perform("capability_error", vec![
-                Term::literal(crate::lambda::Literal::Symbol(
-                    Symbol::new("Insufficient capability for record extension")
-                ))
-            ]);
+            return perform(
+                "capability_error",
+                vec![Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                    "Insufficient capability for record extension",
+                )))],
+            );
         }
     }
-    
+
     // Convert values to effect arguments
     let mut args = vec![
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&resource_id.to_string()))),
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!("{:?}", extension)))),
+        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+            &resource_id.to_string(),
+        ))),
+        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!(
+            "{:?}",
+            extension
+        )))),
     ];
-    
+
     // Add field values as arguments
     for (field, value) in values {
-        args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&field))));
+        args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+            &field,
+        ))));
         args.push(value);
     }
-    
-    args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!("{:?}", capability)))));
-    
+
+    args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+        &format!("{:?}", capability),
+    ))));
+
     perform("record.extend", args)
 }
 
@@ -276,40 +311,46 @@ pub fn restrict_record(
     remove_fields: Vec<impl Into<FieldName>>,
     capability: RecordCapability,
 ) -> EffectExpr {
-    let field_names: Vec<FieldName> = remove_fields.into_iter().map(|f| f.into()).collect();
-    
+    let field_names: Vec<FieldName> =
+        remove_fields.into_iter().map(|f| f.into()).collect();
+
     // Validate capability allows record restriction
     match &capability {
         RecordCapability::RestrictRecord(cap_fields) => {
             // Check if we can remove the requested fields
             if !field_names.iter().all(|f| cap_fields.contains(f)) {
-                return perform("capability_error", vec![
-                    Term::literal(crate::lambda::Literal::Symbol(
-                        Symbol::new("Insufficient capability for field removal")
-                    ))
-                ]);
+                return perform(
+                    "capability_error",
+                    vec![Term::literal(crate::lambda::Literal::Symbol(
+                        Symbol::new("Insufficient capability for field removal"),
+                    ))],
+                );
             }
-        },
-        RecordCapability::FullRecordAccess => {},
+        }
+        RecordCapability::FullRecordAccess => {}
         _ => {
-            return perform("capability_error", vec![
-                Term::literal(crate::lambda::Literal::Symbol(
-                    Symbol::new("Insufficient capability for record restriction")
-                ))
-            ]);
+            return perform(
+                "capability_error",
+                vec![Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                    "Insufficient capability for record restriction",
+                )))],
+            );
         }
     }
-    
-    let field_terms: Vec<Term> = field_names.into_iter()
+
+    let field_terms: Vec<Term> = field_names
+        .into_iter()
         .map(|f| Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&f))))
         .collect();
-    
-    let mut args = vec![
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&resource_id.to_string()))),
-    ];
+
+    let mut args = vec![Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+        &resource_id.to_string(),
+    )))];
     args.extend(field_terms);
-    args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!("{:?}", capability)))));
-    
+    args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+        &format!("{:?}", capability),
+    ))));
+
     perform("record.restrict", args)
 }
 
@@ -323,36 +364,42 @@ pub fn create_record(
     match &capability {
         RecordCapability::CreateRecord(cap_schema) => {
             if cap_schema != &schema {
-                return perform("capability_error", vec![
-                    Term::literal(crate::lambda::Literal::Symbol(
-                        Symbol::new("Schema doesn't match creation capability")
-                    ))
-                ]);
+                return perform(
+                    "capability_error",
+                    vec![Term::literal(crate::lambda::Literal::Symbol(
+                        Symbol::new("Schema doesn't match creation capability"),
+                    ))],
+                );
             }
-        },
-        RecordCapability::FullRecordAccess => {},
+        }
+        RecordCapability::FullRecordAccess => {}
         _ => {
-            return perform("capability_error", vec![
-                Term::literal(crate::lambda::Literal::Symbol(
-                    Symbol::new("Insufficient capability for record creation")
-                ))
-            ]);
+            return perform(
+                "capability_error",
+                vec![Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                    "Insufficient capability for record creation",
+                )))],
+            );
         }
     }
-    
+
     // Convert schema and values to effect arguments
-    let mut args = vec![
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!("{:?}", schema)))),
-    ];
-    
+    let mut args = vec![Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+        &format!("{:?}", schema),
+    )))];
+
     // Add field values
     for (field, value) in values {
-        args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&field))));
+        args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+            &field,
+        ))));
         args.push(value);
     }
-    
-    args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!("{:?}", capability)))));
-    
+
+    args.push(Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+        &format!("{:?}", capability),
+    ))));
+
     perform("record.create", args)
 }
 
@@ -363,28 +410,40 @@ pub fn delete_record(
 ) -> EffectExpr {
     // Validate capability allows record deletion
     match &capability {
-        RecordCapability::DeleteRecord => {},
-        RecordCapability::FullRecordAccess => {},
+        RecordCapability::DeleteRecord => {}
+        RecordCapability::FullRecordAccess => {}
         _ => {
-            return perform("capability_error", vec![
-                Term::literal(crate::lambda::Literal::Symbol(
-                    Symbol::new("Insufficient capability for record deletion")
-                ))
-            ]);
+            return perform(
+                "capability_error",
+                vec![Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                    "Insufficient capability for record deletion",
+                )))],
+            );
         }
     }
-    
-    perform("record.delete", vec![
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&resource_id.to_string()))),
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!("{:?}", capability)))),
-    ])
+
+    perform(
+        "record.delete",
+        vec![
+            Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                &resource_id.to_string(),
+            ))),
+            Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!(
+                "{:?}",
+                capability
+            )))),
+        ],
+    )
 }
 
 /// Require a specific capability for record operations
 pub fn require_capability(capability_name: impl Into<String>) -> EffectExpr {
-    perform("capability.require", vec![
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&capability_name.into()))),
-    ])
+    perform(
+        "capability.require",
+        vec![Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+            &capability_name.into(),
+        )))],
+    )
 }
 
 /// Grant a capability for a resource (requires ownership)
@@ -393,11 +452,21 @@ pub fn grant_capability(
     capability_name: impl Into<String>,
     capability: RecordCapability,
 ) -> EffectExpr {
-    perform("capability.grant", vec![
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&resource_id.to_string()))),
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&capability_name.into()))),
-        Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!("{:?}", capability)))),
-    ])
+    perform(
+        "capability.grant",
+        vec![
+            Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                &resource_id.to_string(),
+            ))),
+            Term::literal(crate::lambda::Literal::Symbol(Symbol::new(
+                &capability_name.into(),
+            ))),
+            Term::literal(crate::lambda::Literal::Symbol(Symbol::new(&format!(
+                "{:?}",
+                capability
+            )))),
+        ],
+    )
 }
 
 //-----------------------------------------------------------------------------
@@ -410,38 +479,46 @@ pub fn record_capability_handlers() -> Vec<EffectHandler> {
         // Field access handler - compiles to tensor projection
         EffectHandler {
             effect_tag: "record.access_field".to_string(),
-            params: vec!["resource_id".to_string(), "field".to_string(), "capability".to_string()],
+            params: vec![
+                "resource_id".to_string(),
+                "field".to_string(),
+                "capability".to_string(),
+            ],
             continuation: "k".to_string(),
             body: {
                 // Compile field access to proper tensor operations
                 // 1. Load the resource as a tensor structure
                 // 2. Extract the field index from the record schema
                 // 3. Project the tensor to get the field value
-                let load_resource = perform("load_resource", vec![Term::var("resource_id")]);
-                let get_field_index = perform("get_field_index", vec![Term::var("field")]);
-                let project_tensor = perform("tensor_project", vec![Term::var("loaded_resource"), Term::var("field_index")]);
-                
+                let load_resource =
+                    perform("load_resource", vec![Term::var("resource_id")]);
+                let get_field_index =
+                    perform("get_field_index", vec![Term::var("field")]);
+                let project_tensor = perform(
+                    "tensor_project",
+                    vec![Term::var("loaded_resource"), Term::var("field_index")],
+                );
+
                 // Chain the operations: load → index → project
                 bind(
                     load_resource,
                     "loaded_resource",
-                    bind(
-                        get_field_index,
-                        "field_index", 
-                        project_tensor
-                    )
+                    bind(get_field_index, "field_index", project_tensor),
                 )
             },
         },
-        
         // Field update handler - compiles to tensor reconstruction
         EffectHandler {
             effect_tag: "record.update_field".to_string(),
-            params: vec!["resource_id".to_string(), "field".to_string(), "value".to_string(), "capability".to_string()],
+            params: vec![
+                "resource_id".to_string(),
+                "field".to_string(),
+                "value".to_string(),
+                "capability".to_string(),
+            ],
             continuation: "k".to_string(),
             body: pure(Term::unit()),
         },
-        
         // Record projection handler - compiles to multiple tensor projections
         EffectHandler {
             effect_tag: "record.project".to_string(),
@@ -449,15 +526,17 @@ pub fn record_capability_handlers() -> Vec<EffectHandler> {
             continuation: "k".to_string(),
             body: pure(Term::var("projected_record")),
         },
-        
         // Record extension handler - compiles to tensor construction
         EffectHandler {
             effect_tag: "record.extend".to_string(),
-            params: vec!["resource_id".to_string(), "extension".to_string(), "capability".to_string()],
+            params: vec![
+                "resource_id".to_string(),
+                "extension".to_string(),
+                "capability".to_string(),
+            ],
             continuation: "k".to_string(),
             body: pure(Term::var("extended_resource_id")),
         },
-        
         // Record restriction handler - compiles to tensor projection
         EffectHandler {
             effect_tag: "record.restrict".to_string(),
@@ -465,7 +544,6 @@ pub fn record_capability_handlers() -> Vec<EffectHandler> {
             continuation: "k".to_string(),
             body: pure(Term::var("restricted_resource_id")),
         },
-        
         // Record creation handler - compiles to tensor construction
         EffectHandler {
             effect_tag: "record.create".to_string(),
@@ -473,7 +551,6 @@ pub fn record_capability_handlers() -> Vec<EffectHandler> {
             continuation: "k".to_string(),
             body: pure(Term::var("new_resource_id")),
         },
-        
         // Record deletion handler - compiles to resource consumption
         EffectHandler {
             effect_tag: "record.delete".to_string(),
@@ -481,7 +558,6 @@ pub fn record_capability_handlers() -> Vec<EffectHandler> {
             continuation: "k".to_string(),
             body: pure(Term::unit()),
         },
-        
         // Capability requirement handler
         EffectHandler {
             effect_tag: "capability.require".to_string(),
@@ -489,15 +565,17 @@ pub fn record_capability_handlers() -> Vec<EffectHandler> {
             continuation: "k".to_string(),
             body: pure(Term::var("capability_token")),
         },
-        
         // Capability granting handler
         EffectHandler {
             effect_tag: "capability.grant".to_string(),
-            params: vec!["resource_id".to_string(), "capability_name".to_string(), "capability".to_string()],
+            params: vec![
+                "resource_id".to_string(),
+                "capability_name".to_string(),
+                "capability".to_string(),
+            ],
             continuation: "k".to_string(),
             body: pure(Term::var("granted_token")),
         },
-        
         // Capability error handler
         EffectHandler {
             effect_tag: "capability_error".to_string(),
@@ -517,13 +595,13 @@ pub fn record_transaction(effects: Vec<EffectExpr>) -> EffectExpr {
     if effects.is_empty() {
         return pure(Term::unit());
     }
-    
+
     // Sequence all record effects with proper capability checking
     let mut result = effects[0].clone();
     for effect in effects.into_iter().skip(1) {
         result = bind(result, "_", effect);
     }
-    
+
     // Wrap in transaction context
     handle(result, record_capability_handlers())
 }
@@ -545,7 +623,7 @@ pub fn validate_capabilities(
             RecordEffect::GrantCapability { capability, .. } => capability,
             _ => continue, // Skip operations that don't require specific record capabilities
         };
-        
+
         // Check if any available capability implies the required one
         let has_required = available_capabilities.iter().any(|avail_cap| {
             if let Some(avail_record_cap) = &avail_cap.record_capability {
@@ -554,12 +632,12 @@ pub fn validate_capabilities(
                 false
             }
         });
-        
+
         if !has_required {
             return Err(format!("Missing required capability: {:?}", required_cap));
         }
     }
-    
+
     Ok(())
 }
 
@@ -577,27 +655,33 @@ impl CapabilityToken {
             expires_at: None,
         }
     }
-    
+
     /// Create a token with expiration
     pub fn with_expiration(mut self, expires_at: u64) -> Self {
         self.expires_at = Some(expires_at);
         self
     }
-    
+
     /// Check if the token is valid (not expired)
     pub fn is_valid(&self, current_time: u64) -> bool {
         self.expires_at.map_or(true, |expiry| current_time < expiry)
     }
-    
+
     /// Check if this token grants the required capability
-    pub fn grants(&self, required: &RecordCapability, for_resource: Option<EntityId>) -> bool {
+    pub fn grants(
+        &self,
+        required: &RecordCapability,
+        for_resource: Option<EntityId>,
+    ) -> bool {
         // Check resource match if specified
-        if let (Some(token_resource), Some(required_resource)) = (self.resource_id, for_resource) {
+        if let (Some(token_resource), Some(required_resource)) =
+            (self.resource_id, for_resource)
+        {
             if token_resource != required_resource {
                 return false;
             }
         }
-        
+
         // Check capability implication
         self.record_capability.implies(required)
     }
@@ -617,9 +701,9 @@ mod tests {
     fn test_access_field_with_valid_capability() {
         let resource_id = test_resource_id();
         let capability = RecordCapability::ReadField("name".to_string());
-        
+
         let effect = access_field(resource_id, "name", capability);
-        
+
         // Should create a valid record access effect
         match effect.kind {
             EffectExprKind::Perform { effect_tag, args } => {
@@ -634,9 +718,9 @@ mod tests {
     fn test_access_field_with_invalid_capability() {
         let resource_id = test_resource_id();
         let capability = RecordCapability::ReadField("age".to_string());
-        
+
         let effect = access_field(resource_id, "name", capability); // Wrong field
-        
+
         // Should create a capability error effect
         match effect.kind {
             EffectExprKind::Perform { effect_tag, .. } => {
@@ -651,9 +735,9 @@ mod tests {
         let resource_id = test_resource_id();
         let capability = RecordCapability::WriteField("name".to_string());
         let value = Term::literal(Literal::Symbol(Symbol::new("John")));
-        
-        let effect = update_field(resource_id, "name", *value, capability);
-        
+
+        let effect = update_field(resource_id, "name", Box::new(value), capability);
+
         match effect.kind {
             EffectExprKind::Perform { effect_tag, args } => {
                 assert_eq!(effect_tag, "record.update_field");
@@ -666,10 +750,13 @@ mod tests {
     #[test]
     fn test_project_record_with_valid_capability() {
         let resource_id = test_resource_id();
-        let capability = RecordCapability::ProjectFields(vec!["name".to_string(), "age".to_string()]);
-        
+        let capability = RecordCapability::ProjectFields(vec![
+            "name".to_string(),
+            "age".to_string(),
+        ]);
+
         let effect = project_record(resource_id, vec!["name", "age"], capability);
-        
+
         match effect.kind {
             EffectExprKind::Perform { effect_tag, args } => {
                 assert_eq!(effect_tag, "record.project");
@@ -683,16 +770,20 @@ mod tests {
     fn test_capability_token_validation() {
         let resource_id = test_resource_id();
         let capability = RecordCapability::ReadField("name".to_string());
-        
-        let token = CapabilityToken::new("test_token", Some(resource_id), capability.clone());
-        
+
+        let token = CapabilityToken::new(
+            "test_token",
+            Some(resource_id),
+            capability.clone(),
+        );
+
         // Should grant the exact capability
         assert!(token.grants(&capability, Some(resource_id)));
-        
+
         // Should not grant different capability
         let other_capability = RecordCapability::ReadField("age".to_string());
         assert!(!token.grants(&other_capability, Some(resource_id)));
-        
+
         // Should not grant for different resource
         let other_resource = EntityId::from_bytes([2u8; 32]);
         assert!(!token.grants(&capability, Some(other_resource)));
@@ -703,8 +794,8 @@ mod tests {
         let capability = RecordCapability::ReadField("name".to_string());
         let token = CapabilityToken::new("test_token", None, capability)
             .with_expiration(100);
-        
-        assert!(token.is_valid(50));  // Before expiration
+
+        assert!(token.is_valid(50)); // Before expiration
         assert!(!token.is_valid(150)); // After expiration
     }
 
@@ -713,14 +804,19 @@ mod tests {
         let resource_id = test_resource_id();
         let read_cap = RecordCapability::ReadField("name".to_string());
         let write_cap = RecordCapability::WriteField("age".to_string());
-        
+
         let effects = vec![
             access_field(resource_id, "name", read_cap),
-            update_field(resource_id, "age", Term::literal(Literal::Int(30)), write_cap),
+            update_field(
+                resource_id,
+                "age",
+                Box::new(Term::literal(Literal::Int(30))),
+                write_cap,
+            ),
         ];
-        
+
         let transaction = record_transaction(effects);
-        
+
         // Should wrap effects in a transaction with handlers
         match transaction.kind {
             EffectExprKind::Handle { .. } => {
@@ -741,42 +837,45 @@ mod tests {
             RecordEffect::UpdateField {
                 resource_id: test_resource_id(),
                 field: "age".to_string(),
-                value: Term::unit(),
+                value: Box::new(Term::unit()),
                 capability: RecordCapability::WriteField("age".to_string()),
             },
         ];
-        
+
         let available_capabilities = vec![
             Capability::read_field("record", "name"),
             Capability::write_field("record", "age"),
         ];
-        
+
         // Should validate successfully
         assert!(validate_capabilities(&operations, &available_capabilities).is_ok());
-        
+
         // Should fail with insufficient capabilities
         let insufficient_capabilities = vec![
             Capability::read_field("record", "name"),
             // Missing write capability for age
         ];
-        
-        assert!(validate_capabilities(&operations, &insufficient_capabilities).is_err());
+
+        assert!(
+            validate_capabilities(&operations, &insufficient_capabilities).is_err()
+        );
     }
 
     #[test]
     fn test_full_record_access_capability() {
         let resource_id = test_resource_id();
         let full_access = RecordCapability::FullRecordAccess;
-        
+
         // Full access should allow any field operation
-        let read_effect = access_field(resource_id, "any_field", full_access.clone());
+        let read_effect =
+            access_field(resource_id, "any_field", full_access.clone());
         let write_effect = update_field(
-            resource_id, 
-            "any_field", 
-            Term::unit(), 
-            full_access.clone()
+            resource_id,
+            "any_field",
+            Box::new(Term::unit()),
+            full_access.clone(),
         );
-        
+
         // Both should succeed (not produce capability errors)
         match read_effect.kind {
             EffectExprKind::Perform { effect_tag, .. } => {
@@ -784,7 +883,7 @@ mod tests {
             }
             _ => panic!("Expected successful access effect"),
         }
-        
+
         match write_effect.kind {
             EffectExprKind::Perform { effect_tag, .. } => {
                 assert_eq!(effect_tag, "record.update_field");
@@ -792,4 +891,4 @@ mod tests {
             _ => panic!("Expected successful update effect"),
         }
     }
-} 
+}
