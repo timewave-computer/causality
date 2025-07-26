@@ -1,6 +1,6 @@
 # 104: Content Addressing System
 
-Content addressing is the foundational identity and data management system that permeates every layer of Causality. Unlike traditional systems that rely on location-based addressing (like memory addresses or file paths), Causality identifies all data by the cryptographic hash of its canonical representation. This design choice has profound implications for the system's architecture, enabling powerful properties like immutability, verifiability, and global deduplication.
+Content addressing is the foundational identity and data management system that permeates every layer of Causality. Unlike traditional systems that rely on location-based addressing (like memory addresses or file paths), Causality identifies all data by the cryptographic hash of its canonical representation. This design choice has important implications for the system's architecture, enabling properties like immutability, verifiability, and global deduplication.
 
 ## Overview
 
@@ -285,7 +285,7 @@ Content addressing is not just a storage mechanism in Causality—it's a fundame
 
 ### Hash Function
 
-The system uses **SHA256** as the hash function for content addressing. SHA256 provides:
+The system uses SHA256 as the hash function for content addressing. SHA256 provides:
 
 - **Deterministic**: Same content always produces the same hash
 - **Collision-resistant**: Practically impossible to find two different inputs with the same hash

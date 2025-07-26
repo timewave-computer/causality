@@ -1,10 +1,10 @@
 # 200: Row Types and Capability System
 
-Row types form the **foundation of Causality's capability system**, providing static type-level guarantees for resource field access while enabling polymorphic record operations. This document explains how row types integrate with the three-layer architecture to provide fine-grained access control and efficient ZK circuit compilation.
+Row types form the foundation of Causality's capability system, providing static type-level guarantees for resource field access while enabling polymorphic record operations. This document explains how row types integrate with the three-layer architecture to provide fine-grained access control and efficient ZK circuit compilation.
 
 ## 1. Overview: Row Types as the Capability Foundation
 
-**Row types are central to Causality's architecture** because they enable:
+Row types are central to Causality's architecture because they enable:
 
 1. **Static Capability Resolution**: Polymorphic field access compiles to concrete operations
 2. **Zero-Runtime-Cost Access Control**: All capability checks happen at compile time
@@ -51,7 +51,7 @@ pub enum RowConstraint {
 
 ### 2.2 Row Polymorphism in Action
 
-**Open Row Types** enable polymorphic operations:
+Open Row Types enable polymorphic operations:
 
 ```rust
 // Open row type: { name: String, age: Int | r }
@@ -68,7 +68,7 @@ let user_row = RowType::open(
 let name_projection = user_row.project("name"); //  Always succeeds
 ```
 
-**Closed Row Types** provide exact field specifications:
+Closed Row Types provide exact field specifications:
 
 ```rust
 // Closed row type: { x: Int, y: Int }
@@ -85,7 +85,7 @@ let z_projection = point_row.project("z"); //  Compile error: field not found
 
 ### 3.1 Core Row Operations
 
-All row operations are **compile-time** operations that produce static type information:
+All row operations are compile-time operations that produce static type information:
 
 | Operation | Type Signature | Purpose | Example |
 |-----------|----------------|---------|---------|
@@ -126,7 +126,7 @@ let name2 = get_name(product); //  Compiles: product has 'name' + other fields
 
 ### 4.1 Capabilities as Row Type Constraints
 
-**Capabilities control which row operations are permitted**:
+Capabilities control which row operations are permitted:
 
 ```rust
 pub enum RecordCapability {
@@ -149,7 +149,7 @@ pub struct Capability {
 
 ### 4.2 Static Capability Resolution Process
 
-The capability system performs **static analysis** to resolve dynamic operations:
+The capability system performs static analysis to resolve dynamic operations:
 
 ```
 1. Capability Analysis
@@ -200,7 +200,7 @@ let concrete_access = project_field(
 
 ### 5.1 Row Types with Location Information
 
-**Location-aware row types** extend the traditional row type system to include location information, enabling the same field operations to work seamlessly across local and remote data:
+Location-aware row types extend the traditional row type system to include location information, enabling the same field operations to work seamlessly across local and remote data:
 
 ```rust
 pub struct LocationAwareRowType {
@@ -566,7 +566,7 @@ let resolved_operations = constraint_system.solve_constraints(&mut det_sys)?;
 
 ### 7.1 Schema Content Addressing
 
-**All record schemas are content-addressed**, enabling global reuse:
+All record schemas are content-addressed, enabling global reuse:
 
 ```rust
 // Schema definition becomes content-addressed
@@ -603,7 +603,7 @@ assert_eq!(
 
 ### 8.1 Static Layout for ZK Compatibility
 
-Row type resolution ensures **fixed memory layouts** for ZK circuit generation:
+Row type resolution ensures fixed memory layouts for ZK circuit generation:
 
 ```rust
 // Before resolution: Polymorphic access
@@ -804,13 +804,13 @@ let broad_capability = Capability::FullRecordAccess; // Too permissive
 
 ## 13. Conclusion
 
-Row types are **fundamental to Causality's architecture** because they provide the bridge between:
+Row types are fundamental to Causality's architecture because they provide the bridge between:
 
-- **Layer 2's dynamic capability requirements** and **Layer 1's static operations**
-- **Polymorphic record manipulation** and **efficient ZK circuit generation**
-- **Flexible schema evolution** and **deterministic content addressing**
-- **Compile-time safety guarantees** and **zero-runtime-cost enforcement**
+- Layer 2's dynamic capability requirements and Layer 1's static operations
+- Polymorphic record manipulation and efficient ZK circuit generation
+- Flexible schema evolution and deterministic content addressing
+- Compile-time safety guarantees and zero-runtime-cost enforcement
 
-This design enables Causality to provide both **developer productivity** (through polymorphic operations) and **system efficiency** (through static compilation), making it unique among verifiable computation platforms.
+This design enables Causality to provide both developer productivity (through polymorphic operations) and system efficiency (through static compilation), making it unique among verifiable computation platforms.
 
-The row type system demonstrates how **sophisticated type-level programming** can provide practical benefits: better performance, stronger safety guarantees, and more efficient ZK proof generation, all while maintaining developer ergonomics. 
+The row type system demonstrates how type-level programming can provide practical benefits: better performance, stronger safety guarantees, and more efficient ZK proof generation, all while maintaining developer ergonomics. 

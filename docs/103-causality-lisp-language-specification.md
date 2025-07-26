@@ -33,7 +33,7 @@ Causality Lisp provides the structured type system and expression language that 
 
 Causality Lisp is a statically-typed, linear functional programming language designed for expressing resource-aware computations. Every value in Causality Lisp is linear by default, meaning it must be consumed exactly once. This restriction enables compile-time verification of resource safety and forms the foundation for Causality's broader guarantees around correctness and conservation.
 
-The language is built around **content-addressed expressions** that compile to the 5 fundamental Layer 0 instructions. These operations compile to a minimal set of register machine instructions based on symmetric monoidal closed category theory, ensuring that the high-level expressiveness of the language translates to efficient, verifiable execution.
+The language is built around content-addressed expressions that compile to the 5 fundamental Layer 0 instructions. These operations compile to a minimal set of register machine instructions based on symmetric monoidal closed category theory, ensuring that the high-level expressiveness of the language translates to efficient, verifiable execution.
 
 ### Key Features
 
@@ -162,7 +162,7 @@ By making linearity the default, Causality Lisp inverts these problems:
 
 ### Why Content-Addressed Expressions?
 
-The design around **content-addressed expressions** provides several key benefits:
+The design around content-addressed expressions provides several key benefits:
 
 **Theoretical Foundation**: Content addressing enables:
 - **Structural Sharing**: Identical subexpressions automatically share storage and computation

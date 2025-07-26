@@ -1,16 +1,16 @@
 # 002: Causality's Three-Layer Architecture
 
-Causality employs a sophisticated three-layer architecture, designed to separate concerns and provide a clear progression from low-level execution to high-level domain logic. This layered approach enhances modularity, verifiability, and the overall robustness of the system. Each layer builds upon the capabilities of the one below it, creating a powerful yet manageable framework for modeling complex causal interactions.
+Causality employs a three-layer architecture, designed to separate concerns and provide a clear progression from low-level execution to high-level domain logic. This layered approach enhances modularity, verifiability, and the overall robustness of the system. Each layer builds upon the capabilities of the one below it, creating an expressive framework for modeling complex causal interactions.
 
 The Causality system is organized into three distinct layers, each with specific responsibilities, primitives, and categorical underpinnings, ensuring a clear separation of concerns from the lowest-level execution to high-level domain logic.
 
 ## Fundamental Architectural Principles
 
-Before diving into the layer-specific details, it's crucial to understand the cross-cutting concerns that permeate all layers of the Causality architecture. These foundational systems ensure consistency, verifiability, and interoperability across the entire stack.
+Before diving into the layer-specific details, it's important to understand the cross-cutting concerns throughout the Causality architecture. These foundational systems ensure consistency, verifiability, and interoperability across the entire stack.
 
 ### Content Addressing System
 
-**Content addressing is the foundational identity system for all data in Causality.** Every piece of data—from Layer 0 values to Layer 2 effects—is identified by the cryptographic hash of its canonical SSZ-serialized representation. This creates a unified addressing scheme with powerful properties:
+Content addressing is the foundational identity system for all data in Causality. Every piece of data—from Layer 0 values to Layer 2 effects—is identified by the cryptographic hash of its canonical SSZ-serialized representation. This creates a unified addressing scheme with useful properties:
 
 - **Immutability**: Content-addressed data cannot be modified without changing its identity
 - **Deduplication**: Identical logical structures share the same identifier regardless of context
@@ -201,7 +201,7 @@ Key properties:
 
 ### The 5 Fundamental Instructions
 
-The power of Layer 0 lies in its radical simplicity. Rather than providing hundreds of instructions like traditional processors, Causality's register machine operates with just **5 carefully chosen instructions** based on symmetric monoidal closed category theory. This minimalism enables complete formal verification while remaining expressive enough to compile any higher-level computation.
+The strength of Layer 0 lies in its simplicity. Rather than providing hundreds of instructions like traditional processors, Causality's register machine operates with just 5 carefully chosen instructions based on symmetric monoidal closed category theory. This minimal approach enables complete formal verification while remaining expressive enough to compile any higher-level computation.
 
 Each instruction serves a specific purpose in the unified transform model, ensuring that all operations - whether local computation or distributed communication - can be expressed through the same mathematical framework.
 
@@ -213,10 +213,10 @@ Each instruction serves a specific purpose in the unified transform model, ensur
 | `compose f g output` | Sequential composition | Unifies control flow, session sequencing, protocol chaining |
 | `tensor left right output` | Parallel composition | Unifies parallel data, concurrent sessions, resource pairing |
 
-These instructions form a complete computational basis—any program that can be expressed in higher layers ultimately reduces to sequences of these five operations. The mathematical foundation ensures that **computation and communication are unified** as transformations that differ only in their source and target locations.
+These instructions form a complete computational basis—any program that can be expressed in higher layers ultimately reduces to sequences of these five operations. The mathematical foundation ensures that computation and communication are unified as transformations that differ only in their source and target locations.
 
 - **Minimal Instruction Set:** The register machine operates with a small, carefully chosen set of instructions. This minimalism is key to its verifiability and makes it a suitable target for formal analysis.
-- **Deterministic Execution:** Every operation at Layer 0 is strictly deterministic, ensuring that given the same initial state and inputs, the outcome is always identical. This predictability is crucial for a system designed around verifiable causality.
+- **Deterministic Execution:** Every operation at Layer 0 is strictly deterministic, ensuring that given the same initial state and inputs, the outcome is always identical. This predictability is essential for a system designed around verifiable causality.
 - **State Primitives:** Layer 0 defines the most basic units of state and the rules for their transformation. It provides the raw computational power upon which higher layers build more abstract concepts.
 - **Target for Compilation:** Higher-level languages and constructs within Causality are ultimately compiled down to Layer 0 instructions for execution. This makes the register machine the ultimate arbiter of what can and cannot happen within the system.
 
@@ -224,7 +224,7 @@ Think of Layer 0 as the CPU of Causality, providing the raw, unopinionated proce
 
 ## Layer 1: The Linear Lambda Calculus - Expressing Resource Flow
 
-Building upon Layer 0, Layer 1 introduces a Linear Lambda Calculus that operates entirely within the content-addressed value system. This layer leverages the principles of linear logic to provide a powerful and safe way to express computations that involve resources, while maintaining the content-addressed identity system throughout.
+Building upon Layer 0, Layer 1 introduces a Linear Lambda Calculus that operates entirely within the content-addressed value system. This layer leverages the principles of linear logic to provide a safe way to express computations that involve resources, while maintaining the content-addressed identity system throughout.
 
 Layer 1 represents the mathematical heart of Causality—where the abstract principles of linear logic meet practical programming within a content-addressed architecture. While Layer 0 provides the mechanical execution model, Layer 1 gives us the conceptual tools to reason about resource flow and transformation in a type-safe manner while preserving content addressability.
 
@@ -246,48 +246,48 @@ The choice of Linear Lambda Calculus isn't arbitrary. Linear logic naturally cap
 While the theoretical foundation rests on 11 core primitives, the actual implementation includes additional constructs to support practical programming patterns:
 
 #### Core Linear Lambda Calculus (11 Primitives)
-| Category | Primitive | Purpose | Content-Addressed |
-|----------|-----------|---------|-------------------|
-| **Unit Type** | `unit` | Unit introduction |  |
-| | `letunit` | Unit elimination |  |
-| **Tensor Product (⊗)** | `tensor` | Creates pairs/tuples |  |
-| | `lettensor` | Destructures pairs |  |
-| **Sum Type (⊕)** | `inl` | Left injection |  |
-| | `inr` | Right injection |  |
-| | `case` | Pattern matching |  |
-| **Linear Functions (⊸)** | `lambda` | Function definition |  |
-| | `apply` | Function application |  |
-| **Resource Management** | `alloc` | Resource allocation |  |
-| | `consume` | Resource consumption |  |
+| Category | Primitive | Purpose |
+|----------|-----------|---------|
+| **Unit Type** | `unit` | Unit introduction |
+| | `letunit` | Unit elimination |
+| **Tensor Product (⊗)** | `tensor` | Creates pairs/tuples |
+| | `lettensor` | Destructures pairs |
+| **Sum Type (⊕)** | `inl` | Left injection |
+| | `inr` | Right injection |
+| | `case` | Pattern matching |
+| **Linear Functions (⊸)** | `lambda` | Function definition |
+| | `apply` | Function application |
+| **Resource Management** | `alloc` | Resource allocation |
+| | `consume` | Resource consumption |
 
 #### Row Types and Record Operations
-Layer 1 includes sophisticated support for row types and record manipulation:
+Layer 1 includes comprehensive support for row types and record manipulation:
 
-| Operation | Purpose | Content-Addressed |
-|-----------|---------|-------------------|
-| `ReadField` | Safe field access from records |  |
-| `UpdateField` | Functional field updates |  |
-| `Project` | Row type projection |  |
-| `Restrict` | Row type restriction |  |
-| `Extend` | Row type extension |  |
-| `Diff` | Row type difference |  |
+| Operation | Purpose |
+|-----------|---------|
+| `ReadField` | Safe field access from records |
+| `UpdateField` | Functional field updates |
+| `Project` | Row type projection |
+| `Restrict` | Row type restriction |
+| `Extend` | Row type extension |
+| `Diff` | Row type difference |
 
 #### Convenience Forms
 Additional constructs that compile to core primitives:
 
-| Form | Purpose | Content-Addressed |
-|------|---------|-------------------|
-| `Symbol` | Symbol literals |  |
-| `Int` | Integer literals |  |
-| `Bool` | Boolean literals |  |
-| `Quote` | Quoted expressions |  |
-| `List` | List construction |  |
-| `Let` | Local bindings |  |
-| `If` | Conditional expressions |  |
+| Form | Purpose |
+|------|---------|
+| `Symbol` | Symbol literals |
+| `Int` | Integer literals |
+| `Bool` | Boolean literals |
+| `Quote` | Quoted expressions |
+| `List` | List construction |
+| `Let` | Local bindings |
+| `If` | Conditional expressions |
 
 ### Content-Addressed Expression System
 
-All Layer 1 expressions are content-addressed, enabling powerful optimization and verification:
+All Layer 1 expressions are content-addressed, enabling effective optimization and verification:
 
 ```
 Expression = ExprId(EntityId)  -- All expressions identified by content hash
@@ -318,11 +318,11 @@ Resource operations work seamlessly with content addressing:
 
 **Purpose**: Declarative programming through unified transformations that eliminate the distinction between computation and communication.
 
-**Key Innovation**: All operations are **transformations** - local computation and distributed communication are unified under a single mathematical framework based on symmetric monoidal closed category theory.
+**Key Innovation**: All operations are transformations - local computation and distributed communication are unified under a single mathematical framework based on symmetric monoidal closed category theory.
 
 ### Computation/Communication Symmetry
 
-The fundamental breakthrough of Layer 2 is the recognition that **computation and communication are the same operation**, differing only by location:
+The key design principle of Layer 2 is the recognition that computation and communication are the same operation**, differing only by location:
 
 ```rust
 // Local computation - same transform applied locally

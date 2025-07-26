@@ -1,10 +1,10 @@
 # 101: Layer 1 - Unified Type System & Causality Lisp
 
-Layer 1 builds upon Layer 0's execution substrate to provide a **unified type system** that seamlessly integrates structured types, session types, and location awareness. This layer implements Causality Lisp, a linear functional language that compiles to Layer 0's minimal instruction set while maintaining mathematical elegance through category theory.
+Layer 1 builds upon Layer 0's execution substrate to provide a unified type system that seamlessly integrates structured types, session types, and location awareness. This layer implements Causality Lisp, a linear functional language that compiles to Layer 0's minimal instruction set while maintaining mathematical elegance through category theory.
 
 ## Mathematical Foundation: Unified Type Structure
 
-Layer 1 extends Layer 0's category theory foundation with a **unified type system**:
+Layer 1 extends Layer 0's category theory foundation with a unified type system:
 
 ### Core Type Structure
 ```rust
@@ -50,7 +50,7 @@ pub enum Location {
 
 ## Unified Row Types: Local and Distributed
 
-Layer 1's key innovation is **location-aware row types** that unify local record operations with distributed communication:
+Layer 1's key innovation is location-aware row types that unify local record operations with distributed communication:
 
 ### Row Type Structure
 ```rust

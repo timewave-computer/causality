@@ -1,6 +1,6 @@
 # 105: Hybrid Value Model - Direct vs Content-Addressed Values
 
-Causality employs a **hybrid value model** that strategically combines direct values (stored inline) with content-addressed references. This document explains the design rationale, usage patterns, and benefits of this approach.
+Causality employs a hybrid value model that strategically combines direct values (stored inline) with content-addressed references. This document explains the design rationale, usage patterns, and benefits of this approach.
 
 ## 1. Overview: Why a Hybrid Model?
 
@@ -596,6 +596,6 @@ The hybrid value model provides Causality with:
 4. **Optimization**: Global deduplication and shared computation results
 5. **Scalability**: Memory usage grows sub-linearly with program complexity
 
-This design enables Causality to handle both **high-performance computation** (through direct values) and **large-scale optimization** (through content addressing) within a single coherent framework.
+This design enables Causality to handle both high-performance computation (through direct values) and large-scale optimization (through content addressing) within a single coherent framework.
 
-The key insight is that **different value types have different optimal storage strategies**, and the system should automatically choose the best approach rather than forcing developers to make these decisions manually. 
+The key insight is that different value types have different optimal storage strategies, and the system should automatically choose the best approach rather than forcing developers to make these decisions manually. 

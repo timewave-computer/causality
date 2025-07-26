@@ -1,10 +1,10 @@
 # 201: Session Types Specification
 
-Session types in Causality provide **type-safe communication protocols** with a revolutionary twist: they are **automatically derived** from data access patterns rather than manually specified. This eliminates the traditional burden of protocol specification while ensuring deadlock-freedom and type safety.
+Session types in Causality provide type-safe communication protocols with a key feature: they are automatically derived from data access patterns rather than manually specified. This removes the traditional burden of protocol specification while ensuring deadlock-freedom and type safety.
 
 ## Key Innovation: Automatic Protocol Derivation
 
-Unlike traditional session type systems that require manual protocol specification, Causality automatically generates session types from **row type operations** on distributed data:
+Unlike traditional session type systems that require manual protocol specification, Causality automatically generates session types from row type operations on distributed data:
 
 ### Traditional Approach (Manual)
 ```lisp
@@ -79,7 +79,7 @@ Complex operations generate transactional protocols:
 
 ## Integration with Row Type Constraints
 
-Session types are automatically derived from **location-aware row type constraints**:
+Session types are automatically derived from location-aware row type constraints:
 
 ### Row Operation → Protocol Derivation
 
@@ -166,7 +166,7 @@ let migration_protocol = SessionType::Send(
 
 ## Unified Constraint Language Examples
 
-All session types emerge from the **same unified constraint system** used for local operations:
+All session types emerge from the same unified constraint system used for local operations:
 
 ### Example 1: Local Computation vs Remote Communication
 
