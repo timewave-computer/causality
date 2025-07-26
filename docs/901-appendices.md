@@ -62,7 +62,7 @@ This grammar highlights the core forms. The 11 Lisp primitives are mapped to the
 
 ## Appendix C: SSZ Serialization and Content Addressing
 
-A foundational principle in Causality is the use of **SSZ (SimpleSerialize)** for deterministic data serialization. This is crucial for several reasons:
+A foundational principle in Causality is the use of SSZ (SimpleSerialize) for deterministic data serialization. This is important for several reasons:
 
 1.  **Determinism**: SSZ guarantees that the same logical data structure will always serialize to the exact same byte string. This is essential for reliable hashing.
 2.  **Content Addressing**: Key elements in Causality, such as:
@@ -72,10 +72,10 @@ A foundational principle in Causality is the use of **SSZ (SimpleSerialize)** fo
     *   `ProofId` (for ZKP instances)
     *   `WitnessId` (for ZKP private inputs)
     are derived by taking the SSZ hash of their canonical representation. This means the identifier *is* a cryptographic commitment to the content itself.
-3.  **Verifiability**: Anyone can re-serialize a piece of data (e.g., a Lisp `Expr`) using SSZ and hash it to verify its `ExprId`. This prevents tampering and ensures consistency across the system.
+3.  **Verifiability**: Anyone can re-serialize a piece of data (e.g., a Lisp `Expr`) using SSZ and hash it to verify its `ExprId`. This prevents tampering and supports consistency across the system.
 4.  **Network Efficiency**: While not its primary goal in Causality, SSZ is designed to be reasonably compact and efficient for network transmission.
 
-The consistent use of SSZ underpins much of the verifiability and integrity of the Causality framework. It ensures that all participants have an unambiguous way to identify and reference core data structures.
+The consistent use of SSZ underpins much of the verifiability and integrity of the Causality framework. It provides all participants with an unambiguous way to identify and reference core data structures.
 
 ---
 

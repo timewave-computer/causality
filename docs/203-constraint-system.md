@@ -1,6 +1,6 @@
 # 203: Unified Constraint System
 
-Causality's **unified constraint system** is the mathematical foundation that enables computation and communication to be expressed through the same constraint language. This system eliminates the artificial distinction between local and distributed operations while providing automatic protocol derivation and optimization.
+Causality's unified constraint system is the mathematical foundation that enables computation and communication to be expressed through the same constraint language. This system reduces the artificial distinction between local and distributed operations while providing automatic protocol derivation and optimization.
 
 ## Overview: One Constraint Language for Everything
 
@@ -26,7 +26,7 @@ let migration = TransformConstraint::DataMigration { .. };
 let capability = TransformConstraint::CapabilityAccess { .. };
 ```
 
-**Key Innovation**: All operations are **transform constraints** that differ only in their parameters.
+**Key Innovation**: All operations are transform constraints that differ only in their parameters.
 
 ## Unified Constraint Language
 
@@ -312,7 +312,7 @@ let transaction_protocol = SessionType::Send(
 );
 ```
 
-## Comprehensive Examples
+## Examples
 
 ### Example 1: E-commerce Order Processing
 
@@ -591,6 +591,6 @@ Constraints compose naturally through mathematical laws.
 
 ## Conclusion
 
-Causality's unified constraint system represents a fundamental advance in distributed systems programming. By expressing all operations - local computation, remote communication, data migration, capability access, and distributed coordination - through the same mathematical framework, we achieve unprecedented simplicity, optimization, and correctness.
+By expressing all operations - local computation, remote communication, data migration, capability access, and distributed coordination - through the same mathematical framework, Causality achieves simplicity, optimization, and correctness.
 
-This unification is not just a convenience - it fundamentally changes how distributed applications are designed, enabling automatic protocol generation, location transparency, and global optimization while maintaining mathematical rigor and type safety.
+This unification enables automatic protocol generation, location transparency, and global optimization while maintaining mathematical rigor and type safety.

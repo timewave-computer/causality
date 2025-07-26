@@ -1,10 +1,10 @@
 # 400: Advanced Examples and Idiomatic Patterns
 
-This document showcases advanced usage patterns and idiomatic examples within the Causality framework. These examples aim to illustrate how the core principles and layered architecture come together to solve complex problems, manage resources effectively, and integrate advanced features like Zero-Knowledge Proofs (ZKPs).
+This document presents advanced usage patterns and idiomatic examples within the Causality framework. These examples aim to illustrate how the core principles and layered architecture come together to solve complex problems, manage resources effectively, and integrate advanced features like Zero-Knowledge Proofs (ZKPs).
 
 ## 1. Complex Resource Management with Linearity and Capabilities
 
-Causality's strength lies in its robust resource management. This example demonstrates managing a multi-component, upgradeable digital asset where different parts have different capabilities and ownership.
+Causality's design focuses on resource management. This example demonstrates managing a multi-component, upgradeable digital asset where different parts have different capabilities and ownership.
 
 **Scenario**: A 'Digital Artwork' `Resource` that has a core `ImageComponent` (linear, owned by the artist) and an optional, affine `DisplayLicenseComponent` (transferable by the current artwork owner).
 
@@ -85,7 +85,7 @@ This Lisp snippet demonstrates consuming the artwork, checking capabilities, cre
 (let ((my-token-ids (list token-id1 token-id2 token-id3)))
   (map-transform-resources my-token-ids double-balance))
 ```
-**Idiomatic Pattern**: This showcases recursion for list processing, higher-order functions (`transform-fn`), and the core `consume`/`alloc` pattern for resource transformation. Linearity is maintained for each resource within the loop.
+**Idiomatic Pattern**: This demonstrates recursion for list processing, higher-order functions (`transform-fn`), and the core `consume`/`alloc` pattern for resource transformation. Linearity is maintained for each resource within the loop.
 
 ## 3. Sophisticated Effect and Handler Patterns: Composable Data Validation
 
@@ -188,8 +188,8 @@ This pattern allows complex logic to be broken down into smaller, testable, and 
 
 **Idiomatic Pattern**: 
 -   Linear `VoterCredential` ensures one vote per voter.
--   ZKPs are used to decouple *eligibility/validity* from *identity/choice*. The `verify-zk-proof` primitive is crucial.
+-   ZKPs are used to decouple *eligibility/validity* from *identity/choice*. The `verify-zk-proof` primitive is important.
 -   The `CastVoteEffect` consumes the linear credential and the proof, transforming private inputs into a publicly auditable (but still private regarding choice) event.
 -   Layered ZKPs: One ZKP for casting, potentially another set for tallying.
 
-These examples provide a glimpse into how Causality's features can be combined to build sophisticated, secure, and verifiable applications. The key is understanding how linearity, structured data (LispValues, Records), effects, handlers, and the ZKP integration work in concert.
+These examples provide a glimpse into how Causality's features can be combined to build secure and verifiable applications. The key is understanding how linearity, structured data (LispValues, Records), effects, handlers, and the ZKP integration work in concert.

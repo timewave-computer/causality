@@ -11,7 +11,7 @@ The OCaml Causality DSL provides a functional interface to the Causality linear 
 - **Content Addressing**: Store and retrieve content with cryptographic integrity verification
 - **Pattern Matching**: Match and filter resources by type and domain
 - **FFI Bridge**: Full integration with Rust causality-core backend via C FFI
-- **Error Handling**: Comprehensive error types and graceful failure handling
+- **Error Handling**: Error types and graceful failure handling
 
 ## Architecture
 
@@ -43,7 +43,7 @@ ocaml_causality/
 │   └── effects/                 # Effect system
 └── examples/
     ├── e2e_demo.ml              # End-to-end demonstration
-    └── integration_test.ml      # Comprehensive test suite
+    └── integration_test.ml      # Test suite
 ```
 
 ## API Documentation
@@ -620,4 +620,4 @@ let validate_session_types () =
 
 ## Conclusion
 
-The OCaml Causality DSL provides a comprehensive implementation for building distributed applications with verifiable resource management. The framework integrates seamlessly with the Rust backend through FFI, enabling type-safe linear resource management, content-addressed storage, and expression compilation while maintaining the safety and expressiveness of OCaml.
+The OCaml Causality DSL provides an implementation for building distributed applications with verifiable resource management. The framework integrates with the Rust backend through FFI, enabling type-safe linear resource management, content-addressed storage, and expression compilation while maintaining the safety and expressiveness of OCaml.

@@ -1,14 +1,14 @@
 # 102: Layer 2 - Transform-Based Effects, Intents & Unified Operations
 
-Layer 2 represents the highest abstraction level within the Causality architecture, implementing unification of computation and communication through transform-based effects. This layer is where application developers primarily work, creating sophisticated domain-specific logic through a declarative programming model centered around **Unified Transforms**, **Intents**, **Location-Aware Capabilities**, and automatic protocol derivation.
+Layer 2 represents the highest abstraction level within the Causality architecture, implementing unification of computation and communication through transform-based effects. This layer is where application developers primarily work, creating domain-specific logic through a declarative programming model centered around Unified Transforms, Intents, Location-Aware Capabilities, and automatic protocol derivation.
 
-Building upon the type-safe resource management of Layer 1 and the verifiable execution substrate of Layer 0, Layer 2 provides the tools needed to express complex business logic, coordinate multi-party interactions, and manage sophisticated resource transformations while maintaining perfect symmetry between local and distributed operations.
+Building upon the type-safe resource management of Layer 1 and the verifiable execution substrate of Layer 0, Layer 2 provides the tools needed to express complex business logic, coordinate multi-party interactions, and manage resource transformations while maintaining symmetry between local and distributed operations.
 
-**Key Innovation**: Layer 2 eliminates the artificial distinction between computation and communication by treating both as **transformations** that differ only in their source and target locations. This unification enables location-transparent programming with automatic protocol derivation.
+**Key Innovation**: Layer 2 reduces the artificial distinction between computation and communication by treating both as transformations that differ only in their source and target locations. This unification enables location-transparent programming with automatic protocol derivation.
 
 ## 1. Mathematical Foundation: Symmetric Monoidal Closed Categories
 
-Layer 2 is built upon **Symmetric Monoidal Closed Category Theory**, providing a unified mathematical foundation for all operations:
+Layer 2 is built upon Symmetric Monoidal Closed Category Theory, providing a unified mathematical foundation for all operations:
 
 ### 1.1 Category Structure
 
@@ -20,7 +20,7 @@ Layer 2 is built upon **Symmetric Monoidal Closed Category Theory**, providing a
 
 ### 1.2 Transform Unification
 
-All operations are **transformations** `T: A → B` where location determines the operation type:
+All operations are transformations `T: A → B` where location determines the operation type:
 
 ```
 Effect<From, To> where:
@@ -38,7 +38,7 @@ This unification provides:
 
 ## 2. Core Layer 2 Components
 
-Layer 2 is built around three fundamental abstractions that work together to provide comprehensive declarative programming capabilities:
+Layer 2 is built around three fundamental abstractions that work together to provide declarative programming capabilities:
 
 1. **Unified Transforms** - Structured descriptions of operations to be performed
 2. **Intents** - Declarative specifications of desired outcomes  
@@ -48,7 +48,7 @@ These three pillars complement each other: Unified Transforms handle individual 
 
 ### 2.1 Unified Transforms - Structured Side Effects
 
-Unified Transforms are **pure data structures** that describe operations to be performed. They separate the specification of what should happen from how it's implemented, enabling powerful composition and transformation patterns.
+Unified Transforms are pure data structures that describe operations to be performed. They separate the specification of what should happen from how it's implemented, enabling flexible composition and transformation patterns.
 
 ```rust
 pub enum UnifiedTransform {
@@ -100,7 +100,7 @@ pub enum UnifiedTransform {
 }
 ```
 
-### 2.2 Capability System - Comprehensive Access Control
+### 2.2 Capability System - Access Control
 
 The capability system provides fine-grained, unforgeable access control over resources and their fields. This system was moved from Layer 1 to Layer 2 to maintain Layer 1's mathematical purity while providing the rich access control needed for real-world applications.
 
@@ -145,7 +145,7 @@ pub struct Capability {
 
 #### 2.2.3 Capability Resolution Process
 
-During Intent compilation, the capability system performs **static analysis** to resolve dynamic operations:
+During Intent compilation, the capability system performs static analysis to resolve dynamic operations:
 
 ```
 1. Capability Analysis
@@ -178,7 +178,7 @@ Intent::new()
 
 ### 2.3 Object Model - Linear Resource Management
 
-The object model provides sophisticated resource management with linearity enforcement, moved from Layer 1 to Layer 2 to enable capability-based access control while maintaining type safety.
+The object model provides resource management with linearity enforcement, moved from Layer 1 to Layer 2 to enable capability-based access control while maintaining type safety.
 
 #### 2.3.1 Object Types with Linearity
 
@@ -267,7 +267,7 @@ pub struct RecordType {
 
 ### 2.5 Intents - Declarative Specifications with Transform Constraints
 
-Intents represent **declarative specifications** of desired outcomes using our unified transform constraint system that eliminates the distinction between computation and communication.
+Intents represent declarative specifications of desired outcomes using our unified transform constraint system that reduces the distinction between computation and communication.
 
 ```rust
 pub struct Intent {
@@ -295,7 +295,7 @@ pub struct Intent {
 
 #### 2.5.1 Transform Constraints - Unified Operations
 
-The key innovation is **unified transform constraints** that work for both local and distributed operations:
+The key innovation is unified transform constraints that work for both local and distributed operations:
 
 ```rust
 pub enum TransformConstraint {
@@ -464,7 +464,7 @@ impl Intent {
 
 ### 2.6 Session Types - Type-Safe Communication Protocols
 
-Session types provide **type-safe communication protocols** with automatic duality checking, enabling distributed systems to maintain correctness guarantees while composing complex multi-party workflows. Session types form the third pillar of Layer 2 alongside Unified Transforms and Intents.
+Session types provide type-safe communication protocols with automatic duality checking, enabling distributed systems to maintain correctness guarantees while composing complex multi-party workflows. Session types form the third pillar of Layer 2 alongside Unified Transforms and Intents.
 
 #### 2.6.1 Session Type Syntax
 
@@ -484,7 +484,7 @@ pub enum SessionType {
 
 #### 2.6.2 Duality Computation
 
-The core innovation of session types is **automatic duality computation** - the ability to generate complementary protocols that are guaranteed to be compatible:
+The core innovation of session types is automatic duality computation - the ability to generate complementary protocols that are guaranteed to be compatible:
 
 ```
 dual(!T.S) = ?T.dual(S)           // Send becomes receive
@@ -495,7 +495,7 @@ dual(End) = End                   // Terminal stays terminal
 dual(rec X.S) = rec X.dual(S[X ↦ dual(X)])  // Recursive types
 ```
 
-This ensures that communication protocols are **deadlock-free** and **type-safe** by construction.
+This ensures that communication protocols are deadlock-free and type-safe by construction.
 
 #### 2.6.3 Session Declaration and Usage
 
@@ -552,7 +552,7 @@ pub enum EffectExprKind {
 
 #### 2.6.5 Choreographies and Multi-Party Coordination
 
-Session types support **choreographies** for multi-party protocol specification:
+Session types support choreographies for multi-party protocol specification:
 
 ```lisp
 (choreography EscrowProtocol
@@ -913,7 +913,7 @@ The capability system provides several security guarantees:
 
 ### 6.2 Static Verification
 
-Layer 2 enables powerful static verification:
+Layer 2 enables static verification:
 
 - **Effect Safety**: All effects have verified handlers
 - **Resource Conservation**: Conservation laws checked at Intent level
@@ -940,7 +940,7 @@ Layer 2 effects compile to Layer 1 expressions that use only the 11 core primiti
 
 ### 7.2 Layer 0 Execution
 
-The compilation chain ensures that high-level Intent operations ultimately execute as sequences of the **5 fundamental register machine instructions** (transform, alloc, consume, compose, tensor), maintaining:
+The compilation chain ensures that high-level Intent operations ultimately execute as sequences of the 5 fundamental register machine instructions (transform, alloc, consume, compose, tensor), maintaining:
 
 - **Deterministic Execution**: Same Intent always produces same instruction sequence
 - **Resource Linearity**: Hardware-enforced resource tracking preserved
@@ -952,8 +952,8 @@ Layer 2 represents the culmination of Causality's three-layer architecture, prov
 
 - **Declarative Programming**: Express what should happen, not how
 - **Capability Security**: Fine-grained, unforgeable access control
-- **Effect Composition**: Powerful combinators for complex operations
-- **Static Verification**: Comprehensive analysis before execution
+- **Effect Composition**: Combinators for complex operations
+- **Static Verification**: Analysis before execution
 - **ZK Compatibility**: Clean compilation to fixed-size circuits
 
 The capability system elegantly solves the tension between mathematical purity and practical expressiveness, enabling complex record operations while preserving the categorical foundations that make formal verification possible. By handling all dynamic operations at Layer 2, the system maintains clean abstraction boundaries while providing the flexibility needed for real-world applications.

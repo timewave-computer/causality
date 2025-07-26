@@ -1,6 +1,6 @@
 # 202: Computation-Communication Symmetry
 
-**The fundamental breakthrough of Causality** is the recognition that computation and communication are not separate concepts but are **unified as transformations** that differ only by their source and target locations. This symmetry eliminates artificial distinctions, simplifies programming models, and enables unprecedented location transparency.
+The core design principle of Causality is the recognition that computation and communication are not separate concepts but are unified as transformations that differ only by their source and target locations. This symmetry reduces artificial distinctions, simplifies programming models, and enables comprehensive location transparency.
 
 ## The Fundamental Symmetry
 
@@ -28,7 +28,7 @@ let remote_result = transform(input, Location::Local, Location::Remote("server")
 
 ### Symmetric Monoidal Closed Category Theory
 
-The unification is based on **symmetric monoidal closed category theory**:
+The unification is based on symmetric monoidal closed category theory:
 
 - **Objects**: Linear resources (data, channels, functions, protocols)
 - **Morphisms**: Transformations between resources
@@ -63,7 +63,7 @@ transform r_morph r_input r_output     # Apply function locally
 transform r_protocol r_message r_response  # Apply protocol remotely
 ```
 
-**Key Point**: The `transform` instruction is **location-agnostic** - the same machine operation handles both computation and communication.
+**Key Point**: The `transform` instruction is location-agnostic - the same machine operation handles both computation and communication.
 
 ### Layer 1: Linear Lambda Calculus
 
@@ -300,7 +300,7 @@ channel.send(request).await?;
 let response = channel.receive().await?;
 ```
 
-Causality eliminates this complexity:
+Causality reduces this complexity:
 
 ```rust
 // Causality: Same as local operations

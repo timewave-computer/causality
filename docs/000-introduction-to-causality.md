@@ -4,7 +4,7 @@ Welcome to the Causality project! This documentation will guide you through the 
 
 ## What is Causality?
 
-Causality is a programming environment and runtime for verifiable distributed programs. At its core is a linear resource language, where resources are, by default, consumed exactly once. On this foundational concept, Causality builds a layered type system and execution model that **unifies computation and communication as transformations**. Causality aims to provide a robust framework for building systems where the lifecycle of every critical resource is explicit, causally consistent, and verifiable.
+Causality is a programming environment and runtime for verifiable distributed programs. At its core is a linear resource language, where resources are, by default, consumed exactly once. On this foundational concept, Causality builds a layered type system and execution model that unifies computation and communication as transformations. Causality aims to provide a robust framework for building systems where the lifecycle of every critical resource is explicit, causally consistent, and verifiable.
 
 ## Core Claims
 

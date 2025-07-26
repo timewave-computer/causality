@@ -1,10 +1,10 @@
 # 302: Zero-Knowledge Proof Integration
 
-Causality provides comprehensive zero-knowledge proof infrastructure, compiling register machine instructions into arithmetic circuits with multi-backend support for verifiable and private computation.
+Causality provides zero-knowledge proof infrastructure, compiling register machine instructions into arithmetic circuits with multi-backend support for verifiable and private computation.
 
 ## ZK Framework Design
 
-Causality's ZK integration is built around **content-addressed circuit optimization** that dramatically reduces proof complexity by verifying component assembly rather than full computation.
+Causality's ZK integration is built around content-addressed circuit optimization that reduces proof complexity by verifying component assembly rather than full computation.
 
 ### Design Principles
 

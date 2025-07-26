@@ -1,10 +1,10 @@
 # 100: Layer 0 - The Verifiable Execution Core
 
-Layer 0 forms the computational foundation of Causality, implementing a **minimal register machine** based on symmetric monoidal closed category theory. This layer provides the execution substrate that all higher-level constructs compile down to, ensuring verifiable, deterministic computation suitable for zero-knowledge proof systems.
+Layer 0 forms the computational foundation of Causality, implementing a minimal register machine based on symmetric monoidal closed category theory. This layer provides the execution substrate that all higher-level constructs compile down to, ensuring verifiable, deterministic computation suitable for zero-knowledge proof systems.
 
 ## Mathematical Foundation: Symmetric Monoidal Closed Categories
 
-Layer 0 is built upon **Symmetric Monoidal Closed Category Theory**, providing a unified mathematical foundation:
+Layer 0 is built upon Symmetric Monoidal Closed Category Theory, providing a unified mathematical foundation:
 
 - **Objects**: Linear resources (data, channels, functions, protocols)
 - **Morphisms**: Transformations between resources  
@@ -14,7 +14,7 @@ Layer 0 is built upon **Symmetric Monoidal Closed Category Theory**, providing a
 
 ## The 5 Fundamental Instructions
 
-Layer 0 implements exactly **5 instructions** that capture all possible operations:
+Layer 0 implements exactly 5 instructions that capture all possible operations:
 
 ### 1. `transform morph input output`
 Apply any morphism (unifies function application, effects, session operations)
@@ -43,7 +43,7 @@ Parallel composition of resources (unifies parallel data, concurrent sessions)
 
 ## Unification Achieved
 
-This minimal instruction set achieves **complete unification**:
+This minimal instruction set achieves complete unification:
 
 - **All operations are transformations** (local or distributed)
 - **All resources follow the same linear discipline**
