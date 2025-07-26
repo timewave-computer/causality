@@ -1,10 +1,6 @@
 # 002: Causality's Three-Layer Architecture
 
-Causality employs a three-layer architecture, designed to separate concerns and provide a clear progression from low-level execution to high-level domain logic. This layered approach enhances modularity, verifiability, and the overall robustness of the system. Each layer builds upon the capabilities of the one below it, creating an expressive framework for modeling complex causal interactions.
-
-The Causality system is organized into three distinct layers, each with specific responsibilities, primitives, and categorical underpinnings, ensuring a clear separation of concerns from the lowest-level execution to high-level domain logic.
-
-## Fundamental Architectural Principles
+Causality employs a three-layer architecture, designed to separate concerns and provide a clean progression from low-level execution to high-level domain logic. Each layer builds upon the capabilities of the one below it, creating an expressive framework for modeling complex causal interactions.
 
 Before diving into the layer-specific details, it's important to understand the cross-cutting concerns throughout the Causality architecture. These foundational systems ensure consistency, verifiability, and interoperability across the entire stack.
 
@@ -201,7 +197,7 @@ Key properties:
 
 ### The 5 Fundamental Instructions
 
-The strength of Layer 0 lies in its simplicity. Rather than providing hundreds of instructions like traditional processors, Causality's register machine operates with just 5 carefully chosen instructions based on symmetric monoidal closed category theory. This minimal approach enables complete formal verification while remaining expressive enough to compile any higher-level computation.
+Causality's register machine operates with just 5 carefully chosen instructions based on symmetric monoidal closed category theory. This minimal approach enables complete formal verification while remaining expressive enough to compile any higher-level computation.
 
 Each instruction serves a specific purpose in the unified transform model, ensuring that all operations - whether local computation or distributed communication - can be expressed through the same mathematical framework.
 
@@ -224,11 +220,9 @@ Think of Layer 0 as the CPU of Causality, providing the raw, unopinionated proce
 
 ## Layer 1: The Linear Lambda Calculus - Expressing Resource Flow
 
-Building upon Layer 0, Layer 1 introduces a Linear Lambda Calculus that operates entirely within the content-addressed value system. This layer leverages the principles of linear logic to provide a safe way to express computations that involve resources, while maintaining the content-addressed identity system throughout.
+Layer 1 introduces a Linear Lambda Calculus that operates entirely within the content-addressed value system. This provides a type safe way to express computations that involve resource sequencing.
 
-Layer 1 represents the mathematical heart of Causality—where the abstract principles of linear logic meet practical programming within a content-addressed architecture. While Layer 0 provides the mechanical execution model, Layer 1 gives us the conceptual tools to reason about resource flow and transformation in a type-safe manner while preserving content addressability.
-
-The choice of Linear Lambda Calculus isn't arbitrary. Linear logic naturally captures the idea that resources should be used exactly once, making it impossible to accidentally duplicate valuable assets or leave them unused. Combined with content addressing, this mathematical foundation provides strong guarantees about resource identity and usage that we can rely on when building more complex systems.
+Linear logic naturally captures the idea that resources should be used exactly once, making it impossible to accidentally duplicate valuable assets or leave them unused.
 
 - **Mathematical Basis**: Term model of linear type theory operating over content-addressed values; initial object in the category of models of linear type theory with content addressing.
 - **Role**: Provides a pure functional programming model with content-addressed expressions. This layer focuses on linear lambda calculus foundations with rich AST structure supporting row types and record operations.
@@ -316,13 +310,11 @@ Resource operations work seamlessly with content addressing:
 
 ## Layer 2: Transform-Based Effects & Intents
 
-**Purpose**: Declarative programming through unified transformations that eliminate the distinction between computation and communication.
-
-**Key Innovation**: All operations are transformations - local computation and distributed communication are unified under a single mathematical framework based on symmetric monoidal closed category theory.
+Layer 2 enables declarative programming through unified transformations. All operations are transformations within a symmetric monoidal closed category theory. This layer allows for natural expression of side effects as data and automatic protocol derivation from data access patterns. By treating location as typed data rather than a separate API concern, the same transformations can execute locally or remotely. Location differences are resolved at compile time through type checking, enabling developers to write code that works seamlessly across local and distributed contexts.
 
 ### Computation/Communication Symmetry
 
-The key design principle of Layer 2 is the recognition that computation and communication are the same operation**, differing only by location:
+The key design principle of Layer 2 is the recognition that computation and communication are the same operation, differing only by location:
 
 ```rust
 // Local computation - same transform applied locally
@@ -399,7 +391,7 @@ TypeInner::Transform {
 }
 ```
 
-**Location-Aware Row Types** enable the same field operations on both local and remote data:
+Location-Aware Row Types enable the same field operations on both local and remote data:
 
 ```rust
 // Local row access
@@ -417,7 +409,7 @@ row.migrate(from_location, to_location, migration_strategy)
 
 ### Protocol Derivation from Transforms
 
-Communication protocols are **automatically derived** from data access patterns:
+Communication protocols are automatically derived from data access patterns:
 
 #### Field Access Patterns → Protocols
 ```rust
@@ -504,7 +496,7 @@ migration_spec = MigrationSpec {
 
 ### Mathematical Foundation
 
-Based on **Symmetric Monoidal Closed Category Theory**:
+Based on Symmetric Monoidal Closed Category Theory:
 - **Objects**: Linear resources (data, channels, functions, protocols)
 - **Morphisms**: Transformations between resources
 - **Monoidal Structure**: Parallel composition (⊗)
